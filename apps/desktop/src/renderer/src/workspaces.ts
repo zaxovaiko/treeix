@@ -136,7 +136,8 @@ export function inWorkspace(
 ): boolean {
   if (!workspace) return true
   if (workspaces.some((candidate) => candidate.id === session.workspaceId)) return session.workspaceId === workspace.id
-  const owner = workspaces.find((candidate) => containsWorktree(candidate, repos, session.worktreePath)) ?? workspaces[0]
+  // With no record of where it started, it belongs to the narrowest workspace holding the checkout, e.g. "Betfeel" over "Betfeel + Openora"
+  const owner = workspaces.filter((candidate) => containsWorktree(candidate, repos, session.worktreePath)).sort((a, b) => a.repoPaths.length - b.repoPaths.length)[0] ?? workspaces[0]
   return owner?.id === workspace.id
 }
 

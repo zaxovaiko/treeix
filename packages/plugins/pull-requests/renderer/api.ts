@@ -1,6 +1,6 @@
 import { createBridge, definePluginSettings } from '@treeix/sdk'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ImageResult, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread } from '../shared/types'
+import type { ImageResult, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread, ReviewVerdict, MergeMethod } from '../shared/types'
 
 const bridge = createBridge('pull-requests')
 
@@ -10,6 +10,10 @@ export const api = {
   pullRequestFile: (pullRequest: PullRequest, filePath: string) => bridge.invoke<string>('file', pullRequest, filePath),
   setThreadResolved: (pullRequest: PullRequest, thread: ReviewThread, resolved: boolean) => bridge.invoke<void>('setThreadResolved', pullRequest, thread, resolved),
   setFileViewed: (pullRequest: PullRequest, filePath: string, viewed: boolean) => bridge.invoke<void>('setFileViewed', pullRequest, filePath, viewed),
+  editComment: (pullRequest: PullRequest, commentId: string, body: string) => bridge.invoke<void>('editComment', pullRequest, commentId, body),
+  deleteComment: (pullRequest: PullRequest, commentId: string) => bridge.invoke<void>('deleteComment', pullRequest, commentId),
+  merge: (pullRequest: PullRequest, method: MergeMethod, deleteBranch: boolean) => bridge.invoke<void>('merge', pullRequest, method, deleteBranch),
+  submitReview: (pullRequest: PullRequest, verdict: ReviewVerdict, body: string) => bridge.invoke<void>('submitReview', pullRequest, verdict, body),
   requestReview: (pullRequest: PullRequest, login: string) => bridge.invoke<void>('requestReview', pullRequest, login),
   commentOnPullRequest: (pullRequest: PullRequest, comment: PullRequestComment) => bridge.invoke<void>('comment', pullRequest, comment),
   reactToPullRequestComment: (pullRequest: PullRequest, commentId: string, reaction: Reaction) => bridge.invoke<void>('react', pullRequest, commentId, reaction),

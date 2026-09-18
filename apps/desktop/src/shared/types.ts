@@ -78,6 +78,8 @@ export type HotkeyOptions = {
   /** Recorded key combination, null turns the hotkey window off */
   shortcut: Shortcut | null
   hideOnBlur: boolean
+  /** No normal window: it always stays the borderless drop-down, only shown and hidden */
+  only: boolean
 }
 
 export type ContextMenuItem =
@@ -89,6 +91,9 @@ export type Api = {
   scan: () => Promise<Repo[]>
   diff: (worktreePath: string) => Promise<FilePatch[]>
   listFiles: (worktreePath: string) => Promise<WorktreeFiles>
+  listDirectory: (root: string, folder: string) => Promise<string[]>
+  /** Native folder picker; null when cancelled */
+  pickFolder: () => Promise<string | null>
   readFile: (worktreePath: string, filePath: string) => Promise<string | null>
   /** Language service answers for TS/JS, text search for everything else */
   navigate: (worktreePath: string, kind: NavigationKind, target: SymbolTarget) => Promise<CodeLocation[]>

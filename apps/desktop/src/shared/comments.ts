@@ -22,9 +22,14 @@ export type ReviewComment = {
   range: LineRange
   code: string
   text: string
-  /** Comment on a whole file view rather than a diff; ranges have no side */
-  kind?: 'file'
+  /**
+   * `file`: on a whole file view rather than a diff, ranges have no side.
+   * `reference`: a pointer the agent follows itself, like a Jira ticket link; sent as-is, not as review feedback.
+   */
+  kind?: 'file' | 'reference'
   attachments?: Attachment[]
+  /** Workspace the comment was made in; older comments have none and belong to whichever workspace holds their checkout */
+  workspaceId?: string
 }
 
 type PatchRow = { old: number | null; new: number | null; text: string }
@@ -97,6 +102,17 @@ export function formatComments(comments: ReviewComment[]): string {
     .join('\n\n')
 }
 
+/**
+ * What goes to the agent: references as plain lines, then code notes under one line saying they are feedback on
+ * the code in `where`, so they aren't mistaken for comments on a ticket or a branch.
+ */
+export function commentsPrompt(comments: ReviewComment[], where: string | null): string {
+  const references = comments.filter((comment) => comment.kind === 'reference').map((comment) => comment.text.trim())
+  const notes = comments.filter((comment) => comment.kind !== 'reference')
+  const feedback = notes.length ? [`Feedback on the code${where ? ` in ${where}` : ''}. Address each note:\n\n${formatComments(notes)}`] : []
+  return `${[...references, ...feedback].join('\n\n')}\n`
+}
+
 function isAttachment(value: unknown): value is Attachment {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Record<string, unknown>
@@ -117,7 +133,8 @@ export function isReviewComment(value: unknown): value is ReviewComment {
     range !== null &&
     typeof range.start === 'number' &&
     typeof range.end === 'number' &&
-    (candidate.kind === undefined || candidate.kind === 'file') &&
+    (candidate.kind === undefined || candidate.kind === 'file' || candidate.kind === 'reference') &&
+    (candidate.workspaceId === undefined || typeof candidate.workspaceId === 'string') &&
     (candidate.attachments === undefined || (Array.isArray(candidate.attachments) && candidate.attachments.every(isAttachment)))
   )
 }

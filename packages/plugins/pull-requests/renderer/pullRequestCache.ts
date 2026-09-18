@@ -1,4 +1,4 @@
-import type { PullRequestList } from '../shared/types'
+import type { PullRequest, PullRequestList } from '../shared/types'
 import { api } from './api'
 
 const STORAGE_KEY = 'prs.cache'
@@ -25,6 +25,21 @@ export const scopeKeyOf = (repoPaths: string[]): string => repoPaths.join('\n')
 
 /** The last list fetched for these repositories, from this run or an earlier one */
 export const cachedPullRequests = (scopeKey: string): PullRequestList | null => lists.get(scopeKey)?.list ?? null
+
+/** Same pull request whatever page of it the address points at (…/437, …/437/diffs, ?tab=files) */
+export const samePullRequestUrl = (url: string, prUrl: string): boolean => {
+  const clean = url.replace(/[?#].*$/, '').replace(/\/+$/, '')
+  return clean === prUrl || clean.startsWith(`${prUrl}/`)
+}
+
+/** Newest fetch first, so a scope refreshed a while ago can't hand back an older copy */
+export function findCachedPullRequest(url: string): PullRequest | null {
+  for (const { list } of [...lists.values()].reverse()) {
+    const found = list.pullRequests.find((pr) => samePullRequestUrl(url, pr.url))
+    if (found) return found
+  }
+  return null
+}
 
 export const lastFetched = (scopeKey: string): number => lists.get(scopeKey)?.fetchedAt ?? 0
 

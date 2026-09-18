@@ -107,6 +107,13 @@ export type SessionsService = {
  */
 export interface Services {
   sessions: SessionsService
+  /** Provided by the pull requests plugin */
+  pullRequests: PullRequestsService
+}
+
+export type PullRequestsService = {
+  /** Opens the pull request at `url` in its own tab; false when it isn't one from the workspace's repositories */
+  open: (url: string, host: HostApi) => Promise<boolean>
 }
 
 /** Everything a plugin's renderer module can contribute; all optional */
@@ -115,8 +122,8 @@ export type RendererPlugin = {
   panels?: PanelContribution[]
   /** Always mounted while enabled: background work, dialogs, global listeners */
   Root?: ComponentType
-  /** Title bar items left of the command palette button, lower order first */
-  titleBar?: { order: number; render: ComponentType }[]
+  /** Title bar items left of the command palette button, lower order first; `end` ones go after Settings, at the window's right edge */
+  titleBar?: { order: number; render: ComponentType; end?: boolean }[]
   /** Rendered under the plugin's switch in Settings while enabled */
   Settings?: ComponentType
   /** Palette commands, built when the palette opens */
@@ -143,6 +150,11 @@ export type HostApi = {
   selectedWorktree: string | null
   /** Branch of the selected worktree, for headers */
   selectedWorktreeLabel: string | null
+  /** Folder `renderExplorer` paths are relative to: the browsed folder, else the selected worktree, else the home folder */
+  explorerRoot: string
+  /** A folder the explorer shows instead of the selected worktree; null follows the worktree */
+  browsedFolder: string | null
+  setBrowsedFolder: (path: string | null) => void
   /** Where new sessions start: the selected worktree, else the workspace folder */
   defaultCwd: string
   diffStyle: 'split' | 'unified'

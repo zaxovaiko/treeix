@@ -193,7 +193,7 @@ export function PanelToggle({
       {menuOpen && (
         <div
           onMouseLeave={() => setMenuOpen(false)}
-          className="absolute top-8 right-0 z-50 w-40 rounded-lg border border-input bg-popover p-1 shadow-xl shadow-black/50"
+          className="absolute top-8 right-0 z-50 w-40 rounded-lg border border-input bg-popover p-1"
         >
           {SIDES.filter((target) => target !== side).map((target) => (
             <button

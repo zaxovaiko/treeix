@@ -208,7 +208,7 @@ export function useSymbolNavigation({
       onMouseEnter={() => clearTimeout(timer.current)}
       onMouseLeave={hideSoon}
       style={{ left: Math.max(8, Math.min(card.x - 12, window.innerWidth - HOVER_CARD_MAX_WIDTH - 8)), top: card.y + 2, maxWidth: HOVER_CARD_MAX_WIDTH }}
-      className="fixed z-50 max-h-80 w-max overflow-auto rounded-lg border border-input bg-popover shadow-xl shadow-black/50 backdrop-blur-2xl"
+      className="fixed z-50 max-h-80 w-max overflow-auto rounded-lg border border-input bg-popover backdrop-blur-2xl"
     >
       {card.html ? (
         <div

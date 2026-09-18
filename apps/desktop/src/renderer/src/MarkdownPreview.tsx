@@ -39,11 +39,22 @@ export function MarkdownPreview({ load, loadKey }: { load: () => Promise<string 
     }
   }, [loadKey])
 
+  // Wide tables read better across the whole pane; remembered for every preview
+  const [fullWidth, setFullWidth] = usePersisted<boolean>('markdown.fullWidth', false)
   if (error) return <EmptyState fill icon="alert" title={error} />
   if (text === null) return <EmptyState fill title="Loading preview..." />
   return (
-    <div className="mx-auto w-full max-w-3xl px-8 py-6">
-      <LazyMarkdown>{text}</LazyMarkdown>
+    <div className="relative">
+      <button
+        title={fullWidth ? 'Readable width' : 'Full width'}
+        onClick={() => setFullWidth(!fullWidth)}
+        className="absolute top-3 right-3 z-10 grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <Icon name={fullWidth ? 'narrow' : 'widen'} className="size-3.5" />
+      </button>
+      <div className={`mx-auto w-full px-8 py-6 ${fullWidth ? '' : 'max-w-3xl'}`}>
+        <LazyMarkdown>{text}</LazyMarkdown>
+      </div>
     </div>
   )
 }

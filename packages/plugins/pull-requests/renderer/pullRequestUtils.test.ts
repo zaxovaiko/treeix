@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { sortPullRequests, untilLabel } from './pullRequestUtils'
+import { groupPullRequests, sortPullRequests, untilLabel } from './pullRequestUtils'
 
 test('untilLabel picks the largest sensible unit', () => {
   const now = 1_000_000_000_000
@@ -20,4 +20,24 @@ test('sortPullRequests orders by counts with unknown counts last', () => {
   expect(numbers('fewestFiles')).toEqual([3, 1, 2])
   expect(numbers('fewestChanges')).toEqual([1, 3, 2])
   expect(numbers('mostComments')).toEqual([2, 1, 3])
+})
+
+test('groupPullRequests puts reviewable first and conflicts last, keeping order', () => {
+  type PullRequest = Parameters<typeof groupPullRequests>[0][number]
+  const pr = (number: number, extra: Partial<PullRequest>) => ({ number, draft: false, conflicts: false, review: null, ...extra }) as PullRequest
+  const groups = groupPullRequests([
+    pr(1, { conflicts: true }),
+    pr(2, {}),
+    pr(3, { review: { state: 'approved', newCommits: 0 } }),
+    pr(4, { draft: true }),
+    pr(5, { review: { state: 'approved', newCommits: 2 } }),
+    pr(6, { draft: true, conflicts: true })
+  ])
+  expect(groups.map((group) => [group.id, group.pullRequests.map((entry) => entry.number)])).toEqual([
+    ['ready', [2, 5]],
+    ['settled', [3]],
+    ['drafts', [4]],
+    ['conflicts', [1, 6]]
+  ])
+  expect(groupPullRequests([pr(1, {})]).map((group) => group.id)).toEqual(['ready'])
 })

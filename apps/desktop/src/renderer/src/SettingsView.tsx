@@ -6,7 +6,7 @@ import { NAVIGATION_ACTIONS } from './codeNavigation'
 import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
 import { type Theme, THEMES, type ThemeId } from './themes'
 import { EmptyState } from './ui'
-import { Card, Row, Segmented, Switch } from './settingsUi'
+import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, settingMatches, SettingsSearch, Switch, useSettingMatch, useSettingsQuery } from './settingsUi'
 import { isPluginEnabled, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { copyText } from './contextMenu'
 
@@ -75,7 +75,7 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
   useEffect(() => {
     if (!recording) return
     // The current global hotkey would fire instead of being recorded
-    window.api.configureHotkey({ shortcut: null, hideOnBlur: false })
+    window.api.configureHotkey({ shortcut: null, hideOnBlur: false, only: getSettings().hotkeyOnly })
     const capture = (event: KeyboardEvent): void => {
       event.preventDefault()
       event.stopImmediatePropagation()
@@ -92,8 +92,8 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
     window.addEventListener('keydown', capture, true)
     return () => {
       window.removeEventListener('keydown', capture, true)
-      const { hotkey, hotkeyHideOnBlur } = getSettings()
-      window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur })
+      const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = getSettings()
+      window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null })
     }
   }, [recording])
 
@@ -121,12 +121,12 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
 }
 
 function HotkeyWindow(): React.JSX.Element {
-  const { hotkey, hotkeyHideOnBlur } = useSettings()
+  const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = useSettings()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur }).then(setError)
-  }, [hotkey, hotkeyHideOnBlur])
+    window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null }).then(setError)
+  }, [hotkey, hotkeyHideOnBlur, hotkeyOnly])
 
   return (
     <Card title="Hotkey window">
@@ -141,6 +141,12 @@ function HotkeyWindow(): React.JSX.Element {
       </Row>
       <Row label="Hide when focus is lost" description="Clicking another app puts the hotkey window away, like iTerm2.">
         <Switch checked={hotkeyHideOnBlur} label="Hide when focus is lost" onChange={() => updateSettings({ hotkeyHideOnBlur: !hotkeyHideOnBlur })} />
+      </Row>
+      <Row
+        label="Hotkey window only"
+        description="No normal window: Treeix always stays the drop-down and only shows or hides, so nothing resizes or re-renders when it appears. Needs a global shortcut."
+      >
+        <Switch checked={hotkeyOnly} label="Hotkey window only" onChange={() => updateSettings({ hotkeyOnly: !hotkeyOnly })} />
       </Row>
     </Card>
   )
@@ -333,7 +339,7 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
         </button>
       )}
       {open && suggestions.length > 0 && (
-        <div className="absolute inset-x-0 top-9 z-20 max-h-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 shadow-xl shadow-black/50">
+        <div className="absolute inset-x-0 top-9 z-20 max-h-64 overflow-y-auto rounded-lg border border-input bg-popover p-1">
           {suggestions.map((font) => (
             <button
               key={font.name}
@@ -376,9 +382,10 @@ function ThemePreview({ theme }: { theme: Theme }): React.JSX.Element {
   )
 }
 
-function ThemeCard({ label, selected, onSelect, children }: { label: string; selected: boolean; onSelect: () => void; children: React.ReactNode }): React.JSX.Element {
+function ThemeCard({ label, selected, onSelect, children }: { label: string; selected: boolean; onSelect: () => void; children: React.ReactNode }): React.JSX.Element | null {
+  if (!useSettingMatch(label, 'theme')) return null
   return (
-    <button onClick={onSelect} className={`overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-2 ring-primary' : 'ring-border hover:ring-input'}`}>
+    <button data-setting onClick={onSelect} className={`overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-2 ring-primary' : 'ring-border hover:ring-input'}`}>
       {children}
       <div className="flex items-center gap-2 bg-card px-2.5 py-2 text-xs">
         {label}
@@ -453,23 +460,34 @@ function Appearance(): React.JSX.Element {
   )
 }
 
+function ShortcutRow({ keys, action }: { keys: string; action: string }): React.JSX.Element | null {
+  if (!useSettingMatch(action, keys, 'shortcut')) return null
+  return (
+    <div data-setting className="flex items-center border-b border-border px-4 py-2.5 text-[13px] last:border-b-0">
+      <span className="flex-1">{action}</span>
+      <kbd className="rounded-md bg-muted px-2 py-0.5 font-sans text-xs whitespace-pre text-muted-foreground ring-1 ring-border">{keys}</kbd>
+    </div>
+  )
+}
+
 function Shortcuts(): React.JSX.Element {
   return (
     <>
       {SHORTCUTS.map(({ group, items }) => (
         <Card key={group} title={`${group} shortcuts`}>
           {items.map(([keys, action]) => (
-            <div key={action} className="flex items-center border-b border-border px-4 py-2.5 text-[13px] last:border-b-0">
-              <span className="flex-1">{action}</span>
-              <kbd className="rounded-md bg-muted px-2 py-0.5 font-sans text-xs whitespace-pre text-muted-foreground ring-1 ring-border">
-                {keys}
-              </kbd>
-            </div>
+            <ShortcutRow key={action} keys={keys} action={action} />
           ))}
         </Card>
       ))}
     </>
   )
+}
+
+/** While searching, names the plugin above matching settings of its own whose switch row filtered out */
+function PluginName({ name, description }: { name: string; description: string }): React.JSX.Element | null {
+  const query = useSettingsQuery()
+  return query && !settingMatches(query, name, description) ? <div className="px-4 pt-3 text-xs font-medium text-muted-foreground">{name}</div> : null
 }
 
 /** Everything beyond worktrees and diffs; each plugin's own settings show under its switch while it's on */
@@ -485,7 +503,8 @@ function Plugins(): React.JSX.Element {
         const PluginSettings = loaded.find((entry) => entry.manifest.id === manifest.id)?.plugin.Settings
         const requirement = missing.length ? ` Needs ${missing.map((id) => PLUGINS.find((entry) => entry.manifest.id === id)?.manifest.name ?? id).join(', ')}.` : ''
         return (
-          <div key={manifest.id} className="border-b border-border last:border-b-0">
+          <SearchGroup key={manifest.id} title={`${manifest.name} ${manifest.description}`} className="border-b border-border last:border-b-0">
+            <PluginName name={manifest.name} description={manifest.description} />
             <Row label={manifest.name} description={`${manifest.description}${chosen ? requirement : ''}`}>
               <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
             </Row>
@@ -494,7 +513,7 @@ function Plugins(): React.JSX.Element {
                 <PluginSettings />
               </div>
             )}
-          </div>
+          </SearchGroup>
         )
       })}
     </Card>
@@ -561,7 +580,7 @@ function Integrations(): React.JSX.Element {
   useEffect(() => void check(), [])
 
   return (
-    <section className="mb-8">
+    <SearchGroup title="Command line tools integrations" className="mb-8">
       <div className="mb-2 flex items-center">
         <h2 className="text-[13px] font-medium">Command line tools</h2>
         <button
@@ -575,36 +594,45 @@ function Integrations(): React.JSX.Element {
       <div className="rounded-xl border border-border bg-card">
         {!tools && <EmptyState title="Checking your login shell..." />}
         {tools?.map((tool) => (
-          <div key={tool.name} className="flex items-start gap-3 border-b border-border px-4 py-3.5 last:border-b-0">
-            <span className={`mt-1.5 size-2 shrink-0 rounded-full ${tool.error ? (tool.version ? 'bg-amber-400' : 'bg-red-400') : 'bg-emerald-400'}`} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-[13px]">
-                <ToolMark name={tool.name} />
-                <span className="font-mono">{tool.name}</span>
-                <span className="text-xs text-muted-foreground">{tool.purpose}</span>
-              </div>
-              {tool.version && <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{tool.version}</div>}
-              {tool.update && (
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-sky-400">
-                  <span className="select-text">Update available: {tool.update}</span>
-                  {tool.updateCommand && <UpdateButton command={tool.updateCommand} onDone={check} />}
-                </div>
-              )}
-              {tool.accounts?.map((account) => (
-                <div key={account} className="mt-0.5 text-xs text-emerald-400">
-                  Signed in as {account}
-                </div>
-              ))}
-              {tool.error && <div className="mt-0.5 text-xs text-amber-400 select-text">{tool.error}</div>}
-            </div>
-          </div>
+          <ToolRow key={tool.name} tool={tool} check={check} />
         ))}
       </div>
-    </section>
+    </SearchGroup>
+  )
+}
+
+function ToolRow({ tool, check }: { tool: ToolStatus; check: () => Promise<void> }): React.JSX.Element | null {
+  if (!useSettingMatch(tool.name, tool.purpose)) return null
+  return (
+    <div data-setting className="flex items-start gap-3 border-b border-border px-4 py-3.5 last:border-b-0">
+      <span className={`mt-1.5 size-2 shrink-0 rounded-full ${tool.error ? (tool.version ? 'bg-amber-400' : 'bg-red-400') : 'bg-emerald-400'}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-[13px]">
+          <ToolMark name={tool.name} />
+          <span className="font-mono">{tool.name}</span>
+          <span className="text-xs text-muted-foreground">{tool.purpose}</span>
+        </div>
+        {tool.version && <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{tool.version}</div>}
+        {tool.update && (
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-sky-400">
+            <span className="select-text">Update available: {tool.update}</span>
+            {tool.updateCommand && <UpdateButton command={tool.updateCommand} onDone={check} />}
+          </div>
+        )}
+        {tool.accounts?.map((account) => (
+          <div key={account} className="mt-0.5 text-xs text-emerald-400">
+            Signed in as {account}
+          </div>
+        ))}
+        {tool.error && <div className="mt-0.5 text-xs text-amber-400 select-text">{tool.error}</div>}
+      </div>
+    </div>
   )
 }
 
 export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const [query, setQuery] = useState('')
+
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
@@ -618,14 +646,38 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
       <div className="mx-auto max-w-3xl px-8 py-8">
         <div className="mb-6 flex items-center">
           <h1 className="text-lg font-semibold">Settings</h1>
-          <button onClick={onClose} className="ml-auto h-7 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground">
+          <label className="mr-3 ml-auto flex h-7 w-64 items-center gap-2 rounded-md px-2.5 text-xs ring-1 ring-border focus-within:ring-primary">
+            <Icon name="search" className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              placeholder="Search settings"
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                // First Esc clears the search, the next one closes settings
+                if (event.key === 'Escape' && query) {
+                  event.stopPropagation()
+                  setQuery('')
+                }
+              }}
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground">
             Done (Esc)
           </button>
         </div>
-        <General />
-        <Appearance />
-        <Integrations />
-        <Shortcuts />
+        <div className={`peer ${query.trim() ? HIDE_WHEN_EMPTY : ''}`}>
+          <SettingsSearch value={query.trim()}>
+            <General />
+            <Appearance />
+            <Integrations />
+            <Shortcuts />
+          </SettingsSearch>
+        </div>
+        <p className={`hidden py-12 text-center text-[13px] text-muted-foreground ${query.trim() ? 'peer-[:not(:has([data-setting]))]:block' : ''}`}>
+          No settings match “{query.trim()}”
+        </p>
       </div>
     </div>
   )

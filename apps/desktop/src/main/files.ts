@@ -1,6 +1,6 @@
 import { shell, type WebContents } from 'electron'
 import { type Stats, unwatchFile, watchFile as watchFileStat } from 'node:fs'
-import { mkdir, rename, stat, writeFile as writeFileText } from 'node:fs/promises'
+import { mkdir, readdir, rename, stat, writeFile as writeFileText } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { insideWorktree } from './paths'
 
@@ -31,6 +31,13 @@ export function stopWatching(id: string): void {
   const watcher = watchers.get(id)
   if (watcher) unwatchFile(watcher.absolute, watcher.listener)
   watchers.delete(id)
+}
+
+/** One level of a folder, relative to `root`, folders ending in /; for browsing outside a repository, where listing everything at once is too slow */
+export async function listDirectory(root: string, folder: string): Promise<string[]> {
+  const entries = await readdir(folder ? insideWorktree(root, folder) : root, { withFileTypes: true }).catch(() => [])
+  const prefix = folder ? `${folder}/` : ''
+  return entries.filter((entry) => entry.name !== '.DS_Store').map((entry) => `${prefix}${entry.name}${entry.isDirectory() ? '/' : ''}`)
 }
 
 /** New empty file or folder (path ending in /), creating missing parent folders */

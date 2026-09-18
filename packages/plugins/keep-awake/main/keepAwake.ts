@@ -7,24 +7,33 @@ let blockerId: number | null = null
 
 const pmsetScript = (disable: boolean): string => `do shell script "pmset -a disablesleep ${disable ? 1 : 0}" with administrator privileges`
 
+/** The administrator prompt in flight, so calls made while it is open don't stack more prompts */
+let pending: Promise<boolean> | null = null
+
 /**
  * While agents work: blocks idle sleep (no password) and, when lidClosed is set, turns off lid-close sleep
  * through the macOS administrator prompt. Resolves false when the prompt is cancelled or fails.
+ * Lid-close sleep stays off between agent runs, until the setting is turned off or Treeix quits: every
+ * change costs a password prompt, and agents start and stop many times an hour.
  */
-export function setKeepAwake(active: boolean, lidClosed: boolean): Promise<boolean> {
+export async function setKeepAwake(active: boolean, lidClosed: boolean): Promise<boolean> {
+  await pending
   if (active && blockerId === null) blockerId = powerSaveBlocker.start('prevent-app-suspension')
   if (!active && blockerId !== null) {
     powerSaveBlocker.stop(blockerId)
     blockerId = null
   }
-  const wantDisabled = active && lidClosed
-  if (process.platform !== 'darwin' || wantDisabled === sleepDisabledByUs) return Promise.resolve(true)
-  return new Promise((resolve) => {
+  const wantDisabled = lidClosed && (active || sleepDisabledByUs)
+  if (process.platform !== 'darwin' || wantDisabled === sleepDisabledByUs) return true
+  pending = new Promise<boolean>((resolve) => {
     execFile('osascript', ['-e', pmsetScript(wantDisabled)], (error) => {
       if (!error) sleepDisabledByUs = wantDisabled
       resolve(!error)
     })
+  }).finally(() => {
+    pending = null
   })
+  return pending
 }
 
 /** On quit: put lid-close sleep back if Treeix turned it off; a Mac stuck awake in a bag is worse than one more prompt */

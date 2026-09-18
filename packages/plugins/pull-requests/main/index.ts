@@ -1,6 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
-import type { PullRequest, PullRequestComment, Reaction, ReviewThread } from '../shared/types'
-import { commentOnPullRequest, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, requestReview, setFileViewed, setThreadResolved } from './prs'
+import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
+import { commentOnPullRequest, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setFileViewed, setThreadResolved, submitReview } from './prs'
 
 const plugin: MainPlugin = {
   tools: [
@@ -14,6 +14,14 @@ const plugin: MainPlugin = {
     context.handle('image', (_, pullRequest: PullRequest, source: string) => pullRequestImage(pullRequest, source))
     context.handle('setThreadResolved', (_, pullRequest: PullRequest, thread: ReviewThread, resolved: boolean) => setThreadResolved(pullRequest, thread, resolved))
     context.handle('setFileViewed', (_, pullRequest: PullRequest, filePath: string, viewed: boolean) => setFileViewed(pullRequest, filePath, viewed))
+    context.handle('submitReview', (_, pullRequest: PullRequest, verdict: ReviewVerdict, body: string) =>
+      submitReview(pullRequest, verdict === 'approve' ? 'approve' : 'changes', typeof body === 'string' ? body : '')
+    )
+    context.handle('editComment', (_, pullRequest: PullRequest, commentId: string, body: string) => editPullRequestComment(pullRequest, commentId, String(body)))
+    context.handle('deleteComment', (_, pullRequest: PullRequest, commentId: string) => deletePullRequestComment(pullRequest, commentId))
+    context.handle('merge', (_, pullRequest: PullRequest, method: MergeMethod, deleteBranch: boolean) =>
+      mergePullRequest(pullRequest, method === 'squash' || method === 'rebase' ? method : 'merge', deleteBranch === true)
+    )
     context.handle('requestReview', (_, pullRequest: PullRequest, login: string) => requestReview(pullRequest, login))
     context.handle('comment', (_, pullRequest: PullRequest, comment: PullRequestComment) => commentOnPullRequest(pullRequest, comment))
     context.handle('react', (_, pullRequest: PullRequest, commentId: string, reaction: Reaction) => reactToPullRequestComment(pullRequest, commentId, reaction))

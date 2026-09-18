@@ -1,12 +1,15 @@
-import { lazy, Suspense, useEffect } from 'react'
-import { definePluginSettings, type HostApi, type RendererPlugin, SESSION_KINDS, type SessionKind, type SessionSummary, useHost } from '@treeix/sdk'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { createBridge, definePluginSettings, type HostApi, type RendererPlugin, SESSION_KINDS, type SessionKind, type SessionSummary, useHost } from '@treeix/sdk'
 import { FileIcon, Icon } from '@treeix/app/Icon'
+import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
 import { KindBadge } from '@treeix/app/sessionUi'
 import { digitPressed, getSettings } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
-import { inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
+import { getCurrentWorkspaceId, inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
 import { SessionsDialog } from './SessionsDialog'
+import { resolvePath } from './fileLinks'
 import {
+  activePane,
   closeActivePane,
   createSession,
   focusNeighbor,
@@ -16,10 +19,13 @@ import {
   isTerminalFocused,
   type Session,
   sendText,
+  setFileLinkHandler,
+  setWebLinkHandler,
   showPane,
   splitPane,
   subscribeTerminals,
   toggleZoom,
+  restoreClosedSession,
   useTerminals,
   whenReady
 } from './terminals'
@@ -28,10 +34,18 @@ const TerminalPanel = lazy(() => import('./TerminalPanel').then((module) => ({ d
 
 const TAB_ID = 'terminal'
 
+/** `root` is the folder `path` is relative to; older saved previews have none and use the explorer's */
+type FilePreview = { path: string; line: number | null; root?: string }
+
 const view = definePluginSettings('terminal', (stored) => ({
   explorerOpen: stored.explorerOpen !== false,
-  preview: null as { path: string; line: number | null } | null
+  /** The open file in each workspace */
+  previews: (typeof stored.previews === 'object' && stored.previews !== null ? stored.previews : {}) as Record<string, FilePreview | null>,
+  /** The file preview fills the tab, the terminal stays alive behind it */
+  previewMaximized: stored.previewMaximized === true
 }))
+
+const setPreview = (preview: FilePreview | null): void => view.update({ previews: { ...view.get().previews, [getCurrentWorkspaceId()]: preview } })
 
 /** Whether the ⌘⇧J session switcher is open */
 const dialog = definePluginSettings('terminal-dialog', () => ({ open: false }))
@@ -57,7 +71,7 @@ function useWorkspaceSessions(): Session[] {
   return useTerminals().sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces))
 }
 
-function useIncludeSession(): (session: Session) => boolean {
+function useIncludeSession(): (session: { worktreePath: string; workspaceId: string }) => boolean {
   const { repos } = useHost()
   const { workspaces, currentId } = useWorkspaces()
   const workspace = workspaces.find((candidate) => candidate.id === currentId)
@@ -72,23 +86,33 @@ const WaitingDot = ({ className }: { className: string }): React.JSX.Element | n
 function TerminalTab(): React.JSX.Element {
   const host = useHost()
   const includeSession = useIncludeSession()
-  const { explorerOpen, preview } = view.use()
+  useFileLinks()
+  const { explorerOpen, previews, previewMaximized } = view.use()
+  const preview = previews[useWorkspaces().currentId] ?? null
   const [explorerWidth, setExplorerWidth] = usePersisted<number>('terminalTab.explorerWidth', 260)
   const [previewWidth, setPreviewWidth] = usePersisted<number>('terminalTab.previewWidth', 560)
-  const open = (path: string, line: number | null = null): void => view.update({ preview: { path, line } })
+  // The file opener is registered once, so it reads the explorer's folder through a ref
+  const explorerRoot = useRef(host.explorerRoot)
+  explorerRoot.current = host.explorerRoot
+  const open = (path: string, line: number | null = null): void => setPreview({ path, line, root: explorerRoot.current })
+  const [markdownPreview, setMarkdownPreview] = useMarkdownPreview()
   useEffect(() => host.registerFileOpener(TAB_ID, open), [])
+  const previewRoot = preview?.root ?? host.explorerRoot
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className={`min-w-0 flex-1 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
           <Suspense fallback={null}>
             <TerminalPanel repos={host.repos} worktreePath={host.defaultCwd} orientation="horizontal" includeSession={includeSession} />
           </Suspense>
         </div>
-        {host.selectedWorktree && preview && (
-          <aside style={{ width: previewWidth }} className="relative flex shrink-0 flex-col border-l border-border bg-background">
-            <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />
+        {preview && (
+          <aside
+            style={previewMaximized ? undefined : { width: previewWidth }}
+            className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}
+          >
+            {!previewMaximized && <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />}
             <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
               <FileIcon path={preview.path} />
               <span className="min-w-0 truncate font-mono text-xs text-foreground/85 select-text" title={preview.path}>
@@ -96,19 +120,27 @@ function TerminalTab(): React.JSX.Element {
                 {preview.line && <span className="text-muted-foreground">:{preview.line}</span>}
               </span>
               <span className="flex-1" />
-              <IconButton label="Close preview" onClick={() => view.update({ preview: null })}>
+              {isMarkdownPath(preview.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+              <IconButton label={previewMaximized ? 'Show the terminal' : 'Fill the tab'} active={previewMaximized} onClick={() => view.update({ previewMaximized: !previewMaximized })}>
+                <Icon name={previewMaximized ? 'minimize' : 'maximize'} className="size-3.5" />
+              </IconButton>
+              <IconButton label="Close preview" onClick={() => setPreview(null)}>
                 <Icon name="close" className="size-3" />
               </IconButton>
             </div>
-            {host.renderFileView(host.selectedWorktree, preview.path, preview.line)}
+            {markdownPreview && isMarkdownPath(preview.path) ? (
+              <div className="min-h-0 flex-1 overflow-auto">
+                <MarkdownPreview loadKey={`${previewRoot}:${preview.path}`} load={() => window.api.readFile(previewRoot, preview.path)} />
+              </div>
+            ) : (
+              host.renderFileView(previewRoot, preview.path, preview.line)
+            )}
           </aside>
         )}
         {explorerOpen && (
           <aside style={{ width: explorerWidth }} className="relative flex shrink-0 flex-col border-l border-border">
-            <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-              <span className="truncate text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{host.selectedWorktreeLabel ?? 'Files'}</span>
-            </div>
-            <div className="min-h-0 flex-1">{host.renderExplorer(preview?.path ?? null, (path) => open(path))}</div>
+            <ExplorerHeader />
+            <div className="min-h-0 flex-1">{host.renderExplorer(previewRoot === host.explorerRoot ? (preview?.path ?? null) : null, (path) => open(path))}</div>
             <ResizeHandle edge="left" width={explorerWidth} min={180} max={520} onResize={setExplorerWidth} />
           </aside>
         )}
@@ -117,8 +149,82 @@ function TerminalTab(): React.JSX.Element {
   )
 }
 
+const bridge = createBridge('terminal')
+
+const folderLabel = (path: string, home: string): string => (path === home ? '~' : (path.split('/').pop() ?? path))
+
+/** What the files panel shows, with buttons to browse the terminal's folder or any other */
+function ExplorerHeader(): React.JSX.Element {
+  const host = useHost()
+  const label = host.browsedFolder ? folderLabel(host.browsedFolder, window.api.home) : (host.selectedWorktreeLabel ?? '~')
+  const showTerminalFolder = async (): Promise<void> => {
+    const session = activePane()
+    const cwd = session ? await bridge.invoke<string | null>('cwd', session.id) : null
+    if (cwd) host.setBrowsedFolder(cwd)
+    else host.flash('No running terminal to take the folder from')
+  }
+  const pickFolder = async (): Promise<void> => {
+    const folder = await window.api.pickFolder()
+    if (folder) host.setBrowsedFolder(folder)
+  }
+  return (
+    <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-border pr-1.5 pl-3">
+      <span title={host.explorerRoot} className="min-w-0 flex-1 truncate text-[11px] font-medium tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <IconButton label="Show the terminal's folder" onClick={showTerminalFolder}>
+        <Icon name="terminal" className="size-3.5" />
+      </IconButton>
+      <IconButton label="Open folder…" onClick={pickFolder}>
+        <Icon name="folderOpen" className="size-3.5" />
+      </IconButton>
+      {host.browsedFolder && (
+        <IconButton label={host.selectedWorktree ? 'Back to the selected worktree' : 'Back to home'} onClick={() => host.setBrowsedFolder(null)}>
+          <Icon name="close" className="size-3" />
+        </IconButton>
+      )}
+    </div>
+  )
+}
+
+/**
+ * ⌘-click on a path in a session: shows the file in the Terminal tab, with the Files panel on the folder it is in
+ * unless that folder is already shown. Relative paths start where the session's shell is now.
+ */
+function useFileLinks(): void {
+  const host = useHost()
+  useEffect(() =>
+    setFileLinkHandler(async (sessionId, path, line) => {
+      const session = getTerminals().sessions.find((candidate) => candidate.id === sessionId)
+      const cwd = (await bridge.invoke<string | null>('cwd', sessionId).catch(() => null)) ?? session?.worktreePath ?? window.api.home
+      const absolute = resolvePath(path, cwd, window.api.home)
+      const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
+      const isFolder = (await window.api.listDirectory(parent, '')).includes(`${absolute.slice(parent.length + 1)}/`)
+      if (isFolder) {
+        host.setBrowsedFolder(absolute)
+        view.update({ explorerOpen: true })
+        if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
+        return
+      }
+      const inside = absolute.startsWith(`${host.explorerRoot}/`)
+      const folder = inside ? host.explorerRoot : parent
+      if (!inside) host.setBrowsedFolder(folder)
+      setPreview({ path: absolute.slice(folder.length + 1), line, root: folder })
+      view.update({ explorerOpen: true })
+      if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
+    })
+  )
+  useEffect(() =>
+    setWebLinkHandler(async (url) => {
+      const opened = (await host.service('pullRequests')?.open(url, host).catch(() => false)) ?? false
+      if (!opened) window.open(url)
+    })
+  )
+}
+
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
   const host = useHost()
+  useFileLinks()
   const includeSession = useIncludeSession()
   return <TerminalPanel repos={host.repos} worktreePath={host.defaultCwd} orientation={side === 'bottom' ? 'horizontal' : 'vertical'} includeSession={includeSession} />
 }
@@ -145,8 +251,9 @@ function FilesToggle(): React.JSX.Element | null {
   const { explorerOpen } = view.use()
   if (activeTab !== TAB_ID) return null
   return (
-    <IconButton label="Toggle files (⌘P)" active={explorerOpen} onClick={() => view.update({ explorerOpen: !explorerOpen })}>
-      <Icon name="folder" />
+    <IconButton label={explorerOpen ? 'Hide files (⌘P)' : 'Show files (⌘P)'} onClick={() => view.update({ explorerOpen: !explorerOpen })}>
+      {/* A side panel, not a folder: the folder icon is for opening a folder in the panel */}
+      <Icon name="panel" className="size-3.5 -scale-x-100" />
     </IconButton>
   )
 }
@@ -164,6 +271,8 @@ function Root(): React.JSX.Element | null {
   const host = useHost()
   const { open } = dialog.use()
   const sessions = useWorkspaceSessions()
+  const includeSession = useIncludeSession()
+  const history = useTerminals().history.filter(includeSession)
   // An empty terminal panel is just a gap: close it once the last session in this workspace is gone
   useEffect(() => {
     if (sessions.length === 0 && host.isPanelVisible(TAB_ID)) host.hidePanel(TAB_ID)
@@ -172,11 +281,13 @@ function Root(): React.JSX.Element | null {
   return (
     <SessionsDialog
       sessions={sessions}
+      history={history}
       repos={host.repos}
       cwd={host.defaultCwd}
       onClose={() => dialog.update({ open: false })}
       onNew={(kind) => startIn(host, kind)}
       onPick={(session) => reveal(host, session.id)}
+      onRestore={(entry) => void restoreClosedSession(entry).then((id) => reveal(host, id))}
     />
   )
 }
@@ -252,7 +363,7 @@ const plugin: RendererPlugin = {
   Root,
   titleBar: [
     { order: 20, render: SessionsButton },
-    { order: 90, render: FilesToggle }
+    { order: 90, render: FilesToggle, end: true }
   ],
   onKeyDown,
   onCloseShortcut: () => {

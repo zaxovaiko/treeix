@@ -42,16 +42,17 @@ const openPlan = (host: HostApi, plan: Plan): void => {
   host.openTab(tab)
 }
 
-/** The newest Claude plan written since the session started */
-function PlanButton({ startedAt }: { startedAt: number }): React.JSX.Element | null {
+/** The plan the session printed the path of, else the newest Claude plan written since it started */
+function PlanButton({ startedAt, name }: { startedAt: number; name?: string | null }): React.JSX.Element | null {
   const host = useHost()
   const [plan, setPlan] = useState<Plan | null>(null)
   useEffect(() => {
-    const check = (): void => void listPlans().then((plans) => setPlan(plans.find((candidate) => candidate.modifiedAt >= startedAt) ?? null))
+    const check = (): void =>
+      void listPlans().then((plans) => setPlan(plans.find((candidate) => (name ? candidate.name === name : candidate.modifiedAt >= startedAt)) ?? null))
     check()
     const timer = setInterval(check, PLAN_POLL_MS)
     return () => clearInterval(timer)
-  }, [startedAt])
+  }, [startedAt, name])
   if (!plan) return null
   return (
     <button

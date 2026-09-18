@@ -8,6 +8,8 @@ const api: Api = {
   scan: () => ipcRenderer.invoke('scan'),
   diff: (worktreePath) => ipcRenderer.invoke('diff', worktreePath),
   listFiles: (worktreePath) => ipcRenderer.invoke('listFiles', worktreePath),
+  listDirectory: (root, folder) => ipcRenderer.invoke('listDirectory', root, folder),
+  pickFolder: () => ipcRenderer.invoke('pickFolder'),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),
   navigate: (worktreePath, kind, target) => ipcRenderer.invoke('navigate', worktreePath, kind, target),
   hover: (worktreePath, target) => ipcRenderer.invoke('hover', worktreePath, target),
@@ -37,6 +39,8 @@ const api: Api = {
   onWindowChromeless: (listener) => {
     const handler = (_: IpcRendererEvent, chromeless: boolean): void => listener(chromeless)
     ipcRenderer.on('window-chromeless', handler)
+    // The event only fires on changes, so a page reloaded in full screen asks for the current state first
+    ipcRenderer.invoke('isChromeless').then((chromeless: unknown) => listener(chromeless === true))
     return () => ipcRenderer.removeListener('window-chromeless', handler)
   },
   onCloseShortcut: (listener) => {

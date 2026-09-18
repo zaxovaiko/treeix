@@ -26,7 +26,9 @@ test('workspace helpers', async () => {
   // Started in a workspace: only there, even when another one holds the same worktree
   expect(inWorkspace({ worktreePath: '/r/openora', workspaceId: 'w2' }, workspace, repos, all)).toBe(false)
   expect(inWorkspace({ worktreePath: '/Users/me', workspaceId: 'w1' }, workspace, repos, all)).toBe(true)
-  // Orphans go to the first workspace holding the worktree, else the first workspace
+  // Orphans go to the narrowest workspace holding the worktree, else the first workspace
+  expect(inWorkspace({ worktreePath: '/r/openora/.claude/worktrees/a', workspaceId: 'all' }, workspace, repos, [other, workspace])).toBe(true)
+  expect(inWorkspace({ worktreePath: '/r/openora/.claude/worktrees/a', workspaceId: 'all' }, other, repos, [other, workspace])).toBe(false)
   expect(inWorkspace({ worktreePath: '/r/ariex', workspaceId: 'all' }, other, repos, all)).toBe(true)
   expect(inWorkspace({ worktreePath: '/r/ariex', workspaceId: 'all' }, workspace, repos, all)).toBe(false)
   expect(inWorkspace({ worktreePath: '/Users/me', workspaceId: 'gone' }, workspace, repos, all)).toBe(true)

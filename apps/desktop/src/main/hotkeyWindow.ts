@@ -5,6 +5,8 @@ import { nativeHotkeys, setDockHidden, setSquareCorners } from './macWindow'
 
 let registered: string | null = null
 let hideOnBlur = true
+/** Hotkey-only mode: the window never turns back into a normal one, so showing it again changes nothing on screen */
+let only = false
 /** True while the window is shown as the drop-down hotkey window */
 let summoned = false
 let normalBounds: Rectangle | null = null
@@ -25,6 +27,9 @@ function setChrome(window: BrowserWindow, visible: boolean): void {
   window.webContents.send('window-chromeless', !visible)
 }
 
+/** Whether the window is shown borderless as the hotkey window right now */
+export const isSummoned = (): boolean => summoned
+
 function summon(window: BrowserWindow): void {
   if (!summoned) normalBounds = window.getBounds()
   summoned = true
@@ -38,7 +43,8 @@ function summon(window: BrowserWindow): void {
   const menuBar = workArea.y - bounds.y
   const fullBounds = { x: bounds.x, y: workArea.y, width: bounds.width, height: bounds.height - menuBar }
   summonedBounds = fullBounds
-  window.setBounds(fullBounds)
+  const current = window.getBounds()
+  if (current.x !== fullBounds.x || current.y !== fullBounds.y || current.width !== fullBounds.width || current.height !== fullBounds.height) window.setBounds(fullBounds)
   // The Dock hides on the next run loop turn and macOS clamps windows to the visible frame until then
   setTimeout(() => summoned && window.setBounds(fullBounds), 100)
   window.show()
@@ -62,7 +68,7 @@ function dismiss(window: BrowserWindow): void {
   // Hiding the app hands focus back to whatever was in front before
   if (process.platform === 'darwin') app.hide()
   else window.hide()
-  restore(window)
+  if (!only) restore(window)
 }
 
 /** `focused` is whether the window had focus when the shortcut was pressed */
@@ -84,6 +90,11 @@ export function addHotkeyMenuItem(window: BrowserWindow): void {
 /** Registers the global shortcut; returns an error message when it cannot be used */
 export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): string | null {
   hideOnBlur = options.hideOnBlur
+  if (options.only !== only) {
+    only = options.only
+    if (only && !summoned) summon(window)
+    else if (!only && summoned) restore(window)
+  }
   if (!watched.has(window)) {
     watched.add(window)
     window.on('blur', () => {
@@ -103,7 +114,7 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
   unregister()
   if (!shortcut || !key) {
     // Turning the feature off while the window is summoned gives the normal window back
-    if (summoned) restore(window)
+    if (summoned && !only) restore(window)
     return null
   }
 

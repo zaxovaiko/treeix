@@ -53,6 +53,21 @@ export function StateBadge({ pr }: { pr: PullRequest }): React.JSX.Element {
 export const reviewSettled = (review?: ReviewStatus | null): boolean =>
   !!review && review.newCommits === 0 && ['yours', 'approved', 'changes', 'commented'].includes(review.state)
 
+export type PullRequestGroup = { id: 'ready' | 'settled' | 'drafts' | 'conflicts'; label: string; pullRequests: PullRequest[] }
+
+/** Open pull requests you can review now come first; ones already reviewed, drafts, then conflicts, which can't merge anyway. Order inside a group is kept */
+export function groupPullRequests(pullRequests: PullRequest[]): PullRequestGroup[] {
+  const groups: PullRequestGroup[] = [
+    { id: 'ready', label: 'Ready to review', pullRequests: [] },
+    { id: 'settled', label: 'Reviewed or yours', pullRequests: [] },
+    { id: 'drafts', label: 'Drafts', pullRequests: [] },
+    { id: 'conflicts', label: 'Conflicts', pullRequests: [] }
+  ]
+  const groupOf = (pr: PullRequest): PullRequestGroup['id'] => (pr.conflicts ? 'conflicts' : pr.draft ? 'drafts' : reviewSettled(pr.review) ? 'settled' : 'ready')
+  for (const pr of pullRequests) groups.find((group) => group.id === groupOf(pr))?.pullRequests.push(pr)
+  return groups.filter((group) => group.pullRequests.length > 0)
+}
+
 const REVIEW_MARKS: Record<Exclude<ReviewStatus['state'], 'unreviewed'>, { label: string; className: string; icon?: 'check' | 'alert' | 'comment' }> = {
   requested: { label: 'Review requested', className: 'bg-amber-400/15 text-amber-400' },
   approved: { label: 'Approved', className: 'bg-emerald-400/12 text-emerald-400', icon: 'check' },

@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { shellQuote } from '../../shared/shell'
 import type { Repo } from '../../shared/types'
 import { Icon } from './Icon'
 import { KindBadge, StatusDot, worktreeLabel } from './sessionUi'
 import type { SessionSummary as Session } from '@treeix/sdk'
 import { useService, useSessions } from './plugins'
+import { inWorkspace, useWorkspaces } from './workspaces'
 import { usePersisted } from './ui'
 
 const lastTargets = new Map<string, string>()
@@ -33,9 +35,26 @@ export function SendButton({
   onDone: (message: string) => void
   onClear?: () => void
 }): React.JSX.Element {
-  const sessions = useSessions()
+  // Only sessions of this workspace, even when another workspace has one on the same checkout
+  const { workspaces, currentId } = useWorkspaces()
+  const workspace = workspaces.find((candidate) => candidate.id === currentId)
+  const sessions = useSessions().filter((session) => inWorkspace(session, workspace, repos, workspaces))
   const service = useService('sessions')
   const [menuOpen, setMenuOpen] = useState(false)
+  const anchor = useRef<HTMLDivElement>(null)
+  // Placed against the window rather than the button's box, so panels that scroll (like the comments popover) can't cut it off
+  const [menuPlace, setMenuPlace] = useState<React.CSSProperties | null>(null)
+  const openMenu = (): void => {
+    const rect = anchor.current?.getBoundingClientRect()
+    if (!rect) return
+    const above = rect.top - 16
+    const below = window.innerHeight - rect.bottom - 16
+    setMenuPlace({
+      right: Math.max(8, window.innerWidth - rect.right),
+      ...(above >= below ? { bottom: window.innerHeight - rect.top + 8, maxHeight: above } : { top: rect.bottom + 8, maxHeight: below })
+    })
+    setMenuOpen(true)
+  }
   // Off by default so extra context can be typed before sending; a new key so earlier saved choices don't turn it back on
   const [submit, setSubmit] = usePersisted<boolean>('send.submitAfterPaste', false)
   const target = defaultTarget(sessions, worktreePath)
@@ -103,7 +122,7 @@ export function SendButton({
   const divider = variant === 'pill' ? 'border-primary/30' : 'border-white/25'
 
   return (
-    <div className={`relative flex items-center text-[11.5px] font-medium ${shell}`}>
+    <div ref={anchor} className={`relative flex items-center text-[11.5px] font-medium ${shell}`}>
       <button
         onClick={() => (target ? send(target) : copy())}
         title={target ? `Paste into ${target.title}` : 'No agent session in this worktree, copies to clipboard'}
@@ -125,16 +144,18 @@ export function SendButton({
       </button>
       <button
         aria-label="Choose where to send comments"
-        onClick={() => setMenuOpen(!menuOpen)}
+        onClick={() => (menuOpen ? setMenuOpen(false) : openMenu())}
         className={`flex h-full w-7 items-center justify-center rounded-r-[inherit] border-l hover:bg-white/5 ${divider}`}
       >
         <Icon name="chevron" className="size-3 rotate-90" />
       </button>
 
-      {menuOpen && (
+      {menuOpen &&
+        createPortal(
         <div
           onMouseLeave={() => setMenuOpen(false)}
-          className="absolute right-0 bottom-full z-50 mb-2 w-80 rounded-lg border border-input bg-popover p-1 font-normal text-foreground shadow-2xl shadow-black/60"
+          style={menuPlace ?? undefined}
+          className="fixed z-[60] w-80 overflow-y-auto rounded-lg border border-input bg-popover p-1 font-normal text-foreground"
         >
           {here.length > 0 && <div className="px-2 pt-1.5 pb-1 text-[11px] text-muted-foreground">This worktree</div>}
           {here.map(row)}
@@ -169,8 +190,9 @@ export function SendButton({
               <Icon name="close" className="size-3.5" /> Delete {label}
             </button>
           )}
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   )
 }

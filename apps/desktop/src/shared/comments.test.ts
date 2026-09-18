@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { extractFileLines, extractLines, formatComments, isReviewComment, rangeLabel } from './comments'
+import { commentsPrompt, extractFileLines, extractLines, formatComments, isReviewComment, rangeLabel, type ReviewComment } from './comments'
 
 const patch = `diff --git a/a.ts b/a.ts
 --- a/a.ts
@@ -43,4 +43,13 @@ test('formatComments', () => {
 
 test('extractFileLines', () => {
   expect(extractFileLines('a\nb\nc\nd', { start: 3, end: 2 })).toBe('b\nc')
+})
+
+test('commentsPrompt sends references as-is and code notes as feedback on the code', () => {
+  const base = { worktreePath: '/r', range: { start: 0, end: 0 }, code: '' }
+  const reference: ReviewComment = { ...base, id: 'a', filePath: 'BF-627 Translations', text: 'Jira BF-627 https://x/browse/BF-627', kind: 'reference' }
+  const note: ReviewComment = { ...base, id: 'b', filePath: 'src/a.ts', range: { start: 3, end: 3 }, code: '+x', text: 'rename x' }
+  expect(commentsPrompt([reference], 'main (/r)')).toBe('Jira BF-627 https://x/browse/BF-627\n')
+  const both = commentsPrompt([reference, note], 'main (/r)')
+  expect(both.startsWith('Jira BF-627 https://x/browse/BF-627\n\nFeedback on the code in main (/r). Address each note:\n\n1. src/a.ts:3')).toBe(true)
 })

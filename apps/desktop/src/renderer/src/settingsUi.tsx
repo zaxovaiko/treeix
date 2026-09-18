@@ -1,4 +1,39 @@
 /** Building blocks for the settings page, also used by plugins' settings */
+import { createContext, useContext } from 'react'
+
+/** Settings search; '' shows everything */
+const SettingsQuery = createContext('')
+export const SettingsSearch = SettingsQuery.Provider
+
+/** Every word of the query appears somewhere in the texts */
+export function settingMatches(query: string, ...texts: string[]): boolean {
+  const haystack = texts.join(' ').toLowerCase()
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .every((word) => haystack.includes(word))
+}
+
+export const useSettingsQuery = (): string => useContext(SettingsQuery)
+
+export const useSettingMatch = (...texts: string[]): boolean => settingMatches(useContext(SettingsQuery), ...texts)
+
+/** While searching, hides a group whose entries all filtered out; entries mark themselves with data-setting */
+export const HIDE_WHEN_EMPTY = '[&:not(:has([data-setting]))]:hidden'
+
+/**
+ * A group that matches by its own title shows everything in it; otherwise, while searching,
+ * it hides once all its entries have filtered out
+ */
+export function SearchGroup({ title, className = '', children }: { title: string; className?: string; children: React.ReactNode }): React.JSX.Element {
+  const query = useContext(SettingsQuery)
+  const titleMatch = query.trim() !== '' && settingMatches(query, title)
+  return (
+    <div className={`${className} ${query.trim() && !titleMatch ? HIDE_WHEN_EMPTY : ''}`}>
+      {titleMatch ? <SettingsSearch value="">{children}</SettingsSearch> : children}
+    </div>
+  )
+}
 
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }): React.JSX.Element {
   return (
@@ -38,9 +73,10 @@ export function Segmented<T extends string>({
   )
 }
 
-export function Row({ label, description, children }: { label: string; description: string; children: React.ReactNode }): React.JSX.Element {
+export function Row({ label, description, children }: { label: string; description: string; children: React.ReactNode }): React.JSX.Element | null {
+  if (!useSettingMatch(label, description)) return null
   return (
-    <div className="flex items-center gap-6 border-b border-border px-4 py-3.5 last:border-b-0">
+    <div data-setting className="flex items-center gap-6 border-b border-border px-4 py-3.5 last:border-b-0">
       <span className="min-w-0 flex-1">
         <span className="block text-[13px]">{label}</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
@@ -51,9 +87,9 @@ export function Row({ label, description, children }: { label: string; descripti
 }
 
 export const Card = ({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element => (
-  <section className="mb-8">
+  <SearchGroup title={title} className="mb-8">
     <h2 className="mb-2 text-[13px] font-medium">{title}</h2>
     <div className="rounded-xl border border-border bg-card">{children}</div>
-  </section>
+  </SearchGroup>
 )
 

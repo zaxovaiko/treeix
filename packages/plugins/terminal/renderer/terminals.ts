@@ -3,6 +3,7 @@ import type { Terminal } from '@xterm/xterm'
 import { useSyncExternalStore } from 'react'
 import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscribeSettings } from '@treeix/app/settings'
 import { terminalTitle } from './terminalTitle'
+import { findFileLinks, findWebLinks } from './fileLinks'
 import { THEMES } from '@treeix/app/themes'
 import { addPane, type DropEdge, neighborPane, type PaneLayout, placePane as placeInLayout, remapPanes, removePane } from './paneLayout'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
@@ -38,6 +39,8 @@ export type Session = SessionMeta & {
   fit: FitAddon
   element: HTMLDivElement
   opened: boolean
+  /** Last Claude plan file the session printed, e.g. when Claude runs inside a shell session */
+  planName: string | null
 }
 
 /** Readline control codes that ⌘ arrows and ⌘⌫ send in macOS terminals */
@@ -75,11 +78,53 @@ const ACTIVE_WINDOW_MS = 2000
 const WAITING_FOR_INPUT =
   /Do you want to|❯\s*1\.\s*Yes|Yes, and don't ask|\[y\/n\]|\(y\/n\)|Allow command|Would you like to run|Press Enter to continue/i
 
+/** A closed session, kept so it can be started again; agent sessions resume their conversation */
+export type ClosedSession = SessionMeta & { id: string; endedAt: number }
+
 /** `panes` is the flat list of shown sessions; `layout` arranges them in columns */
-type State = { sessions: Session[]; panes: string[]; layout: PaneLayout; listOpen: boolean; /** Pane filling the whole area, like iTerm's maximize */ zoomed: string | null }
+type State = {
+  sessions: Session[]
+  panes: string[]
+  layout: PaneLayout
+  listOpen: boolean
+  /** Pane filling the whole area, like iTerm's maximize */
+  zoomed: string | null
+  /** Newest first */
+  history: ClosedSession[]
+}
+
+/** Opens a path ⌘-clicked in a session; set by the plugin, which knows where files show */
+let fileLinkHandler: ((sessionId: string, path: string, line: number | null) => void) | null = null
+export const setFileLinkHandler = (handler: typeof fileLinkHandler): void => {
+  fileLinkHandler = handler
+}
+
+/** Opens a web address ⌘-clicked in a session, in the app when a plugin knows it, else in the browser */
+let webLinkHandler: ((url: string) => void) | null = null
+export const setWebLinkHandler = (handler: typeof webLinkHandler): void => {
+  webLinkHandler = handler
+}
 
 const LIST_OPEN_KEY = 'terminal.listOpen'
-let state: State = { sessions: [], panes: [], layout: [], listOpen: localStorage.getItem(LIST_OPEN_KEY) === 'true', zoomed: null }
+const HISTORY_KEY = 'terminals.history'
+const HISTORY_LIMIT = 100
+
+function isClosedSession(value: unknown): value is ClosedSession {
+  if (!isSessionMeta(value)) return false
+  const { id, endedAt } = value as Partial<ClosedSession>
+  return typeof id === 'string' && typeof endedAt === 'number'
+}
+
+function loadHistory(): ClosedSession[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter(isClosedSession) : []
+  } catch {
+    return []
+  }
+}
+
+let state: State = { sessions: [], panes: [], layout: [], listOpen: localStorage.getItem(LIST_OPEN_KEY) === 'true', zoomed: null, history: loadHistory() }
 const listeners = new Set<() => void>()
 const pendingOutput = new Map<string, string>()
 
@@ -117,24 +162,33 @@ bridge.on('exit', (id, exitCode) => {
   })
 })
 
+/** Wrapped rows are joined back into their line, so long paths stay whole */
 function visibleScreen(terminal: Terminal): string {
   const buffer = terminal.buffer.active
-  const lines: string[] = []
+  let text = ''
   for (let row = buffer.viewportY; row < buffer.viewportY + terminal.rows; row++) {
-    lines.push(buffer.getLine(row)?.translateToString(true) ?? '')
+    const line = buffer.getLine(row)
+    text += (row > buffer.viewportY && !line?.isWrapped ? '\n' : '') + (line?.translateToString(true) ?? '')
   }
-  return lines.join('\n')
+  return text
 }
 
-function detectStatus(session: Session): SessionStatus {
+const PLAN_PATH = /\.claude\/plans\/([\w.-]+\.md)/g
+const printedPlan = (screen: string, current: string | null): string | null => [...screen.matchAll(PLAN_PATH)].at(-1)?.[1] ?? current
+
+function detectStatus(session: Session, screen: string): SessionStatus {
   if (session.status === 'exited') return 'exited'
-  if (session.kind !== 'shell' && WAITING_FOR_INPUT.test(visibleScreen(session.terminal))) return 'input'
+  if (session.kind !== 'shell' && WAITING_FOR_INPUT.test(screen)) return 'input'
   return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
 }
 
 setInterval(() => {
-  const changed = state.sessions.some((session) => detectStatus(session) !== session.status)
-  if (changed) update({ sessions: state.sessions.map((session) => ({ ...session, status: detectStatus(session) })) })
+  const next = state.sessions.map((session) => {
+    const screen = session.opened ? visibleScreen(session.terminal) : ''
+    return { session, status: detectStatus(session, screen), planName: printedPlan(screen, session.planName) }
+  })
+  const changed = next.some(({ session, status, planName }) => status !== session.status || planName !== session.planName)
+  if (changed) update({ sessions: next.map(({ session, status, planName }) => ({ ...session, status, planName })) })
 }, 1000)
 
 const setLayout = (layout: PaneLayout): void => update({ layout, panes: layout.flat(), zoomed: layout.flat().includes(state.zoomed ?? '') ? state.zoomed : null })
@@ -166,12 +220,41 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     cursorStyle: 'bar',
     cursorWidth: 2,
     allowTransparency: true,
-    macOptionIsMeta: true,
+    // ⌥ types characters like ą and ś on Polish and other layouts; ⌥ arrows and ⌥⌫ still move and delete by word
+    macOptionIsMeta: false,
     scrollback: 5000,
     theme: terminalTheme()
   })
   const fit = new FitAddon()
   terminal.loadAddon(fit)
+  // ⌘-click on a printed path opens it in the app; wrapped lines are read one row at a time
+  terminal.registerLinkProvider({
+    provideLinks: (row, callback) => {
+      const text = terminal.buffer.active.getLine(row - 1)?.translateToString(true) ?? ''
+      const webLinks = findWebLinks(text)
+      // A path inside a web address (…/merge_requests/437) belongs to the address
+      const fileLinks = findFileLinks(text).filter((file) => !webLinks.some((web) => file.start < web.end && file.end > web.start))
+      const range = (start: number, end: number) => ({ start: { x: start + 1, y: row }, end: { x: end, y: row } })
+      callback([
+        ...fileLinks.map((link) => ({
+          text: text.slice(link.start, link.end),
+          range: range(link.start, link.end),
+          decorations: { underline: true, pointerCursor: true },
+          activate: (event: MouseEvent) => {
+            if (event.metaKey) fileLinkHandler?.(id, link.path, link.line)
+          }
+        })),
+        ...webLinks.map((link) => ({
+          text: link.url,
+          range: range(link.start, link.end),
+          decorations: { underline: true, pointerCursor: true },
+          activate: (event: MouseEvent) => {
+            if (event.metaKey) webLinkHandler?.(link.url)
+          }
+        }))
+      ])
+    }
+  })
   const element = document.createElement('div')
   element.className = 'h-full w-full'
   // Replayed output still contains the programs' old terminal queries (device attributes, colors);
@@ -205,7 +288,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     if (title && findSession(id)?.title !== title) update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)) })
   })
   const status: SessionStatus = exitCode === null ? 'running' : 'exited'
-  const session: Session = { ...meta, id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false }
+  const session: Session = { ...meta, id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false, planName: null }
   update({ sessions: [...state.sessions, session] })
   terminal.write(output + (pendingOutput.get(id) ?? ''), () => (replaying = false))
   pendingOutput.delete(id)
@@ -343,13 +426,35 @@ export function focusSession(id: string): void {
   findSession(id)?.terminal.focus()
 }
 
+const setHistory = (history: ClosedSession[]): void => {
+  const kept = history.slice(0, HISTORY_LIMIT)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(kept))
+  update({ history: kept })
+}
+
+/** Ends the process and moves the session to the history */
 export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
   bridge.send('kill', id)
   session.terminal.dispose()
   const layout = removePane(state.layout, id)
+  const { worktreePath, kind, title, startedAt, workspaceId, agentSessionId } = session
   update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), layout, panes: layout.flat() })
+  setHistory([{ id, worktreePath, kind, title, startedAt, workspaceId, agentSessionId, endedAt: Date.now() }, ...state.history])
+}
+
+export const forgetClosedSession = (id: string): void => setHistory(state.history.filter((entry) => entry.id !== id))
+export const clearClosedSessions = (ids: string[]): void => setHistory(state.history.filter((entry) => !ids.includes(entry.id)))
+
+/** Starts a closed session again in its folder, resuming the agent conversation, and shows it */
+export async function restoreClosedSession(entry: ClosedSession): Promise<string> {
+  const { id: _closedId, endedAt: _endedAt, ...meta } = entry
+  const id = await spawnSession(meta, resumeCommand(meta))
+  await openSession(id, meta, '', null)
+  showPane(id)
+  forgetClosedSession(entry.id)
+  return id
 }
 
 /** Paste as one bracketed block so TUIs like Claude Code keep newlines inside the prompt */
@@ -409,13 +514,12 @@ export async function splitPane(edge: DropEdge, fallbackCwd: string): Promise<vo
   setTimeout(() => focusSession(id))
 }
 
-/** Ends shells; agent sessions only leave the layout so a stray ⌘W can't kill a running conversation */
+/** Ends the session; it stays in the history, so an agent conversation can be resumed */
 export function closeActivePane(): void {
   const session = activePane()
   if (!session) return
   const next = neighborPane(state.layout, session.id, 'top') ?? neighborPane(state.layout, session.id, 'left') ?? neighborPane(state.layout, session.id, 'bottom') ?? neighborPane(state.layout, session.id, 'right')
-  if (session.kind === 'shell' || session.status === 'exited') killSession(session.id)
-  else hidePane(session.id)
+  killSession(session.id)
   if (next) setTimeout(() => focusSession(next))
 }
 

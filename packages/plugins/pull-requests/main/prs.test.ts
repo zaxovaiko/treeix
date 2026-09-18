@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { splitPatch } from '@treeix/host/git'
-import { githubFilesToPatches, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseRemote, toGithubPullRequest, toGitlabPullRequest } from './prs'
+import { githubFilesToPatches, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview } from './prs'
 
 test('parseRemote', () => {
   expect(parseRemote('git@github.com:blurifycom/openora.git')).toEqual({ provider: 'github', host: 'github.com', slug: 'blurifycom/openora' })
@@ -168,4 +168,13 @@ test('githubReviewers lists pending requests first and skips the author', () => 
     { login: 'dee', avatarUrl: 'd.png', state: 'requested' },
     { login: 'eve', avatarUrl: null, state: 'approved' }
   ])
+})
+
+test('githubMyReview reads the viewer verdict', () => {
+  const detail = (state: string | null): unknown => ({ data: { repository: { pullRequest: { viewerLatestReview: state ? { state } : null } } } })
+  expect(githubMyReview(detail('APPROVED'))).toBe('approved')
+  expect(githubMyReview(detail('CHANGES_REQUESTED'))).toBe('changes')
+  expect(githubMyReview(detail('COMMENTED'))).toBeNull()
+  expect(githubMyReview(detail(null))).toBeNull()
+  expect(githubMyReview(null)).toBeNull()
 })

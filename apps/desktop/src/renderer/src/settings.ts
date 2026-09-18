@@ -24,6 +24,7 @@ export type Settings = {
   /** Recorded global shortcut for the drop-down hotkey window, null turns it off */
   hotkey: Shortcut | null
   hotkeyHideOnBlur: boolean
+  hotkeyOnly: boolean
   /** In-app code navigation keys; macOS sends F-keys only with fn unless standard function keys are on, so they can be re-recorded */
   navigationKeys: Record<NavigationKind, Shortcut | null>
   /** Modifier held with 1-9 to jump to a terminal pane, a title bar tab or a workspace */
@@ -125,7 +126,7 @@ export function stepFontSize(key: 'editorFontSize' | 'terminalFontSize', step: -
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, editorFontSize: 13, terminalFontSize: 12, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { panes: 'meta', tabs: 'alt', workspaces: 'altMeta' }, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { panes: 'meta', tabs: 'alt', workspaces: 'altMeta' }, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -141,7 +142,7 @@ function load(): Settings {
     const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}')
     if (typeof stored !== 'object' || stored === null) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
+    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
@@ -154,6 +155,7 @@ function load(): Settings {
       borderStrength: BORDER_STRENGTHS.find((strength) => strength === candidate.borderStrength) ?? DEFAULTS.borderStrength,
       hotkey: 'hotkey' in candidate ? parseHotkey(candidate.hotkey) : DEFAULTS.hotkey,
       hotkeyHideOnBlur: flag('hotkeyHideOnBlur'),
+      hotkeyOnly: flag('hotkeyOnly'),
       navigationKeys: parseNavigationKeys(candidate.navigationKeys),
       digitShortcuts: parseDigitShortcuts(candidate.digitShortcuts),
       editorFontSize: clampFontSize(candidate.editorFontSize, DEFAULTS.editorFontSize),

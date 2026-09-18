@@ -66,7 +66,7 @@ function KeepAwakeSettings(): React.JSX.Element {
   return (
     <Row
       label="Keep running with the lid closed"
-      description="Asks for your password when agents start and again after they've been idle for 2 minutes. Watch for heat if the Mac is in a bag."
+      description="Asks for your password the first time agents start. Lid-close sleep then stays off until you turn this off or quit Treeix. Watch for heat if the Mac is in a bag."
     >
       <Switch checked={keepAwakeLidClosed} label="Keep running with the lid closed" onChange={() => awakeSettings.update({ keepAwakeLidClosed: !keepAwakeLidClosed })} />
     </Row>

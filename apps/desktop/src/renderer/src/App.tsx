@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   type Attachment,
   extractLines,
-  formatComments,
+  commentsPrompt as promptForComments,
   isReviewComment,
   type LineRange,
   rangeLabel,
@@ -21,7 +21,7 @@ import { CORE_PANELS, type DockSide, DropZones, type PanelId, type PanelInfo, Pa
 import { ErrorBoundary } from './ErrorBoundary'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from './MarkdownPreview'
 import { emptyHistory, recordPlace, stepPlace } from './navigationHistory'
-import { Explorer } from './Explorer'
+import { Explorer, FolderExplorer } from './Explorer'
 import { LocationsDialog, matcherFor, SearchDialog } from './LocationBrowser'
 import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindForKey, useSymbolNavigation } from './codeNavigation'
 import { codeThemeOptions, diffBackground, FileView } from './FileView'
@@ -33,7 +33,7 @@ import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, 
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar } from './Sidebar'
 import { digitLabel, digitPressed, stepFontSize, updateSettings, useSettings } from './settings'
 
-import { CopyButton, EmptyState, errorMessage, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, usePersisted } from './ui'
+import { CopyButton, EmptyState, errorMessage, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
@@ -54,6 +54,13 @@ function readPlace(workspaceId: string): SavedPlace {
   }
 }
 const SAVED_PLACE = readPlace(getCurrentWorkspaceId())
+
+const BROWSED_FOLDERS_KEY = 'explorer.browsedFolders'
+function readBrowsedFolders(): Record<string, string> {
+  const stored = readStored(BROWSED_FOLDERS_KEY)
+  if (typeof stored !== 'object' || stored === null) return {}
+  return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+}
 
 type Place = { appTab: string; selected: string | null; viewer: { path: string; line: number | null } | null; filePath: string | null }
 const samePlace = (a: Place, b: Place): boolean =>
@@ -129,9 +136,12 @@ function App(): React.JSX.Element {
   const [sidebarWidth, setSidebarWidth] = usePersisted<number>('sidebar.width', 280)
   const [filesOpen, setFilesOpen] = usePersisted<boolean>('files.open', true)
   const [filesWidth, setFilesWidth] = usePersisted<number>('files.width', 260)
-  const [comments, setComments] = useState<ReviewComment[]>(loadComments)
+  const [allComments, setAllComments] = useState<ReviewComment[]>(loadComments)
   const [draft, setDraft] = useState<LineRange | null>(null)
   const [worktreeFiles, setWorktreeFiles] = useState<WorktreeFiles | null>(null)
+  /** A folder the explorer shows instead of the selected worktree, picked by the user */
+  /** Folders the explorer shows instead of the selected worktree, one per workspace */
+  const [browsedFolders, setBrowsedFolders] = useState<Record<string, string>>(readBrowsedFolders)
   const [viewer, setViewer] = useState<{ path: string; line: number | null } | null>(null)
   /** Files opened in the worktree view, shown as editor tabs; the viewer is the active one */
   const [editorTabs, setEditorTabs] = useState<string[]>([])
@@ -183,6 +193,12 @@ function App(): React.JSX.Element {
   const dock = useLayout(panelIds)
   const allSessions = useSessions()
   const { workspaces, currentId: workspaceId } = useWorkspaces()
+  const browseRoot = browsedFolders[workspaceId] || null
+  const setBrowsedFolder = (path: string | null): void => {
+    const next = { ...browsedFolders, [workspaceId]: path ?? '' }
+    localStorage.setItem(BROWSED_FOLDERS_KEY, JSON.stringify(next))
+    setBrowsedFolders(next)
+  }
   const workspace = workspaces.find((candidate) => candidate.id === workspaceId)
   const workspaceRepos = repos ? reposOf(workspace, repos) : null
   // A workspace replaces the folder filter; focus only applies to a project inside it
@@ -197,13 +213,22 @@ function App(): React.JSX.Element {
 
   const inCurrentWorkspace = (session: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(session, workspace, repos, workspaces)
   const sessions = allSessions.filter(inCurrentWorkspace)
-  const [chromeless, setChromeless] = useState(false)
-  useEffect(() => window.api.onWindowChromeless(setChromeless), [])
+  /** Each workspace keeps its own agent comments, even on a checkout two workspaces share */
+  const inThisWorkspace = (comment: ReviewComment): boolean =>
+    comment.workspaceId ? comment.workspaceId === workspaceId : inCurrentWorkspace({ worktreePath: comment.worktreePath, workspaceId: '' })
+  const comments = allComments.filter(inThisWorkspace)
+  /** Replaces this workspace's comments and leaves the others alone; new comments are stamped with the workspace */
+  const setComments = (next: ReviewComment[] | ((visible: ReviewComment[]) => ReviewComment[])): void =>
+    setAllComments((current) => {
+      const updated = typeof next === 'function' ? next(current.filter(inThisWorkspace)) : next
+      return [...current.filter((comment) => !inThisWorkspace(comment)), ...updated.map((comment) => (comment.workspaceId ? comment : { ...comment, workspaceId }))]
+    })
+  const chromeless = useChromeless()
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null | undefined>(undefined)
   type WorkspaceView = { selected: string | null; docTabs: DocumentTab[]; appTab: string; editorTabs: string[]; viewer: typeof viewer }
   const workspaceViews = useRef(new Map<string, WorkspaceView>())
 
-  useEffect(() => localStorage.setItem(COMMENTS_KEY, JSON.stringify(comments)), [comments])
+  useEffect(() => localStorage.setItem(COMMENTS_KEY, JSON.stringify(allComments)), [allComments])
 
   const rescan = (): void => {
     setScanning(true)
@@ -736,6 +761,14 @@ function App(): React.JSX.Element {
   const additions = files.reduce((sum, patch) => sum + patch.additions, 0)
   const deletions = files.reduce((sum, patch) => sum + patch.deletions, 0)
   const worktreeComments = comments.filter((comment) => comment.worktreePath === selected)
+  // Comments collected anywhere in this workspace, e.g. Jira items added from the Tasks tab, reachable from any tab
+  const workspaceComments = comments
+  const [allCommentsOpen, setAllCommentsOpen] = useState(false)
+  const checkoutLabel = (path: string): string => {
+    const repo = repos?.find((candidate) => candidate.worktrees.some((worktree) => worktree.path === path))
+    const checkout = repo?.worktrees.find((worktree) => worktree.path === path)
+    return repo && checkout ? `${baseName(repo.path)} · ${branchLabel(checkout)}` : baseName(path)
+  }
   const fileComments = worktreeComments.filter((comment) => !comment.kind && comment.filePath === file?.path)
 
   const activity: Record<string, 'input' | 'running'> = {}
@@ -774,8 +807,7 @@ function App(): React.JSX.Element {
   const commentCount = `${worktreeComments.length} comment${worktreeComments.length === 1 ? '' : 's'}`
 
   const commentsPrompt = (): string => {
-    const intro = worktree ? `Review comments on ${branchLabel(worktree)} (${worktree.path}). Address each one:` : 'Review comments:'
-    return `${intro}\n\n${formatComments(worktreeComments)}\n`
+    return promptForComments(worktreeComments, worktree ? `${branchLabel(worktree)} (${worktree.path})` : null)
   }
 
   const clearComments = (): void => {
@@ -794,13 +826,12 @@ function App(): React.JSX.Element {
     const pathComments = comments.filter((comment) => comment.worktreePath === worktreePath)
     if (!worktreePath || pathComments.length === 0) return null
     const checkout = repos?.flatMap((repo) => repo.worktrees).find((candidate) => candidate.path === worktreePath)
-    const intro = checkout ? `Review comments on ${branchLabel(checkout)} (${checkout.path}). Address each one:` : `Review comments (${worktreePath}). Address each one:`
     return (
       <SendButton
         repos={repos}
         worktreePath={worktreePath}
         count={pathComments.length}
-        prompt={() => `${intro}\n\n${formatComments(pathComments)}\n`}
+        prompt={() => promptForComments(pathComments, checkout ? `${branchLabel(checkout)} (${checkout.path})` : worktreePath)}
         variant={variant}
         onDone={onSent}
         onClear={() => {
@@ -918,11 +949,23 @@ function App(): React.JSX.Element {
     </div>
   )
 
+  const titleBarItems = (end: boolean): React.ReactNode =>
+    plugins
+      .flatMap(({ manifest, plugin }) => (plugin.titleBar ?? []).map((item, index) => ({ key: `${manifest.id}:${index}`, ...item })))
+      .filter((item) => (item.end ?? false) === end)
+      .sort((a, b) => a.order - b.order)
+      .map(({ key, render: Item }) => (
+        <ErrorBoundary key={key} label={key} resetKey={key}>
+          <Item />
+        </ErrorBoundary>
+      ))
+
   const scopeLabel = scope.focus ? baseName(scope.focus) : workspace ? workspace.name : scope.folder ? baseName(scope.folder) : 'all repositories'
   const openDocTab = docTabs.find((tab) => tab.key === appTab)
 
+  const explorerRoot = browseRoot ?? selected ?? window.api.home
   const renderExplorer = (activePath: string | null, open: (path: string) => void): React.JSX.Element =>
-    worktree ? (
+    worktree && !browseRoot ? (
       <Explorer
         files={worktreeFiles}
         changed={new Set(files.map((patch) => patch.path))}
@@ -933,7 +976,7 @@ function App(): React.JSX.Element {
         onCreate={(kind, folder) => selected && askCreate(selected, kind, folder, open)}
       />
     ) : (
-      <Placeholder>Select a worktree in the Worktrees tab to browse its files</Placeholder>
+      <FolderExplorer root={explorerRoot} activePath={activePath} onOpen={open} />
     )
 
   const host: HostApi = {
@@ -943,6 +986,9 @@ function App(): React.JSX.Element {
     scopeLabel,
     selectedWorktree: selected,
     selectedWorktreeLabel: worktree ? branchLabel(worktree) : null,
+    explorerRoot,
+    browsedFolder: browseRoot,
+    setBrowsedFolder,
     defaultCwd,
     diffStyle,
     activeTab: appTab,
@@ -1285,7 +1331,7 @@ function App(): React.JSX.Element {
     <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
       <div
-        className={`flex h-8 shrink-0 items-center gap-0.5 border-b border-border bg-card pr-1.5 ${chromeless ? 'pl-1.5' : 'pl-[80px] [-webkit-app-region:drag]'}`}
+        className={`flex h-8 shrink-0 items-center gap-0.5 border-b border-border bg-card pr-1.5 ${chromeless ? 'pl-1.5' : 'pl-[88px] [-webkit-app-region:drag]'}`}
       >
         {tabs.map((tab, index) => (
           <button key={tab.id} title={`${tab.label} ${digitLabel('tabs', index + 1)}`.trim()} onClick={() => setAppTab(tab.id)} className={tabClass(appTab === tab.id)}>
@@ -1319,14 +1365,7 @@ function App(): React.JSX.Element {
           </div>
         ))}
         <span className="flex-1" />
-        {plugins
-          .flatMap(({ manifest, plugin }) => (plugin.titleBar ?? []).map((item, index) => ({ key: `${manifest.id}:${index}`, ...item })))
-          .sort((a, b) => a.order - b.order)
-          .map(({ key, render: Item }) => (
-            <ErrorBoundary key={key} label={key} resetKey={key}>
-              <Item />
-            </ErrorBoundary>
-          ))}
+        {titleBarItems(false)}
         <button
           title="Search commands, worktrees and files (⌘K)"
           onClick={() => setPaletteOpen(true)}
@@ -1355,9 +1394,50 @@ function App(): React.JSX.Element {
             />
           ) : null
         })}
+        {workspaceComments.length > 0 && (
+          <div className="relative">
+            <IconButton label={`Agent comments (${workspaceComments.length})`} active={allCommentsOpen} onClick={() => setAllCommentsOpen(!allCommentsOpen)}>
+              <span className="relative">
+                <Icon name="comment" />
+                <span className="absolute -top-1.5 -right-2 min-w-3.5 rounded-full bg-primary px-1 text-center text-[9px] leading-3.5 font-medium text-white tabular-nums">
+                  {workspaceComments.length}
+                </span>
+              </span>
+            </IconButton>
+            {allCommentsOpen && (
+              <>
+                <div className="fixed inset-0 z-40 [-webkit-app-region:no-drag]" onClick={() => setAllCommentsOpen(false)} />
+                <div className="absolute top-full right-0 z-50 mt-1.5 flex max-h-[75vh] w-[440px] flex-col gap-2 overflow-y-auto rounded-lg border border-input bg-popover p-2 [-webkit-app-region:no-drag]">
+                  {[...new Set(workspaceComments.map((comment) => comment.worktreePath))].map((path) => (
+                    <section key={path} className="overflow-hidden rounded-md border border-border">
+                      <button
+                        onClick={() => {
+                          setAllCommentsOpen(false)
+                          openWorktree(path)
+                        }}
+                        title={`Open ${path}`}
+                        className="flex w-full items-center gap-1.5 border-b border-border bg-muted px-3 py-1.5 text-left text-xs font-medium hover:bg-accent"
+                      >
+                        <Icon name="branch" className="size-3.5 text-emerald-400" />
+                        <span className="truncate">{checkoutLabel(path)}</span>
+                      </button>
+                      <div className="max-h-96">
+                        {renderCommentsPanel(path, () => {
+                          setAllCommentsOpen(false)
+                          openWorktree(path)
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <IconButton label="Settings (⌘,)" active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
           <Icon name="settings" />
         </IconButton>
+        {titleBarItems(true)}
       </div>
 
       <div className="flex min-h-0 flex-1">

@@ -1,15 +1,17 @@
 import { adfToMarkdown } from '@treeix/atlassian/main/adf'
 import { acli, atlassianSite, failure, run } from '@treeix/atlassian/main/cli'
 import { IMAGE_HOST, type Json, object, orNull, text } from '@treeix/atlassian/shared'
-import type { WorkItem, WorkItemDetail, WorkItemList } from '../shared/types'
+import type { Epic, WorkItem, WorkItemDetail, WorkItemEdit, WorkItemList } from '../shared/types'
 
 const LIST_LIMIT = 200
 // Search only allows the fields it can print; view takes any field
 const SEARCH_FIELDS = 'key,summary,status,issuetype,priority,assignee'
-const DETAIL_FIELDS = `${SEARCH_FIELDS},project,updated,description,reporter,labels,comment,attachment`
+const DETAIL_FIELDS = `${SEARCH_FIELDS},project,updated,description,reporter,labels,comment,attachment,parent`
+/** acli processes started at once while listing epic children */
+const EPIC_CONCURRENCY = 6
 
 /** Public avatar image of a Jira user object */
-const avatarOf = (user: unknown): string | null => orNull(text(object(object(user).avatarUrls)['48x48']))
+export const avatarOf = (user: unknown): string | null => orNull(text(object(object(user).avatarUrls)['48x48']))
 
 const CATEGORIES: Record<string, WorkItem['statusCategory']> = { new: 'new', indeterminate: 'indeterminate', done: 'done' }
 
@@ -28,6 +30,7 @@ export function toWorkItem(raw: unknown, site: string | null): WorkItem {
     priority: orNull(text(object(fields.priority).name)),
     assignee: orNull(text(object(fields.assignee).displayName)),
     assigneeAvatar: avatarOf(fields.assignee),
+    assigneeId: orNull(text(object(fields.assignee).accountId)),
     // Search can't return the project, so the key prefix stands in until the detail loads
     project: text(object(fields.project).name) || key.split('-')[0],
     updatedAt: text(fields.updated),
@@ -80,10 +83,51 @@ export async function workItemDetail(key: string): Promise<WorkItemDetail> {
     description: adfToMarkdown(fields.description, context),
     reporter: orNull(text(object(fields.reporter).displayName)),
     reporterAvatar: avatarOf(fields.reporter),
+    parent: parentOf(fields.parent),
     labels: Array.isArray(fields.labels) ? fields.labels.filter((label): label is string => typeof label === 'string') : [],
     comments: comments.map((comment) => ({ author: text(object(comment.author).displayName), authorAvatar: avatarOf(comment.author), created: text(comment.created), body: adfToMarkdown(comment.body, context) })),
     links: [...links]
   }
+}
+
+export function parentOf(raw: unknown): WorkItemDetail['parent'] {
+  const parent = object(raw)
+  const key = text(parent.key)
+  return key ? { key, summary: text(object(parent.fields).summary), type: text(object(object(parent.fields).issuetype).name) } : null
+}
+
+const PROJECT_KEY = /^[A-Z][A-Z0-9_]*$/
+
+/**
+ * Open epics in these projects with the keys under each. Search can't print an item's parent, so every
+ * epic gets its own `parent = KEY` query instead.
+ */
+// ponytail: one acli call per epic, a REST search with the API token would do it in one when epics number in the hundreds
+export async function openEpics(projects: string[]): Promise<Epic[]> {
+  const keys = projects.filter((project) => PROJECT_KEY.test(project))
+  if (keys.length === 0) return []
+  const raw = await acli(['jira', 'workitem', 'search', '--jql', `project in (${keys.join(', ')}) AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`, '--fields', 'key,summary,status', '--limit', `${LIST_LIMIT}`, '--json'])
+  const epics = (Array.isArray(raw) ? raw : []).map((issue) => toWorkItem(issue, null))
+  const result: Epic[] = []
+  for (let start = 0; start < epics.length; start += EPIC_CONCURRENCY) {
+    const batch = await Promise.all(
+      epics.slice(start, start + EPIC_CONCURRENCY).map(async (epic) => {
+        const children = await acli(['jira', 'workitem', 'search', '--jql', `parent = ${epic.key}`, '--fields', 'key,status', '--limit', `${LIST_LIMIT}`, '--json']).catch(() => null)
+        return {
+          key: epic.key,
+          summary: epic.summary,
+          status: epic.status,
+          statusCategory: epic.statusCategory,
+          children: (Array.isArray(children) ? children : []).map((child) => {
+            const item = toWorkItem(child, null)
+            return { key: item.key, done: item.statusCategory === 'done' }
+          })
+        }
+      })
+    )
+    result.push(...batch)
+  }
+  return result
 }
 
 /** Your own display name, for the Mine filter; acli only reports the account email */
@@ -101,6 +145,34 @@ export async function workItemSummary(key: string): Promise<WorkItem> {
 
 export async function commentOnWorkItem(key: string, body: string): Promise<void> {
   await run(['jira', 'workitem', 'comment', 'create', '--key', key, '--body', body]).catch((reason: unknown) => {
+    throw new Error(failure(reason))
+  })
+}
+
+const ISSUE_KEY = /^[A-Z][A-Z0-9_]*-\d+$/
+export const checkedKey = (key: string): string => {
+  if (!ISSUE_KEY.test(key)) throw new Error(`Not a work item key: ${key}`)
+  return key
+}
+const LABEL = /^[^\s,]+$/
+
+export async function editWorkItem(key: string, changes: WorkItemEdit): Promise<void> {
+  const labels = (list: string[] | undefined): string => (list ?? []).filter((label) => LABEL.test(label)).join(',')
+  const args = [
+    ...(changes.summary?.trim() ? ['--summary', changes.summary.trim()] : []),
+    ...(changes.type?.trim() ? ['--type', changes.type.trim()] : []),
+    ...(labels(changes.addLabels) ? ['--labels', labels(changes.addLabels)] : []),
+    ...(labels(changes.removeLabels) ? ['--remove-labels', labels(changes.removeLabels)] : [])
+  ]
+  if (args.length === 0) return
+  await run(['jira', 'workitem', 'edit', '--key', checkedKey(key), ...args, '--yes']).catch((reason: unknown) => {
+    throw new Error(failure(reason))
+  })
+}
+
+/** `accountId` null removes the assignee; '@me' is you */
+export async function assignWorkItem(key: string, accountId: string | null): Promise<void> {
+  await run(['jira', 'workitem', 'assign', '--key', checkedKey(key), ...(accountId ? ['--assignee', accountId] : ['--remove-assignee']), '--yes']).catch((reason: unknown) => {
     throw new Error(failure(reason))
   })
 }

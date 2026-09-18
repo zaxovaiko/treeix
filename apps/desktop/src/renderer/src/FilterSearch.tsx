@@ -43,13 +43,16 @@ export function FilterSearch<T>({
   groups,
   tokens,
   onChange,
-  placeholder
+  placeholder,
+  freeTextHint = 'Press ↵ to filter by this text'
 }: {
   items: T[]
   groups: FilterGroup<T>[]
   tokens: FilterToken[]
   onChange: (tokens: FilterToken[]) => void
   placeholder: string
+  /** Shown when typed text matches no option and Enter turns it into a text filter */
+  freeTextHint?: string
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -130,8 +133,8 @@ export function FilterSearch<T>({
       </label>
 
       {open && (
-        <div className="absolute top-full right-0 left-0 z-40 mt-1 max-h-96 overflow-y-auto rounded-lg border border-input bg-popover p-1 shadow-xl shadow-black/50">
-          {sections.length === 0 && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{textGroup && needle ? 'Press ↵ to filter by this text' : 'No matching filters'}</p>}
+        <div className="absolute top-full right-0 left-0 z-40 mt-1 max-h-96 overflow-y-auto rounded-lg border border-input bg-popover p-1">
+          {sections.length === 0 && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{textGroup && needle ? freeTextHint : 'No matching filters'}</p>}
           {sections.map((section, sectionIndex) => (
             <div key={section.label}>
               {sectionIndex > 0 && <hr className="my-1 border-border" />}

@@ -2,7 +2,7 @@ import { type DiffLineAnnotation, PatchDiff, Virtualizer } from '@pierre/diffs/r
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { LineRange } from '@treeix/shared/comments'
 import { type FilePatch, type Repo } from '@treeix/shared/types'
-import { type PullRequest, type PullRequestComment, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewThread, type ThreadComment } from '../shared/types'
+import { type MergeMethod, type PullRequest, type PullRequestComment, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewThread, type ThreadComment } from '../shared/types'
 import { allFolders, ChangedFileList, folderPaths } from '@treeix/app/ChangedFiles'
 import { ancestorFolders } from '@treeix/app/fileTree'
 import { groupOpen } from '@treeix/app/settings'
@@ -16,16 +16,19 @@ import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } fr
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { CommentDraft, orderRange } from '@treeix/app/Comments'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
-import { ConflictMark, localWorktreeFor, markdownBase, prefix, ProviderMark, pullRequestKey, isPullRequestSort, PULL_REQUEST_SORTS, type PullRequestSort, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
+import { ConflictMark, groupPullRequests, localWorktreeFor, markdownBase, prefix, ProviderMark, pullRequestKey, isPullRequestSort, PULL_REQUEST_SORTS, type PullRequestSort, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
 import { FilterSearch, matchesFilters, parseFilters, type PullRequestFilter } from './PullRequestFilter'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
-import { CopyButton, EmptyState, errorMessage, IconButton, readStored, ResizeHandle, usePersisted } from '@treeix/app/ui'
+import { CopyButton, EmptyState, errorMessage, IconButton, readStored, ResizeHandle, TextPrompt, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
+import { useHost } from '@treeix/sdk'
 
 const detailCache = new Map<string, PullRequestDetail>()
+/** Returning to the app reloads an open pull request at most this often */
+const DETAIL_FOCUS_REFRESH_MS = 30_000
 
 export function PullRequestsView({
   repos,
@@ -35,6 +38,7 @@ export function PullRequestsView({
   onOpenTab,
   onOpenWorktree,
   onAddToComments,
+  onAddNote,
   onCreateWorktree,
   wrapDetail = (detail) => detail,
   renderSend,
@@ -57,6 +61,8 @@ export function PullRequestsView({
   onOpenTab: (pr: PullRequest) => void
   onOpenWorktree: (worktreePath: string) => void
   onAddToComments: (pr: PullRequest, thread: ReviewThread, patch: FilePatch | undefined) => void
+  /** Keeps a drafted note as an agent comment instead of posting it; `range` is null for the whole file */
+  onAddNote: (pr: PullRequest, patch: FilePatch, range: LineRange | null, text: string) => void
   onCreateWorktree: (pr: PullRequest) => void
 }): React.JSX.Element {
   const scopeKey = repoPaths ? scopeKeyOf(repoPaths) : ''
@@ -98,7 +104,69 @@ export function PullRequestsView({
   const byProvider = (data?.pullRequests ?? []).filter((pr) => provider === 'all' || pr.provider === provider)
   const inScope = byProvider.filter((pr) => matchesFilters(pr, filters))
   const visible = sortPullRequests(inScope.filter((pr) => pr.state === status), sort)
-  const selected = visible.find((pr) => pullRequestKey(pr) === selectedKey) ?? visible[0]
+  // Only open pull requests are grouped; merged and closed ones have nothing left to do
+  const groups = status === 'open' ? groupPullRequests(visible) : [{ id: 'all', label: '', pullRequests: visible }]
+  const selected = visible.find((pr) => pullRequestKey(pr) === selectedKey) ?? groups[0]?.pullRequests[0]
+
+  const row = (pr: PullRequest): React.JSX.Element => {
+    const active = selected && pullRequestKey(pr) === pullRequestKey(selected)
+    const local = localWorktreeFor(repos, pr)
+    const settled = reviewSettled(pr.review)
+    return (
+      <button
+        key={pullRequestKey(pr)}
+        onClick={() => setSelectedKey(pullRequestKey(pr))}
+        onDoubleClick={() => onOpenTab(pr)}
+        onContextMenu={(event) => {
+          const addFilter = (filter: PullRequestFilter): void => setFilters([...filters, filter])
+          openMenu(event, [
+            { label: 'Open in tab', run: () => onOpenTab(pr) },
+            { label: `Open on ${providerName(pr)}`, run: () => window.open(pr.url) },
+            null,
+            local
+              ? { label: 'Open local worktree', run: () => onOpenWorktree(local) }
+              : { label: `Create worktree for ${pr.sourceBranch}`, enabled: pr.state === 'open', run: () => onCreateWorktree(pr) },
+            null,
+            { label: 'Copy link', run: () => copyText(pr.url) },
+            { label: 'Copy branch name', run: () => copyText(pr.sourceBranch) },
+            { label: `Copy ${prefix(pr)}${pr.number}`, run: () => copyText(`${prefix(pr)}${pr.number}`) },
+            null,
+            { label: `Filter by ${pr.author}`, run: () => addFilter({ kind: 'author', value: pr.author }) },
+            { label: `Filter by ${baseName(pr.repoPath)}`, run: () => addFilter({ kind: 'repo', value: pr.repoPath }) }
+          ])
+        }}
+        className={`mb-0.5 block w-full rounded-lg px-2.5 py-2 text-left transition-opacity ${active ? 'bg-accent ring-1 ring-border' : 'hover:bg-accent'} ${
+          settled && !active ? 'opacity-50 hover:opacity-90' : ''
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <ProviderMark provider={pr.provider} />
+          <span className={`min-w-0 flex-1 truncate text-[13px] ${settled ? '' : 'font-medium'}`}>{pr.title}</span>
+        </div>
+        <div className="mt-1 flex items-center gap-1.5 pl-6 text-[11.5px] text-muted-foreground">
+          <span className="font-mono">
+            {prefix(pr)}
+            {pr.number}
+          </span>
+          <span className="truncate">
+            {baseName(pr.repoPath)} · {pr.author}
+          </span>
+          <span className="flex-1" />
+          <ConflictMark pr={pr} />
+          <ReviewMark review={pr.review} />
+          <StateBadge pr={pr} />
+        </div>
+        <div className="mt-1 flex items-center gap-2 pl-6 text-[11px] text-muted-foreground">
+          {pr.additions !== null && <span className="font-mono text-emerald-400">+{pr.additions}</span>}
+          {pr.deletions !== null && <span className="font-mono text-red-400">−{pr.deletions}</span>}
+          <span className="truncate font-mono">{pr.sourceBranch}</span>
+          {local && <span className="shrink-0 text-indigo-300">⎇ local</span>}
+          <span className="flex-1" />
+          <span>{timeAgo(pr.updatedAt)}</span>
+        </div>
+      </button>
+    )
+  }
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -176,65 +244,17 @@ export function PullRequestsView({
             </details>
           )}
           {data && visible.length === 0 && <EmptyState icon="pullRequest" title="No pull requests" />}
-          {visible.map((pr) => {
-            const active = selected && pullRequestKey(pr) === pullRequestKey(selected)
-            const local = localWorktreeFor(repos, pr)
-            const settled = reviewSettled(pr.review)
-            return (
-              <button
-                key={pullRequestKey(pr)}
-                onClick={() => setSelectedKey(pullRequestKey(pr))}
-                onDoubleClick={() => onOpenTab(pr)}
-                onContextMenu={(event) => {
-                  const addFilter = (filter: PullRequestFilter): void => setFilters([...filters, filter])
-                  openMenu(event, [
-                    { label: 'Open in tab', run: () => onOpenTab(pr) },
-                    { label: `Open on ${providerName(pr)}`, run: () => window.open(pr.url) },
-                    null,
-                    local
-                      ? { label: 'Open local worktree', run: () => onOpenWorktree(local) }
-                      : { label: `Create worktree for ${pr.sourceBranch}`, enabled: pr.state === 'open', run: () => onCreateWorktree(pr) },
-                    null,
-                    { label: 'Copy link', run: () => copyText(pr.url) },
-                    { label: 'Copy branch name', run: () => copyText(pr.sourceBranch) },
-                    { label: `Copy ${prefix(pr)}${pr.number}`, run: () => copyText(`${prefix(pr)}${pr.number}`) },
-                    null,
-                    { label: `Filter by ${pr.author}`, run: () => addFilter({ kind: 'author', value: pr.author }) },
-                    { label: `Filter by ${baseName(pr.repoPath)}`, run: () => addFilter({ kind: 'repo', value: pr.repoPath }) }
-                  ])
-                }}
-                className={`mb-0.5 block w-full rounded-lg px-2.5 py-2 text-left transition-opacity ${active ? 'bg-accent ring-1 ring-border' : 'hover:bg-accent'} ${
-                  settled && !active ? 'opacity-50 hover:opacity-90' : ''
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <ProviderMark provider={pr.provider} />
-                  <span className={`min-w-0 flex-1 truncate text-[13px] ${settled ? '' : 'font-medium'}`}>{pr.title}</span>
+          {groups.map((group, index) => (
+            <div key={group.id}>
+              {groups.length > 1 && (
+                <div className={`flex items-center gap-1.5 px-2.5 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase ${index > 0 ? 'pt-3' : 'pt-1'}`}>
+                  {group.label}
+                  <span className="tabular-nums text-muted-foreground/60">{group.pullRequests.length}</span>
                 </div>
-                <div className="mt-1 flex items-center gap-1.5 pl-6 text-[11.5px] text-muted-foreground">
-                  <span className="font-mono">
-                    {prefix(pr)}
-                    {pr.number}
-                  </span>
-                  <span className="truncate">
-                    {baseName(pr.repoPath)} · {pr.author}
-                  </span>
-                  <span className="flex-1" />
-                  <ConflictMark pr={pr} />
-                  <ReviewMark review={pr.review} />
-                  <StateBadge pr={pr} />
-                </div>
-                <div className="mt-1 flex items-center gap-2 pl-6 text-[11px] text-muted-foreground">
-                  {pr.additions !== null && <span className="font-mono text-emerald-400">+{pr.additions}</span>}
-                  {pr.deletions !== null && <span className="font-mono text-red-400">−{pr.deletions}</span>}
-                  <span className="truncate font-mono">{pr.sourceBranch}</span>
-                  {local && <span className="shrink-0 text-indigo-300">⎇ local</span>}
-                  <span className="flex-1" />
-                  <span>{timeAgo(pr.updatedAt)}</span>
-                </div>
-              </button>
-            )
-          })}
+              )}
+              {group.pullRequests.map(row)}
+            </div>
+          ))}
         </div>
         <ResizeHandle width={listWidth} min={300} max={640} onResize={setListWidth} />
       </aside>
@@ -254,6 +274,7 @@ export function PullRequestsView({
             diffStyle={diffStyle}
             onOpenWorktree={onOpenWorktree}
             onAddToComments={onAddToComments}
+            onAddNote={onAddNote}
             onCreateWorktree={onCreateWorktree}
             listOpen={listOpen}
             onToggleList={() => setListOpen(!listOpen)}
@@ -329,7 +350,7 @@ function Reactions({ pr, comment }: { pr: PullRequest; comment: ThreadComment })
       {pickerOpen && (
         <div
           onMouseLeave={() => setPickerOpen(false)}
-          className="absolute top-7 left-0 z-30 flex gap-0.5 rounded-lg border border-input bg-popover p-1 shadow-xl shadow-black/50"
+          className="absolute top-7 left-0 z-30 flex gap-0.5 rounded-lg border border-input bg-popover p-1"
         >
           {REACTIONS.map((reaction) => (
             <button key={reaction} onClick={() => react(reaction)} className="grid size-7 place-items-center rounded-md text-base hover:bg-accent">
@@ -370,33 +391,234 @@ const REVIEWER_LOOK: Record<Reviewer['state'], { label: string; className: strin
   commented: { label: 'Commented', className: 'text-muted-foreground', icon: 'comment' }
 }
 
+/** Approve, or request changes with a reason; both reload the pull request so the reviewer list shows the new state */
+function ReviewButtons({
+  pr,
+  myReview,
+  onReviewed,
+  onError
+}: {
+  pr: PullRequest
+  myReview: PullRequestDetail['myReview']
+  onReviewed: () => Promise<void>
+  onError: (message: string) => void
+}): React.JSX.Element {
+  /** Your verdict as sent from here, shown before the provider confirms it */
+  const [sent, setSent] = useState<PullRequestDetail['myReview']>(null)
+  // The dialog's text; it comes back with the same text when sending fails, so nothing typed is lost
+  const [reason, setReason] = useState<string | null>(null)
+  const shown = sent ?? myReview
+  const approve = (): void => {
+    setSent('approved')
+    api.submitReview(pr, 'approve', '').then(onReviewed, (failure: unknown) => {
+      setSent(null)
+      onError(`Approval not sent: ${errorMessage(failure)}`)
+    })
+  }
+  const requestChanges = (body: string): Promise<void> => {
+    setSent('changes')
+    api.submitReview(pr, 'changes', body).then(onReviewed, (failure: unknown) => {
+      setSent(null)
+      setReason(body)
+      onError(`Change request not sent: ${errorMessage(failure)}`)
+    })
+    return Promise.resolve()
+  }
+  const [open, setOpen] = useState(false)
+  const look =
+    shown === 'approved'
+      ? { label: 'Approved', className: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30', icon: 'check' as const }
+      : shown === 'changes'
+        ? { label: 'Changes requested', className: 'bg-red-400/12 text-red-400 ring-red-400/30', icon: 'alert' as const }
+        : { label: 'Review', className: 'text-foreground ring-input hover:bg-accent', icon: 'eye' as const }
+  const option = (verdict: 'approved' | 'changes', label: string, detail: string, run: () => void): React.JSX.Element => (
+    <button
+      onClick={() => {
+        setOpen(false)
+        run()
+      }}
+      className={`flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-accent ${shown === verdict ? 'bg-accent' : ''}`}
+    >
+      <Icon name={verdict === 'approved' ? 'check' : 'alert'} className={`mt-0.5 size-3.5 shrink-0 ${verdict === 'approved' ? 'text-emerald-400' : 'text-red-400'}`} />
+      <span>
+        <span className="block text-xs font-medium">{label}</span>
+        <span className="block text-[11px] text-muted-foreground">{detail}</span>
+      </span>
+    </button>
+  )
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[11.5px] font-medium ring-1 ${look.className}`}>
+        <Icon name={look.icon} className="size-3" />
+        {look.label}
+        <Icon name="chevron" className={`size-3 transition-transform ${open ? '-rotate-90' : 'rotate-90'}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute top-full right-0 z-40 mt-1 flex w-64 flex-col gap-1 rounded-lg border border-input bg-popover p-1">
+            {option('approved', shown === 'approved' ? 'Approved' : 'Approve', "Marks the changes as good to merge", () => shown !== 'approved' && approve())}
+            {option('changes', 'Request changes', 'Asks for a reason and blocks the merge', () => setReason(''))}
+          </div>
+        </>
+      )}
+      {reason !== null && (
+        <TextPrompt
+          title="Request changes"
+          description={`Tells ${pr.author} what has to change before this can merge.`}
+          placeholder="What needs to change"
+          confirmLabel="Request changes"
+          initialValue={reason}
+          onSubmit={requestChanges}
+          onClose={() => setReason(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+const MERGE_METHODS: Record<MergeMethod, { label: string; detail: string }> = {
+  merge: { label: 'Merge commit', detail: 'All commits plus a merge commit' },
+  squash: { label: 'Squash and merge', detail: 'All changes in one commit' },
+  rebase: { label: 'Rebase and merge', detail: 'Commits replayed, no merge commit' }
+}
+const isMergeMethod = (value: string): value is MergeMethod => Object.hasOwn(MERGE_METHODS, value)
+
+/**
+ * Merging can't be undone, so the button opens a small form to pick how and confirm, and waits for the provider
+ * instead of showing the result early. The last method used is remembered.
+ */
+function MergeButton({ pr, onMerged, onError }: { pr: PullRequest; onMerged: () => void; onError: (message: string) => void }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [storedMethod, setMethod] = usePersisted<string>('prs.mergeMethod', 'squash')
+  const method: MergeMethod = isMergeMethod(storedMethod) ? storedMethod : 'squash'
+  const [deleteBranch, setDeleteBranch] = usePersisted<boolean>('prs.deleteBranchOnMerge', true)
+  const [merging, setMerging] = useState(false)
+  const { scopeRepoPaths } = useHost()
+  const blocked = pr.conflicts ? 'Resolve the conflicts first' : pr.draft ? 'Drafts can’t be merged' : null
+  const merge = (): void => {
+    setMerging(true)
+    api
+      .merge(pr, method, deleteBranch)
+      .then(
+        () => {
+          setOpen(false)
+          onMerged()
+          // The list moves it to Merged
+          void refreshPullRequests(scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined)
+        },
+        (reason: unknown) => onError(`Not merged: ${errorMessage(reason)}`)
+      )
+      .finally(() => setMerging(false))
+  }
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        disabled={blocked !== null}
+        title={blocked ?? `Merge into ${pr.targetBranch}`}
+        className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-[11.5px] font-medium text-white disabled:opacity-40"
+      >
+        <Icon name="pullRequest" className="size-3" />
+        Merge
+        <Icon name="chevron" className={`size-3 transition-transform ${open ? '-rotate-90' : 'rotate-90'}`} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => !merging && setOpen(false)} />
+          <div className="absolute top-full right-0 z-40 mt-1 w-72 rounded-lg border border-input bg-popover p-1">
+            <div className="flex flex-col gap-1">
+            {(Object.keys(MERGE_METHODS) as MergeMethod[]).map((candidate) => (
+              <button
+                key={candidate}
+                onClick={() => setMethod(candidate)}
+                className={`flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-accent ${method === candidate ? 'bg-accent' : ''}`}
+              >
+                <Icon name="check" className={`mt-0.5 size-3.5 shrink-0 text-primary ${method === candidate ? '' : 'invisible'}`} />
+                <span>
+                  <span className="block text-xs font-medium">{MERGE_METHODS[candidate].label}</span>
+                  <span className="block text-[11px] text-muted-foreground">{MERGE_METHODS[candidate].detail}</span>
+                </span>
+              </button>
+            ))}
+            </div>
+            <hr className="my-1 border-border" />
+            <label title={pr.sourceBranch} className="flex items-center gap-2 px-2 py-2 text-xs">
+              <input type="checkbox" checked={deleteBranch} onChange={() => setDeleteBranch(!deleteBranch)} />
+              Delete source branch after merging
+            </label>
+            <button
+              onClick={merge}
+              disabled={merging}
+              className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-xs font-medium text-white disabled:opacity-60"
+            >
+              {merging && <Icon name="loader" className="size-3.5 animate-spin" />}
+              {merging ? 'Merging…' : `${MERGE_METHODS[method].label} into ${pr.targetBranch}`}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 /** A reviewer with their state; anyone who already reviewed can be asked to look again */
 function ReviewerChip({ reviewer, pr, onRequested, onError }: { reviewer: Reviewer; pr: PullRequest; onRequested: () => Promise<void>; onError: (message: string) => void }): React.JSX.Element {
-  const [requesting, setRequesting] = useState(false)
-  const look = REVIEWER_LOOK[reviewer.state]
+  // Shown as requested straight away; put back if the provider refuses
+  const [requested, setRequested] = useState(false)
+  const state = requested ? 'requested' : reviewer.state
+  const look = REVIEWER_LOOK[state]
   const request = (): void => {
-    setRequesting(true)
-    api
-      .requestReview(pr, reviewer.login)
-      .then(onRequested, (reason: unknown) => onError(errorMessage(reason)))
-      .finally(() => setRequesting(false))
+    setRequested(true)
+    api.requestReview(pr, reviewer.login).then(onRequested, (reason: unknown) => {
+      setRequested(false)
+      onError(`Review request to ${reviewer.login} not sent: ${errorMessage(reason)}`)
+    })
   }
   return (
     <span title={`${reviewer.login} · ${look.label}`} className="flex h-6 items-center gap-1.5 rounded-full bg-accent py-0.5 pr-1 pl-0.5 ring-1 ring-border">
       <UserAvatar name={reviewer.login} url={reviewer.avatarUrl} size="size-5" />
       <span className="max-w-40 truncate">{reviewer.login}</span>
       <Icon name={look.icon} className={`size-3 shrink-0 ${look.className}`} />
-      {reviewer.state !== 'requested' && (
+      {state !== 'requested' && (
         <button
           onClick={request}
-          disabled={requesting}
           title={`Re-request review from ${reviewer.login}`}
-          className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
+          className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
         >
-          <Icon name={requesting ? 'loader' : 'refresh'} className={`size-3 ${requesting ? 'animate-spin' : ''}`} />
+          <Icon name="refresh" className="size-3" />
         </button>
       )}
     </span>
+  )
+}
+
+/** A reply or comment shown before the provider has it; kept with Retry and Discard when sending fails */
+type PendingComment = { id: string; threadId: string | null; body: string; error: string | null }
+
+function PendingCommentView({ comment, onRetry, onDiscard }: { comment: PendingComment; onRetry: () => void; onDiscard: () => void }): React.JSX.Element {
+  return (
+    <div className={`flex gap-2.5 border-b border-border px-3 py-2.5 ${comment.error ? 'bg-red-400/5' : 'opacity-60'}`}>
+      <div className="size-[22px] shrink-0 rounded-full bg-accent" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-xs">
+          {comment.error ? (
+            <>
+              <span className="min-w-0 flex-1 break-words text-red-400 select-text">Not sent: {comment.error}</span>
+              <button onClick={onRetry} className="shrink-0 rounded px-1.5 font-medium text-foreground hover:bg-accent">
+                Retry
+              </button>
+              <button onClick={onDiscard} className="shrink-0 rounded px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
+                Discard
+              </button>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Sending…</span>
+          )}
+        </div>
+        <p className="mt-1 text-[13px] whitespace-pre-wrap select-text">{comment.body}</p>
+      </div>
+    </div>
   )
 }
 
@@ -405,19 +627,32 @@ function ThreadCard({
   pr,
   onAdd,
   onReply,
-  onResolve
+  onResolve,
+  pending = [],
+  onRetry,
+  onDiscard,
+  viewer = null,
+  onEdit,
+  onDelete
 }: {
   thread: ReviewThread
   pr: PullRequest
   onAdd: () => void
   onReply: (body: string) => Promise<void>
-  onResolve: (resolved: boolean) => Promise<void>
+  onResolve: (resolved: boolean) => void
+  pending?: PendingComment[]
+  onRetry?: (comment: PendingComment) => void
+  onDiscard?: (comment: PendingComment) => void
+  /** Your login; your own comments can be edited and deleted */
+  viewer?: string | null
+  onEdit?: (comment: ThreadComment, body: string) => void
+  onDelete?: (comment: ThreadComment) => void
 }): React.JSX.Element {
-  const [resolving, setResolving] = useState(false)
-  const toggleResolved = (): void => {
-    setResolving(true)
-    onResolve(!thread.resolved).finally(() => setResolving(false))
+  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null)
+  const remove = (comment: ThreadComment): void => {
+    if (window.confirm(`Delete this comment on ${providerName(pr)}?`)) onDelete?.(comment)
   }
+  const toggleResolved = (): void => onResolve(!thread.resolved)
   const [added, setAdded] = useState(false)
   const [replying, setReplying] = useState(false)
   const addToComments = (): void => {
@@ -432,13 +667,17 @@ function ThreadCard({
           Resolved
         </div>
       )}
-      {thread.comments.map((comment) => (
+      {thread.comments.map((comment) => {
+        const mine = viewer !== null && comment.author === viewer && onEdit !== undefined
+        return (
         <div
           key={comment.id}
-          className="flex gap-2.5 border-b border-border px-3 py-2.5"
+          className="group/comment flex gap-2.5 border-b border-border px-3 py-2.5"
           onContextMenu={(event) =>
             openMenu(event, [
               { label: 'Copy comment', run: () => copyText(comment.body) },
+              mine && { label: 'Edit comment', run: () => setEditing({ id: comment.id, body: comment.body }) },
+              mine && { label: 'Delete comment', run: () => remove(comment) },
               { label: `Copy @${comment.author}`, run: () => copyText(`@${comment.author}`) },
               null,
               { label: added ? 'Added to agent comments' : 'Add thread to agent comments', enabled: !added, run: addToComments },
@@ -452,15 +691,65 @@ function ThreadCard({
             <div className="flex items-center gap-2 text-xs">
               <span className="font-semibold">{comment.author}</span>
               <span className="text-muted-foreground">{timeAgo(comment.createdAt)} ago</span>
+              <span className="flex-1" />
+              {mine && editing?.id !== comment.id && (
+                <span className="flex gap-0.5 opacity-0 transition-opacity group-hover/comment:opacity-100">
+                  <IconButton label="Edit comment" onClick={() => setEditing({ id: comment.id, body: comment.body })}>
+                    <Icon name="pencil" className="size-3" />
+                  </IconButton>
+                  <IconButton label="Delete comment" onClick={() => remove(comment)}>
+                    <Icon name="trash" className="size-3" />
+                  </IconButton>
+                </span>
+              )}
             </div>
-            <div className="mt-1 max-h-[32rem] overflow-y-auto">
-              <Markdown baseUrl={markdownBase(pr)} resolveImage={imageResolver(pr)}>
-                {comment.body}
-              </Markdown>
-            </div>
+            {editing?.id === comment.id ? (
+              <div className="mt-1.5">
+                <textarea
+                  autoFocus
+                  value={editing.body}
+                  onChange={(event) => setEditing({ id: comment.id, body: event.target.value })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') setEditing(null)
+                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && editing.body.trim()) {
+                      onEdit?.(comment, editing.body.trim())
+                      setEditing(null)
+                    }
+                  }}
+                  rows={Math.min(12, Math.max(3, editing.body.split('\n').length + 1))}
+                  className="w-full resize-y rounded-md bg-muted px-2.5 py-2 text-[13px] ring-1 ring-border outline-none focus:ring-primary/60"
+                />
+                <div className="mt-1.5 flex items-center justify-end gap-2">
+                  <span className="mr-auto text-[11px] text-muted-foreground">⌘↵ to save, Esc to cancel</span>
+                  <button onClick={() => setEditing(null)} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!editing.body.trim() || editing.body.trim() === comment.body}
+                    onClick={() => {
+                      onEdit?.(comment, editing.body.trim())
+                      setEditing(null)
+                    }}
+                    className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1 max-h-[32rem] overflow-y-auto">
+                <Markdown baseUrl={markdownBase(pr)} resolveImage={imageResolver(pr)}>
+                  {comment.body}
+                </Markdown>
+              </div>
+            )}
             <Reactions pr={pr} comment={comment} />
           </div>
         </div>
+        )
+      })}
+      {pending.map((comment) => (
+        <PendingCommentView key={comment.id} comment={comment} onRetry={() => onRetry?.(comment)} onDiscard={() => onDiscard?.(comment)} />
       ))}
       {replying && (
         <CommentDraft
@@ -494,10 +783,9 @@ function ThreadCard({
         {thread.resolved !== null && (
           <button
             onClick={toggleResolved}
-            disabled={resolving}
-            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs whitespace-nowrap text-muted-foreground ring-1 ring-border hover:text-foreground disabled:opacity-50"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs whitespace-nowrap text-muted-foreground ring-1 ring-border hover:text-foreground"
           >
-            <Icon name={resolving ? 'loader' : 'check'} className={`size-3 ${resolving ? 'animate-spin' : ''}`} />
+            <Icon name="check" className="size-3" />
             {thread.resolved ? 'Unresolve' : 'Resolve conversation'}
           </button>
         )}
@@ -521,6 +809,7 @@ export function PullRequestDetailView({
   diffStyle,
   onOpenWorktree,
   onAddToComments,
+  onAddNote,
   onCreateWorktree,
   renderSend,
   renderComments,
@@ -543,6 +832,8 @@ export function PullRequestDetailView({
   renderSend?: (pr: PullRequest) => React.ReactNode
   onOpenWorktree: (worktreePath: string) => void
   onAddToComments: (pr: PullRequest, thread: ReviewThread, patch: FilePatch | undefined) => void
+  /** Keeps a drafted note as an agent comment instead of posting it; `range` is null for the whole file */
+  onAddNote: (pr: PullRequest, patch: FilePatch, range: LineRange | null, text: string) => void
   onCreateWorktree: (pr: PullRequest) => void
 }): React.JSX.Element {
   const [detail, setDetail] = useState<PullRequestDetail | null>(null)
@@ -599,6 +890,24 @@ export function PullRequestDetailView({
     load().catch((reason: unknown) => cachedDetail === undefined && setError(errorMessage(reason)))
   }, [pr.url])
 
+  // New commits or comments bump updatedAt in the background list refresh; coming back to the app checks again
+  const loadedFor = useRef(pr.updatedAt)
+  useEffect(() => {
+    if (loadedFor.current === pr.updatedAt) return
+    loadedFor.current = pr.updatedAt
+    load().catch(() => undefined)
+  }, [pr.updatedAt])
+  useEffect(() => {
+    let last = Date.now()
+    const onFocus = (): void => {
+      if (Date.now() - last < DETAIL_FOCUS_REFRESH_MS) return
+      last = Date.now()
+      load().catch(() => undefined)
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [pr.url])
+
   useEffect(() => setDraft(null), [filePath])
 
   /** Posts, then reloads so the new comment shows with its real id */
@@ -648,7 +957,28 @@ export function PullRequestDetailView({
   }
 
   const [showResolved, setShowResolved] = usePersisted<boolean>(workspaceKey('prs.showResolved'), false)
-  const allThreads = detail?.threads ?? []
+  /** Resolve and unresolve clicks shown before the provider confirms them, by thread id */
+  const [resolvedNow, setResolvedNow] = useState<Record<string, boolean>>({})
+  const [pending, setPending] = useState<PendingComment[]>([])
+  useEffect(() => setResolvedNow({}), [detail])
+  /** Edits and deletes of your own comments, shown before the provider confirms them */
+  const [commentChanges, setCommentChanges] = useState<Record<string, string | null>>({})
+  useEffect(() => setCommentChanges({}), [detail])
+  const allThreads = (detail?.threads ?? [])
+    .map((thread) => ({
+      ...(thread.id in resolvedNow ? { ...thread, resolved: resolvedNow[thread.id] } : thread),
+      comments: thread.comments
+        .filter((comment) => commentChanges[comment.id] !== null)
+        .map((comment) => (typeof commentChanges[comment.id] === 'string' ? { ...comment, body: commentChanges[comment.id] ?? comment.body } : comment))
+    }))
+    .filter((thread) => thread.comments.length > 0)
+  const changeComment = (comment: ThreadComment, body: string | null): void => {
+    setCommentChanges((current) => ({ ...current, [comment.id]: body }))
+    ;(body === null ? api.deleteComment(pr, comment.id) : api.editComment(pr, comment.id, body)).then(load, (reason: unknown) => {
+      setCommentChanges(({ [comment.id]: _dropped, ...rest }) => rest)
+      setError(`Comment not ${body === null ? 'deleted' : 'saved'}: ${errorMessage(reason)}`)
+    })
+  }
   const resolvedCount = allThreads.filter((thread) => thread.resolved).length
   // Resolved conversations are done; they stay out of the way unless asked for
   const threads = showResolved ? allThreads : allThreads.filter((thread) => !thread.resolved)
@@ -665,17 +995,42 @@ export function PullRequestDetailView({
     setView('files')
   }
   const add = (thread: ReviewThread): void => onAddToComments(pr, thread, patches.find((patch) => patch.path === thread.path))
-  const resolve = async (thread: ReviewThread, resolved: boolean): Promise<void> => {
-    await api.setThreadResolved(pr, thread, resolved).catch((reason: unknown) => setError(errorMessage(reason)))
-    await load()
+  const resolve = (thread: ReviewThread, resolved: boolean): void => {
+    setResolvedNow((current) => ({ ...current, [thread.id]: resolved }))
+    api.setThreadResolved(pr, thread, resolved).then(load, (reason: unknown) => {
+      setResolvedNow(({ [thread.id]: _dropped, ...rest }) => rest)
+      setError(`Conversation not ${resolved ? 'resolved' : 'reopened'}: ${errorMessage(reason)}`)
+    })
   }
+  /** Replies and comments show at once as "Sending…"; the draft closes, and a failure keeps the text with Retry */
+  const send = (comment: PendingComment): void => {
+    setPending((current) => [...current.filter((entry) => entry.id !== comment.id), { ...comment, error: null }])
+    api
+      .commentOnPullRequest(pr, comment.threadId ? { body: comment.body, threadId: comment.threadId } : { body: comment.body })
+      .then(load)
+      .then(
+        () => setPending((current) => current.filter((entry) => entry.id !== comment.id)),
+        (reason: unknown) => setPending((current) => current.map((entry) => (entry.id === comment.id ? { ...entry, error: errorMessage(reason) } : entry)))
+      )
+  }
+  const sendNew = (body: string, threadId: string | null): Promise<void> => {
+    send({ id: crypto.randomUUID(), threadId, body, error: null })
+    return Promise.resolve()
+  }
+  const discard = (comment: PendingComment): void => setPending((current) => current.filter((entry) => entry.id !== comment.id))
   const threadCard = (thread: ReviewThread): React.JSX.Element => (
     <ThreadCard
       thread={thread}
       pr={pr}
       onAdd={() => add(thread)}
-      onReply={(body) => post({ body, threadId: thread.id })}
+      onReply={(body) => sendNew(body, thread.id)}
       onResolve={(resolved) => resolve(thread, resolved)}
+      pending={pending.filter((comment) => comment.threadId === thread.id)}
+      onRetry={send}
+      onDiscard={discard}
+      viewer={detail?.viewer ?? null}
+      onEdit={(comment, body) => changeComment(comment, body)}
+      onDelete={(comment) => changeComment(comment, null)}
     />
   )
   // In the all-files scroll, go back to the file this pull request was left on once its diff has loaded
@@ -784,6 +1139,13 @@ export function PullRequestDetailView({
             submitLabel={`Comment on ${providerName(pr)}`}
             allowAttachments={false}
             onCancel={() => setFileCommentPath(null)}
+            alternative={{
+              label: 'Add to agent comments',
+              onSave: (text) => {
+                onAddNote(pr, patch, null, text)
+                setFileCommentPath(null)
+              }
+            }}
             onSave={(body) => post({ body, path: patch.path }).then(() => setFileCommentPath(null))}
           />
         )}
@@ -813,6 +1175,13 @@ export function PullRequestDetailView({
                   submitLabel={`Comment on ${providerName(pr)}`}
                   allowAttachments={false}
                   onCancel={() => setDraft(null)}
+                  alternative={{
+                    label: 'Add to agent comments',
+                    onSave: (text) => {
+                      onAddNote(pr, patch, fileDraft, text)
+                      setDraft(null)
+                    }
+                  }}
                   onSave={(body) =>
                     post({ body, path: patch.path, line: fileDraft.end, side: fileDraft.endSide ?? fileDraft.side }).then(() => setDraft(null))
                   }
@@ -943,6 +1312,16 @@ export function PullRequestDetailView({
               </span>
             </button>
           ))}
+          {pr.state === 'open' && (
+            <div className="ml-auto flex items-center gap-2 self-center">
+              <ReviewButtons pr={pr} myReview={detail?.myReview ?? null} onReviewed={load} onError={(message) => setError(message)} />
+              <MergeButton
+                pr={pr}
+                onError={(message) => setError(message)}
+                onMerged={load}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -980,6 +1359,15 @@ export function PullRequestDetailView({
               {threadCard(thread)}
             </div>
           ))}
+          {pending.some((comment) => comment.threadId === null) && (
+            <div className="mx-3 my-2 overflow-hidden rounded-lg border border-border bg-card">
+              {pending
+                .filter((comment) => comment.threadId === null)
+                .map((comment) => (
+                  <PendingCommentView key={comment.id} comment={comment} onRetry={() => send(comment)} onDiscard={() => discard(comment)} />
+                ))}
+            </div>
+          )}
           {composing ? (
             <CommentDraft
               label={`New comment on ${providerName(pr)}`}
@@ -987,7 +1375,7 @@ export function PullRequestDetailView({
               submitLabel={`Comment on ${providerName(pr)}`}
               allowAttachments={false}
               onCancel={() => setComposing(false)}
-              onSave={(body) => post({ body }).then(() => setComposing(false))}
+              onSave={(body) => sendNew(body, null).then(() => setComposing(false))}
             />
           ) : (
             <button

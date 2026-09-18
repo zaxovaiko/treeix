@@ -80,7 +80,7 @@ function BranchCombobox({
       {open && suggestions.length > 0 && (
         <div
           ref={listRef}
-          className="absolute inset-x-0 top-9 z-10 max-h-56 overflow-y-auto rounded-lg border border-input bg-popover p-1 shadow-xl shadow-black/50"
+          className="absolute inset-x-0 top-9 z-10 max-h-56 overflow-y-auto rounded-lg border border-input bg-popover p-1"
         >
           {suggestions.map((branch, index) => (
             <button

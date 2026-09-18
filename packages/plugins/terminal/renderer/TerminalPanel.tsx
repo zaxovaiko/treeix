@@ -8,17 +8,22 @@ import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { groupOpen, toggleIn, useSettings } from '@treeix/app/settings'
 import { EmptyState, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { baseName } from '@treeix/app/Sidebar'
+import { timeAgo } from '@treeix/app/time'
 import {
   attachSession,
+  clearClosedSessions,
   clearTerminal,
+  type ClosedSession,
   createSession,
   fitSession,
   focusSession,
+  forgetClosedSession,
   hidePane,
   killSession,
   pasteClipboard,
   setSessionListOpen,
   placePane,
+  restoreClosedSession,
   selectAllTerminal,
   terminalSelection,
   SESSION_KINDS,
@@ -42,7 +47,7 @@ function NewSessionMenu({ cwd, label }: { cwd: string; label: string }): React.J
       {open && (
         <div
           onMouseLeave={() => setOpen(false)}
-          className={`absolute top-7 right-0 z-40 w-44 rounded-lg border border-input bg-popover p-1 shadow-xl shadow-black/50`}
+          className={`absolute top-7 right-0 z-40 w-44 rounded-lg border border-input bg-popover p-1`}
         >
           {(Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => (
             <button
@@ -65,8 +70,60 @@ function NewSessionMenu({ cwd, label }: { cwd: string; label: string }): React.J
 
 const SESSION_MIME = 'application/x-treeix-session'
 
-const endSession = (session: Session): void => {
-  if (window.confirm(`End ${session.title}?`)) killSession(session.id)
+/** Closed sessions of this workspace; restoring starts one again, resuming an agent conversation */
+function SessionHistory({ entries, repos }: { entries: ClosedSession[]; repos: Repo[] | null }): React.JSX.Element | null {
+  const [open, setOpen] = usePersisted<boolean>('terminal.historyOpen', true)
+  if (entries.length === 0) return null
+  return (
+    <div className="mt-1 border-t border-border pt-1.5">
+      <div className="flex h-6 items-center gap-1 px-1.5 text-[11px] text-muted-foreground">
+        <button onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-1 text-left hover:text-foreground">
+          <Icon name="chevron" className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`} />
+          <Icon name="history" className="size-3" />
+          History <span className="tabular-nums">{entries.length}</span>
+        </button>
+        {open && (
+          <button onClick={() => clearClosedSessions(entries.map((entry) => entry.id))} className="rounded px-1 hover:bg-accent hover:text-foreground">
+            Clear
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-0.5 flex flex-col gap-0.5">
+          {entries.map((entry) => (
+            <div
+              key={entry.id}
+              role="button"
+              tabIndex={0}
+              title={`Restore${entry.kind === 'shell' ? '' : ' and resume the conversation'} in ${entry.worktreePath}`}
+              onClick={() => void restoreClosedSession(entry).then((id) => setTimeout(() => focusSession(id)))}
+              className="group/closed flex h-8 w-full items-center gap-2 rounded-md pr-1 pl-4 text-left text-foreground/60 hover:bg-accent hover:text-foreground"
+            >
+              <KindBadge kind={entry.kind} />
+              <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                <span className="truncate text-xs">{entry.title}</span>
+                <span className="truncate text-[10px] text-muted-foreground">
+                  {worktreeLabel(repos, entry.worktreePath)} · {timeAgo(new Date(entry.endedAt).toISOString())}
+                </span>
+              </span>
+              <Icon name="refresh" className="size-3 shrink-0 opacity-0 group-hover/closed:opacity-100" />
+              <button
+                title="Remove from history"
+                aria-label="Remove from history"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  forgetClosedSession(entry.id)
+                }}
+                className="grid size-5 shrink-0 place-items-center rounded opacity-0 group-hover/closed:opacity-100 hover:bg-background hover:text-red-400"
+              >
+                <Icon name="trash" className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 /** Actions shared by the session list and pane headers */
@@ -82,7 +139,7 @@ function sessionMenu(event: React.MouseEvent, session: Session, shown: boolean):
     { label: 'Copy working directory', run: () => copyText(session.worktreePath) },
     { label: 'Reveal in Finder', run: () => window.api.revealInFinder(session.worktreePath) },
     null,
-    { label: session.status === 'exited' ? 'Remove session' : 'End session…', run: () => (session.status === 'exited' ? killSession(session.id) : endSession(session)) }
+    { label: 'Close session', run: () => killSession(session.id) }
   ])
 }
 
@@ -193,21 +250,13 @@ function TerminalPane({ session, repos, horizontal }: { session: Session; repos:
         <span className="truncate text-xs">{session.title}</span>
         <span className="truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>
         <span className="flex-1" />
-        {plans && session.kind === 'claude' && <plans.PlanButton startedAt={session.startedAt} />}
+        {plans && (session.kind === 'claude' || session.planName) && <plans.PlanButton startedAt={session.startedAt} name={session.planName} />}
         <StatusDot session={session} />
         <button
-          title="End session"
-          aria-label="End session"
-          onClick={() => endSession(session)}
+          title="Close session (⌘W); restore it from History"
+          aria-label="Close session"
+          onClick={() => killSession(session.id)}
           className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-red-400"
-        >
-          <Icon name="power" className="size-3" />
-        </button>
-        <button
-          title="Hide pane"
-          aria-label="Hide pane"
-          onClick={() => hidePane(session.id)}
-          className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Icon name="close" className="size-3" />
         </button>
@@ -239,10 +288,11 @@ export function TerminalPanel({
   worktreePath: string | null
   orientation: 'horizontal' | 'vertical'
   /** Limits the list and panes, e.g. to the current workspace */
-  includeSession?: (session: Session) => boolean
+  includeSession?: (session: { worktreePath: string; workspaceId: string }) => boolean
 }): React.JSX.Element {
-  const { sessions: allSessions, panes, layout: fullLayout, listOpen, zoomed } = useTerminals()
+  const { sessions: allSessions, panes, layout: fullLayout, listOpen, zoomed, history: allHistory } = useTerminals()
   const sessions = includeSession ? allSessions.filter(includeSession) : allSessions
+  const history = includeSession ? allHistory.filter(includeSession) : allHistory
   // A pane zoomed in another workspace doesn't blank this one
   const layout = zoomed && sessions.some((session) => session.id === zoomed) ? [[zoomed]] : fullLayout
   const waiting = sessions.filter((session) => session.status === 'input').length
@@ -327,6 +377,7 @@ export function TerminalPanel({
             </div>
           )
         })}
+        <SessionHistory entries={history} repos={repos} />
       </div>
       {horizontal && <ResizeHandle width={listWidth} min={180} max={480} onResize={setListWidth} />}
     </div>
@@ -346,6 +397,11 @@ export function TerminalPanel({
               {SESSION_KINDS[kind].label}
             </button>
           ))}
+          {history.length > 0 && (
+            <div className="w-72 basis-full text-left">
+              <SessionHistory entries={history} repos={repos} />
+            </div>
+          )}
         </EmptyState>
       </div>
     )

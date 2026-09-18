@@ -79,9 +79,17 @@ export type PullRequestDetail = {
   /** Paths marked viewed on GitHub; null where the provider has no API for it (GitLab keeps it in the browser) */
   viewedFiles: string[] | null
   reviewers: Reviewer[]
+  /** Your login on the provider, to tell which comments you can edit; null when it couldn't be read */
+  viewer: string | null
+  /** Your own latest verdict; null when you haven't approved or requested changes */
+  myReview: 'approved' | 'changes' | null
 }
 
 /** Someone asked to review or who reviewed; `requested` means their review is currently pending */
+export type ReviewVerdict = 'approve' | 'changes'
+
+export type MergeMethod = 'merge' | 'squash' | 'rebase'
+
 export type Reviewer = { login: string; avatarUrl: string | null; state: 'requested' | 'approved' | 'changes' | 'commented' }
 
 export type ImageResult = { dataUrl: string } | { error: string }

@@ -1,4 +1,4 @@
-import type { WorkItem } from '../shared/types'
+import type { Epic, WorkItem } from '../shared/types'
 
 /** Grouped by whose move it is, not by Jira's status category */
 export const BUCKETS = {
@@ -38,8 +38,61 @@ const PRIORITY_RANK: [RegExp, number][] = [
 ]
 const priorityRank = (priority: string | null): number => PRIORITY_RANK.find(([pattern]) => priority && pattern.test(priority))?.[1] ?? 2
 
+export const SORTS = { status: 'Status', priority: 'Priority', updated: 'Updated', created: 'Created' } as const
+export type ItemSort = keyof typeof SORTS
+export const isItemSort = (value: unknown): value is ItemSort => typeof value === 'string' && Object.hasOwn(SORTS, value)
+
+const IN_PROGRESS = /progress|doing|develop/i
+/** Work under way first, then started items that came back or stalled, then not started */
+const statusRank = (item: WorkItem): number => {
+  if (item.statusCategory === 'indeterminate') return IN_PROGRESS.test(item.status) && !BACK_TO_ME.test(item.status) ? 0 : 1
+  return item.statusCategory === 'new' ? 2 : 3
+}
+
+/** Updated and created come from the query's ORDER BY, so they keep the order Jira returned */
+export function sortItems(items: WorkItem[], sort: ItemSort): WorkItem[] {
+  const rank = (item: WorkItem): number =>
+    sort === 'status' ? statusRank(item) * 10 + priorityRank(item.priority) : sort === 'priority' ? priorityRank(item.priority) : 0
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index)
+    .map(({ item }) => item)
+}
+
 /** Most urgent first; equal priorities keep the query's order */
-export const byPriority = (items: WorkItem[]): WorkItem[] =>
-  items.map((item, index) => ({ item, index })).sort((a, b) => priorityRank(a.item.priority) - priorityRank(b.item.priority) || a.index - b.index).map(({ item }) => item)
+export const byPriority = (items: WorkItem[]): WorkItem[] => sortItems(items, 'priority')
 
 export const projectOf = (item: WorkItem): string => item.key.split('-')[0]
+
+export type EpicGroup = { epic: Epic | null; items: WorkItem[] }
+
+/** Which open epic each item sits under */
+export function epicIndex(epics: Epic[]): Map<string, Epic> {
+  const index = new Map<string, Epic>()
+  for (const epic of epics) for (const child of epic.children) index.set(child.key, epic)
+  return index
+}
+
+/**
+ * Items under their epic, epics with the most to do first, then items with no open epic. Epics themselves
+ * head their group instead of sitting in it. Order inside a group is kept.
+ */
+export function groupByEpic(items: WorkItem[], epics: Epic[]): EpicGroup[] {
+  const index = epicIndex(epics)
+  const epicKeys = new Set(epics.map((epic) => epic.key))
+  const groups = new Map<string, EpicGroup>()
+  const loose: WorkItem[] = []
+  for (const item of items) {
+    if (epicKeys.has(item.key)) continue
+    const epic = index.get(item.key)
+    if (!epic) {
+      loose.push(item)
+      continue
+    }
+    const group = groups.get(epic.key) ?? { epic, items: [] }
+    group.items.push(item)
+    groups.set(epic.key, group)
+  }
+  const sorted = [...groups.values()].sort((a, b) => b.items.length - a.items.length)
+  return loose.length ? [...sorted, { epic: null, items: loose }] : sorted
+}

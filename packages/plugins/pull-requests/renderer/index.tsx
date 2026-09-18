@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useReducer } from 'react'
 import { type DocumentTab, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
-import { extractLines, type ReviewComment } from '@treeix/shared/comments'
+import { extractLines, type LineRange, type ReviewComment } from '@treeix/shared/comments'
 import type { FilePatch } from '@treeix/shared/types'
 import { Row, Segmented } from '@treeix/app/settingsUi'
 import { baseName } from '@treeix/app/Sidebar'
@@ -8,7 +8,7 @@ import { useSettings } from '@treeix/app/settings'
 import { errorMessage } from '@treeix/app/ui'
 import type { PullRequest, ReviewThread } from '../shared/types'
 import { POLL_MINUTES, prSettings } from './api'
-import { lastFetched, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
+import { findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
 import { localWorktreeFor, prefix, ProviderMark, pullRequestKey } from './pullRequestUtils'
 
 // The views pull in diffs, markdown and filters, so they load when the tab first opens
@@ -28,6 +28,7 @@ function useViewProps(): {
   renderComments: (pr: PullRequest, openFile: (path: string) => void) => React.ReactNode
   onOpenWorktree: (path: string) => void
   onAddToComments: (pr: PullRequest, thread: ReviewThread, patch: FilePatch | undefined) => void
+  onAddNote: (pr: PullRequest, patch: FilePatch, range: LineRange | null, text: string) => void
   onAddFile: (pr: PullRequest, patch: FilePatch) => void
   onCreateWorktree: (pr: PullRequest) => void
 } {
@@ -53,6 +54,18 @@ function useViewProps(): {
       host.addComment(comment)
       host.flash(`Added to comments on ${baseName(worktreePath)}`)
     },
+    onAddNote: (pr, patch, range, text) => {
+      const worktreePath = checkoutOf(host, pr)
+      host.addComment({
+        id: crypto.randomUUID(),
+        worktreePath,
+        filePath: patch.path,
+        range: range ?? { start: 0, end: 0 },
+        code: range ? extractLines(patch.patch, range) : '',
+        text: text.trim()
+      })
+      host.flash(`Added to comments on ${baseName(worktreePath)}`)
+    },
     // Just the path: the agent reads the file itself
     onAddFile: (pr, patch) => {
       const worktreePath = checkoutOf(host, pr)
@@ -66,8 +79,12 @@ function useViewProps(): {
   }
 }
 
-function DetailTab({ pr }: { pr: PullRequest }): React.JSX.Element {
+function DetailTab({ pr: opened }: { pr: PullRequest }): React.JSX.Element {
   const host = useHost()
+  // The tab keeps the pull request it was opened with; background refreshes bring its title, state and counts up to date
+  const [, bump] = useReducer((count: number) => count + 1, 0)
+  useEffect(() => onPullRequestsUpdated(bump), [])
+  const pr = findCachedPullRequest(opened.url) ?? opened
   const props = useViewProps()
   const commentCount = host.comments.filter((comment) => comment.worktreePath === checkoutOf(host, pr)).length
   return (
@@ -161,7 +178,20 @@ function PullRequestSettings(): React.JSX.Element {
   )
 }
 
+/**
+ * Opens a pull request link from elsewhere, like a terminal, as a tab. A new one may not be in the list yet,
+ * so the workspace's list is fetched once before giving up.
+ */
+async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> {
+  if (!/\/(pull|merge_requests)\/\d+/.test(url)) return false
+  const pr = findCachedPullRequest(url) ?? (host.scopeRepoPaths ? (await refreshPullRequests(host.scopeRepoPaths), findCachedPullRequest(url)) : null)
+  if (!pr) return false
+  host.openTab(detailTab(pr))
+  return true
+}
+
 const plugin: RendererPlugin = {
+  services: { pullRequests: { open: openPullRequestUrl } },
   tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'] }],
   Root: Polling,
   Settings: PullRequestSettings,

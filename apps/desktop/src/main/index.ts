@@ -1,14 +1,14 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import type { ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
 import { saveAttachment } from './attachments'
-import { createPath, renamePath, saveFile, stopWatching, trashPath, watchFile } from './files'
+import { createPath, listDirectory, renamePath, saveFile, stopWatching, trashPath, watchFile } from './files'
 import { createHistory } from './history'
 import { enableTextMenu, showContextMenu } from './contextMenu'
 import { addWorktree, createBranch, deleteBranch, diff, listBranches, discardChanges, listFiles, searchText, readFile, removeWorktree, scan } from './git'
 import { addSettingsMenuItem } from './appMenu'
-import { addHotkeyMenuItem, configureHotkey, releaseHotkey } from './hotkeyWindow'
+import { addHotkeyMenuItem, configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
 import { hover, navigate, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { checkTools } from './tools'
@@ -60,6 +60,17 @@ app.whenReady().then(() => {
   ipcMain.handle('scan', () => scan())
   ipcMain.handle('diff', (_, worktreePath: string) => diff(worktreePath))
   ipcMain.handle('listFiles', (_, worktreePath: string) => listFiles(worktreePath))
+  ipcMain.handle('isChromeless', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return window !== null && (window.isFullScreen() || isSummoned())
+  })
+  ipcMain.handle('listDirectory', (_, root: string, folder: string) => listDirectory(root, folder))
+  ipcMain.handle('pickFolder', async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const options = { properties: ['openDirectory' as const] }
+    const { canceled, filePaths } = await (window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options))
+    return canceled ? null : (filePaths[0] ?? null)
+  })
   ipcMain.handle('readFile', (_, worktreePath: string, filePath: string) => readFile(worktreePath, filePath))
   ipcMain.handle('navigate', (_, worktreePath: string, kind: NavigationKind, target: SymbolTarget) => navigate(worktreePath, kind, target))
   ipcMain.handle('searchText', (_, worktreePaths: string[], query: string, options: SearchOptions) => searchText(worktreePaths, query, options))

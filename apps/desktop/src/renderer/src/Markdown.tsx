@@ -1,4 +1,4 @@
-import { Children, createContext, useContext, useEffect, useState } from 'react'
+import { Children, createContext, useContext, useEffect, useRef, useState } from 'react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
@@ -45,6 +45,65 @@ function Section({ children }: { children?: React.ReactNode }): React.JSX.Elemen
       </button>
       {open && <div className="pl-4">{body}</div>}
     </section>
+  )
+}
+
+/** Starts dragging a column edge of the table around it; set by ResizableTable for its header cells */
+const ColumnResize = createContext<((column: number, event: React.MouseEvent) => void) | null>(null)
+
+/**
+ * A table whose columns are sized by dragging the header edges. The first drag freezes the widths the browser
+ * chose, so only the dragged column changes; double-clicking an edge goes back to automatic widths.
+ */
+function ResizableTable({ children }: { children?: React.ReactNode }): React.JSX.Element {
+  const table = useRef<HTMLTableElement>(null)
+  const [widths, setWidths] = useState<number[] | null>(null)
+  const startResize = (column: number, event: React.MouseEvent): void => {
+    event.preventDefault()
+    if (event.detail > 1) return setWidths(null)
+    const header = table.current?.rows[0]
+    if (!header) return
+    const start = [...header.cells].map((cell) => cell.getBoundingClientRect().width)
+    const from = event.clientX
+    const move = (moved: MouseEvent): void => setWidths(start.map((width, index) => (index === column ? Math.max(40, width + moved.clientX - from) : width)))
+    const stop = (): void => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', stop)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', stop)
+  }
+  return (
+    <ColumnResize.Provider value={startResize}>
+      <div className="overflow-x-auto">
+      <table ref={table} style={widths ? { tableLayout: 'fixed', width: widths.reduce((sum, width) => sum + width, 0) } : undefined}>
+        {widths && (
+          <colgroup>
+            {widths.map((width, index) => (
+              <col key={index} style={{ width }} />
+            ))}
+          </colgroup>
+        )}
+        {children}
+      </table>
+      </div>
+    </ColumnResize.Provider>
+  )
+}
+
+function ResizableHeader({ children, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>): React.JSX.Element {
+  const startResize = useContext(ColumnResize)
+  return (
+    <th {...props} className="relative">
+      {children}
+      {startResize && (
+        <span
+          title="Drag to resize, double-click to reset"
+          onMouseDown={(event) => startResize(event.currentTarget.parentElement instanceof HTMLTableCellElement ? event.currentTarget.parentElement.cellIndex : 0, event)}
+          className="absolute top-0 -right-1 z-10 h-full w-2 cursor-col-resize hover:bg-primary/40"
+        />
+      )}
+    </th>
   )
 }
 
@@ -112,6 +171,8 @@ export function Markdown({ children, baseUrl, resolveImage }: { children: string
           components={{
             a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
             section: ({ node: _node, children }) => <Section>{children}</Section>,
+            table: ({ node: _node, children }) => <ResizableTable>{children}</ResizableTable>,
+            th: ({ node: _node, ...props }) => <ResizableHeader {...props} />,
             img: ({ node: _node, src, alt, ...props }) =>
               resolveImage && typeof src === 'string' ? (
                 <ResolvedImage src={src} alt={alt ?? ''} resolve={resolveImage} />

@@ -45,7 +45,8 @@ export function Explorer({
   onOpen,
   onFileMenu,
   onFolderMenu,
-  onCreate
+  onCreate,
+  onExpand
 }: {
   files: WorktreeFiles | null
   changed: Set<string>
@@ -55,6 +56,8 @@ export function Explorer({
   /** Folder rows and the empty area below the tree (path '') */
   onFolderMenu?: (event: React.MouseEvent, path: string) => void
   onCreate?: (kind: 'file' | 'folder', folder: string) => void
+  /** For trees loaded a folder at a time: called when a folder opens */
+  onExpand?: (path: string) => void
 }): React.JSX.Element {
   const [filter, setFilter] = usePersisted<string>(workspaceKey('explorer.filter'), '')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -76,7 +79,10 @@ export function Explorer({
   const toggle = (path: string): void => {
     const next = new Set(expanded)
     if (next.has(path)) next.delete(path)
-    else next.add(path)
+    else {
+      next.add(path)
+      onExpand?.(path)
+    }
     setExpanded(next)
   }
 
@@ -167,3 +173,24 @@ export function Explorer({
     </div>
   )
 }
+
+/** A folder outside the selected worktree, e.g. home or where a terminal is; folders load when opened, since listing everything at once is too slow */
+export function FolderExplorer({ root, activePath, onOpen }: { root: string; activePath: string | null; onOpen: (path: string) => void }): React.JSX.Element {
+  const [files, setFiles] = useState<string[] | null>(null)
+  const load = (folder: string): void => {
+    window.api.listDirectory(root, folder).then((entries) =>
+      setFiles((current) => [...new Set([...(current ?? []).filter((path) => !folder || !path.startsWith(`${folder}/`)), ...entries])])
+    )
+  }
+  // A repository lists everything at once through git, so the filter finds files in folders not opened yet
+  const [repoFiles, setRepoFiles] = useState<WorktreeFiles | null>(null)
+  useEffect(() => {
+    setFiles(null)
+    setRepoFiles(null)
+    window.api.listFiles(root).then(setRepoFiles, () => load(''))
+  }, [root])
+  const tree = useMemo(() => repoFiles ?? (files ? { files, ignored: [] } : null), [repoFiles, files])
+  return <Explorer files={tree} changed={NOTHING_CHANGED} activePath={activePath} onOpen={onOpen} onExpand={repoFiles ? undefined : load} />
+}
+
+const NOTHING_CHANGED = new Set<string>()

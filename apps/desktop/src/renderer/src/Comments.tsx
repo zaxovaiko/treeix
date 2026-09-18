@@ -141,7 +141,7 @@ export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onD
     >
       <Icon name="comment" className="mt-0.5 size-3.5 text-primary" />
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] text-muted-foreground">{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : 'General'}</div>
+        <div className="text-[11px] text-muted-foreground">{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : 'General'}</div>
         <Markdown>{comment.text}</Markdown>
         <Attachments attachments={comment.attachments ?? []} />
       </div>
@@ -162,7 +162,8 @@ export function CommentDraft({
   submitLabel = 'Comment',
   allowAttachments = true,
   onSave,
-  onCancel
+  onCancel,
+  alternative
 }: {
   label: string
   placeholder?: string
@@ -170,6 +171,8 @@ export function CommentDraft({
   allowAttachments?: boolean
   onSave: (text: string, attachments: Attachment[]) => void | Promise<void>
   onCancel: () => void
+  /** A second way to save the text, e.g. as an agent comment instead of posting it; ⌘⇧↵ */
+  alternative?: { label: string; onSave: (text: string) => void }
 }): React.JSX.Element {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -234,7 +237,10 @@ export function CommentDraft({
           attach(files)
         }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && event.metaKey) save()
+          if (event.key !== 'Enter' || !event.metaKey) return
+          if (event.shiftKey && alternative) {
+            if (text.trim()) alternative.onSave(text)
+          } else save()
         }}
         placeholder={allowAttachments ? `${placeholder}. Paste or drop files to attach` : placeholder}
         className="w-full resize-y rounded-md border border-input bg-muted px-2.5 py-2 outline-none placeholder:text-muted-foreground/70 focus:border-primary/60"
@@ -267,6 +273,17 @@ export function CommentDraft({
         <button onClick={onCancel} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
+        {alternative && (
+          <button
+            title="⌘⇧↵"
+            onClick={() => alternative.onSave(text)}
+            disabled={!text.trim()}
+            className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent disabled:opacity-40"
+          >
+            <Icon name="comment" className="size-3.5" />
+            {alternative.label}
+          </button>
+        )}
         <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-40">
           {busy ? '...' : submitLabel}
         </button>
@@ -337,7 +354,7 @@ export function CommentsPanel({
                   className="group/item mb-1 cursor-pointer rounded-md border border-transparent px-2 py-1.5 hover:border-border hover:bg-accent"
                 >
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : 'General'}</span>
+                    <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : 'General'}</span>
                     <span className="flex-1" />
                     <button
                       title="Delete comment"

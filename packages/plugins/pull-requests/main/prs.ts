@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ImageResult, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ThreadComment } from '../shared/types'
+import type { ImageResult, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
 
@@ -237,6 +237,11 @@ export function githubReviewers(raw: unknown): Reviewer[] {
   return [...reviewers.values()].sort((a, b) => Number(b.state === 'requested') - Number(a.state === 'requested'))
 }
 
+export function githubMyReview(raw: unknown): PullRequestDetail['myReview'] {
+  const state = text(object(object(object(object(object(raw).data).repository).pullRequest).viewerLatestReview).state)
+  return state === 'APPROVED' ? 'approved' : state === 'CHANGES_REQUESTED' ? 'changes' : null
+}
+
 /** Files the viewer marked as viewed, from the same pull request query */
 export const githubViewedFiles = (raw: unknown): string[] =>
   list(object(object(object(object(object(raw).data).repository).pullRequest).files).nodes)
@@ -375,12 +380,14 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
     )
     const [owner, name] = remote.slug.split('/')
     const threadQuery = `query($owner: String!, $name: String!, $number: Int!) {
+      viewer { login }
       repository(owner: $owner, name: $name) { pullRequest(number: $number) {
         reviewThreads(first: 100) { nodes { id isResolved comments(first: 1) { nodes { databaseId } } } }
         files(first: 100) { nodes { path viewerViewedState } }
         author { login }
         reviewRequests(first: 30) { nodes { requestedReviewer { ... on User { login avatarUrl } } } }
         latestReviews(first: 30) { nodes { author { login avatarUrl } state } }
+        viewerLatestReview { state }
       } }
     }`
     const [filePatches, view, reviewComments, issueComments, extra] = await Promise.all([
@@ -397,23 +404,29 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
       threads: githubThreads(reviewComments, issueComments, githubThreadStates(extra)),
       // ponytail: first 100 files only, paginate when PRs get bigger
       viewedFiles: extra === null ? null : githubViewedFiles(extra),
-      reviewers: githubReviewers(extra)
+      reviewers: githubReviewers(extra),
+      myReview: githubMyReview(extra),
+      viewer: text(object(object(object(extra).data).viewer).login) || null
     }
   }
 
-  const [diff, request, discussions, approvals] = await Promise.all([
+  const [diff, request, discussions, approvals, viewer] = await Promise.all([
     run('glab', ['mr', 'diff', `${number}`, '--color=never'], repoPath),
     runJson('glab', ['api', `projects/:id/merge_requests/${number}`], repoPath),
     // ponytail: first 100 discussions only, paginate if MRs get that busy
     runJson('glab', ['api', `projects/:id/merge_requests/${number}/discussions?per_page=100`], repoPath),
-    runJson('glab', ['api', `projects/:id/merge_requests/${number}/approvals`], repoPath).catch(() => null)
+    runJson('glab', ['api', `projects/:id/merge_requests/${number}/approvals`], repoPath).catch(() => null),
+    gitlabUser(repoPath)
   ])
   return {
     body: text(object(request).description),
     patches: splitPatch(normalizeGitlabDiff(diff)),
     threads: gitlabThreads(list(discussions)),
     viewedFiles: null,
-    reviewers: gitlabReviewers(request, approvals)
+    reviewers: gitlabReviewers(request, approvals),
+    // GitLab tells only whether you approved; a change request shows as your reviewer state, not here
+    myReview: object(approvals).user_has_approved === true ? 'approved' : null,
+    viewer
   }
 }
 
@@ -506,6 +519,44 @@ export async function reactToPullRequestComment(pullRequest: PullRequest, commen
   })
 }
 
+/** Who glab is signed in as, per repository folder; asked once per run */
+const gitlabUsers = new Map<string, Promise<string | null>>()
+function gitlabUser(repoPath: string): Promise<string | null> {
+  const known = gitlabUsers.get(repoPath)
+  if (known) return known
+  const asking = runJson('glab', ['api', 'user'], repoPath).then((user) => text(object(user).username) || null, () => null)
+  gitlabUsers.set(repoPath, asking)
+  return asking
+}
+
+/** The API path of one of your comments, from its `review:`, `issue:` or `note:` id */
+async function commentEndpoint(pullRequest: PullRequest, commentId: string): Promise<{ command: 'gh' | 'glab'; args: string[] }> {
+  const [kind, id] = commentId.split(':')
+  if (!/^\d+$/.test(id ?? '')) throw new Error('Invalid comment')
+  const remote = await remoteOf(pullRequest.repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  if (remote.provider === 'github') {
+    return { command: 'gh', args: ['api', '--hostname', remote.host, `repos/${remote.slug}/${kind === 'review' ? 'pulls' : 'issues'}/comments/${id}`] }
+  }
+  return { command: 'glab', args: ['api', `projects/:id/merge_requests/${pullRequest.number}/notes/${id}`] }
+}
+
+export async function editPullRequestComment(pullRequest: PullRequest, commentId: string, body: string): Promise<void> {
+  const { command, args } = await commentEndpoint(pullRequest, commentId)
+  const [api, ...rest] = args
+  await runWithBody(command, [api, '-X', command === 'gh' ? 'PATCH' : 'PUT', ...rest], pullRequest.repoPath, { body }).catch((reason: unknown) => {
+    throw new Error(failureMessage(reason))
+  })
+}
+
+export async function deletePullRequestComment(pullRequest: PullRequest, commentId: string): Promise<void> {
+  const { command, args } = await commentEndpoint(pullRequest, commentId)
+  const [api, ...rest] = args
+  await run(command, [api, '-X', 'DELETE', ...rest], pullRequest.repoPath).catch((reason: unknown) => {
+    throw new Error(failureMessage(reason))
+  })
+}
+
 /** A file as it is on the pull request's source branch, e.g. to preview its markdown */
 export async function pullRequestFile(pullRequest: PullRequest, filePath: string): Promise<string> {
   const { repoPath, sourceBranch } = pullRequest
@@ -568,6 +619,46 @@ export async function pullRequestImage(pullRequest: PullRequest, source: string)
     return { dataUrl: `data:${type};base64,${stdout.toString('base64')}` }
   } catch (reason) {
     return { error: failureMessage(reason) }
+  }
+}
+
+/**
+ * Merges now, never as auto-merge. GitHub goes through the API because `gh pr merge --delete-branch` also deletes
+ * and switches branches in the local checkout; GitLab's CLI leaves the checkout alone.
+ */
+export async function mergePullRequest(pullRequest: PullRequest, method: MergeMethod, deleteBranch: boolean): Promise<void> {
+  const { repoPath, number, sourceBranch } = pullRequest
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  try {
+    if (remote.provider === 'github') {
+      await run('gh', ['api', '--hostname', remote.host, '-X', 'PUT', `repos/${remote.slug}/pulls/${number}/merge`, '-f', `merge_method=${method}`], repoPath)
+      if (deleteBranch) await run('gh', ['api', '--hostname', remote.host, '-X', 'DELETE', `repos/${remote.slug}/git/refs/heads/${sourceBranch.split('/').map(encodeURIComponent).join('/')}`], repoPath)
+      return
+    }
+    const how = method === 'squash' ? ['--squash'] : method === 'rebase' ? ['--rebase'] : []
+    await run('glab', ['mr', 'merge', String(number), '--yes', '--auto-merge=false', ...how, ...(deleteBranch ? ['--remove-source-branch'] : [])], repoPath)
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
+  }
+}
+
+/** Approves, or requests changes with `body` explaining why */
+export async function submitReview(pullRequest: PullRequest, verdict: ReviewVerdict, body: string): Promise<void> {
+  const { repoPath, number } = pullRequest
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  try {
+    if (remote.provider === 'github') {
+      await run('gh', ['pr', 'review', String(number), verdict === 'approve' ? '--approve' : '--request-changes', ...(body ? ['--body', body] : [])], repoPath)
+    } else if (verdict === 'approve') {
+      await run('glab', ['mr', 'approve', String(number)], repoPath)
+    } else {
+      // No REST endpoint sets the reviewer state; the quick action does, as the web UI's "Request changes" does
+      await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `${body}\n\n/submit_review requested_changes` })
+    }
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
   }
 }
 

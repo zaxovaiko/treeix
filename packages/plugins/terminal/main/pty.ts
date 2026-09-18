@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import { type IPty, spawn } from 'node-pty'
@@ -32,7 +33,15 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
     cols,
     rows,
     // Empty PROMPT_EOL_MARK: zsh otherwise prints an inverse % when the first fit resizes the fresh shell mid-line
-    env: { ...withoutAgentVariables(process.env), ...extraEnv, TERM: 'xterm-256color', COLORTERM: 'truecolor', PROMPT_EOL_MARK: '' }
+    env: {
+      ...withoutAgentVariables(process.env),
+      ...extraEnv,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      // Apps opened from Finder get no locale, and without one shells mangle non-ASCII input
+      LANG: process.env.LANG || 'en_US.UTF-8',
+      PROMPT_EOL_MARK: ''
+    }
   })
   const entry: Entry = { pty, owner, meta, chunks: [], size: 0, exitCode: null }
   sessions.set(id, entry)
@@ -63,6 +72,17 @@ export function listTerminals(owner: WebContents): LiveTerminal[] {
     entry.owner = owner
     const { cols, rows } = entry.pty ?? { cols: SPAWN_COLS, rows: SPAWN_ROWS }
     return { id, meta: entry.meta, output: entry.chunks.join('').slice(-MAX_BUFFERED_CHARS), exitCode: entry.exitCode, cols, rows }
+  })
+}
+
+/** Where the session's shell is now, after any cd; null once it exited */
+export function terminalCwd(id: string): Promise<string | null> {
+  const pid = sessions.get(id)?.pty?.pid
+  if (!pid) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    execFile('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], (error, stdout) => {
+      resolve(error ? null : (stdout.split('\n').find((line) => line.startsWith('n'))?.slice(1) ?? null))
+    })
   })
 }
 

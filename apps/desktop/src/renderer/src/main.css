@@ -135,9 +135,8 @@ body {
   color: var(--color-muted-foreground);
 }
 
+/* The wrapper scrolls wide tables; the table itself stays a table so column widths can be set */
 .markdown table {
-  display: block;
-  overflow-x: auto;
   border-collapse: collapse;
 }
 
@@ -165,6 +164,19 @@ body {
 .markdown summary {
   cursor: pointer;
   color: var(--color-muted-foreground);
+}
+
+/* Everything clickable shows the hand, as on the web; in a layer so a cursor-* utility still wins */
+@layer base {
+  button:not(:disabled),
+  a[href],
+  summary,
+  select,
+  [role='button'],
+  input[type='checkbox'],
+  input[type='radio'] {
+    cursor: pointer;
+  }
 }
 
 /* Controls show state through their own hover and active styles, not the browser focus ring */

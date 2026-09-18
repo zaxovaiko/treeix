@@ -65,6 +65,9 @@ const paths = {
       <circle cx="12" cy="12" r="3" />
     </>
   ),
+  folderOpen: (
+    <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+  ),
   panel: (
     <>
       <rect width="18" height="18" x="3" y="3" rx="2" />
@@ -155,6 +158,11 @@ const paths = {
   ),
   plug: <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />,
   sort: <path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4" />,
+  maximize: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />,
+  minimize: <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />,
+  widen: <path d="m18 8 4 4-4 4M6 8l-4 4 4 4M2 12h20" />,
+  narrow: <path d="M2 12h7M22 12h-7M6 9l3 3-3 3M18 9l-3 3 3 3M12 5v14" />,
+  trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
   eye: (
     <>
       <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
