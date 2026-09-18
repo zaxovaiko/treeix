@@ -1,0 +1,7 @@
+{
+  "name": "@treeix/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contract between Treeix and its plugins",
+  "exports": { ".": "./src/index.ts", "./main": "./src/main.ts" }
+}

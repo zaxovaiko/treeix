@@ -1,0 +1,515 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>quick-diff - workspace mock</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --card: #111; --card2: #151515; --fg: #f5f5f5; --muted: #848484;
+    --border: rgb(255 255 255 / 6%); --input: rgb(255 255 255 / 8%); --accent: rgb(255 255 255 / 5%);
+    --primary: oklch(0.571 0.21 264); --add: #34d399; --del: #f87171; --warn: #fbbf24; --merged: #a78bfa;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1c1c1c; font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--fg); padding: 24px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .window { position: relative; width: 1440px; height: 900px; margin: 0 auto; background: var(--bg); border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 60%); }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); } .add { color: var(--add); } .del { color: var(--del); }
+  .row { display: flex; align-items: center; gap: 8px; } .grow { flex: 1; min-width: 0; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* title bar with app tabs */
+  .titlebar { height: 44px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .lights { display: flex; gap: 8px; margin-right: 14px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .apptab { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: 8px; color: var(--muted); max-width: 260px; }
+  .apptab:hover { background: var(--accent); color: var(--fg); }
+  .apptab.on { background: rgb(255 255 255 / 8%); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
+  .apptab .x { opacity: .5; font-size: 14px; padding: 0 2px; } .apptab .x:hover { opacity: 1; }
+  .kbd { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+  .search { height: 30px; width: 280px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  .pane { background: var(--card); display: flex; flex-direction: column; min-height: 0; }
+  .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .item { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; color: rgb(255 255 255 / 78%); }
+  .item:hover { background: var(--accent); } .item.on { background: rgb(255 255 255 / 8%); color: var(--fg); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; font-weight: 500; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .seg button { height: 22px; padding: 0 10px; border-radius: 6px; font-size: 11.5px; color: var(--muted); }
+  .seg button.on { background: rgb(255 255 255 / 9%); color: var(--fg); }
+
+  /* workspace docking */
+  .workspace { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .hrow { flex: 1; display: flex; min-height: 0; }
+  .dock { display: flex; flex-direction: column; background: var(--card); min-height: 0; min-width: 0; position: relative; }
+  .dock.left { width: 300px; border-right: 1px solid var(--border); }
+  .dock.right { width: 340px; border-left: 1px solid var(--border); }
+  .dock.bottom { height: 400px; border-top: 1px solid var(--border); }
+  .rail { height: 30px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 6px; border-bottom: 1px solid var(--border); }
+  .rail-btn { position: relative; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); cursor: grab; }
+  .rail-btn:hover { background: var(--accent); color: var(--fg); }
+  .rail-btn.on { background: rgb(255 255 255 / 9%); color: var(--fg); }
+  .rail-btn.on::before { content: ''; position: absolute; left: 6px; right: 6px; bottom: -3px; height: 2px; border-radius: 2px; background: var(--primary); }
+  .rail-btn svg { width: 15px; height: 15px; }
+  .rail-badge { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 0 2px var(--card); }
+  .dock-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+  .resize-v { position: absolute; top: 0; bottom: 0; width: 6px; cursor: col-resize; } .resize-h { position: absolute; left: 0; right: 0; height: 6px; cursor: row-resize; top: -3px; }
+  .dropzone { position: absolute; z-index: 20; border: 2px dashed oklch(0.571 0.21 264 / 70%); background: oklch(0.571 0.21 264 / 12%); border-radius: 10px; display: none; align-items: center; justify-content: center; color: #c7d2fe; font-weight: 500; }
+  .dragging .dropzone { display: flex; }
+  .dropzone.over { background: oklch(0.571 0.21 264 / 28%); }
+  .dz-left { left: 8px; top: 52px; bottom: 8px; width: 180px; } .dz-right { right: 8px; top: 52px; bottom: 8px; width: 180px; } .dz-bottom { left: 200px; right: 200px; bottom: 8px; height: 120px; }
+  .menu { position: absolute; z-index: 30; background: #181818; border: 1px solid var(--input); border-radius: 8px; padding: 4px; box-shadow: 0 12px 30px rgb(0 0 0 / 50%); }
+  .menu button { display: flex; width: 170px; height: 28px; align-items: center; padding: 0 10px; border-radius: 5px; font-size: 12px; } .menu button:hover { background: var(--accent); }
+
+  /* diff mock */
+  .diff { font: 12px/20px var(--mono); }
+  .drow { display: grid; grid-template-columns: 44px 1fr 44px 1fr; }
+  .ln { color: #555; text-align: right; padding-right: 10px; } .code { white-space: pre; overflow: hidden; padding-left: 8px; color: #cfcfcf; }
+  .radd { background: rgb(52 211 153 / 10%); } .rdel { background: rgb(248 113 113 / 10%); } .rhunk { background: rgb(99 102 241 / 10%); color: #9aa6d8; }
+  .thread { margin: 6px 12px 10px 56px; border: 1px solid var(--border); border-radius: 10px; background: var(--card2); font: 13px -apple-system, system-ui, sans-serif; }
+  .comment { display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 10px; font-weight: 600; }
+  .reply { display: flex; gap: 8px; padding: 8px 12px; align-items: center; }
+  .input { flex: 1; height: 28px; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); display: flex; align-items: center; padding: 0 10px; color: var(--muted); font-size: 12px; }
+  .btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--input); color: rgb(255 255 255 / 80%); }
+  .btn.primary { background: var(--primary); box-shadow: none; color: white; font-weight: 500; }
+
+  .term { background: #070707; height: 100%; font: 12px/19px var(--mono); padding: 10px 14px; color: #d4d4d4; }
+  .prompt { color: #34d399; } .path { color: #818cf8; }
+  .pr { padding: 10px 12px; border-radius: 8px; display: block; width: 100%; text-align: left; }
+  .pr:hover { background: var(--accent); } .pr.on { background: rgb(255 255 255 / 7%); box-shadow: inset 0 0 0 1px var(--border); }
+  .prov { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-size: 9px; font-weight: 700; flex: none; }
+  .gh { background: #f5f5f5; color: #111; } .gl { background: #fc6d26; color: #fff; }
+  .subtab { height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-right: 18px; color: var(--muted); border-bottom: 2px solid transparent; }
+  .subtab.on { color: var(--fg); border-color: var(--primary); }
+  .count { font-size: 11px; background: var(--accent); padding: 0 6px; border-radius: 999px; }
+  .pill { position: absolute; right: 16px; bottom: 16px; z-index: 25; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0; border-radius: 999px; background: var(--card); color: #a5b4fc; box-shadow: inset 0 0 0 1px oklch(0.571 0.21 264 / 45%), 0 8px 20px rgb(0 0 0 / 50%); font-size: 11.5px; font-weight: 500; }
+  .note { max-width: 1440px; margin: 14px auto 0; color: #8a8a8a; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="window" id="app"></div>
+<div class="note">Mock only. Comments: "Send 3 comments" pastes them into the chosen terminal session (⌄ to change target). Terminal: sessions grouped by worktree, click one to show it, 1-4 split layout. Drag a panel tab (Explorer, Comments, Terminal) onto the left, right or bottom drop zones, or use its ⋯ menu. Click a PR to preview it, double-click or "Open in tab" to open it as its own tab.</div>
+
+<script>
+const $ = (html) => html
+const state = {
+  tab: 'review',
+  prTabs: [],
+  docks: { left: [], right: ['explorer', 'comments'], bottom: ['terminal'] },
+  active: { left: null, right: 'explorer', bottom: 'terminal' },
+  menu: null,
+  prFilter: { provider: 'all', status: 'open' },
+  prSelected: 482,
+  prView: 'files',
+  hidden: [],
+  changedOpen: true
+}
+
+const PANELS = { explorer: 'Explorer', comments: 'Comments', terminal: 'Terminal' }
+const PRS = [
+  { id: 482, provider: 'gh', repo: 'openora', title: 'feat: rate limit v2 for public API', author: 'zaxovaiko', branch: 'feat/rate-limit-v2', base: 'main', status: 'open', checks: 'pass', comments: 6, add: 310, del: 96, age: '2h', local: true },
+  { id: 1356, provider: 'gl', repo: 'betfeel', title: 'BF-410 manual wallet adjustments', author: 'kasia.n', branch: 'feat/BF-410/manual-wallet', base: 'dev', status: 'open', checks: 'fail', comments: 3, add: 88, del: 34, age: '5h', local: true },
+  { id: 479, provider: 'gh', repo: 'openora', title: 'fix: retry jitter on webhook delivery', author: 'claude[bot]', branch: 'fix/retry-jitter', base: 'main', status: 'open', checks: 'running', comments: 0, add: 41, del: 18, age: '1d', draft: true },
+  { id: 1349, provider: 'gl', repo: 'infrastructure', title: 'Preview environments per MR', author: 'zaxovaiko', branch: 'feat/preview-envs', base: 'main', status: 'merged', checks: 'pass', comments: 11, add: 480, del: 120, age: '2d' },
+  { id: 471, provider: 'gh', repo: 'openora', title: 'chore: bump tauri + shiki', author: 'renovate[bot]', branch: 'chore/bump', base: 'main', status: 'merged', checks: 'pass', comments: 1, add: 9, del: 9, age: '3d' },
+  { id: 1340, provider: 'gl', repo: 'betfeel', title: 'Spike: grpc transport', author: 'marek.w', branch: 'spike/grpc', base: 'dev', status: 'closed', checks: 'none', comments: 4, add: 2100, del: 410, age: '6d' }
+]
+const STATUS = { open: ['Open', '#34d399', 'rgb(52 211 153 / 12%)'], merged: ['Merged', '#a78bfa', 'rgb(167 139 250 / 14%)'], closed: ['Closed', '#f87171', 'rgb(248 113 113 / 12%)'] }
+const CHECK = { pass: ['✓', '#34d399'], fail: ['✕', '#f87171'], running: ['◌', '#fbbf24'], none: ['–', '#555'] }
+
+function titlebar() {
+  const tabs = [
+    `<button class="apptab ${state.tab === 'review' ? 'on' : ''}" onclick="go('review')">⎇ Worktrees</button>`,
+    `<button class="apptab ${state.tab === 'prs' ? 'on' : ''}" onclick="go('prs')">⇄ Pull requests <span class="count">9</span></button>`,
+    ...state.prTabs.map((id) => {
+      const pr = PRS.find((p) => p.id === id)
+      return `<button class="apptab ${state.tab === 'pr:' + id ? 'on' : ''}" onclick="go('pr:${id}')"><span class="prov ${pr.provider}">${pr.provider === 'gh' ? 'GH' : 'GL'}</span><span class="truncate">${pr.provider === 'gh' ? '#' : '!'}${id} ${pr.title}</span><span class="x" onclick="closeTab(event, ${id})">×</span></button>`
+    })
+  ].join('')
+  return `<div class="titlebar"><div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>${tabs}<div class="grow"></div><div class="search">⌕ <span class="grow">Search commands, files, PRs</span><span class="kbd">⌘K</span></div></div>`
+}
+
+function sidebar() {
+  const agent = (mark, color, title) => `<span title="${title}" style="color:${color};font-size:11px">${mark}</span>`
+  const wt = (name, n, on, agents = '') => `<div class="item ${on ? 'on' : ''}" style="padding-left:26px"><span class="muted">⎇</span><span class="grow truncate">${name}</span>${agents}${n ? `<span style="color:var(--warn);font-size:11px">${n}</span>` : ''}</div>`
+  return `<div class="pane" style="width:250px;border-right:1px solid var(--border)">
+    <div style="padding:10px 8px 6px"><div class="input" style="height:32px">⌕&nbsp; Search</div></div>
+    <div class="row" style="padding:0 8px 8px"><div class="item grow" style="height:32px">▭ oss <span class="grow"></span><span class="muted">⌄</span></div><div class="seg"><button class="on">All</button><button>Changed</button></div></div>
+    <div class="row label" style="padding:10px 16px 6px;border-top:1px solid var(--border);margin:0 8px"><span class="grow">Projects</span>3</div>
+    <div style="padding:0 8px;overflow:auto">
+      <div class="item">› ▭ betfeel <span class="grow"></span><span class="muted">4</span></div>
+      ${wt('dev', 1)}${wt('feat/BF-410/manual-wallet', 9, false, agent('◎', '#a3a3a3', 'Codex done'))}
+      <div class="item">› ▭ openora <span class="grow"></span><span class="muted">6</span></div>
+      ${wt('t3code/c85008de', 2, true, agent('✳', '#fbbf24', 'Claude needs input') + agent('◎', '#34d399', 'Codex running'))}${wt('feat/rate-limit-v2', 5, false, agent('✳', '#34d399', 'Claude running'))}${wt('fix/retry-jitter', 1)}
+      <div class="item">› ▭ infrastructure <span class="grow"></span><span class="muted">1</span></div>${wt('stage', 1)}
+    </div></div>`
+}
+
+function diffRows(withThread) {
+  const r = (cls, a, l, b, rr) => `<div class="drow ${cls}"><span class="ln">${a}</span><span class="code">${l}</span><span class="ln">${b}</span><span class="code">${rr}</span></div>`
+  return `<div class="diff">
+    ${r('rhunk', '', '@@ -144,9 +146,21 @@ deposit handler', '', '')}
+    ${r('', 146, '  deposit: os.deposit.handler(async ({ input, context }) =>', 148, '  deposit: os.deposit.handler(async ({ input, context }) =>')}
+    ${r('radd', '', '', 149, '    mapErrors({')}
+    ${r('radd', '', '', 150, '      BAD_REQUEST: [DepositDisabledError, BelowMinimumDepositError],')}
+    ${r('radd', '', '', 151, '      CONFLICT: IdempotencyKeyReuseError,')}
+    ${r('rdel', 147, '    mapErrors({ CONFLICT: IdempotencyKeyReuseError }, () =>', 152, '    }, () =>')}
+    ${withThread ? thread() : ''}
+    ${r('', 148, '      wallet.deposit({', 153, '      wallet.deposit({')}
+    ${r('', 149, '        userId: getUserId(context),', 154, '        userId: getUserId(context),')}
+    ${r('', 150, '        amount: input.amount,', 155, '        amount: input.amount,')}
+    ${r('rdel', 151, '        currency: input.currency,', '', '')}
+    ${r('radd', '', '', 156, '        currency: normalizeCurrency(input.currency),')}
+    ${r('', 152, '      }),', 157, '      }),')}
+  </div>`
+}
+
+function thread() {
+  const c = (initials, color, name, meta, text) => `<div class="comment"><div class="avatar" style="background:${color}">${initials}</div><div class="grow"><div class="row"><b style="font-weight:600">${name}</b><span class="muted" style="font-size:12px">${meta}</span></div><div style="margin-top:3px;color:#d4d4d4">${text}</div></div></div>`
+  return `<div class="thread">
+    ${c('KN', '#7c3aed', 'kasia.n', 'on GitHub · 3h', 'Should BelowMinimumDepositError really be a 400? The client can retry with a bigger amount.')}
+    ${c('ZA', '#2563eb', 'zaxovaiko', 'on GitHub · 2h', 'Yes, it is a validation error on input. Will add a test.')}
+    <div class="reply"><div class="input">Reply on GitHub…</div><button class="btn">Resolve</button><button class="btn primary">+ Agent prompt</button></div>
+  </div>`
+}
+
+function panelBody(id, dock) {
+  if (id === 'explorer') {
+    const f = (depth, label, icon, dim, changed) => `<div class="item" style="height:24px;padding-left:${10 + depth * 12}px;${dim ? 'opacity:.45' : ''}">${icon}<span class="truncate grow">${label}</span>${changed ? '<span class="dot" style="background:var(--warn)"></span>' : ''}</div>`
+    return `<div style="padding:8px"><div class="input" style="height:28px;margin-bottom:6px">⌕&nbsp; Filter files</div>
+      ${f(0, '.github', '<span class="muted">› ▭</span>')}${f(0, 'node_modules', '<span class="muted">&nbsp; ▭</span>', true)}
+      ${f(0, 'packages', '<span class="muted">⌄ ▭</span>')}${f(1, 'core', '<span class="muted">⌄ ▭</span>')}${f(2, 'src/wallet/router', '<span class="muted">⌄ ▭</span>')}
+      ${f(3, 'index.ts', '<b style="color:#3b82f6;font-size:9px">TS</b>', false, true)}${f(3, 'schema.ts', '<b style="color:#3b82f6;font-size:9px">TS</b>')}
+      ${f(0, 'package.json', '<b style="color:#ef4444;font-size:9px">NPM</b>')}${f(0, '.env.local', '<b style="color:#eab308;font-size:9px">ENV</b>', true)}${f(0, 'README.md', '<b style="color:#38bdf8;font-size:9px">i</b>')}</div>`
+  }
+  if (id === 'comments') {
+    const card = (file, line, text) => `<div style="padding:8px 10px;border-radius:8px;margin-bottom:6px;box-shadow:inset 0 0 0 1px var(--border)"><div class="muted mono" style="font-size:11px">${file} · L${line}</div><div style="margin-top:3px">${text}</div></div>`
+    return `<div style="padding:10px;display:flex;flex-direction:column;height:100%"><div class="${dock === 'bottom' ? 'row' : ''}" style="gap:8px;align-items:stretch;flex:1;overflow:auto">
+      ${card('router/index.ts', '149-151', 'Extract these mapErrors into a shared const')}
+      ${card('router-utils.ts', '52', 'getUserId should throw a typed error')}
+      ${card('wallet.service.ts', '196', 'Rename to DepositsDisabledError')}</div>
+      <div style="margin-top:8px;position:relative">${sendButton('panel')}</div></div>`
+  }
+  return terminals(dock)
+}
+
+const AGENTS = {
+  claude: { mark: '✳', color: '#d97757', label: 'Claude' },
+  codex: { mark: '◎', color: '#e5e5e5', label: 'Codex' },
+  shell: { mark: '$', color: '#34d399', label: 'zsh' },
+  server: { mark: '▶', color: '#60a5fa', label: 'dev' }
+}
+const STATES = {
+  input: ['needs input', '#fbbf24'],
+  running: ['running', '#34d399'],
+  done: ['done', '#a3a3a3'],
+  failed: ['exit 1', '#f87171'],
+  idle: ['idle', '#555']
+}
+const SESSIONS = [
+  { id: 'c1', group: 'openora · t3code/c85008de', kind: 'claude', title: 'fix mapErrors review', state: 'input', age: '2m' },
+  { id: 'x1', group: 'openora · t3code/c85008de', kind: 'codex', title: 'write wallet tests', state: 'running', age: '14m' },
+  { id: 's1', group: 'openora · t3code/c85008de', kind: 'shell', title: 'bun test --watch', state: 'failed', age: '1m' },
+  { id: 'c2', group: 'openora · feat/rate-limit-v2', kind: 'claude', title: 'implement token bucket', state: 'running', age: '31m' },
+  { id: 'd1', group: 'openora · feat/rate-limit-v2', kind: 'server', title: 'bun dev  :3000', state: 'running', age: '2h' },
+  { id: 'x2', group: 'betfeel · feat/BF-410', kind: 'codex', title: 'address MR !1356 comments', state: 'done', age: '8m' },
+  { id: 'z1', group: 'betfeel · feat/BF-410', kind: 'shell', title: 'zsh', state: 'idle', age: '1h' }
+]
+state.term = { panes: ['c1', 'x1', 'c2'], focus: 'c1', collapsed: [] }
+
+function sessionOutput(session) {
+  const path = (p) => `<span class="path">${p}</span> <span class="prompt">❯</span>`
+  if (session.id === state.send.sent && session.id === 'c1') return `<div style="color:#d97757">✳ Claude Code</div><div><span style="color:#34d399">⏺</span> Update(packages/core/src/wallet/router/index.ts)</div><div class="muted">  ⎿ <span class="add">+12</span> <span class="del">−3</span></div>${pastedPrompt(session)}`
+  if (session.id === state.send.sent) return sessionOutputBase(session) + pastedPrompt(session)
+  return sessionOutputBase(session)
+}
+
+function sessionOutputBase(session) {
+  const path = (p) => `<span class="path">${p}</span> <span class="prompt">❯</span>`
+  if (session.id === 'c1') return `
+    <div style="color:#d97757">✳ Claude Code</div>
+    <div><span style="color:#d4d4d4">&gt;</span> address the 3 review comments from quick-diff</div>
+    <div><span style="color:#34d399">⏺</span> Read(packages/core/src/wallet/router/index.ts)</div>
+    <div><span style="color:#34d399">⏺</span> Update(packages/core/src/wallet/router/index.ts)</div>
+    <div class="muted">  ⎿ <span class="add">+12</span> <span class="del">−3</span> extract DEPOSIT_ERRORS const</div>
+    <div style="border:1px solid #fbbf24;border-radius:6px;padding:6px 10px;background:rgb(251 191 36 / 6%)">
+      <div>Do you want to run <b>bun test packages/core/src/wallet</b>?</div>
+      <div style="color:#fbbf24">❯ 1. Yes</div><div class="muted">  2. Yes, and don't ask again for bun test</div><div class="muted">  3. No, and tell Claude what to do differently</div></div>`
+  if (session.id === 'x1') return `
+    <div>▌ <b>codex</b> <span class="muted">gpt-5-codex · workspace-write</span></div><br>
+    <div><span class="muted">user</span> write tests for deposit error mapping</div><br>
+    <div><span style="color:#a78bfa">•</span> Explored</div><div class="muted">  └ Read router/index.ts, wallet.service.ts</div>
+    <div><span style="color:#a78bfa">•</span> Edited packages/core/src/wallet/router/index.test.ts <span class="add">(+64)</span></div>
+    <div><span style="color:#a78bfa">•</span> Ran bun test packages/core/src/wallet</div><div class="muted">  └ 3 pass · 1 fail</div><br>
+    <div><span style="color:#34d399">⠹</span> Working <span class="muted">(1m 12s · esc to interrupt)</span></div>`
+  if (session.id === 'c2') return `
+    <div style="color:#d97757">✳ Claude Code</div>
+    <div class="muted">  cwd ~/code/.worktrees/openora/feat-rate-limit-v2</div><br>
+    <div><span style="color:#34d399">⏺</span> Write(packages/core/src/limiter/token-bucket.ts)</div>
+    <div class="muted">  ⎿ Wrote 88 lines</div>
+    <div><span style="color:#34d399">⏺</span> Bash(bun test limiter)</div><div class="muted">  ⎿ 12 pass</div><br>
+    <div><span style="color:#d97757">✻</span> Wiring limiter into public routes… <span class="muted">(4m 03s · ↓ 8.2k tokens · esc to interrupt)</span></div>`
+  if (session.id === 'd1') return `<div>${path('~/code/.worktrees/openora/feat-rate-limit-v2')} bun dev</div><div class="muted">$ turbo dev</div><div><span style="color:#60a5fa">api</span> listening on http://localhost:3000</div><div><span style="color:#60a5fa">api</span> GET /v1/wallet 200 12ms</div>`
+  if (session.id === 's1') return `<div>${path('~/.t3/worktrees/openora/t3code-c85008de')} bun test --watch</div><div><span class="add">✓</span> maps BelowMinimumDepositError to 400</div><div><span class="del">✕</span> normalizes currency casing</div><div class="del">error: expected "USD" received "usd"</div>`
+  if (session.id === 'x2') return `<div>▌ <b>codex</b></div><div><span style="color:#a78bfa">•</span> Resolved 4 of 4 MR comments</div><div><span class="add">✓</span> Task complete <span class="muted">· 3 files changed</span></div>`
+  return `<div>${path('~/code/betfeel-BF-410')} <span style="background:#d4d4d4">&nbsp;</span></div>`
+}
+
+function terminals(side) {
+  const needInput = SESSIONS.filter((x) => x.state === 'input').length
+  const groups = [...new Set(SESSIONS.map((x) => x.group))]
+  const badge = (session) => {
+    const agent = AGENTS[session.kind]
+    return `<span style="width:18px;height:18px;border-radius:5px;display:grid;place-items:center;flex:none;background:rgb(255 255 255 / 6%);color:${agent.color};font-size:11px">${agent.mark}</span>`
+  }
+  const status = (session) => {
+    const [label, color] = STATES[session.state]
+    const pulse = session.state === 'input' ? 'box-shadow:0 0 0 3px rgb(251 191 36 / 25%)' : ''
+    return `<span class="row" style="gap:5px;color:${color};font-size:11px;flex:none"><span class="dot" style="background:${color};${pulse}"></span>${label}</span>`
+  }
+  const list = groups.map((group) => {
+    const items = SESSIONS.filter((x) => x.group === group)
+    const open = !state.term.collapsed.includes(group)
+    return `<div style="margin-bottom:4px">
+      <div class="item" style="height:26px;font-size:11.5px;color:var(--muted)" onclick="toggleGroup('${group}')"><span>${open ? '⌄' : '›'}</span><span class="grow truncate">${group}</span>${items.some((x) => x.state === 'input') ? '<span class="dot" style="background:#fbbf24"></span>' : ''}<span>${items.length}</span><span title="New session in this worktree">＋</span></div>
+      ${open ? items.map((x) => `<div class="item ${state.term.panes.includes(x.id) ? 'on' : ''}" style="height:30px;padding-left:18px" onclick="showSession('${x.id}')">${badge(x)}<span class="grow truncate" style="font-size:12px">${x.title}</span>${status(x)}</div>`).join('') : ''}
+    </div>`
+  }).join('')
+
+  const panes = state.term.panes.map((id) => {
+    const x = SESSIONS.find((session) => session.id === id)
+    const focused = state.term.focus === id
+    return `<div onclick="state.term.focus='${id}';render()" style="display:flex;flex-direction:column;min-width:0;min-height:0;border-radius:8px;overflow:hidden;background:#070707;box-shadow:inset 0 0 0 1px ${focused ? 'oklch(0.571 0.21 264 / 70%)' : 'var(--border)'}">
+      <div class="row" style="height:30px;padding:0 8px;border-bottom:1px solid var(--border);background:#0d0d0d;flex:none">${badge(x)}<span class="truncate" style="font-size:12px">${x.title}</span><span class="muted truncate" style="font-size:11px">${x.group.split(' · ')[1]}</span><span class="grow"></span>${status(x)}<span class="muted" title="Maximize" style="padding:0 3px">⤢</span><span class="muted" style="padding:0 3px" onclick="event.stopPropagation();hidePane('${id}')">×</span></div>
+      <div class="term" style="flex:1;overflow:hidden;font-size:11.5px;line-height:18px;display:flex;flex-direction:column;justify-content:flex-end"><div>${sessionOutput(x)}</div></div>
+    </div>`
+  }).join('')
+  const vertical = side !== 'bottom'
+  const columns = vertical ? '1fr' : `repeat(${state.term.panes.length}, minmax(0, 1fr))`
+
+  const compact = vertical
+    ? `<div style="display:flex;gap:4px;flex-wrap:wrap;flex:none">${SESSIONS.map((x) => `<button class="row" onclick="showSession('${x.id}')" style="height:24px;padding:0 7px;border-radius:6px;gap:5px;font-size:11px;${state.term.panes.includes(x.id) ? 'background:rgb(255 255 255 / 8%)' : 'box-shadow:inset 0 0 0 1px var(--border)'}">${badge(x)}<span class="dot" style="background:${STATES[x.state][1]}"></span></button>`).join('')}</div>`
+    : ''
+  return `<div style="display:flex;height:100%;min-height:0;position:relative">
+    <div style="${vertical ? 'position:absolute;inset:auto 0 0 0;height:0;overflow:hidden' : 'width:290px'};border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0">
+      <div class="row" style="height:36px;padding:0 8px 0 12px;flex:none"><span class="label grow">Sessions</span>${needInput ? `<span class="badge" style="background:rgb(251 191 36 / 14%);color:#fbbf24">${needInput} waiting</span>` : ''}<button class="btn" style="height:24px;padding:0 8px">＋ New ⌄</button></div>
+      <div style="flex:1;overflow:auto;padding:0 6px">${list}</div>
+      <div class="row muted" style="height:30px;padding:0 12px;border-top:1px solid var(--border);font-size:11px;flex:none"><span>Group by</span><span style="color:var(--fg)">worktree ⌄</span><span class="grow"></span><span>⌘⇧T new</span></div>
+    </div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:8px;gap:8px">
+      ${compact}
+      <div style="flex:1;min-height:0;display:grid;gap:8px;grid-template-columns:${columns};grid-auto-rows:minmax(0,1fr)">${panes}</div>
+    </div>
+  </div>`
+}
+
+window.toggleGroup = (group) => {
+  const c = state.term.collapsed
+  state.term.collapsed = c.includes(group) ? c.filter((x) => x !== group) : [...c, group]
+  render()
+}
+window.showSession = (id) => {
+  const panes = state.term.panes
+  if (!panes.includes(id)) state.term.panes = [...panes.slice(0, Math.max(panes.length - 1, 0)), id]
+  state.term.focus = id
+  render()
+}
+window.hidePane = (id) => { state.term.panes = state.term.panes.filter((x) => x !== id); render() }
+window.setPanes = (n) => {
+  const rest = SESSIONS.map((x) => x.id).filter((id) => !state.term.panes.includes(id))
+  state.term.panes = [...state.term.panes, ...rest].slice(0, n)
+  render()
+}
+
+state.send = { target: 'x1', menu: null, submit: true, sent: null, toast: null }
+
+function sendButton(where) {
+  const target = SESSIONS.find((x) => x.id === state.send.target)
+  const agent = AGENTS[target.kind]
+  const open = state.send.menu === where
+  const shell = where === 'pill'
+    ? 'class="pill"'
+    : 'style="display:flex;height:32px;border-radius:7px;background:var(--primary);color:white;font-size:12px;font-weight:500"'
+  const divider = where === 'pill' ? 'box-shadow:inset 1px 0 0 oklch(0.571 0.21 264 / 45%)' : 'box-shadow:inset 1px 0 0 rgb(255 255 255 / 25%)'
+  const main = `<button class="row" style="height:100%;padding:0 12px;gap:6px;flex:1;justify-content:center;white-space:nowrap" onclick="sendComments()">⤷ Send 3 comments to <span style="color:${where === 'pill' ? agent.color : 'white'}">${agent.mark}</span> ${target.title}</button>`
+  const caret = `<button style="height:100%;padding:0 10px;${divider}" onclick="toggleSendMenu('${where}')">⌄</button>`
+  const sameWorktree = SESSIONS.filter((x) => x.group.endsWith('t3code/c85008de'))
+  const others = SESSIONS.filter((x) => !x.group.endsWith('t3code/c85008de') && (x.kind === 'claude' || x.kind === 'codex'))
+  const row = (x) => `<button onclick="pickTarget('${x.id}')" style="width:100%;height:30px;justify-content:flex-start;gap:8px" class="row">${x.id === state.send.target ? '✓' : '<span style="width:9px"></span>'}<span style="color:${AGENTS[x.kind].color}">${AGENTS[x.kind].mark}</span><span class="grow truncate" style="text-align:left">${x.title}</span><span class="dot" style="background:${STATES[x.state][1]}"></span><span class="muted" style="font-size:11px">${x.state === 'input' ? 'answer prompt first' : STATES[x.state][0]}</span></button>`
+  const menu = open ? `<div class="menu" style="right:0;${where === 'pill' ? 'bottom:36px' : 'bottom:38px'};width:330px;color:var(--fg);font-weight:400">
+      <div class="label" style="padding:6px 10px 4px">This worktree</div>${sameWorktree.map(row).join('')}
+      <div class="label" style="padding:8px 10px 4px">Other worktrees</div>${others.map(row).join('')}
+      <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+      <button class="row" style="width:100%;height:30px;gap:8px"><span style="color:#d97757">✳</span> New Claude session with comments</button>
+      <button class="row" style="width:100%;height:30px;gap:8px"><span>◎</span> New Codex session with comments</button>
+      <button class="row" style="width:100%;height:30px;gap:8px">⧉ Copy to clipboard only</button>
+      <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+      <label class="row muted" style="height:30px;padding:0 10px;font-size:12px"><input type="checkbox" ${state.send.submit ? 'checked' : ''} onclick="state.send.submit=!state.send.submit"> Press Enter after pasting</label>
+    </div>` : ''
+  return `<div ${shell}>${main}${caret}${menu}</div>`
+}
+
+window.toggleSendMenu = (where) => { state.send.menu = state.send.menu === where ? null : where; render() }
+window.pickTarget = (id) => { state.send.target = id; state.send.menu = null; render() }
+window.sendComments = () => {
+  const target = SESSIONS.find((x) => x.id === state.send.target)
+  state.send.sent = target.id
+  state.send.menu = null
+  target.state = 'running'
+  if (!state.term.panes.includes(target.id)) state.term.panes = [target.id, ...state.term.panes].slice(0, 3)
+  state.term.focus = target.id
+  state.send.toast = `Sent 3 comments to ${AGENTS[target.kind].label} · ${target.title}`
+  render()
+  setTimeout(() => { state.send.toast = null; render() }, 2600)
+}
+
+function pastedPrompt(session) {
+  if (state.send.sent !== session.id) return ''
+  return `<div style="margin-top:8px;border-left:2px solid var(--primary);padding-left:8px">
+    <div><span style="color:#d4d4d4">&gt;</span> Review comments on t3code/c85008de. Address each one:</div>
+    <div class="muted">  1. router/index.ts:149-151 - Extract these mapErrors into a shared const</div>
+    <div class="muted">  2. router-utils.ts:52 - getUserId should throw a typed error</div>
+    <div class="muted">  3. wallet.service.ts:196 - Rename to DepositsDisabledError</div>
+    <div style="margin-top:4px"><span style="color:${session.kind === 'claude' ? '#d97757' : '#34d399'}">${session.kind === 'claude' ? '✻' : '⠹'}</span> Working… <span class="muted">(3s · esc to interrupt)</span></div></div>`
+}
+
+const svg = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
+const PANEL_ICONS = {
+  explorer: svg('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>'),
+  comments: svg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  terminal: svg('<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2"/>')
+}
+
+function dock(side) {
+  const ids = state.docks[side]
+  if (!ids.length) return ''
+  const active = ids.includes(state.active[side]) ? state.active[side] : ids[0]
+  if (state.hidden.includes(active)) return ''
+  const handle = side === 'bottom' ? '<div class="resize-h"></div>' : `<div class="resize-v" style="${side === 'left' ? 'right:-3px' : 'left:-3px'}"></div>`
+  return `<div class="dock ${side}">${handle}<div class="dock-body">${panelBody(active, side)}</div></div>`
+}
+
+const sideOf = (id) => Object.keys(state.docks).find((side) => state.docks[side].includes(id))
+
+function panelToggles() {
+  const button = (id, icon, title, badge) => {
+    const side = sideOf(id)
+    const on = id === 'changed' ? state.changedOpen : side && !state.hidden.includes(id) && (state.active[side] ?? state.docks[side][0]) === id
+    const drag = id === 'changed' ? '' : `draggable="true" ondragstart="dragStart(event,'${id}')" ondragend="dragEnd()" oncontextmenu="event.preventDefault();openMenu('${id}')"`
+    return `<div class="rail-btn ${on ? 'on' : ''}" style="cursor:pointer" title="${title}" ${drag} onclick="togglePanel('${id}')">${icon}${badge ? '<span class="rail-badge"></span>' : ''}</div>`
+  }
+  const list = svg('<path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13"/>')
+  return `<div class="row" style="gap:4px;position:relative">
+    ${button('changed', list, 'Changed files (⌘E)')}
+    ${button('explorer', PANEL_ICONS.explorer, 'Explorer (⌘P) · drag to dock, right-click to move')}
+    ${button('comments', PANEL_ICONS.comments, 'Comments (⌘I) · drag to dock, right-click to move')}
+    ${button('terminal', PANEL_ICONS.terminal, 'Terminal (⌘J) · drag to dock, right-click to move', true)}
+    ${state.menu ? menu(state.menu, sideOf(state.menu)) : ''}
+  </div>`
+}
+
+function reviewTab() {
+  const center = `<div class="grow" style="display:flex;flex-direction:column;min-width:0;position:relative">
+
+    <div style="display:flex;flex:1;min-height:0">
+      <div style="width:210px;border-right:1px solid var(--border);padding:8px;${state.changedOpen ? '' : 'display:none'}"><div class="label" style="padding:4px 8px 6px">Changed files</div>
+        <div class="item on"><b style="color:#3b82f6;font-size:9px">TS</b><span class="grow truncate">index.ts</span><span class="mono add" style="font-size:10px">+21</span></div>
+        <div class="item"><b style="color:#3b82f6;font-size:9px">TS</b><span class="grow truncate">wallet.service.ts</span><span class="mono add" style="font-size:10px">+14</span></div></div>
+      <div class="grow" style="overflow:auto"><div class="row mono muted" style="height:34px;padding:0 14px;border-bottom:1px solid var(--border);font-size:12px">packages/core/src/wallet/router/index.ts</div>${diffRows(false)}</div>
+    </div>${sendButton('pill')}</div>`
+  const zones = ['left', 'right', 'bottom'].map((z) => `<div class="dropzone dz-${z}" ondragover="over(event,this)" ondragleave="this.classList.remove('over')" ondrop="drop(event,'${z}')">Dock ${z}</div>`).join('')
+  const header = `<div class="row" style="height:44px;padding:0 14px;border-bottom:1px solid var(--border)"><b style="font-weight:600">t3code/c85008de</b><span class="muted">openora</span><span class="badge mono muted" style="box-shadow:inset 0 0 0 1px var(--border)">2ecd6cb</span><span class="mono add" style="font-size:11px">+35</span><span class="mono del" style="font-size:11px">−10</span><span class="grow"></span><span class="badge" style="background:rgb(52 211 153 / 12%);color:#34d399">⇄ PR #482 open</span><div class="seg"><button class="on">Split</button><button>Unified</button></div>${panelToggles()}</div>`
+  return `${sidebar()}<div class="workspace" id="ws">${zones}${header}<div class="hrow">${dock('left')}${center}${dock('right')}</div>${dock('bottom')}</div>`
+}
+
+function prList() {
+  const { provider, status } = state.prFilter
+  const list = PRS.filter((p) => (provider === 'all' || p.provider === provider) && p.status === status)
+  const count = (s) => PRS.filter((p) => (provider === 'all' || p.provider === provider) && p.status === s).length
+  const items = list.map((p) => {
+    const [label, color, bg] = p.draft ? ['Draft', '#a3a3a3', 'rgb(255 255 255 / 8%)'] : STATUS[p.status]
+    const [ci, ciColor] = CHECK[p.checks]
+    return `<button class="pr ${state.prSelected === p.id ? 'on' : ''}" onclick="selectPr(${p.id})" ondblclick="openPr(${p.id})">
+      <div class="row"><span class="prov ${p.provider}">${p.provider === 'gh' ? 'GH' : 'GL'}</span><span class="grow truncate" style="font-weight:500">${p.title}</span><span style="color:${ciColor}">${ci}</span></div>
+      <div class="row muted" style="margin-top:5px;padding-left:26px;font-size:12px"><span class="mono">${p.provider === 'gh' ? '#' : '!'}${p.id}</span><span>${p.repo}</span><span>· ${p.author}</span><span class="grow"></span><span class="badge" style="color:${color};background:${bg}">${label}</span></div>
+      <div class="row muted" style="margin-top:4px;padding-left:26px;font-size:11.5px"><span class="mono add">+${p.add}</span><span class="mono del">−${p.del}</span><span>💬 ${p.comments}</span>${p.local ? '<span style="color:#a5b4fc">⎇ local worktree</span>' : ''}<span class="grow"></span><span>${p.age}</span></div></button>`
+  }).join('')
+  return `<div class="pane" style="width:400px;border-right:1px solid var(--border)">
+    <div style="padding:10px 10px 8px;display:flex;flex-direction:column;gap:8px">
+      <div class="input" style="height:32px">⌕&nbsp; Search pull requests <span class="grow"></span><span class="kbd">author:me</span></div>
+      <div class="row"><div class="seg">${['all', 'gh', 'gl'].map((v) => `<button class="${provider === v ? 'on' : ''}" onclick="filterPr('provider','${v}')">${{ all: 'All', gh: 'GitHub', gl: 'GitLab' }[v]}</button>`).join('')}</div><span class="grow"></span><div class="item" style="height:28px">▭ All repos ⌄</div></div>
+      <div class="seg">${['open', 'merged', 'closed'].map((v) => `<button class="${status === v ? 'on' : ''}" style="flex:1" onclick="filterPr('status','${v}')">${STATUS[v][0]} <span class="muted">${count(v)}</span></button>`).join('')}</div>
+    </div>
+    <div style="padding:0 8px;overflow:auto;border-top:1px solid var(--border);padding-top:6px">${items || '<div class="muted" style="padding:30px;text-align:center">No pull requests</div>'}</div></div>`
+}
+
+function prDetail(id, standalone) {
+  const p = PRS.find((x) => x.id === id) ?? PRS[0]
+  const [label, color, bg] = p.draft ? ['Draft', '#a3a3a3', 'rgb(255 255 255 / 8%)'] : STATUS[p.status]
+  const sub = (v, text, n) => `<button class="subtab ${state.prView === v ? 'on' : ''}" onclick="prView('${v}')">${text}${n !== undefined ? ` <span class="count">${n}</span>` : ''}</button>`
+  const conversation = `<div style="padding:18px 24px;max-width:820px;display:flex;flex-direction:column;gap:14px">
+    <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--card2)"><div class="row"><div class="avatar" style="background:#2563eb">ZA</div><b>${p.author}</b><span class="muted">opened ${p.age} ago</span></div><div style="margin-top:10px;color:#d4d4d4;line-height:1.55">Adds a token-bucket limiter in front of public routes. Limits are configured per API key. Closes #460.</div></div>
+    <div class="row muted" style="padding-left:6px">✓ <span>CI passed · 14 checks</span><span class="grow"></span><span>Review requested from kasia.n</span></div>
+    ${thread()}</div>`
+  const files = `<div style="display:flex;flex:1;min-height:0"><div style="width:230px;border-right:1px solid var(--border);padding:8px">
+      <div class="label" style="padding:4px 8px 6px">Files · 8</div>
+      <div class="item on"><b style="color:#3b82f6;font-size:9px">TS</b><span class="grow truncate">router/index.ts</span><span style="color:#a5b4fc;font-size:11px">💬2</span></div>
+      <div class="item"><b style="color:#3b82f6;font-size:9px">TS</b><span class="grow truncate">limiter.ts</span></div>
+      <div class="item"><b style="color:#f472b6;font-size:9px">SQL</b><span class="grow truncate">0034_rate_limits.sql</span></div>
+      <div class="item"><b style="color:#ef4444;font-size:9px">NPM</b><span class="grow truncate">package.json</span></div></div>
+    <div class="grow" style="overflow:auto">${diffRows(true)}</div></div>`
+  const body = state.prView === 'conversation' ? conversation : state.prView === 'files' ? files : `<div class="muted" style="padding:30px">${state.prView === 'commits' ? '4 commits' : '14 checks'} (mock)</div>`
+  return `<div class="grow" style="display:flex;flex-direction:column;min-width:0">
+    <div style="padding:14px 20px 0;border-bottom:1px solid var(--border)">
+      <div class="row"><span class="prov ${p.provider}">${p.provider === 'gh' ? 'GH' : 'GL'}</span><b style="font-size:16px;font-weight:600" class="truncate">${p.title}</b><span class="muted mono" style="font-size:15px">${p.provider === 'gh' ? '#' : '!'}${p.id}</span><span class="grow"></span>
+        ${standalone ? '' : `<button class="btn" onclick="openPr(${p.id})">↗ Open in tab</button>`}<button class="btn">⎇ Check out as worktree</button><button class="btn">Open on ${p.provider === 'gh' ? 'GitHub' : 'GitLab'}</button></div>
+      <div class="row muted" style="margin-top:8px;font-size:12px"><span class="badge" style="color:${color};background:${bg}">${label}</span><span>${p.author} wants to merge</span><span class="badge mono" style="background:var(--accent);color:#c7d2fe">${p.branch}</span><span>into</span><span class="badge mono" style="background:var(--accent);color:#c7d2fe">${p.base}</span><span>· ${p.repo}</span></div>
+      <div class="row" style="margin-top:6px">${sub('conversation', 'Conversation', p.comments)}${sub('files', 'Files changed', 8)}${sub('commits', 'Commits', 4)}${sub('checks', 'Checks', 14)}</div>
+    </div>${body}</div>`
+}
+
+function render() {
+  let content
+  if (state.tab === 'review') content = reviewTab()
+  else if (state.tab === 'prs') content = prList() + prDetail(state.prSelected, false)
+  else content = prDetail(Number(state.tab.split(':')[1]), true)
+  const toast = state.send.toast ? `<div style="position:absolute;left:50%;top:56px;transform:translateX(-50%);z-index:40;height:32px;display:flex;align-items:center;gap:8px;padding:0 14px;border-radius:999px;background:#161616;box-shadow:inset 0 0 0 1px var(--input),0 10px 30px rgb(0 0 0 / 50%);font-size:12px">✓ ${state.send.toast} <span class="muted">· jump ⌘J</span></div>` : ''
+  document.getElementById('app').innerHTML = titlebar() + `<div class="body">${content}</div>` + toast
+}
+
+window.go = (tab) => { state.tab = tab; render() }
+window.closeTab = (event, id) => { event.stopPropagation(); state.prTabs = state.prTabs.filter((t) => t !== id); if (state.tab === 'pr:' + id) state.tab = 'prs'; render() }
+window.activate = (side, id) => { state.active[side] = id; render() }
+window.togglePanel = (id) => {
+  if (id === 'changed') { state.changedOpen = !state.changedOpen; return render() }
+  const side = sideOf(id)
+  const visible = !state.hidden.includes(id) && (state.active[side] ?? state.docks[side][0]) === id
+  if (visible) state.hidden = [...state.hidden, id]
+  else { state.hidden = state.hidden.filter((x) => x !== id); state.active[side] = id }
+  render()
+}
+window.dragStart = (event, id) => { event.dataTransfer.setData('text/plain', id); setTimeout(() => document.getElementById('ws')?.classList.add('dragging')) }
+window.dragEnd = () => document.getElementById('ws')?.classList.remove('dragging')
+window.over = (event, el) => { event.preventDefault(); el.classList.add('over') }
+window.drop = (event, side) => { event.preventDefault(); move(event.dataTransfer.getData('text/plain'), side) }
+window.move = (id, side) => {
+  for (const s in state.docks) state.docks[s] = state.docks[s].filter((x) => x !== id)
+  state.docks[side].push(id); state.active[side] = id; state.menu = null; render()
+}
+window.openMenu = (id) => { state.menu = state.menu === id ? null : id; render() }
+function menu(id, side) {
+  const targets = ['left', 'right', 'bottom'].filter((target) => target !== side)
+  return `<div class="menu" style="right:0;top:32px">${targets.map((target) => `<button onclick="move('${id}','${target}')">Move ${PANELS[id]} to ${target}</button>`).join('')}<button class="muted" onclick="openMenu('${id}')">Cancel</button></div>`
+}
+window.filterPr = (key, value) => { state.prFilter[key] = value; render() }
+window.selectPr = (id) => { state.prSelected = id; render() }
+window.openPr = (id) => { if (!state.prTabs.includes(id)) state.prTabs.push(id); state.tab = 'pr:' + id; render() }
+window.prView = (v) => { state.prView = v; render() }
+render()
+const fit = () => { document.body.style.zoom = Math.min(1, (innerWidth - 48) / 1440) }
+addEventListener('resize', fit)
+fit()
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Treeix - review what your coding agents changed</title>
+  <meta name="description" content="Treeix finds every git worktree on your Mac, shows what each Claude Code or Codex session changed, and sends your line comments back as the next prompt." />
+  <meta property="og:title" content="Treeix - review what your coding agents changed" />
+  <meta property="og:description" content="Every worktree, every agent session and every pull request in one macOS window." />
+  <meta property="og:image" content="https://treeix.dyvertex.com/assets/og.png" />
+  <meta property="og:url" content="https://treeix.dyvertex.com" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400;500;600;700&family=Funnel+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/"><img src="/assets/icon.webp" alt="" width="28" height="28" />Treeix</a>
+    <nav>
+      <a href="#loop">How it works</a>
+      <a href="#install">Install</a>
+      <a class="button button-small" href="/download">Download</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1 class="headline">Your agents branch out.<br />You review in one place.</h1>
+      <p class="lede">Treeix finds every git worktree on your Mac, shows what each Claude Code or Codex session changed, and sends your line comments back as the next prompt.</p>
+      <div class="cta">
+        <a class="button" href="/download">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.6c0-2.5 2-3.7 2.1-3.8-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.8-1.1-2.9-4.1zM13.9 5.1c.7-.9 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></svg>
+          Download for macOS
+        </a>
+        <p class="fine">Free. Apple silicon, macOS 12 or later.</p>
+      </div>
+
+      <div class="graph" aria-hidden="true">
+        <svg viewBox="0 0 1200 300" preserveAspectRatio="xMidYMax meet">
+          <path class="lane lane-1" d="M600 300 V210 C600 150 250 170 250 90 V0" />
+          <path class="lane lane-2" d="M600 300 V0" />
+          <path class="lane lane-3" d="M600 300 V210 C600 150 950 170 950 90 V0" />
+          <circle class="commit c1" cx="250" cy="70" r="6" />
+          <circle class="commit c2" cx="600" cy="110" r="6" />
+          <circle class="commit c3" cx="950" cy="70" r="6" />
+        </svg>
+        <span class="tag tag-1"><b>feat/usage-invoices</b><i class="add">+20</i><i class="del">-2</i></span>
+        <span class="tag tag-2"><b>fix/session-timeout</b><i class="add">+3</i><i class="del">-2</i></span>
+        <span class="tag tag-3"><b>feat/rate-limiter</b><i class="add">+14</i><i class="del">-0</i></span>
+      </div>
+
+      <figure class="window">
+        <img src="/assets/hero.webp" width="2400" height="1543" alt="Treeix showing a split diff of the feat/usage-invoices worktree with a review comment on lines 14 to 17" />
+      </figure>
+    </section>
+
+    <section class="works-with">
+      <p>Works with the tools you already use</p>
+      <ul>
+        <li>Claude Code</li>
+        <li>Codex</li>
+        <li>git worktrees</li>
+        <li>GitHub</li>
+        <li>GitLab</li>
+      </ul>
+    </section>
+
+    <section class="loop" id="loop">
+      <div class="loop-copy">
+        <h2>Review, comment, send. The agent picks it up.</h2>
+        <ol class="steps">
+          <li data-step="1"><strong>Pick a worktree</strong><span>Every repo and worktree under your home folder, with a count of changed files.</span></li>
+          <li data-step="2"><strong>Drag across lines</strong><span>Leave a note on exactly the code that needs another pass.</span></li>
+          <li data-step="3"><strong>Send to the session</strong><span>Comments go to the Claude Code or Codex session running in that worktree.</span></li>
+        </ol>
+      </div>
+
+      <div class="stage" aria-hidden="true">
+        <div class="stage-bar"><span class="dots"><i></i><i></i><i></i></span><b>feat/usage-invoices</b><em>orbit-web</em></div>
+        <div class="code">
+          <div class="ln add"><u>14</u>export async function listInvoices(account, limit = 12) {</div>
+          <div class="ln add sel"><u>15</u>  const { data } = await stripe.invoices.list({ limit })</div>
+          <div class="ln add sel"><u>16</u>  return data.map(toInvoice)</div>
+          <div class="ln add"><u>17</u>}</div>
+          <div class="note"><span class="note-label">Line 15-16</span><span class="typed">Stripe paginates past 100 invoices. Use auto-pagination.</span></div>
+        </div>
+        <div class="term">
+          <div class="send">Send 1 comment to <b>✳ Claude</b></div>
+          <div class="term-line prompt">&gt; Stripe paginates past 100 invoices. Use auto-pagination.</div>
+          <div class="term-line reply"><span class="spark">✳</span> Updating listInvoices to iterate with autoPagingEach</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="more">
+      <h2>Everything around the diff, too</h2>
+      <dl>
+        <div><dt>Pull requests</dt><dd>GitHub and GitLab reviews with inline comments and reactions, through gh and glab.</dd></div>
+        <div><dt>Agent sessions</dt><dd>Claude Code and Codex in split terminal panes that show when a session waits for you.</dd></div>
+        <div><dt>Usage limits</dt><dd>Claude and Codex limits in the title bar, so a long run does not stop by surprise.</dd></div>
+        <div><dt>Hotkey window</dt><dd>One global shortcut drops Treeix over whatever you are doing.</dd></div>
+        <div><dt>Claude plans</dt><dd>Plans from ~/.claude/plans open next to the code they describe.</dd></div>
+        <div><dt>Edit with history</dt><dd>Fix a line yourself. Every save keeps a snapshot you can go back to.</dd></div>
+      </dl>
+      <figure class="window window-flat">
+        <img src="/assets/unified.webp" width="2400" height="1543" loading="lazy" alt="Unified diff of the fix/session-timeout worktree" />
+      </figure>
+    </section>
+
+    <section class="install" id="install">
+      <h2>Install in a minute</h2>
+      <ol>
+        <li><strong>Download</strong><span>Get the .dmg and open it.</span></li>
+        <li><strong>Drag to Applications</strong><span>Treeix goes in with your other apps.</span></li>
+        <li><strong>Open it the first time</strong><span>macOS may say it cannot check the developer. Open System Settings, Privacy &amp; Security, then click Open Anyway.</span></li>
+      </ol>
+      <a class="button" href="/download">Download Treeix</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span><img src="/assets/icon.webp" alt="" width="20" height="20" />Treeix</span>
+    <span>Made by <a href="https://dyvertex.com">Dyvertex</a></span>
+  </footer>
+
+  <script src="/main.js" defer></script>
+</body>
+</html>

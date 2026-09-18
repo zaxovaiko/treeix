@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@treeix/sdk": [
+        "./sdk/src/index.ts"
+      ],
+      "@treeix/sdk/main": [
+        "./sdk/src/main.ts"
+      ],
+      "@treeix/shared/*": [
+        "../apps/desktop/src/shared/*"
+      ],
+      "@treeix/host/*": [
+        "../apps/desktop/src/main/*"
+      ],
+      "@treeix/app/*": [
+        "../apps/desktop/src/renderer/src/*"
+      ],
+      "@treeix/atlassian/*": [
+        "./atlassian/*"
+      ]
+    }
+  }
+}

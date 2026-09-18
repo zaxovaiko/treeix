@@ -1,0 +1,298 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Treeix - stacked PRs mock</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --card: #111; --card2: #151515; --popover: #181818; --fg: #f5f5f5; --muted: #848484;
+    --border: rgb(255 255 255 / 6%); --input: rgb(255 255 255 / 8%); --accent: rgb(255 255 255 / 5%);
+    --primary: #4f5ff0; --add: #34d399; --del: #f87171; --warn: #fbbf24;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1c1c1c; font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--fg); padding: 20px 24px 40px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); } .add { color: var(--add); } .del { color: var(--del); } .warn { color: var(--warn); }
+  .row { display: flex; align-items: center; gap: 8px; } .grow { flex: 1; min-width: 0; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .variants { width: 1440px; margin: 0 auto 14px; display: flex; align-items: center; gap: 10px; }
+  .variants .seg button { height: 28px; padding: 0 14px; font-size: 12.5px; }
+  .variants p { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+  .window { position: relative; width: 1440px; height: 880px; margin: 0 auto; background: var(--bg); border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 60%); }
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .lights { display: flex; gap: 8px; margin-right: 12px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .apptab { height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .apptab:hover { background: var(--accent); color: var(--fg); }
+  .apptab.on { background: rgb(255 255 255 / 8%); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
+  .search { height: 28px; width: 250px; border-radius: 8px; background: rgb(255 255 255 / 3%); box-shadow: inset 0 0 0 1px var(--border); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); font-size: 12px; }
+  .kbd { font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; line-height: 16px; font-family: -apple-system, system-ui; }
+  .usage { display: flex; gap: 12px; font-size: 11.5px; padding: 0 10px; color: var(--muted); white-space: nowrap; } .usage b { color: rgb(255 255 255 / 80%); font-weight: 500; }
+  .icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); } .icon:hover { background: var(--accent); color: var(--fg); }
+  svg.i { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .item { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; color: rgb(255 255 255 / 78%); width: 100%; text-align: left; }
+  .item:hover { background: var(--accent); } .item.on { background: rgb(255 255 255 / 8%); color: var(--fg); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .seg button { height: 22px; padding: 0 10px; border-radius: 6px; font-size: 11.5px; color: var(--muted); }
+  .seg button.on { background: rgb(255 255 255 / 9%); color: var(--fg); }
+  .btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--input); color: rgb(255 255 255 / 85%); display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--accent); }
+  .btn.primary { background: var(--primary); box-shadow: none; color: white; font-weight: 500; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); font-size: 11.5px; color: rgb(255 255 255 / 80%); }
+
+  .sidebar { width: 272px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .header { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .diff { font: 12px/20px var(--mono); flex: 1; overflow: hidden; }
+  .drow { display: grid; grid-template-columns: 44px 1fr 44px 1fr; }
+  .ln { color: #555; text-align: right; padding-right: 10px; } .code { white-space: pre; overflow: hidden; padding-left: 8px; color: #cfcfcf; }
+  .radd { background: rgb(52 211 153 / 10%); } .rdel { background: rgb(248 113 113 / 10%); } .rhunk { background: rgb(99 102 241 / 10%); color: #9aa6d8; }
+  .terminal { height: 250px; flex: none; border-top: 1px solid var(--border); display: flex; background: var(--card); }
+  .sessions { width: 250px; border-right: 1px solid var(--border); padding: 8px 6px; }
+  .term { flex: 1; background: #070707; font: 12px/19px var(--mono); padding: 10px 14px; color: #d4d4d4; }
+  .kind { width: 18px; height: 18px; border-radius: 5px; background: rgb(255 255 255 / 5%); display: grid; place-items: center; font-size: 11px; flex: none; }
+
+  .notes { width: 1440px; margin: 18px auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .notes div { background: #141414; border: 1px solid #262626; border-radius: 10px; padding: 14px 16px; color: #bdbdbd; font-size: 12.5px; line-height: 1.55; }
+  .notes h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg); }
+  .notes ul { margin: 0; padding-left: 18px; }
+
+  .pr { display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; width: 100%; text-align: left; align-items: flex-start; }
+  .pr:hover { background: var(--accent); } .pr.on { background: rgb(255 255 255 / 7%); }
+  .avatar { width: 20px; height: 20px; border-radius: 50%; flex: none; background: linear-gradient(135deg,#6366f1,#ec4899); }
+  .st { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+  .open { color: var(--add); } .merged { color: #a78bfa; } .draft { color: var(--muted); }
+  .pill { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); white-space: nowrap; }
+  .pill.ok { color: var(--add); background: rgb(52 211 153 / 8%); } .pill.bad { color: var(--del); background: rgb(248 113 113 / 8%); } .pill.wait { color: var(--warn); background: rgb(251 191 36 / 8%); }
+  .stack { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); background: rgb(255 255 255 / 2%); margin: 4px 0 8px; }
+  .stackhead { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; border-bottom: 1px solid var(--border); }
+  .lvl { position: relative; padding-left: 26px; }
+  .lvl::before { content: ''; position: absolute; left: 17px; top: 0; bottom: 0; width: 1.5px; background: rgb(255 255 255 / 12%); }
+  .lvl:first-of-type::before { top: 16px; } .lvl:last-child::before { bottom: calc(100% - 16px); }
+  .node { position: absolute; left: 12px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--card); box-shadow: inset 0 0 0 2px var(--add); z-index: 1; }
+  .node.merged { box-shadow: inset 0 0 0 6px #a78bfa; } .node.draft { box-shadow: inset 0 0 0 2px var(--muted); } .node.on { box-shadow: inset 0 0 0 2px var(--primary), 0 0 0 3px rgb(79 95 240 / 25%); }
+  .crumbs { display: flex; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: rgb(255 255 255 / 1.5%); overflow: hidden; }
+  .crumb { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 7px; font-size: 12px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); white-space: nowrap; }
+  .crumb:hover { background: var(--accent); color: var(--fg); } .crumb.on { color: var(--fg); background: rgb(79 95 240 / 14%); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
+  .sepa { color: #444; font-size: 11px; }
+  .tabs { display: flex; gap: 18px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+  .tabs span { height: 38px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; } .tabs span.on { color: var(--fg); box-shadow: inset 0 -2px 0 var(--primary); }
+  .content { flex: 1; overflow: hidden; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .box { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); background: var(--card); }
+  .map { width: 300px; flex: none; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; }
+  .banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; background: rgb(251 191 36 / 7%); box-shadow: inset 0 0 0 1px rgb(251 191 36 / 25%); }
+  .bar { height: 6px; border-radius: 3px; background: var(--accent); overflow: hidden; display: flex; } .bar i { display: block; height: 100%; }
+</style>
+</head>
+<body>
+<div class="variants"><div class="seg" id="variant-tabs"></div><p id="variant-note"></p></div>
+<div class="window" id="window"></div>
+<div class="notes">
+  <div><h3>Detection</h3><ul>
+    <li>Stack = chain where a PR base branch is another open PR head branch</li>
+    <li>GitHub native stacks (when repo has them) used first, branch chain as fallback, same for GitLab MR dependencies</li>
+    <li>Merged parents stay in stack, dimmed, until the whole stack lands</li>
+  </ul></div>
+  <div><h3>Review flow</h3><ul>
+    <li>Files changed defaults to <b>this PR only</b> (diff vs parent head, not trunk)</li>
+    <li><span class="kbd">⌥[</span> <span class="kbd">⌥]</span> move down/up the stack, keeps tab and scroll</li>
+    <li>Comments from other levels shown as a count on each crumb</li>
+  </ul></div>
+  <div><h3>Actions</h3><ul>
+    <li>Open stack in worktree: checks out top branch, all levels available in sidebar</li>
+    <li>Restack: rebase children after parent changes, via agent session or <span class="mono">git rebase --update-refs</span></li>
+    <li>Merge bottom-up: merges ready prefix, retargets next PR base to trunk</li>
+  </ul></div>
+</div>
+<script>
+const I = {
+  pr: '<svg class="i" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/></svg>',
+  merge: '<svg class="i" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>',
+  stack: '<svg class="i" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg>',
+  search: '<svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  settings: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  chev: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="m9 18 6-6-6-6"/></svg>',
+  up: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="m18 15-6-6-6 6"/></svg>',
+  down: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="m6 9 6 6 6-6"/></svg>',
+  term: '<svg class="i" viewBox="0 0 24 24"><path d="m7 11 2-2-2-2M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>',
+  refresh: '<svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.7-6L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.7 6L3 16M8 16H3v5"/></svg>'
+}
+
+// Bottom (closest to trunk) first
+const STACK = [
+  { n: 412, title: 'Promo foundation: schema and service skeleton', branch: 'feat/promo-foundation', state: 'merged', ci: 'ok', review: 'Merged', files: 18, add: 640, del: 12, comments: 9 },
+  { n: 418, title: 'Grant bonuses on deposit', branch: 'feat/promo-grants', state: 'open', ci: 'ok', review: 'Approved', files: 12, add: 312, del: 48, comments: 5 },
+  { n: 421, title: 'Promo UI: banners and claim flow', branch: 'feat/promo-ui', state: 'open', ci: 'bad', review: 'Changes requested', files: 23, add: 880, del: 104, comments: 14, behind: 2 },
+  { n: 425, title: 'Promo analytics events', branch: 'feat/promo-analytics', state: 'draft', ci: 'wait', review: 'Draft', files: 6, add: 140, del: 3, comments: 0 }
+]
+const OTHERS = [
+  { n: 430, title: 'Fix odds rounding in slip', branch: 'fix/odds-rounding', state: 'open', review: 'Review requested' },
+  { n: 427, title: 'Bump prisma to 7.2', branch: 'chore/prisma', state: 'open', review: 'Approved' }
+]
+let current = 418
+let variant = 'list'
+let scope = 'pr'
+
+const VARIANTS = [
+  ['list', 'A. Stacks in PR list', 'Stacks collapse into one group in the list with a connector line. Click any level to open it.'],
+  ['crumbs', 'B. Stack bar in PR', 'Every PR in a stack gets a trunk-to-top breadcrumb, a diff scope switch and a restack warning.'],
+  ['map', 'C. Stack map panel', 'Right panel with the whole stack, readiness per level and bulk actions (merge bottom-up, restack, open in worktree).']
+]
+const byN = (n) => STACK.find((pr) => pr.n === n)
+const stateIcon = (state) => `<span class="st ${state}">${state === 'merged' ? I.merge : I.pr}</span>`
+const ciPill = (ci) => ({ ok: '<span class="pill ok">✓ checks</span>', bad: '<span class="pill bad">✕ 2 failing</span>', wait: '<span class="pill wait">● running</span>' })[ci] ?? ''
+const reviewPill = (pr) => `<span class="pill ${pr.review === 'Approved' ? 'ok' : pr.review === 'Changes requested' ? 'bad' : ''}">${pr.review}</span>`
+
+function titlebar() {
+  return `<div class="titlebar">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <span class="apptab">Changes</span><span class="apptab on">${I.pr} Pull requests</span><span class="apptab">${I.term} Terminal</span>
+    <span class="grow"></span>
+    <div class="usage"><span>5h <b>34%</b></span><span>week <b>61%</b></span><span>codex <b>22%</b></span></div>
+    <div class="search">${I.search}<span class="grow">Search</span><span class="kbd">⌘K</span></div>
+    <button class="icon">${I.settings}</button>
+  </div>`
+}
+
+function prRow(pr, inStack) {
+  const on = pr.n === current ? 'on' : ''
+  const dim = pr.state === 'merged' ? 'opacity:.55' : ''
+  const body = `<span class="grow" style="${dim}">
+      <div class="truncate" style="font-size:12.5px">${pr.title}</div>
+      <div class="row muted" style="font-size:11px;margin-top:3px;gap:6px"><span>#${pr.n}</span><span class="mono truncate">${pr.branch}</span></div>
+    </span>`
+  if (!inStack) return `<button class="pr ${on}">${stateIcon(pr.state)}${body}<span class="avatar" style="width:18px;height:18px"></span></button>`
+  return `<div class="lvl"><span class="node ${pr.state} ${on}"></span><button class="pr ${on}" data-pr="${pr.n}">${body}${pr.ci === 'bad' ? '<span class="dot" style="background:var(--del);margin-top:5px"></span>' : ''}</button></div>`
+}
+
+function prList() {
+  const ready = STACK.filter((pr) => pr.state === 'merged' || pr.review === 'Approved').length
+  return `<div class="sidebar">
+    <div class="header"><span class="label">Pull requests</span><span class="grow"></span><div class="seg"><button class="on">Mine</button><button>Review</button></div></div>
+    <div style="padding:8px;overflow:hidden">
+      <div class="label" style="padding:6px 4px">Stacks</div>
+      <div class="stack">
+        <div class="stackhead">${I.stack}<span class="grow truncate">Promo bonuses</span><span class="pill">${ready}/${STACK.length} ready</span></div>
+        <div style="padding:4px 4px 4px 0;display:flex;flex-direction:column-reverse">${STACK.map((pr) => prRow(pr, true)).join('')}</div>
+        <div class="row muted mono" style="font-size:11px;padding:0 10px 8px 22px">↳ main</div>
+      </div>
+      <div class="label" style="padding:10px 4px 6px">Other</div>
+      ${OTHERS.map((pr) => prRow(pr, false)).join('')}
+    </div>
+  </div>`
+}
+
+function crumbs() {
+  const i = STACK.findIndex((pr) => pr.n === current)
+  return `<div class="crumbs">
+    <span class="crumb mono">main</span>
+    ${STACK.map((pr) => `<span class="sepa">${I.chev}</span><button class="crumb ${pr.n === current ? 'on' : ''}" data-pr="${pr.n}" style="${pr.state === 'merged' ? 'opacity:.55' : ''}">${stateIcon(pr.state)}#${pr.n}${pr.comments ? `<span class="muted" style="font-size:10.5px">${pr.comments}</span>` : ''}${pr.ci === 'bad' ? '<span class="dot" style="background:var(--del)"></span>' : ''}</button>`).join('')}
+    <span class="grow"></span>
+    <span class="muted" style="font-size:11.5px">${i + 1} of ${STACK.length}</span>
+    <button class="icon" data-pr="${STACK[Math.max(0, i - 1)].n}" title="Down the stack ⌥[">${I.down}</button>
+    <button class="icon" data-pr="${STACK[Math.min(STACK.length - 1, i + 1)].n}" title="Up the stack ⌥]">${I.up}</button>
+  </div>`
+}
+
+function detailHeader(pr) {
+  const parent = STACK[STACK.indexOf(pr) - 1]
+  return `<div style="padding:14px 20px 10px">
+    <div class="row" style="gap:10px"><span style="font-size:17px;font-weight:600" class="truncate">${pr.title}</span><span class="muted" style="font-size:17px">#${pr.n}</span></div>
+    <div class="row muted" style="font-size:12px;margin-top:8px;gap:8px">
+      <span class="chip" style="color:var(--add)">${I.pr} ${pr.state === 'draft' ? 'Draft' : pr.state === 'merged' ? 'Merged' : 'Open'}</span>
+      <span>merge <span class="mono chip">${pr.branch}</span> into <span class="mono chip">${parent ? parent.branch : 'main'}</span></span>
+      ${ciPill(pr.ci)} ${reviewPill(pr)}
+    </div>
+  </div>`
+}
+
+function files(pr) {
+  const rows = [
+    ['rhunk', '', '@@ -38,6 +38,14 @@ export class GrantService {', '', ''],
+    ['', '38', '  async grant(userId: string, promo: Promo) {', '38', '  async grant(userId: string, promo: Promo) {'],
+    ['rdel', '39', '    return this.repo.create({ userId, promo })', '', ''],
+    ['radd', '', '', '39', '    const bonus = await this.bonuses.forDeposit(userId, promo)'],
+    ['radd', '', '', '40', '    if (!bonus) return null'],
+    ['radd', '', '', '41', '    return this.repo.create({ userId, promoId: promo.id, amount: bonus.amount })'],
+    ['', '40', '  }', '42', '  }']
+  ]
+  const scopes = [['pr', `This PR · ${pr.files}`], ['stack', 'Stack to here · 30'], ['since', 'Since my review · 3']]
+  return `<div class="row" style="gap:10px">
+      <div class="seg">${scopes.map(([id, label]) => `<button class="${scope === id ? 'on' : ''}" data-scope="${id}">${label}</button>`).join('')}</div>
+      <span class="muted" style="font-size:11.5px">${scope === 'pr' ? 'vs <span class="mono">feat/promo-foundation</span>' : scope === 'stack' ? 'vs <span class="mono">main</span>, parent changes dimmed' : 'commits pushed after your last review'}</span>
+      <span class="grow"></span><span class="add">+${pr.add}</span><span class="del">-${pr.del}</span>
+    </div>
+    <div class="box" style="overflow:hidden">
+      <div class="row" style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px"><span class="mono">packages/core/src/promo/bonus/service/grant.service.ts</span><span class="grow"></span><span class="add">+3</span><span class="del">-1</span></div>
+      <div class="diff">${rows.map(([cls, l, a, r, b]) => `<div class="drow ${cls}"><span class="ln">${l}</span><span class="code">${a}</span><span class="ln">${r}</span><span class="code">${b}</span></div>`).join('')}</div>
+    </div>
+    ${scope === 'stack' ? `<div class="box" style="opacity:.5"><div class="row" style="padding:8px 12px;font-size:12px">${I.stack}<span class="mono">packages/core/prisma/schema.prisma</span><span class="pill">from #412</span><span class="grow"></span><span class="add">+84</span></div></div>` : ''}`
+}
+
+function detail(withCrumbs) {
+  const pr = byN(current)
+  const child = STACK[STACK.indexOf(pr) + 1]
+  return `<div class="main">
+    ${withCrumbs ? crumbs() : ''}
+    ${detailHeader(pr)}
+    <div class="tabs"><span>Conversation <span class="pill">${pr.comments}</span></span><span class="on">Files changed <span class="pill">${pr.files}</span></span><span>Commits <span class="pill">4</span></span></div>
+    <div class="content">
+      ${withCrumbs && pr.n === 418 ? `<div class="banner"><span class="warn">⚠</span><span class="grow">#421 is 2 commits behind this PR. Its diff may show changes that are already here.</span><button class="btn">${I.refresh} Restack</button><button class="btn">${I.term} Ask agent</button></div>` : ''}
+      ${files(pr)}
+    </div>
+  </div>`
+}
+
+function mapPanel() {
+  const readyIndex = STACK.findIndex((pr) => !(pr.state === 'merged' || (pr.review === 'Approved' && pr.ci === 'ok')))
+  const mergeable = STACK.slice(0, readyIndex).filter((pr) => pr.state !== 'merged')
+  const segments = STACK.map((pr) => `<i style="width:${100 / STACK.length}%;background:${pr.state === 'merged' ? '#a78bfa' : pr.review === 'Approved' ? 'var(--add)' : pr.ci === 'bad' ? 'var(--del)' : 'rgb(255 255 255 / 12%)'};margin-right:2px"></i>`).join('')
+  return `<div class="map">
+    <div class="header">${I.stack}<span style="font-size:12.5px;font-weight:500">Promo bonuses</span><span class="grow"></span><span class="pill">${STACK.length} PRs</span></div>
+    <div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border)">
+      <div class="row muted" style="font-size:11.5px"><span class="grow">Ready to land</span><span>${readyIndex}/${STACK.length}</span></div>
+      <div class="bar">${segments}</div>
+    </div>
+    <div style="padding:10px 8px 10px 0;display:flex;flex-direction:column-reverse;flex:1">
+      ${STACK.map((pr) => `<div class="lvl" style="padding-bottom:4px"><span class="node ${pr.state} ${pr.n === current ? 'on' : ''}"></span>
+        <button class="pr ${pr.n === current ? 'on' : ''}" data-pr="${pr.n}" style="flex-direction:column;gap:5px;${pr.state === 'merged' ? 'opacity:.55' : ''}">
+          <div class="row" style="width:100%"><span class="muted">#${pr.n}</span><span class="grow truncate">${pr.title}</span></div>
+          <div class="row" style="gap:5px;flex-wrap:wrap">${pr.state === 'merged' ? '<span class="pill" style="color:#a78bfa">merged</span>' : `${ciPill(pr.ci)}${reviewPill(pr)}`}${pr.behind ? `<span class="pill wait">${pr.behind} behind</span>` : ''}</div>
+          <div class="row muted" style="font-size:11px;gap:8px"><span class="mono truncate">${pr.branch}</span><span class="add">+${pr.add}</span><span class="del">-${pr.del}</span></div>
+          ${pr.ci === 'bad' ? `<div class="row" style="gap:6px;width:100%;padding:6px 8px;border-radius:7px;background:rgb(248 113 113 / 6%);box-shadow:inset 0 0 0 1px rgb(248 113 113 / 20%)"><span class="grow truncate" style="font-size:11px"><span class="del">✕</span> test: <span class="mono">grant.service.spec.ts</span> · lint</span><span class="btn" style="height:22px;padding:0 8px;font-size:11px;color:#d97757">✳ Fix with Claude</span></div>` : ''}
+        </button></div>`).join('')}
+      <div class="row muted mono" style="font-size:11px;padding:0 10px 6px 22px;order:-1">↳ main</div>
+    </div>
+    <div style="padding:12px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+      <button class="btn primary" style="justify-content:center">${I.merge} Merge ${mergeable.map((pr) => '#' + pr.n).join(', ') || 'nothing ready'}</button>
+      <div class="row" style="gap:8px"><button class="btn grow" style="justify-content:center">${I.refresh} Restack</button><button class="btn grow" style="justify-content:center">${I.term} Open in worktree</button></div>
+      <span class="muted" style="font-size:11px;line-height:1.5">Fix with Claude opens a session in the PR worktree with the failing job logs (<span class="mono">gh run view --log-failed</span>) and pushes to the same branch, then restacks the PRs above it.</span>
+      <span class="muted" style="font-size:11px;line-height:1.5">Merges bottom-up, then retargets #421 onto main. Stops at the first PR that is not approved or has failing checks.</span>
+    </div>
+  </div>`
+}
+
+function render() {
+  document.getElementById('variant-tabs').innerHTML = VARIANTS.map(([id, label]) => `<button class="${id === variant ? 'on' : ''}" data-variant="${id}">${label}</button>`).join('')
+  document.getElementById('variant-note').textContent = VARIANTS.find(([id]) => id === variant)[2]
+  const body = variant === 'list' ? prList() + detail(false) : variant === 'crumbs' ? prList() + detail(true) : prList() + detail(false) + mapPanel()
+  document.getElementById('window').innerHTML = titlebar() + `<div class="body">${body}</div>`
+}
+
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-pr], [data-variant], [data-scope]')
+  if (!target) return
+  if (target.dataset.pr) current = Number(target.dataset.pr)
+  if (target.dataset.variant) variant = target.dataset.variant
+  if (target.dataset.scope) scope = target.dataset.scope
+  render()
+})
+render()
+</script>
+</body>
+</html>

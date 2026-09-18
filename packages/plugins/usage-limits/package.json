@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-usage-limits",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "usage-limits",
+    "name": "Usage limits",
+    "description": "Claude and Codex 5-hour and weekly limits in the title bar, from Claude sessions started here, the Claude desktop app, LimitBar and Codex session logs.",
+    "enabledByDefault": true
+  }
+}

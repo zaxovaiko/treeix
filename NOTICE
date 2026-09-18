@@ -1,0 +1,20 @@
+Treeix
+Copyright 2026 Treeix contributors
+
+This product includes software developed as part of Treeix
+(https://treeix.dyvertex.com).
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Section 4 of the License requires that this NOTICE file is carried with any
+copy, fork or derivative work, and that its contents appear wherever such
+notices are normally shown - for example an "About", "Credits" or
+"Acknowledgements" screen, the documentation, or the README of the derivative
+work. A suitable attribution line is:
+
+    Built on Treeix (https://treeix.dyvertex.com), Copyright 2026 Treeix
+    contributors, licensed under the Apache License 2.0.
+
+The names "Treeix" and "Dyvertex", the Treeix logo and the application icons in
+apps/desktop/build, apps/desktop/resources and apps/landing/assets are trademarks and brand assets, not covered by the Apache License 2.0 grant
+(Section 6). Forks must use their own name and icon.

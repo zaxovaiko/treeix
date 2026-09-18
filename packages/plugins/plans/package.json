@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-plans",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "plans",
+    "name": "Claude plans",
+    "description": "Plans in ⌘K and a Plan button on Claude sessions, which checks for new plans every few seconds.",
+    "enabledByDefault": true
+  }
+}

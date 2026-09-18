@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "landing", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "4321", "-d", "apps/landing"], "port": 4321 }
+  ]
+}

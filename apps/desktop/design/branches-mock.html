@@ -1,0 +1,243 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>Treeix - branches mock</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --card: #111; --card2: #151515; --popover: #181818; --fg: #f5f5f5; --muted: #848484;
+    --border: rgb(255 255 255 / 6%); --input: rgb(255 255 255 / 8%); --accent: rgb(255 255 255 / 5%);
+    --primary: #4f5ff0; --add: #34d399; --del: #f87171; --warn: #fbbf24;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1c1c1c; font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--fg); padding: 20px 24px 40px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); } .add { color: var(--add); } .del { color: var(--del); } .warn { color: var(--warn); }
+  .row { display: flex; align-items: center; gap: 8px; } .grow { flex: 1; min-width: 0; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .variants { width: 1440px; margin: 0 auto 14px; display: flex; align-items: center; gap: 10px; }
+  .variants .seg button { height: 28px; padding: 0 14px; font-size: 12.5px; }
+  .variants p { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+  .window { position: relative; width: 1440px; height: 880px; margin: 0 auto; background: var(--bg); border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 60%); }
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .lights { display: flex; gap: 8px; margin-right: 12px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .apptab { height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .apptab:hover { background: var(--accent); color: var(--fg); }
+  .apptab.on { background: rgb(255 255 255 / 8%); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
+  .search { height: 28px; width: 250px; border-radius: 8px; background: rgb(255 255 255 / 3%); box-shadow: inset 0 0 0 1px var(--border); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); font-size: 12px; }
+  .kbd { font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; line-height: 16px; font-family: -apple-system, system-ui; }
+  .usage { display: flex; gap: 12px; font-size: 11.5px; padding: 0 10px; color: var(--muted); white-space: nowrap; } .usage b { color: rgb(255 255 255 / 80%); font-weight: 500; }
+  .icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); } .icon:hover { background: var(--accent); color: var(--fg); }
+  svg.i { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .item { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; color: rgb(255 255 255 / 78%); width: 100%; text-align: left; }
+  .item:hover { background: var(--accent); } .item.on { background: rgb(255 255 255 / 8%); color: var(--fg); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .seg button { height: 22px; padding: 0 10px; border-radius: 6px; font-size: 11.5px; color: var(--muted); }
+  .seg button.on { background: rgb(255 255 255 / 9%); color: var(--fg); }
+  .btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--input); color: rgb(255 255 255 / 85%); display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--accent); }
+  .btn.primary { background: var(--primary); box-shadow: none; color: white; font-weight: 500; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); font-size: 11.5px; color: rgb(255 255 255 / 80%); }
+
+  .sidebar { width: 272px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .header { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .diff { font: 12px/20px var(--mono); flex: 1; overflow: hidden; }
+  .drow { display: grid; grid-template-columns: 44px 1fr 44px 1fr; }
+  .ln { color: #555; text-align: right; padding-right: 10px; } .code { white-space: pre; overflow: hidden; padding-left: 8px; color: #cfcfcf; }
+  .radd { background: rgb(52 211 153 / 10%); } .rdel { background: rgb(248 113 113 / 10%); } .rhunk { background: rgb(99 102 241 / 10%); color: #9aa6d8; }
+  .terminal { height: 250px; flex: none; border-top: 1px solid var(--border); display: flex; background: var(--card); }
+  .sessions { width: 250px; border-right: 1px solid var(--border); padding: 8px 6px; }
+  .term { flex: 1; background: #070707; font: 12px/19px var(--mono); padding: 10px 14px; color: #d4d4d4; }
+  .kind { width: 18px; height: 18px; border-radius: 5px; background: rgb(255 255 255 / 5%); display: grid; place-items: center; font-size: 11px; flex: none; }
+
+  .notes { width: 1440px; margin: 18px auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .notes div { background: #141414; border: 1px solid #262626; border-radius: 10px; padding: 14px 16px; color: #bdbdbd; font-size: 12.5px; line-height: 1.55; }
+  .notes h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg); }
+  .notes ul { margin: 0; padding-left: 18px; }
+
+  .pr { display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; width: 100%; text-align: left; align-items: flex-start; }
+  .pr:hover { background: var(--accent); } .pr.on { background: rgb(255 255 255 / 7%); }
+  .avatar { width: 20px; height: 20px; border-radius: 50%; flex: none; background: linear-gradient(135deg,#6366f1,#ec4899); }
+  .st { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+  .open { color: var(--add); } .merged { color: #a78bfa; } .draft { color: var(--muted); }
+  .pill { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); white-space: nowrap; }
+  .pill.ok { color: var(--add); background: rgb(52 211 153 / 8%); } .pill.bad { color: var(--del); background: rgb(248 113 113 / 8%); } .pill.wait { color: var(--warn); background: rgb(251 191 36 / 8%); }
+  .stack { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); background: rgb(255 255 255 / 2%); margin: 4px 0 8px; }
+  .stackhead { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px; border-bottom: 1px solid var(--border); }
+  .lvl { position: relative; padding-left: 26px; }
+  .lvl::before { content: ''; position: absolute; left: 17px; top: 0; bottom: 0; width: 1.5px; background: rgb(255 255 255 / 12%); }
+  .lvl:first-of-type::before { top: 16px; } .lvl:last-child::before { bottom: calc(100% - 16px); }
+  .node { position: absolute; left: 12px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--card); box-shadow: inset 0 0 0 2px var(--add); z-index: 1; }
+  .node.merged { box-shadow: inset 0 0 0 6px #a78bfa; } .node.draft { box-shadow: inset 0 0 0 2px var(--muted); } .node.on { box-shadow: inset 0 0 0 2px var(--primary), 0 0 0 3px rgb(79 95 240 / 25%); }
+  .crumbs { display: flex; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: rgb(255 255 255 / 1.5%); overflow: hidden; }
+  .crumb { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 7px; font-size: 12px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); white-space: nowrap; }
+  .crumb:hover { background: var(--accent); color: var(--fg); } .crumb.on { color: var(--fg); background: rgb(79 95 240 / 14%); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
+  .sepa { color: #444; font-size: 11px; }
+  .tabs { display: flex; gap: 18px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+  .tabs span { height: 38px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; } .tabs span.on { color: var(--fg); box-shadow: inset 0 -2px 0 var(--primary); }
+  .content { flex: 1; overflow: hidden; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .box { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); background: var(--card); }
+  .map { width: 300px; flex: none; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; }
+  .banner { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; background: rgb(251 191 36 / 7%); box-shadow: inset 0 0 0 1px rgb(251 191 36 / 25%); }
+  .bar { height: 6px; border-radius: 3px; background: var(--accent); overflow: hidden; display: flex; } .bar i { display: block; height: 100%; }
+
+  .wsrail { width: 56px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; }
+  .tile { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: white; }
+  .side { width: 300px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .input { height: 32px; border-radius: 8px; background: rgb(255 255 255 / 4%); box-shadow: inset 0 0 0 1px var(--border); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); font-size: 12.5px; }
+  .proj { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; color: rgb(255 255 255 / 85%); }
+  .wt { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 26px; border-radius: 6px; font-size: 12.5px; width: 100%; text-align: left; }
+  .wt:hover { background: var(--accent); } .wt.on { background: rgb(255 255 255 / 8%); }
+  .br { color: rgb(255 255 255 / 55%); } .br:hover { color: var(--fg); }
+  .sub { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 26px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .hoveract { margin-left: auto; display: none; gap: 2px; } .wt:hover .hoveract { display: flex; } .wt:hover .meta { display: none; }
+  .mini { height: 20px; padding: 0 6px; border-radius: 5px; font-size: 11px; box-shadow: inset 0 0 0 1px var(--input); color: rgb(255 255 255 / 80%); display: inline-flex; align-items: center; gap: 4px; }
+  .mini:hover { background: var(--accent); }
+  .num { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ab { font: 10.5px var(--mono); color: var(--muted); }
+  .empty { flex: 1; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .table td, .table th { padding: 0 12px; height: 38px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  .table th { height: 32px; font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+  .table tr:hover td { background: rgb(255 255 255 / 2.5%); }
+  .kbd2 { font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; line-height: 16px; }
+</style></head>
+<body>
+<div class="variants"><div class="seg" id="variant-tabs"></div><p id="variant-note"></p></div>
+<div class="window" id="window"></div>
+<div class="notes">
+  <div><h3>What a branch row shows</h3><ul>
+    <li>Ahead/behind its upstream (<span class="mono">↑2 ↓5</span>), last commit age, PR badge when one is open</li>
+    <li>No uncommitted changes count: only worktrees have a working copy</li>
+    <li>Merged or gone-upstream branches dimmed, with "Delete merged" in the menu</li>
+  </ul></div>
+  <div><h3>Actions</h3><ul>
+    <li><b>Open as worktree</b> (primary): <span class="mono">git worktree add .claude/worktrees/&lt;branch&gt;</span>, then selects it</li>
+    <li>View diff vs base without checking out (<span class="mono">git diff main...branch</span>), read-only like a PR</li>
+    <li>Checkout in main worktree, copy name, delete, open PR</li>
+  </ul></div>
+  <div><h3>Scope</h3><ul>
+    <li>Local branches by default, remote-only behind a toggle; sorted by last commit</li>
+    <li>Branches already checked out in a worktree are not repeated</li>
+    <li>Recommendation: A for everyday use, C as the ⌘K / "New worktree" flow; B only if lists get long</li>
+  </ul></div>
+</div>
+<script>
+const I = {
+  branch: '<svg class="i" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
+  folder: '<svg class="i" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+  chev: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="m9 18 6-6-6-6"/></svg>',
+  down: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="m6 9 6 6 6-6"/></svg>',
+  search: '<svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  plus: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M12 5v14M5 12h14"/></svg>',
+  pr: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/></svg>',
+  cloud: '<svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>'
+}
+const PROJECTS = [
+  { name: 'betfeel', worktrees: [['dev', 3], ['feat/promo-grants', 12], ['fix/odds-rounding', 0]],
+    branches: [
+      { name: 'feat/promo-ui', ahead: 4, behind: 0, age: '2h', pr: 421 },
+      { name: 'feat/promo-analytics', ahead: 1, behind: 3, age: '1d', pr: 425 },
+      { name: 'chore/prisma-7', ahead: 2, behind: 12, age: '3d' },
+      { name: 'spike/ledger-v2', ahead: 18, behind: 40, age: '2w' },
+      { name: 'feat/promo-foundation', merged: true, age: '5d' }
+    ], remote: 23 },
+  { name: 'openora', worktrees: [['main', 0]], branches: [
+      { name: 'feat/add-provider-gate', ahead: 6, behind: 1, age: '7h', pr: 173 },
+      { name: 'chore/BF-0-review', ahead: 2, behind: 0, age: '8h' }
+    ], remote: 41 },
+  { name: 'infrastructure', worktrees: [['main', 1]], branches: [], remote: 4 }
+]
+let variant = 'inline'
+let open = { betfeel: true, openora: false }
+const VARIANTS = [
+  ['inline', 'A. Inline under project', 'Worktrees stay on top; a collapsed "Branches" group sits under each project. Hover a branch to open it as a worktree.'],
+  ['tabs', 'B. Worktrees | Branches switch', 'A segmented switch swaps the whole sidebar list. Branch view is a flat, sortable list per project.'],
+  ['picker', 'C. Branch picker', 'The "New worktree" flow becomes a searchable branch picker: recent local, then remote, then create new.']
+]
+
+const titlebar = () => `<div class="titlebar">
+  <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+  <span class="apptab on">Worktrees</span><span class="apptab">Terminal</span><span class="apptab">Pull requests</span><span class="grow"></span>
+  <div class="usage"><span>5h <b>34%</b></span><span>week <b>61%</b></span></div>
+  <div class="search">${I.search}<span class="grow">Search commands, files</span><span class="kbd">⌘K</span></div></div>`
+const rail = () => `<div class="wsrail"><div class="tile" style="background:rgb(255 255 255 / 8%);color:var(--muted)">${I.folder}</div><span style="width:26px;height:1px;background:var(--border)"></span><div class="tile" style="background:#64748b">DY</div><div class="tile" style="background:#4f5ff0">BO</div></div>`
+const sideTop = (extra = '') => `<div style="padding:8px;display:flex;flex-direction:column;gap:6px"><div class="input">${I.search}<span>Search</span></div>${extra}</div>`
+const prBadge = (n) => n ? `<span class="pill" style="display:inline-flex;gap:3px;align-items:center">${I.pr}#${n}</span>` : ''
+const aheadBehind = (b) => b.merged ? '<span class="pill" style="color:#a78bfa">merged</span>' : `<span class="ab">${b.ahead ? '↑' + b.ahead : ''} ${b.behind ? '↓' + b.behind : ''}</span>`
+
+function worktreeRows(p) {
+  return p.worktrees.map(([name, changed], i) => `<button class="wt ${p.name === 'betfeel' && i === 1 ? 'on' : ''}">${I.branch}<span class="grow truncate">${name}</span>${changed ? `<span class="num">${changed}</span>` : ''}</button>`).join('')
+}
+function branchRow(b) {
+  return `<button class="wt br" style="${b.merged ? 'opacity:.5' : ''}">
+    <span style="width:15px;display:grid;place-items:center;opacity:.6">${I.branch}</span>
+    <span class="grow truncate">${b.name}</span>
+    <span class="row meta" style="gap:6px">${prBadge(b.pr)}${aheadBehind(b)}</span>
+    <span class="hoveract"><span class="mini" title="Open as worktree">${I.plus} Worktree</span></span>
+  </button>`
+}
+
+function inlineVariant() {
+  const projects = PROJECTS.map((p) => {
+    const isOpen = open[p.name]
+    return `<div class="proj">${I.down}${I.folder}<span class="grow">${p.name}</span><span class="num">${p.worktrees.length}</span></div>
+      ${worktreeRows(p)}
+      ${p.branches.length ? `<button class="sub" data-toggle="${p.name}" style="width:100%">${isOpen ? I.down : I.chev} Branches <span class="num" style="text-transform:none">${p.branches.length}</span><span class="grow"></span><span style="text-transform:none;letter-spacing:0" class="row">${I.cloud} ${p.remote}</span></button>` : ''}
+      ${isOpen ? p.branches.map(branchRow).join('') : ''}`
+  }).join('<div style="height:6px"></div>')
+  return rail() + `<div class="side">${sideTop()}<div style="padding:0 6px;overflow:hidden">${projects}</div></div>` + mainPane()
+}
+
+function tabsVariant() {
+  const rows = PROJECTS.map((p) => `<div class="proj">${I.down}${I.folder}<span class="grow">${p.name}</span><span class="num">${p.branches.length + p.worktrees.length}</span></div>
+    ${p.worktrees.map(([name]) => `<button class="wt">${I.branch}<span class="grow truncate">${name}</span><span class="pill ok">worktree</span></button>`).join('')}
+    ${p.branches.map(branchRow).join('')}`).join('<div style="height:6px"></div>')
+  const seg = `<div class="row"><div class="seg grow" style="display:flex"><button style="flex:1">Worktrees</button><button class="on" style="flex:1">Branches</button></div></div>
+    <div class="row" style="font-size:11.5px;color:var(--muted)"><span class="grow">Sort: last commit</span><span class="row" style="gap:6px">Remote <span class="switch"></span></span></div>`
+  return rail() + `<div class="side">${sideTop(seg)}<div style="padding:0 6px;overflow:hidden">${rows}</div></div>` + mainPane()
+}
+
+function mainPane() {
+  return `<div class="main"><div class="header"><span class="mono" style="font-size:12.5px">feat/promo-grants</span><span class="muted" style="font-size:12px">betfeel · 12 changed</span></div>
+    <div class="content" style="padding:24px"><div class="empty" style="flex:1">Diff of the selected worktree</div></div></div>`
+}
+
+function pickerVariant() {
+  const recent = PROJECTS[0].branches
+  const rows = (items, remote) => items.map((b, i) => `<div class="row" style="height:34px;padding:0 12px;border-radius:7px;${!remote && i === 0 ? 'background:rgb(79 95 240 / 16%)' : ''}">
+      <span style="opacity:.6">${remote ? I.cloud : I.branch}</span><span class="mono grow truncate" style="font-size:12.5px">${remote ? 'origin/' : ''}${b.name}</span>
+      ${prBadge(b.pr)} ${remote ? '' : aheadBehind(b)} <span class="num" style="width:28px;text-align:right">${b.age}</span></div>`).join('')
+  const remote = [{ name: 'feat/cashout-limits', pr: 430, age: '1h' }, { name: 'fix/kyc-retry', age: '6h' }, { name: 'release/2026.09', age: '2d' }]
+  return rail() + `<div class="side">${sideTop()}<div style="padding:0 6px">
+      <div class="proj">${I.down}${I.folder}<span class="grow">betfeel</span><span class="mini">${I.plus}</span></div>${worktreeRows(PROJECTS[0])}</div></div>` + mainPane() + `
+    <div class="scrim"><div class="modal" style="width:620px">
+      <div class="row" style="height:48px;padding:0 16px;border-bottom:1px solid var(--border);gap:10px">${I.search}<span class="mono grow" style="font-size:13px">promo<span style="border-left:1.5px solid var(--fg);margin-left:1px"></span></span><span class="kbd2">betfeel</span></div>
+      <div style="padding:6px">
+        <div class="label" style="padding:8px 12px 4px">Local branches</div>${rows(recent.filter((b) => !b.merged), false)}
+        <div class="label" style="padding:10px 12px 4px">Remote only</div>${rows(remote, true)}
+        <div class="row" style="height:34px;padding:0 12px;border-radius:7px;color:var(--muted)">${I.plus}<span class="grow">Create <span class="mono" style="color:var(--fg)">promo</span> from <span class="mono">dev</span></span><span class="kbd2">⌘↵</span></div>
+      </div>
+      <div class="row" style="padding:10px 16px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);gap:14px"><span>↵ open as worktree</span><span>⌥↵ view diff only</span><span>⇧↵ checkout in main</span></div>
+    </div></div>`
+}
+
+function render() {
+  document.getElementById('variant-tabs').innerHTML = VARIANTS.map(([id, label]) => `<button class="${id === variant ? 'on' : ''}" data-variant="${id}">${label}</button>`).join('')
+  document.getElementById('variant-note').textContent = VARIANTS.find(([id]) => id === variant)[2]
+  const body = variant === 'inline' ? inlineVariant() : variant === 'tabs' ? tabsVariant() : pickerVariant()
+  document.getElementById('window').innerHTML = titlebar() + `<div class="body" style="position:relative">${body}</div>`
+}
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-variant], [data-toggle]')
+  if (!target) return
+  if (target.dataset.variant) variant = target.dataset.variant
+  if (target.dataset.toggle) open[target.dataset.toggle] = !open[target.dataset.toggle]
+  render()
+})
+render()
+</script></body></html>

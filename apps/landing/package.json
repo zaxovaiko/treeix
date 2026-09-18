@@ -1,0 +1,7 @@
+{
+  "name": "treeix-landing",
+  "private": true,
+  "scripts": {
+    "dev": "bun index.html"
+  }
+}

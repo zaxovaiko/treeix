@@ -1,0 +1,33 @@
+{
+  "fill": {
+    "solid": "srgb:0.06275,0.06275,0.07059,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "treeix.png",
+          "name": "treeix",
+          "position": {
+            "scale": 1.25,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

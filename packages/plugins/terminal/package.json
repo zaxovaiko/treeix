@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "terminal",
+    "name": "Terminal",
+    "description": "Terminal tab, docked terminal panel and Claude, Codex and shell sessions that survive reloads (loads xterm).",
+    "enabledByDefault": true
+  }
+}

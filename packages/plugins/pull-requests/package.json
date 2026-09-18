@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-pull-requests",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "pull-requests",
+    "name": "Pull requests",
+    "description": "GitHub and GitLab pull requests with review, comments and viewed files, through the gh and glab CLIs.",
+    "enabledByDefault": true
+  }
+}

@@ -1,0 +1,118 @@
+import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { join } from 'node:path'
+import { is } from '@electron-toolkit/utils'
+import type { ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
+import { saveAttachment } from './attachments'
+import { createPath, renamePath, saveFile, stopWatching, trashPath, watchFile } from './files'
+import { createHistory } from './history'
+import { enableTextMenu, showContextMenu } from './contextMenu'
+import { addWorktree, createBranch, deleteBranch, diff, listBranches, discardChanges, listFiles, searchText, readFile, removeWorktree, scan } from './git'
+import { addSettingsMenuItem } from './appMenu'
+import { addHotkeyMenuItem, configureHotkey, releaseHotkey } from './hotkeyWindow'
+import { hover, navigate, stopLanguageProcess } from './language'
+import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
+import { checkTools } from './tools'
+
+// ponytail: apps launched from Finder get a minimal PATH, add Homebrew so gh/glab resolve
+process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean).join(':')
+
+// Renaming the app would move app data to a new folder; keep the original one so settings, comments and attachments survive
+app.setName('Treeix')
+// --user-data-dir runs a separate profile, e.g. for demo screenshots
+if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', join(app.getPath('appData'), 'quick-diff'))
+
+function createWindow(): void {
+  const window = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    show: false,
+    title: 'Treeix',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 10 },
+    // Keep the blur when the window loses focus instead of flattening to grey
+    visualEffectState: 'active',
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+  })
+  window.on('ready-to-show', () => window.show())
+  enableTextMenu(window.webContents)
+  addHotkeyMenuItem(window)
+  addSettingsMenuItem(window)
+  // ⌘W closes the focused terminal pane when there is one; the page decides and closes the window otherwise
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.meta || input.shift || input.alt || input.control || input.code !== 'KeyW') return
+    event.preventDefault()
+    window.webContents.send('close-shortcut')
+  })
+  // macOS full screen hides the traffic lights, so the title bar can drop the space it keeps for them
+  window.on('enter-full-screen', () => window.webContents.send('window-chromeless', true))
+  window.on('leave-full-screen', () => window.webContents.send('window-chromeless', false))
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) window.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  else window.loadFile(join(__dirname, '../renderer/index.html'))
+}
+
+app.whenReady().then(() => {
+  // Packaged builds take the icon from the bundle; dev runs inside the stock Electron app
+  if (is.dev) app.dock?.setIcon(join(__dirname, '../../resources/icon.png'))
+  ipcMain.handle('scan', () => scan())
+  ipcMain.handle('diff', (_, worktreePath: string) => diff(worktreePath))
+  ipcMain.handle('listFiles', (_, worktreePath: string) => listFiles(worktreePath))
+  ipcMain.handle('readFile', (_, worktreePath: string, filePath: string) => readFile(worktreePath, filePath))
+  ipcMain.handle('navigate', (_, worktreePath: string, kind: NavigationKind, target: SymbolTarget) => navigate(worktreePath, kind, target))
+  ipcMain.handle('searchText', (_, worktreePaths: string[], query: string, options: SearchOptions) => searchText(worktreePaths, query, options))
+  ipcMain.handle('hover', (_, worktreePath: string, target: SymbolTarget) => hover(worktreePath, target))
+  ipcMain.handle('checkTools', () => checkTools(enabledTools()))
+  ipcMain.handle('plugins:setEnabled', (_, ids: string[]) => setEnabledPlugins(ids, app.getPath('userData')))
+  ipcMain.handle('configureHotkey', (event, options: HotkeyOptions) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return window ? configureHotkey(window, options) : 'No window'
+  })
+  ipcMain.handle('showContextMenu', (event, items: ContextMenuItem[]) => showContextMenu(event.sender, items))
+  ipcMain.handle('addWorktree', (_, repoPath: string, branch: string, base?: string) => addWorktree(repoPath, branch, base))
+  ipcMain.handle('listBranches', (_, repoPath: string) => listBranches(repoPath))
+  ipcMain.handle('createBranch', (_, repoPath: string, name: string, base: string) => createBranch(repoPath, name, base))
+  ipcMain.handle('deleteBranch', (_, repoPath: string, name: string) => deleteBranch(repoPath, name))
+  ipcMain.handle('removeWorktree', (_, worktreePath: string, force: boolean) => removeWorktree(worktreePath, force))
+  ipcMain.handle('discardChanges', (_, worktreePath: string, filePath: string) => discardChanges(worktreePath, filePath))
+  ipcMain.on('revealInFinder', (_, path: string) => shell.showItemInFolder(path))
+  ipcMain.on('openPath', (_, path: string) => void shell.openPath(path))
+  ipcMain.on('setTranslucent', (event, translucent: boolean, background: string, appearance: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    // Vibrancy tints by the app appearance, which otherwise follows macOS: a dark theme on a light Mac got light, washed-out glass
+    if (appearance === 'dark' || appearance === 'light' || appearance === 'system') nativeTheme.themeSource = appearance
+    // The page paints its own backgrounds with reduced alpha; vibrancy supplies the blurred desktop underneath
+    window?.setVibrancy(translucent ? 'under-window' : null)
+    // Opaque windows show this wherever Chromium hasn't painted yet (fast scrolling), so it follows the theme
+    window?.setBackgroundColor(translucent ? '#00000000' : /^#[0-9a-f]{6}$/i.test(background) ? background : '#0a0a0a')
+  })
+  ipcMain.handle('saveAttachment', (_, name: string, data: Uint8Array) => saveAttachment(name, data))
+  const history = createHistory(join(app.getPath('userData'), 'history'))
+  ipcMain.handle('saveFile', async (_, worktreePath: string, filePath: string, contents: string, expected: string | null) => {
+    await history.snapshotBeforeSave(worktreePath, filePath).catch(() => undefined)
+    await saveFile(worktreePath, filePath, contents, expected)
+  })
+  ipcMain.on('watchFile', (event, id: string, worktreePath: string, filePath: string) => watchFile(event.sender, id, worktreePath, filePath))
+  ipcMain.on('unwatchFile', (_, id: string) => stopWatching(id))
+  ipcMain.handle('listHistory', (_, worktreePath: string, filePath: string) => history.list(worktreePath, filePath))
+  ipcMain.handle('readHistory', (_, worktreePath: string, filePath: string, id: string) => history.read(worktreePath, filePath, id))
+  ipcMain.handle('createPath', (_, worktreePath: string, filePath: string) => createPath(worktreePath, filePath))
+  ipcMain.handle('renamePath', (_, worktreePath: string, from: string, to: string) => renamePath(worktreePath, from, to))
+  ipcMain.handle('trashPath', (_, worktreePath: string, filePath: string) => trashPath(worktreePath, filePath))
+  createWindow()
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('before-quit', disposePlugins)
+app.on('will-quit', () => {
+  releaseHotkey()
+  stopLanguageProcess()
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})

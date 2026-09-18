@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-jira",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "jira",
+    "name": "Jira tasks",
+    "description": "A Tasks tab with your Jira work items through the Atlassian CLI (acli): status changes, worktrees per item and sending items to agents.",
+    "enabledByDefault": false
+  }
+}

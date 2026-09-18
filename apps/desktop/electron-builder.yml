@@ -1,0 +1,54 @@
+appId: com.zaxovaiko.treeix
+productName: Treeix
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!scripts/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - resources/**
+  - node_modules/node-pty/**
+  - native/mac-window/build/Release/*.node
+win:
+  executableName: treeix
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  # Icon Composer file: macOS 26 puts legacy .icns icons on a grey plate; build/icon.icns stays for older macOS
+  icon: build/icon.icon
+  entitlementsInherit: build/entitlements.mac.plist
+  category: public.app-category.developer-tools
+  extendInfo:
+    - NSDocumentsFolderUsageDescription: Treeix scans your Documents folder for git repositories.
+    - NSDownloadsFolderUsageDescription: Treeix scans your Downloads folder for git repositories.
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  # Notarizes only when APPLE_API_KEY/APPLE_API_KEY_ID/APPLE_API_ISSUER or APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID are set
+dmg:
+  artifactName: ${productName}-${arch}.${ext}
+mas:
+  hardenedRuntime: false
+  entitlements: build/entitlements.mas.plist
+  entitlementsInherit: build/entitlements.mas.inherit.plist
+  # Download from developer.apple.com (Mac App Store distribution profile for com.zaxovaiko.treeix)
+  provisioningProfile: build/embedded.provisionprofile
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: zaxovaiko
+  category: Development
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false

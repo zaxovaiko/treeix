@@ -1,0 +1,380 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Treeix - workspaces mock</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --card: #111; --card2: #151515; --popover: #181818; --fg: #f5f5f5; --muted: #848484;
+    --border: rgb(255 255 255 / 6%); --input: rgb(255 255 255 / 8%); --accent: rgb(255 255 255 / 5%);
+    --primary: #4f5ff0; --add: #34d399; --del: #f87171; --warn: #fbbf24;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1c1c1c; font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--fg); padding: 20px 24px 40px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); } .add { color: var(--add); } .del { color: var(--del); } .warn { color: var(--warn); }
+  .row { display: flex; align-items: center; gap: 8px; } .grow { flex: 1; min-width: 0; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .variants { width: 1440px; margin: 0 auto 14px; display: flex; align-items: center; gap: 10px; }
+  .variants .seg button { height: 28px; padding: 0 14px; font-size: 12.5px; }
+  .variants p { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+  .window { position: relative; width: 1440px; height: 880px; margin: 0 auto; background: var(--bg); border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 60%); }
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .lights { display: flex; gap: 8px; margin-right: 12px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .apptab { height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .apptab:hover { background: var(--accent); color: var(--fg); }
+  .apptab.on { background: rgb(255 255 255 / 8%); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
+  .search { height: 28px; width: 250px; border-radius: 8px; background: rgb(255 255 255 / 3%); box-shadow: inset 0 0 0 1px var(--border); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); font-size: 12px; }
+  .kbd { font-size: 10.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; line-height: 16px; font-family: -apple-system, system-ui; }
+  .usage { display: flex; gap: 12px; font-size: 11.5px; padding: 0 10px; color: var(--muted); white-space: nowrap; } .usage b { color: rgb(255 255 255 / 80%); font-weight: 500; }
+  .icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); } .icon:hover { background: var(--accent); color: var(--fg); }
+  svg.i { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+  .label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .item { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; color: rgb(255 255 255 / 78%); width: 100%; text-align: left; }
+  .item:hover { background: var(--accent); } .item.on { background: rgb(255 255 255 / 8%); color: var(--fg); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .seg button { height: 22px; padding: 0 10px; border-radius: 6px; font-size: 11.5px; color: var(--muted); }
+  .seg button.on { background: rgb(255 255 255 / 9%); color: var(--fg); }
+  .btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--input); color: rgb(255 255 255 / 85%); display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--accent); }
+  .btn.primary { background: var(--primary); box-shadow: none; color: white; font-weight: 500; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); font-size: 11.5px; color: rgb(255 255 255 / 80%); }
+
+  /* workspace avatars */
+  .ws { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: white; flex: none; position: relative; }
+  .ws.sm { width: 20px; height: 20px; border-radius: 6px; font-size: 9.5px; }
+  .ws.lg { width: 44px; height: 44px; border-radius: 12px; font-size: 16px; }
+  .ws .badge-dot { position: absolute; right: -2px; top: -2px; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px var(--card); }
+
+  /* rail variant */
+  .wsrail { width: 60px; flex: none; background: #0d0d0d; border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; }
+  .wsrail .tile { position: relative; padding: 3px; border-radius: 12px; }
+  .wsrail .tile.on::before { content: ''; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--fg); }
+  .wsrail .tile:hover .ws { filter: brightness(1.15); }
+  .wsrail .sep { width: 28px; height: 1px; background: var(--border); margin: 2px 0; }
+  .wsrail .add { width: 32px; height: 32px; border-radius: 9px; border: 1px dashed rgb(255 255 255 / 18%); color: var(--muted); display: grid; place-items: center; font-size: 18px; }
+
+  .sidebar { width: 272px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .header { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .diff { font: 12px/20px var(--mono); flex: 1; overflow: hidden; }
+  .drow { display: grid; grid-template-columns: 44px 1fr 44px 1fr; }
+  .ln { color: #555; text-align: right; padding-right: 10px; } .code { white-space: pre; overflow: hidden; padding-left: 8px; color: #cfcfcf; }
+  .radd { background: rgb(52 211 153 / 10%); } .rdel { background: rgb(248 113 113 / 10%); } .rhunk { background: rgb(99 102 241 / 10%); color: #9aa6d8; }
+  .terminal { height: 250px; flex: none; border-top: 1px solid var(--border); display: flex; background: var(--card); }
+  .sessions { width: 250px; border-right: 1px solid var(--border); padding: 8px 6px; }
+  .term { flex: 1; background: #070707; font: 12px/19px var(--mono); padding: 10px 14px; color: #d4d4d4; }
+  .kind { width: 18px; height: 18px; border-radius: 5px; background: rgb(255 255 255 / 5%); display: grid; place-items: center; font-size: 11px; flex: none; }
+
+  /* switcher popover */
+  .popover { position: absolute; z-index: 40; background: var(--popover); border: 1px solid var(--input); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 60%); }
+  .ws-switch { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 5px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--border); background: rgb(255 255 255 / 4%); margin-right: 6px; font-size: 12.5px; font-weight: 500; }
+  .ws-switch:hover { background: rgb(255 255 255 / 7%); }
+  .ws-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; }
+  .ws-row:hover, .ws-row.on { background: var(--accent); }
+
+  /* overview */
+  .overview { flex: 1; overflow: auto; padding: 28px 36px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .card { border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); padding: 16px; display: flex; flex-direction: column; gap: 12px; text-align: left; }
+  .card:hover { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%); }
+  .card.on { box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .stat { display: flex; flex-direction: column; gap: 2px; } .stat b { font-size: 16px; font-weight: 600; } .stat span { font-size: 11px; color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .activity { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+
+  /* modal */
+  .scrim { position: absolute; inset: 40px 0 0 0; background: rgb(0 0 0 / 55%); display: flex; align-items: flex-start; justify-content: center; padding-top: 60px; z-index: 50; }
+  .modal { width: 640px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 30px 80px rgb(0 0 0 / 60%); }
+  .modal h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .text { height: 32px; border-radius: 7px; background: rgb(255 255 255 / 4%); box-shadow: inset 0 0 0 1px var(--input); display: flex; align-items: center; padding: 0 10px; }
+  .swatches { display: flex; gap: 6px; } .swatch { width: 22px; height: 22px; border-radius: 6px; } .swatch.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px rgb(255 255 255 / 60%); }
+  .check { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 25%); display: grid; place-items: center; font-size: 11px; flex: none; }
+  .check.on { background: var(--primary); box-shadow: none; }
+  .switch { width: 32px; height: 18px; border-radius: 999px; background: rgb(255 255 255 / 15%); position: relative; flex: none; }
+  .switch::after { content: ''; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: transform .15s; }
+  .switch.on { background: var(--primary); } .switch.on::after { transform: translateX(14px); }
+
+  .notes { width: 1440px; margin: 18px auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .notes div { background: #141414; border: 1px solid #262626; border-radius: 10px; padding: 14px 16px; color: #bdbdbd; font-size: 12.5px; line-height: 1.55; }
+  .notes h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg); }
+  .notes ul { margin: 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<div class="variants">
+  <div class="seg" id="variant-tabs"></div>
+  <p id="variant-note"></p>
+</div>
+<div class="window" id="window"></div>
+<div class="notes">
+  <div>
+    <h3>What a workspace holds</h3>
+    <ul>
+      <li>Projects (whole repos, optionally pinned worktrees)</li>
+      <li>Agent and shell sessions started inside those projects</li>
+      <li>Open PR and plan tabs, dock layout, selected worktree</li>
+      <li>Comments stay per worktree, so they follow automatically</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Switching</h3>
+    <ul>
+      <li>⌃1…⌃9 or ⌘K "Switch workspace" (⌘1-3 stay for tabs)</li>
+      <li>Sessions keep running in the background, badges show waiting agents</li>
+      <li>Sidebar, PR list, ⌘K files and usage scope to the workspace</li>
+      <li>"All projects" keeps today's behaviour</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Open questions</h3>
+    <ul>
+      <li>Can a project live in two workspaces? (mock: yes)</li>
+      <li>Auto-create a workspace per project on first run, or start with one?</li>
+      <li>Rail (always visible, costs 60px) vs switcher (no space, one click deeper)</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const WORKSPACES = [
+  { id: 'ariex', name: 'Ariex', short: 'AX', color: '#e0703d', repos: ['ariex'], waiting: 0, running: 1, prs: 3, changes: 14, comments: 2, active: '2m ago' },
+  { id: 'client', name: 'Openora + Betfeel', short: 'OB', color: '#4f5ff0', repos: ['openora', 'betfeel'], waiting: 1, running: 2, prs: 9, changes: 146, comments: 5, active: 'now' },
+  { id: 'infra', name: 'Infrastructure', short: 'IN', color: '#10a37f', repos: ['infrastructure'], waiting: 0, running: 0, prs: 1, changes: 1, comments: 0, active: '3d ago' }
+]
+const REPOS = {
+  ariex: ['main', 'feat/payments-v2', 'fix/login-redirect'],
+  openora: ['t3code/c85008de', 'feat/promo-foundation', 'feat/wallet-custody-foundation'],
+  betfeel: ['dev', 'feat/BF-410/manual-wallet-adjust'],
+  infrastructure: ['stage']
+}
+const CHANGES = { 'feat/payments-v2': 11, 'fix/login-redirect': 3, 't3code/c85008de': 2, 'feat/wallet-custody-foundation': 137, 'feat/BF-410/manual-wallet-adjust': 9, dev: 1, stage: 1 }
+const SESSIONS = {
+  ariex: [{ kind: 'claude', title: 'Claude', where: 'ariex · feat/payments-v2', status: 'running' }],
+  client: [
+    { kind: 'claude', title: 'Claude', where: 'openora · wallet-custody', status: 'input' },
+    { kind: 'codex', title: 'Codex', where: 'betfeel · BF-410', status: 'running' },
+    { kind: 'claude', title: 'Claude 2', where: 'openora · promo-foundation', status: 'running' }
+  ],
+  infra: []
+}
+const VARIANTS = [
+  ['rail', 'A · Workspace rail', 'Always-visible column of workspaces, like Slack. Fastest switching, badges show which workspace needs you.'],
+  ['switcher', 'B · Title bar switcher', 'Workspace chip next to the traffic lights. No extra column; switch with ⌃1-9 or the popover.'],
+  ['overview', 'C · Workspaces home', 'A home tab summarising every workspace: projects, changes, agents, PRs. Good start-of-day view.'],
+  ['create', 'D · Create / edit', 'Pick projects and pin worktrees, choose colour, decide what the workspace restores.']
+]
+
+let variant = 'rail'
+let current = 'client'
+let popoverOpen = true
+
+const icon = (d) => `<svg class="i" viewBox="0 0 24 24">${d}</svg>`
+const I = {
+  branch: '<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>',
+  pr: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v12M13 6h3a2 2 0 0 1 2 2v7"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>',
+  home: '<path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>'
+}
+const ws = (id) => WORKSPACES.find((w) => w.id === id)
+const avatar = (w, size = '') =>
+  `<span class="ws ${size}" style="background:${w.color}">${w.short}${w.waiting ? '<span class="badge-dot" style="background:#fbbf24"></span>' : w.running ? '<span class="badge-dot" style="background:#34d399"></span>' : ''}</span>`
+const kind = (k) => `<span class="kind" style="color:${k === 'claude' ? '#d97757' : '#e5e5e5'}">${k === 'claude' ? '✳' : '◎'}</span>`
+const status = (s) =>
+  s === 'input' ? '<span class="row" style="gap:5px;color:#fbbf24;font-size:11px"><span class="dot" style="background:#fbbf24"></span>needs input</span>'
+  : '<span class="row" style="gap:5px;color:#34d399;font-size:11px"><span class="dot" style="background:#34d399"></span>running</span>'
+
+function titlebar({ switcher = false, home = false } = {}) {
+  const w = ws(current)
+  return `<div class="titlebar">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    ${switcher ? `<button class="ws-switch" data-action="toggle-popover">${avatar(w, 'sm')}<span>${w.name}</span><span class="muted">${icon(I.chevron)}</span></button>` : ''}
+    ${home ? `<button class="apptab ${variant === 'overview' ? 'on' : ''}">${icon(I.home)} Workspaces</button>` : ''}
+    <button class="apptab ${variant === 'overview' ? '' : 'on'}">${icon(I.branch)} Worktrees</button>
+    <button class="apptab">${icon(I.terminal)} Terminal <span class="dot" style="background:#fbbf24"></span></button>
+    <button class="apptab">${icon(I.pr)} Pull requests</button>
+    <span class="grow"></span>
+    <span class="usage"><span><span style="color:#d97757">✳</span> 5h <b>35%</b> · 2h &nbsp; wk <b>28%</b> · 2d</span><span>◎ 5h <b>25%</b> · 2h &nbsp; wk <b>5%</b> · 4d</span></span>
+    <div class="search">${icon(I.search)}<span class="grow">Search commands, files</span><span class="kbd">⌘K</span></div>
+    <button class="icon">${icon(I.gear)}</button>
+  </div>`
+}
+
+function sidebar() {
+  const w = ws(current)
+  const repos = w.repos.map((repo) => `
+    <div style="margin-bottom:4px">
+      <div class="item" style="padding-left:6px"><span class="muted">${icon(I.chevron)}</span>${icon(I.folder)}<span class="grow truncate">${repo}</span><span class="muted" style="font-size:11px">${REPOS[repo].length}</span></div>
+      ${REPOS[repo].map((branch, i) => `<button class="item ${repo === 'openora' && i === 2 && current === 'client' ? 'on' : repo === 'ariex' && i === 1 ? 'on' : ''}" style="padding-left:30px">${icon(I.branch)}<span class="grow truncate">${branch}</span>
+        ${SESSIONS[current].some((s) => s.where.includes(branch.split('/').pop().slice(0, 10)) && s.status === 'input') ? '<span class="dot" style="background:#fbbf24"></span>' : ''}
+        ${CHANGES[branch] ? `<span style="font-size:11px;color:#fbbf24">${CHANGES[branch]}</span>` : ''}</button>`).join('')}
+    </div>`).join('')
+  return `<aside class="sidebar">
+    <div style="padding:10px 10px 6px" class="row">
+      <div class="search" style="width:auto;flex:1">${icon(I.search)}<span>Search</span></div>
+    </div>
+    <div class="row" style="padding:4px 12px 8px"><span class="label grow">${w.name}</span><span class="muted" style="font-size:11px">${w.repos.length} projects</span></div>
+    <nav style="padding:0 8px;overflow:auto;flex:1">${repos}</nav>
+    <div style="padding:10px;border-top:1px solid var(--border)" class="row muted"><span style="font-size:11.5px" class="grow">Projects outside this workspace hidden</span><button class="btn" style="height:24px;font-size:11px" data-variant="create">Edit</button></div>
+  </aside>`
+}
+
+function worktreeMain() {
+  const branch = current === 'ariex' ? 'feat/payments-v2' : 'feat/wallet-custody-foundation'
+  const repo = current === 'ariex' ? 'ariex' : 'openora'
+  const rows = [
+    ['hunk', '@@ -12,7 +12,9 @@ export class CustodyService {'],
+    ['', '  constructor(private readonly wallets: WalletRepository) {}'],
+    ['del', '  async release(id: string) {'],
+    ['add', '  async release(id: string, actor: Operator) {'],
+    ['add', '    await this.audit.record(actor, "release", id)'],
+    ['', '    const wallet = await this.wallets.find(id)'],
+    ['', '    if (!wallet) throw new NotFound(id)'],
+    ['del', '    return this.wallets.unlock(wallet)'],
+    ['add', '    return this.wallets.unlock(wallet, { reason: actor.reason })'],
+    ['', '  }']
+  ]
+  let left = 12, right = 12
+  const diff = rows.map(([type, text]) => {
+    if (type === 'hunk') return `<div class="rhunk" style="padding-left:12px">${text}</div>`
+    const l = type === 'add' ? '' : left++, r = type === 'del' ? '' : right++
+    return `<div class="drow"><span class="ln">${l}</span><span class="code ${type === 'del' ? 'rdel' : ''}">${type === 'add' ? '' : text}</span><span class="ln">${r}</span><span class="code ${type === 'add' ? 'radd' : ''}">${type === 'del' ? '' : text}</span></div>`
+  }).join('')
+  return `<div class="main">
+    <div class="header"><button class="icon">${icon(I.panel)}</button><b style="font-weight:500">${branch}</b><span class="muted">${repo}</span><span class="chip mono">c85008d</span><span class="add mono" style="font-size:11px">+1240</span><span class="del mono" style="font-size:11px">−8</span><span class="grow"></span><div class="seg"><button class="on">Split</button><button>Unified</button></div></div>
+    <div class="diff">${diff}</div>
+    <div class="terminal">
+      <div class="sessions">
+        <div class="row" style="padding:2px 6px 8px"><span class="label grow">Sessions</span>${SESSIONS[current].some((s) => s.status === 'input') ? '<span class="chip" style="color:#fbbf24;height:18px;font-size:10.5px">1 waiting</span>' : ''}</div>
+        ${SESSIONS[current].map((s, i) => `<button class="item ${i === 0 ? 'on' : ''}" style="height:44px;margin-bottom:4px;align-items:center">${kind(s.kind)}<span class="grow" style="display:flex;flex-direction:column;gap:1px"><span>${s.title}</span><span class="muted truncate" style="font-size:11px">${s.where}</span></span>${status(s.status)}</button>`).join('') || '<p class="muted" style="text-align:center;padding:30px 0;font-size:12px">No sessions in this workspace</p>'}
+      </div>
+      <div class="term">
+        ${current === 'ariex'
+          ? '<div><span class="prompt">✳</span> Running migrations for payments-v2…</div><div class="muted">  ✓ 0042_payment_intents.sql</div><div class="muted">  ⠋ 0043_refunds.sql</div>'
+          : '<div><span class="prompt">✳</span> I need to change <span class="path">wallet-commands.ts</span> to add the actor argument.</div><div style="margin-top:8px">Do you want to make this edit?</div><div style="color:#a5b4fc">❯ 1. Yes</div><div class="muted">  2. Yes, and don\'t ask again</div><div class="muted">  3. No, tell Claude what to do</div>'}
+      </div>
+    </div>
+  </div>`
+}
+
+function railVariant() {
+  return `${titlebar()}<div class="body">
+    <div class="wsrail">
+      ${WORKSPACES.map((w) => `<button class="tile ${w.id === current ? 'on' : ''}" data-ws="${w.id}" title="${w.name}">${avatar(w)}</button>`).join('')}
+      <div class="sep"></div>
+      <button class="add" data-variant="create" title="New workspace">+</button>
+      <span class="grow"></span>
+      <button class="icon" title="All projects">${icon(I.folder)}</button>
+    </div>
+    ${sidebar()}${worktreeMain()}
+  </div>`
+}
+
+function switcherVariant() {
+  const popover = popoverOpen ? `<div class="popover" style="left:94px;top:36px;width:360px;padding:6px">
+    <div class="row" style="padding:6px 10px 8px"><span class="label grow">Workspaces</span><span class="kbd">⌃1-9</span></div>
+    ${WORKSPACES.map((w, i) => `<button class="ws-row ${w.id === current ? 'on' : ''}" data-ws="${w.id}">
+      ${avatar(w)}<span class="grow" style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:500">${w.name}</span><span class="muted" style="font-size:11.5px">${w.repos.join(', ')}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:11px">
+        ${w.waiting ? `<span class="warn">${w.waiting} waiting</span>` : w.running ? `<span class="add">${w.running} running</span>` : `<span class="muted">${w.active}</span>`}
+        <span class="kbd">⌃${i + 1}</span>
+      </span></button>`).join('')}
+    <div style="height:1px;background:var(--border);margin:6px 4px"></div>
+    <button class="ws-row" style="padding:7px 10px">${icon(I.folder)}<span class="grow">All projects</span><span class="kbd">⌃0</span></button>
+    <button class="ws-row" style="padding:7px 10px" data-variant="create"><span style="width:15px;text-align:center">+</span><span class="grow">New workspace…</span></button>
+    <button class="ws-row" style="padding:7px 10px" data-variant="create"><span style="width:15px;text-align:center">✎</span><span class="grow">Edit ${ws(current).name}…</span></button>
+  </div>` : ''
+  return `${titlebar({ switcher: true })}<div class="body">${sidebar()}${worktreeMain()}</div>${popover}`
+}
+
+function overviewVariant() {
+  const card = (w) => `<button class="card ${w.id === current ? 'on' : ''}" data-ws="${w.id}" data-variant="rail">
+    <div class="row" style="gap:12px">${avatar(w, 'lg')}<div class="grow"><div style="font-size:14px;font-weight:600">${w.name}</div><div class="muted" style="font-size:11.5px;margin-top:2px">Active ${w.active}</div></div><span class="kbd">⌃${WORKSPACES.indexOf(w) + 1}</span></div>
+    <div class="row" style="flex-wrap:wrap;gap:6px">${w.repos.map((r) => `<span class="chip">${icon(I.folder)} ${r} <span class="muted">${REPOS[r].length}</span></span>`).join('')}</div>
+    <div class="stats">
+      <div class="stat"><b class="${w.changes > 50 ? 'warn' : ''}">${w.changes}</b><span>changed files</span></div>
+      <div class="stat"><b>${w.running + w.waiting}</b><span>agents</span></div>
+      <div class="stat"><b>${w.prs}</b><span>open PRs</span></div>
+      <div class="stat"><b>${w.comments}</b><span>comments</span></div>
+    </div>
+    <div class="activity">
+      ${(SESSIONS[w.id] || []).map((s) => `<div class="row">${kind(s.kind)}<span class="grow truncate">${s.where}</span>${status(s.status)}</div>`).join('') || '<span class="muted">No running sessions</span>'}
+    </div>
+  </button>`
+  return `${titlebar({ home: true })}<div class="body"><div class="overview">
+    <div class="row" style="margin-bottom:18px"><div class="grow"><div style="font-size:20px;font-weight:600">Workspaces</div><div class="muted" style="margin-top:4px">1 agent is waiting for you in Openora + Betfeel</div></div>
+      <button class="btn">${icon(I.folder)} All projects</button><button class="btn primary" data-variant="create">+ New workspace</button></div>
+    <div class="cards">${WORKSPACES.map(card).join('')}</div>
+    <div class="label" style="margin:26px 0 10px">Not in any workspace</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">${['dotfiles', 'quick-diff', 'oss/pierre-diffs'].map((r) => `<span class="chip">${icon(I.folder)} ${r}</span>`).join('')}<button class="btn" style="height:22px;font-size:11px">Add to workspace…</button></div>
+  </div></div>`
+}
+
+function createVariant() {
+  const selected = { openora: ['all'], betfeel: ['all'], ariex: [], infrastructure: [] }
+  const repoRow = (repo) => {
+    const on = selected[repo].length > 0
+    return `<div style="border-bottom:1px solid var(--border);padding:8px 12px">
+      <div class="row"><span class="check ${on ? 'on' : ''}">${on ? '✓' : ''}</span>${icon(I.folder)}<span class="grow">${repo}</span><span class="muted" style="font-size:11.5px">${REPOS[repo].length} worktrees</span>
+      ${on ? '<div class="seg" style="padding:2px"><button class="on" style="height:20px">All worktrees</button><button style="height:20px">Pick…</button></div>' : ''}</div>
+    </div>`
+  }
+  return `${titlebar()}<div class="body">${sidebar()}${worktreeMain()}</div>
+  <div class="scrim"><div class="modal">
+    <div class="row" style="padding:16px 18px;border-bottom:1px solid var(--border)"><h2 class="grow">Edit workspace</h2><button class="icon" data-variant="rail">✕</button></div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:18px">
+      <div class="row" style="gap:14px;align-items:flex-end">
+        ${avatar(ws('client'), 'lg')}
+        <div class="field grow"><span class="muted" style="font-size:11.5px">Name</span><div class="text">Openora + Betfeel</div></div>
+        <div class="field"><span class="muted" style="font-size:11.5px">Colour</span><div class="swatches">${['#4f5ff0', '#e0703d', '#10a37f', '#d946ef', '#eab308', '#64748b'].map((c, i) => `<span class="swatch ${i === 0 ? 'on' : ''}" style="background:${c}"></span>`).join('')}</div></div>
+      </div>
+      <div class="field">
+        <div class="row"><span class="muted grow" style="font-size:11.5px">Projects</span><span class="muted" style="font-size:11.5px">2 selected</span></div>
+        <div style="border-radius:10px;box-shadow:inset 0 0 0 1px var(--border);overflow:hidden">
+          <div style="padding:8px 12px;border-bottom:1px solid var(--border)"><div class="text" style="height:28px">${icon(I.search)}<span class="muted" style="margin-left:8px">Filter projects in ~/Documents/projects</span></div></div>
+          ${['openora', 'betfeel', 'ariex', 'infrastructure'].map(repoRow).join('')}
+        </div>
+      </div>
+      <div class="field">
+        <span class="muted" style="font-size:11.5px">When switching to this workspace</span>
+        <div style="border-radius:10px;box-shadow:inset 0 0 0 1px var(--border)">
+          ${[['Restore open tabs and dock layout', true], ['Keep agent sessions running in the background', true], ['Scope pull requests, ⌘K files and comments to these projects', true], ['Start a Claude session in the last worktree if none is running', false]]
+            .map(([text, on], i) => `<div class="row" style="padding:10px 12px;${i ? 'border-top:1px solid var(--border)' : ''}"><span class="grow">${text}</span><span class="switch ${on ? 'on' : ''}"></span></div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="row" style="padding:12px 18px;border-top:1px solid var(--border)"><button class="btn" style="color:#f87171">Delete workspace</button><span class="grow"></span><button class="btn" data-variant="rail">Cancel</button><button class="btn primary" data-variant="rail">Save</button></div>
+  </div></div>`
+}
+
+function render() {
+  document.getElementById('variant-tabs').innerHTML = VARIANTS.map(([id, label]) => `<button class="${id === variant ? 'on' : ''}" data-variant="${id}">${label}</button>`).join('')
+  document.getElementById('variant-note').textContent = VARIANTS.find(([id]) => id === variant)[2]
+  const views = { rail: railVariant, switcher: switcherVariant, overview: overviewVariant, create: createVariant }
+  document.getElementById('window').innerHTML = views[variant]()
+}
+
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-ws], [data-variant], [data-action]')
+  if (!target) return
+  if (target.dataset.ws) current = target.dataset.ws
+  if (target.dataset.action === 'toggle-popover') popoverOpen = !popoverOpen
+  else if (target.dataset.ws && variant === 'switcher') popoverOpen = false
+  if (target.dataset.variant) variant = target.dataset.variant
+  render()
+})
+render()
+</script>
+</body>
+</html>

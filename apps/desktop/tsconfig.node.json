@@ -1,0 +1,47 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "../../packages/sdk/src/main.ts",
+    "../../packages/plugins/*/main/**/*",
+    "../../packages/plugins/*/shared/**/*",
+    "../../packages/atlassian/main/**/*",
+    "../../packages/atlassian/shared.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "types": [
+      "electron-vite/node",
+      "bun",
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@treeix/sdk": [
+        "../../packages/sdk/src/index.ts"
+      ],
+      "@treeix/sdk/main": [
+        "../../packages/sdk/src/main.ts"
+      ],
+      "@treeix/shared/*": [
+        "./src/shared/*"
+      ],
+      "@treeix/host/*": [
+        "./src/main/*"
+      ],
+      "@treeix/app/*": [
+        "./src/renderer/src/*"
+      ],
+      "*": [
+        "./node_modules/@types/*",
+        "./node_modules/*"
+      ],
+      "@treeix/atlassian/*": [
+        "../../packages/atlassian/*"
+      ]
+    }
+  }
+}

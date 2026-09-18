@@ -1,0 +1,14 @@
+{
+  "name": "treeix-monorepo",
+  "private": true,
+  "scripts": {
+    "postinstall": "bun install --cwd apps/desktop && bun install --cwd apps/landing && ln -sfn ../apps/desktop/node_modules packages/node_modules",
+    "dev": "bun run --cwd apps/desktop dev",
+    "dev:landing": "bun run --cwd apps/landing dev",
+    "build:landing": "bun run --cwd apps/landing build",
+    "dist:dmg": "bun run --cwd apps/desktop dist:dmg",
+    "dist:mas": "bun run --cwd apps/desktop dist:mas",
+    "test": "bun run --cwd apps/desktop test",
+    "typecheck": "bun run --cwd apps/desktop typecheck"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@treeix/plugin-keep-awake",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "keep-awake",
+    "name": "Keep awake",
+    "description": "Stops the Mac from sleeping while a Claude or Codex session is working, optionally even with the lid closed.",
+    "enabledByDefault": true,
+    "requires": ["terminal"]
+  }
+}

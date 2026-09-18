@@ -1,0 +1,308 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>Treeix - Jira tasks mock</title>
+<style>
+  :root {
+    --bg: #fff; --card: #f6f6f7; --fg: #1b1b1f; --muted: #6b6b73;
+    --border: rgb(0 0 0 / 10%); --accent: rgb(0 0 0 / 5%); --primary: #4f5ff0; --jira: #1868db;
+    --add: oklch(50.8% .118 165.612); --del: oklch(50.5% .213 27.518); --warn: oklch(55.5% .163 48.998);
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--fg); padding: 20px 24px 40px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); }
+  .row { display: flex; align-items: center; gap: 8px; } .grow { flex: 1; min-width: 0; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .variants { width: 1180px; margin: 0 auto 14px; display: flex; align-items: center; gap: 12px; }
+  .variants p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .seg button { height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .seg button.on { background: #fff; color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+  .seg.full { width: 100%; } .seg.full button { flex: 1; }
+
+  .window { width: 1180px; height: 760px; margin: 0 auto; background: var(--bg); border: 1px solid #d4d4d8; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 18%); }
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .lights { display: flex; gap: 8px; margin-right: 14px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .apptab { height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12px; }
+  .apptab.on { background: rgb(0 0 0 / 6%); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .rail { width: 56px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; }
+  .rail i { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; font: 700 12px system-ui; font-style: normal; }
+
+  .list { width: 380px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .filters { padding: 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
+  .filter { height: 32px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); display: flex; align-items: center; padding: 0 10px; font-size: 12.5px; }
+  .items { flex: 1; overflow: auto; padding: 4px 8px 10px; }
+  .section { display: flex; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+
+  .task { position: relative; display: block; width: 100%; text-align: left; padding: 9px 10px 9px 34px; border-radius: 8px; }
+  .task:hover { background: var(--accent); }
+  .task.on { background: rgb(0 0 0 / 6%); box-shadow: inset 0 0 0 1px var(--border); }
+  .type { position: absolute; left: 10px; top: 11px; width: 15px; height: 15px; border-radius: 3px; display: grid; place-items: center; color: #fff; font: 700 9px system-ui; }
+  .bug { background: #e2483d; } .story { background: #63ba3c; } .tsk { background: #4bade8; }
+  .task .title { font-size: 13px; font-weight: 500; }
+  .task .meta { margin-top: 3px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pill { height: 18px; padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .todo { background: var(--accent); color: var(--muted); }
+  .progress { background: rgb(79 95 240 / 12%); color: var(--primary); }
+  .review { background: rgb(245 158 11 / 14%); color: var(--warn); }
+  .done { background: rgb(16 185 129 / 12%); color: var(--add); }
+  .wt { background: rgb(16 185 129 / 12%); color: var(--add); }
+  .prio { font-size: 11px; } .high { color: var(--del); }
+  .av { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font: 700 8px system-ui; color: #fff; }
+
+  .detail { flex: 1; min-width: 0; padding: 18px 24px; overflow: auto; }
+  .detail h1 { margin: 6px 0 0; font-size: 17px; }
+  .btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--border); display: inline-flex; align-items: center; gap: 6px; background: #fff; white-space: nowrap; }
+  .btn.primary { background: var(--primary); color: #fff; box-shadow: none; font-weight: 500; }
+  .fields { margin-top: 14px; display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; font-size: 12.5px; }
+  .fields dt { color: var(--muted); } .fields dd { margin: 0; display: flex; align-items: center; gap: 6px; }
+  .desc { margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; line-height: 1.55; }
+  .desc h3 { margin: 0 0 6px; font-size: 13px; }
+  .desc ul { margin: 6px 0 0; padding-left: 18px; }
+  .linked { margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; }
+  .linked .head { padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .linked .item { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 12.5px; }
+  .linked .item + .item { border-top: 1px solid var(--border); }
+  .comment { margin-top: 10px; display: flex; gap: 10px; font-size: 12.5px; line-height: 1.5; }
+  .menu { position: absolute; margin-top: 4px; width: 200px; background: #fff; border-radius: 8px; box-shadow: 0 8px 30px rgb(0 0 0 / 14%), 0 0 0 1px var(--border); padding: 4px; z-index: 2; }
+  .menu div { padding: 6px 8px; border-radius: 5px; font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+  .menu div.on { background: var(--accent); }
+
+  /* B: board */
+  .board { flex: 1; display: flex; gap: 12px; padding: 14px; overflow: auto; background: var(--card); }
+  .col { width: 260px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+  .col h4 { margin: 0; padding: 4px 4px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); display: flex; gap: 6px; }
+  .card { background: #fff; border-radius: 8px; box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 5%); padding: 10px 12px; }
+  .card .title { font-size: 12.5px; font-weight: 500; line-height: 1.4; }
+  .card .meta { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .card .type { position: static; }
+  .drawer { width: 420px; flex: none; border-left: 1px solid var(--border); padding: 16px 20px; overflow: auto; }
+
+  /* C: inside worktrees sidebar */
+  .sidebar { width: 300px; flex: none; background: var(--card); border-right: 1px solid var(--border); padding: 8px; overflow: auto; }
+  .repo { padding: 8px 8px 4px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .wtrow { padding: 6px 8px 6px 22px; border-radius: 6px; font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .wtrow.on { background: rgb(0 0 0 / 6%); }
+  .jira { color: var(--jira); font: 600 11px var(--mono); }
+  .inline { margin: 4px 0 0 22px; padding: 8px 10px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--border); font-size: 12px; }
+  .editor { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .banner { margin: 12px 16px 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .code { flex: 1; margin: 12px 16px 16px; border-radius: 10px; border: 1px solid var(--border); padding: 16px; }
+  .code span { display: block; height: 9px; border-radius: 5px; background: rgb(0 0 0 / 6%); margin: 10px 0; }
+
+  /* Settings + setup states */
+  .extras { width: 1180px; margin: 18px auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panel { background: #fff; border: 1px solid #dcdce0; border-radius: 10px; padding: 14px 16px; }
+  .panel h3 { margin: 0 0 10px; font-size: 13px; }
+  .setting { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .setting:first-of-type { border-top: 0; }
+  .setting b { font-weight: 500; font-size: 13px; } .setting p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .switch { width: 28px; height: 16px; flex: none; border-radius: 8px; background: var(--primary); position: relative; }
+  .switch::after { content: ''; position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .switch.off { background: #d4d4d8; } .switch.off::after { right: auto; left: 2px; }
+  .empty { border: 1px dashed var(--border); border-radius: 10px; padding: 18px; text-align: center; font-size: 12.5px; color: var(--muted); }
+  .empty + .empty { margin-top: 10px; }
+  .empty b { display: block; color: var(--fg); font-size: 13px; margin-bottom: 4px; }
+  .cmd { display: inline-block; margin-top: 8px; padding: 4px 8px; border-radius: 6px; background: var(--accent); font: 12px var(--mono); color: var(--fg); }
+
+  .notes { width: 1180px; margin: 14px auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .notes div { background: #fff; border: 1px solid #dcdce0; border-radius: 10px; padding: 14px 16px; font-size: 12.5px; line-height: 1.55; color: #3f3f46; }
+  .notes h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg); }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .notes code { font: 11.5px var(--mono); background: var(--accent); padding: 0 4px; border-radius: 4px; }
+  [data-variant] { display: none; } [data-variant].show { display: contents; }
+</style></head>
+<body>
+<div class="variants">
+  <div class="seg" id="switch">
+    <button data-for="A" class="on">A · Tasks tab, list + detail</button>
+    <button data-for="B">B · Tasks tab, board</button>
+    <button data-for="C">C · Linked to worktrees</button>
+  </div>
+  <p id="caption">Own Tasks tab shaped like Pull requests: your work items on the left, the selected one with actions on the right.</p>
+</div>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <span class="apptab" id="tabWorktrees">Worktrees</span><span class="apptab">Terminal</span><span class="apptab">Pull requests</span><span class="apptab on" id="tabTasks">Tasks</span>
+  </div>
+  <div class="body">
+    <div class="rail"><i style="background:#4f5ff0">BO</i><i style="background:#94a3b8">DY</i></div>
+
+    <!-- A -->
+    <div data-variant="A" class="show">
+      <div class="list">
+        <div class="filters">
+          <div class="filter">Filter by key, text, project, sprint</div>
+          <div class="seg full"><button class="on">Assigned to me</button><button>Reported</button><button>Watching</button></div>
+          <div class="seg full"><button class="on">Open 9</button><button>Done 24</button></div>
+        </div>
+        <div class="items">
+          <div class="section">In progress <span style="font-weight:500">2</span></div>
+          <button class="task on"><span class="type bug">!</span>
+            <div class="title truncate">Login rate limit ignores X-Forwarded-For behind proxy</div>
+            <div class="meta"><span class="mono">OPN-412</span> · Openora<span class="grow"></span><span class="pill wt">Worktree</span><span class="prio high">▲ High</span></div>
+          </button>
+          <button class="task"><span class="type story">S</span>
+            <div class="title truncate">Vendor-unavailable game status on lobby tiles</div>
+            <div class="meta"><span class="mono">OPN-398</span> · Openora<span class="grow"></span><span class="pill review">PR #187</span></div>
+          </button>
+          <div class="section">To do <span style="font-weight:500">5</span></div>
+          <button class="task"><span class="type tsk">T</span>
+            <div class="title truncate">Bulk enable/disable for gaming providers</div>
+            <div class="meta"><span class="mono">OPN-420</span> · Openora · Sprint 31<span class="grow"></span><span class="prio">▬ Medium</span></div>
+          </button>
+          <button class="task"><span class="type bug">!</span>
+            <div class="title truncate">Bet slip total rounds 0.005 down on EUR</div>
+            <div class="meta"><span class="mono">BET-88</span> · Betfeel · Sprint 12<span class="grow"></span><span class="prio high">▲ High</span></div>
+          </button>
+          <button class="task"><span class="type story">S</span>
+            <div class="title truncate">Export review history as CSV</div>
+            <div class="meta"><span class="mono">BET-91</span> · Betfeel<span class="grow"></span><span class="prio">▼ Low</span></div>
+          </button>
+          <button class="task"><span class="type tsk">T</span>
+            <div class="title truncate">Rotate staging database credentials</div>
+            <div class="meta"><span class="mono">OPN-377</span> · Openora<span class="grow"></span><span class="prio">▬ Medium</span></div>
+          </button>
+          <div class="section">In review <span style="font-weight:500">2</span></div>
+          <button class="task"><span class="type story">S</span>
+            <div class="title truncate">Per-IP login lockout alongside per-account</div>
+            <div class="meta"><span class="mono">OPN-401</span> · Openora<span class="grow"></span><span class="pill review">PR #184</span></div>
+          </button>
+        </div>
+      </div>
+      <div class="detail">
+        <div class="row muted" style="font-size:12px"><span class="type bug" style="position:static">!</span><span class="mono">OPN-412</span> · Bug · Openora<span class="grow"></span>
+          <button class="btn">Copy key</button><button class="btn">Open in Jira ↗</button>
+        </div>
+        <h1>Login rate limit ignores X-Forwarded-For behind proxy</h1>
+        <div class="row" style="margin-top:12px; position:relative">
+          <button class="btn"><span class="pill progress" style="height:16px">In progress</span> ▾</button>
+          <button class="btn primary">Open worktree</button>
+          <button class="btn">Send to agent</button>
+          <span class="grow"></span>
+          <span class="muted" style="font-size:12px">Updated 12m ago</span>
+        </div>
+        <dl class="fields">
+          <dt>Assignee</dt><dd><span class="av" style="background:#4f5ff0">VZ</span>You</dd>
+          <dt>Reporter</dt><dd><span class="av" style="background:#0ea5e9">JF</span>jakub.filinger</dd>
+          <dt>Priority</dt><dd class="high">▲ High</dd>
+          <dt>Sprint</dt><dd>Sprint 31 · ends in 4 days</dd>
+          <dt>Labels</dt><dd><span class="pill todo">security</span><span class="pill todo">auth</span></dd>
+        </dl>
+        <div class="desc">
+          <h3>Description</h3>
+          Behind the load balancer every request comes from the proxy address, so one noisy client locks out everyone.
+          <ul><li>Read the client IP from the first trusted X-Forwarded-For hop</li><li>Keep per-account lockout unchanged</li><li>Add a test with two clients behind one proxy</li></ul>
+        </div>
+        <div class="linked">
+          <div class="head">Linked</div>
+          <div class="item"><span class="pill wt">Worktree</span><span class="mono">fix/OPN-412-forwarded-for</span><span class="grow"></span><span class="muted">2 files changed</span></div>
+          <div class="item"><span class="pill todo">Branch</span><span class="mono">fix/OPN-412-forwarded-for</span><span class="grow"></span><span class="muted">no PR yet</span><button class="btn">Create PR</button></div>
+        </div>
+        <div class="comment"><span class="av" style="background:#0ea5e9">JF</span><div><b>jakub.filinger</b> <span class="muted">· 1h</span><br />Staging uses two proxy hops, so trust depth must be configurable.</div></div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div data-variant="B">
+      <div class="board">
+        <div class="col"><h4>To do <span style="font-weight:500">5</span></h4>
+          <div class="card"><div class="title">Bet slip total rounds 0.005 down on EUR</div><div class="meta"><span class="type bug">!</span><span class="mono">BET-88</span><span class="grow"></span><span class="prio high">▲</span><span class="av" style="background:#4f5ff0">VZ</span></div></div>
+          <div class="card"><div class="title">Bulk enable/disable for gaming providers</div><div class="meta"><span class="type tsk">T</span><span class="mono">OPN-420</span><span class="grow"></span><span class="av" style="background:#4f5ff0">VZ</span></div></div>
+          <div class="card"><div class="title">Export review history as CSV</div><div class="meta"><span class="type story">S</span><span class="mono">BET-91</span><span class="grow"></span><span class="av" style="background:#4f5ff0">VZ</span></div></div>
+        </div>
+        <div class="col"><h4>In progress <span style="font-weight:500">2</span></h4>
+          <div class="card" style="box-shadow:0 0 0 2px var(--primary)"><div class="title">Login rate limit ignores X-Forwarded-For behind proxy</div><div class="meta"><span class="type bug">!</span><span class="mono">OPN-412</span><span class="pill wt">Worktree</span><span class="grow"></span><span class="av" style="background:#4f5ff0">VZ</span></div></div>
+          <div class="card"><div class="title">Vendor-unavailable game status on lobby tiles</div><div class="meta"><span class="type story">S</span><span class="mono">OPN-398</span><span class="grow"></span><span class="av" style="background:#4f5ff0">VZ</span></div></div>
+        </div>
+        <div class="col"><h4>In review <span style="font-weight:500">2</span></h4>
+          <div class="card"><div class="title">Per-IP login lockout alongside per-account</div><div class="meta"><span class="type story">S</span><span class="mono">OPN-401</span><span class="pill review">PR #184</span><span class="grow"></span><span class="av" style="background:#4f5ff0">VZ</span></div></div>
+        </div>
+      </div>
+      <div class="drawer">
+        <div class="row muted" style="font-size:12px"><span class="type bug" style="position:static">!</span><span class="mono">OPN-412</span><span class="grow"></span><button class="btn">✕</button></div>
+        <h1 style="margin:6px 0 0; font-size:16px">Login rate limit ignores X-Forwarded-For behind proxy</h1>
+        <div class="row" style="margin-top:12px"><button class="btn primary">Open worktree</button><button class="btn">Send to agent</button></div>
+        <div class="desc">Behind the load balancer every request comes from the proxy address, so one noisy client locks out everyone.</div>
+        <p class="muted" style="font-size:12px">Drag cards between columns to transition; columns follow the project's workflow statuses.</p>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div data-variant="C">
+      <div class="sidebar">
+        <div class="repo">openora</div>
+        <div class="wtrow">main</div>
+        <div class="wtrow on"><span class="jira">OPN-412</span><span class="truncate">fix/OPN-412-forwarded-for</span><span class="grow"></span><span class="pill progress">In progress</span></div>
+        <div class="inline">
+          <div style="font-weight:500">Login rate limit ignores X-Forwarded-For behind proxy</div>
+          <div class="row muted" style="margin-top:6px; font-size:11.5px">▲ High · Sprint 31<span class="grow"></span>Move to In review ▸</div>
+        </div>
+        <div class="wtrow"><span class="jira">OPN-398</span><span class="truncate">feat/game-unavailable-status</span><span class="grow"></span><span class="pill review">In review</span></div>
+        <div class="repo" style="margin-top:6px">betfeel</div>
+        <div class="wtrow">main</div>
+        <div class="section" style="margin-top:8px">Assigned, no worktree</div>
+        <div class="wtrow" style="padding-left:12px"><span class="jira">BET-88</span><span class="truncate">Bet slip total rounds 0.005 down</span><span class="grow"></span><span class="muted">＋</span></div>
+        <div class="wtrow" style="padding-left:12px"><span class="jira">OPN-420</span><span class="truncate">Bulk enable/disable for providers</span><span class="grow"></span><span class="muted">＋</span></div>
+      </div>
+      <div class="editor">
+        <div class="banner"><span class="type bug" style="position:static; width:15px; height:15px; border-radius:3px; display:grid; place-items:center; color:#fff; font:700 9px system-ui">!</span><span class="jira">OPN-412</span><span class="truncate">Login rate limit ignores X-Forwarded-For behind proxy</span><span class="grow"></span><button class="btn">Details</button><button class="btn">Send to agent</button></div>
+        <div class="code"><span style="width:40%"></span><span style="width:70%"></span><span style="width:55%"></span><span style="width:80%"></span><span style="width:35%"></span><span style="width:62%"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="extras">
+  <div class="panel">
+    <h3>Settings · Modules</h3>
+    <div class="setting"><div class="grow"><b>Pull requests</b><p>Review GitHub and GitLab changes</p></div><span class="switch"></span></div>
+    <div class="setting"><div class="grow"><b>Jira tasks</b><p>Your Jira work items through Atlassian CLI (acli). Loaded only when enabled.</p></div><span class="switch off"></span></div>
+    <div class="setting"><div class="grow"><b>Jira JQL</b><p>Which items the tab lists</p></div><span class="mono muted" style="font-size:12px">assignee = currentUser() AND statusCategory != Done</span></div>
+  </div>
+  <div class="panel">
+    <h3>Setup states</h3>
+    <div class="empty"><b>Atlassian CLI not found</b>Install it, then check again.<br /><span class="cmd">brew tap atlassian/homebrew-acli &amp;&amp; brew install acli</span></div>
+    <div class="empty"><b>Not signed in to Jira</b>Opens the browser to authorize.<br /><span class="cmd">acli jira auth login --web</span></div>
+  </div>
+</div>
+
+<div class="notes">
+  <div><h3>Data via CLI</h3><ul>
+    <li>List: <code>acli jira workitem search --jql … --json</code></li>
+    <li>Detail: <code>acli jira workitem view KEY --json</code></li>
+    <li>Status: <code>acli jira workitem transition --key KEY --status …</code></li>
+    <li>Command list gets checked against the installed acli version before building.</li>
+  </ul></div>
+  <div><h3>Optional and lazy</h3><ul>
+    <li>Off by default; toggle in Settings like the other modules, the tab disappears when off.</li>
+    <li>Renderer: <code>React.lazy(() =&gt; import('./JiraTasks'))</code>, a separate chunk fetched only when the tab opens.</li>
+    <li>Main: acli is never spawned while the module is off; acli shows up in Command line tools only when on.</li>
+  </ul></div>
+  <div><h3>Tie-ins</h3><ul>
+    <li>Open worktree: branch <code>fix/KEY-slug</code>, new worktree, agent session started with the item as context (not submitted).</li>
+    <li>Branch and PR titles containing the key link back to the item; PR list shows the key pill.</li>
+    <li><b>A</b> reuses the PR tab layout; <b>B</b> suits sprint boards; <b>C</b> adds no new tab and keeps tasks next to code.</li>
+  </ul></div>
+</div>
+
+<script>
+  const captions = {
+    A: 'Own Tasks tab shaped like Pull requests: your work items on the left, the selected one with actions on the right.',
+    B: 'Sprint board by workflow status; drag to transition, click a card for a side drawer.',
+    C: 'No new tab: worktrees show their Jira key and status, unstarted items sit under the repos with a + to start one.'
+  }
+  document.querySelectorAll('#switch button').forEach((button) =>
+    button.addEventListener('click', () => {
+      document.querySelectorAll('#switch button').forEach((other) => other.classList.toggle('on', other === button))
+      document.querySelectorAll('[data-variant]').forEach((block) => block.classList.toggle('show', block.dataset.variant === button.dataset.for))
+      document.getElementById('caption').textContent = captions[button.dataset.for]
+      document.getElementById('tabTasks').classList.toggle('on', button.dataset.for !== 'C')
+      document.getElementById('tabWorktrees').classList.toggle('on', button.dataset.for === 'C')
+    })
+  )
+</script>
+</body></html>

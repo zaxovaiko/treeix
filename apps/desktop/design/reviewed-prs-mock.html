@@ -1,0 +1,269 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>Treeix - reviewed PRs mock</title>
+<style>
+  :root {
+    --bg: #fff; --card: #f6f6f7; --fg: #1b1b1f; --muted: #6b6b73;
+    --border: rgb(0 0 0 / 10%); --accent: rgb(0 0 0 / 5%); --primary: #4f5ff0;
+    --add: oklch(50.8% .118 165.612); --del: oklch(50.5% .213 27.518); --warn: oklch(55.5% .163 48.998);
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9e9ec; font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--fg); padding: 20px 24px 40px; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); } .add { color: var(--add); } .del { color: var(--del); }
+  .row { display: flex; align-items: center; gap: 8px; } .grow { flex: 1; min-width: 0; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .variants { width: 1180px; margin: 0 auto 14px; display: flex; align-items: center; gap: 12px; }
+  .variants p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .seg button { height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .seg button.on { background: #fff; color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+
+  .window { width: 1180px; height: 820px; margin: 0 auto; background: var(--bg); border: 1px solid #d4d4d8; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 18%); }
+  .titlebar { height: 40px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  .lights { display: flex; gap: 8px; margin-right: 14px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .apptab { height: 28px; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12px; }
+  .apptab.on { background: rgb(0 0 0 / 6%); color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .rail { width: 56px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; }
+  .rail i { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; font: 700 12px system-ui; font-style: normal; }
+
+  .list { width: 400px; flex: none; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .filters { padding: 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
+  .filter { height: 32px; border-radius: 8px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); display: flex; align-items: center; padding: 0 10px; font-size: 12.5px; }
+  .seg.full { width: 100%; } .seg.full button { flex: 1; }
+  .scope { padding: 10px 14px 4px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; }
+  .items { flex: 1; overflow: auto; padding: 4px 8px 10px; }
+
+  .pr { position: relative; display: block; width: 100%; text-align: left; padding: 9px 10px 9px 36px; border-radius: 8px; }
+  .pr:hover { background: var(--accent); }
+  .pr.on { background: rgb(0 0 0 / 6%); box-shadow: inset 0 0 0 1px var(--border); }
+  .pr .gh { position: absolute; left: 10px; top: 10px; width: 17px; height: 17px; }
+  .pr .title { font-size: 13px; font-weight: 500; }
+  .pr .meta { white-space: nowrap; margin-top: 3px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .pr .stats { margin-top: 3px; font: 11px var(--mono); display: flex; gap: 6px; align-items: center; }
+  .badge { height: 18px; padding: 0 7px; border-radius: 9px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .open { background: rgb(16 185 129 / 12%); color: var(--add); } .draft { background: var(--accent); color: var(--muted); }
+
+  /* Review state marks */
+  .rv { height: 18px; padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .rv-approved { background: rgb(16 185 129 / 12%); color: var(--add); }
+  .rv-changes { background: rgb(239 68 68 / 10%); color: var(--del); }
+  .rv-commented { background: var(--accent); color: var(--muted); }
+  .rv-new { background: rgb(79 95 240 / 12%); color: var(--primary); }
+  .rv-yours { background: var(--accent); color: var(--muted); }
+  .rv-needs { background: rgb(245 158 11 / 14%); color: var(--warn); }
+  svg.s { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* A: dim reviewed rows in place */
+  .A .pr.done { opacity: .5; }
+  .A .pr.done:hover { opacity: .9; }
+  .A .pr.done .title { font-weight: 400; }
+  .A .pr.renew::before { content: ''; position: absolute; left: 3px; top: 12px; bottom: 12px; width: 3px; border-radius: 2px; background: var(--primary); }
+
+  /* B: grouped sections */
+  .section { display: flex; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .section .count { font-weight: 500; letter-spacing: 0; }
+  .section.collapsed { cursor: pointer; }
+  .compact { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px 6px 12px; border-radius: 6px; text-align: left; color: var(--muted); font-size: 12.5px; }
+  .compact:hover { background: var(--accent); color: var(--fg); }
+
+  /* C: reviewer avatars + hide toggle */
+  .avatars { display: flex; margin-left: auto; }
+  .avatars b { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--card); margin-left: -5px; display: grid; place-items: center; font: 700 8px system-ui; color: #fff; }
+  .avatars b.me { box-shadow: 0 0 0 1.5px var(--add); }
+  .avatars b.me.changes { box-shadow: 0 0 0 1.5px var(--del); }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .switch { width: 28px; height: 16px; border-radius: 8px; background: var(--primary); position: relative; }
+  .switch::after { content: ''; position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .hiddenbar { margin: 6px 2px 0; padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--border); font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+
+  .detail { flex: 1; min-width: 0; padding: 16px 22px; }
+  .detail h1 { margin: 0; font-size: 16px; }
+  .reviewbar { margin-top: 14px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--border); display: inline-flex; align-items: center; gap: 6px; background: #fff; }
+  .btn.primary { background: var(--primary); color: #fff; box-shadow: none; font-weight: 500; }
+  .skeleton { margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .skeleton span { display: block; height: 9px; border-radius: 5px; background: rgb(0 0 0 / 6%); margin: 10px 0; }
+
+  .notes { width: 1180px; margin: 18px auto 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .notes div { background: #fff; border: 1px solid #dcdce0; border-radius: 10px; padding: 14px 16px; font-size: 12.5px; line-height: 1.55; color: #3f3f46; }
+  .notes h3 { margin: 0 0 6px; font-size: 13px; color: var(--fg); }
+  .notes ul { margin: 0; padding-left: 18px; }
+  [data-variant] { display: none; } [data-variant].show { display: contents; }
+</style></head>
+<body>
+<div class="variants">
+  <div class="seg" id="switch">
+    <button data-for="A" class="on">A · Dim in place</button>
+    <button data-for="B">B · Grouped sections</button>
+    <button data-for="C">C · Reviewer avatars + hide</button>
+  </div>
+  <p id="caption">Reviewed PRs fade back; a blue edge pulls one forward again when new commits land after your review.</p>
+</div>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="gh" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></symbol>
+</defs></svg>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <span class="apptab">Worktrees</span><span class="apptab">Terminal</span><span class="apptab on">Pull requests</span>
+  </div>
+  <div class="body">
+    <div class="rail"><i style="background:#4f5ff0">BO</i><i style="background:#94a3b8">DY</i></div>
+    <div class="list">
+      <div class="filters">
+        <div class="filter">Filter by person, repository, branch</div>
+        <div class="seg full"><button>All</button><button class="on">GitHub</button><button>GitLab</button></div>
+        <div class="seg full" id="stateSeg"><button class="on">Open 8</button><button>Merged 38</button><button>Closed 4</button></div>
+      </div>
+
+      <!-- A -->
+      <div data-variant="A" class="show">
+        <div class="scope">4 repositories in Betfeel + Openora<span class="grow"></span><span>3 to review</span></div>
+        <div class="items A">
+          <button class="pr on"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat: add per-IP login rate limit alongside per-account lockout</div>
+            <div class="meta">#184 openora · jakubfilinger-b<span class="grow"></span><span class="rv rv-needs">Review requested</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+212</span><span class="del">−1</span><span class="muted truncate">feat/per-ip-login-rate-limit</span><span class="grow"></span><span class="muted">6m</span></div>
+          </button>
+          <button class="pr renew"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(gaming): vendor-unavailable game status</div>
+            <div class="meta">#187 openora · okapitula<span class="grow"></span><span class="rv rv-new">3 new commits</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+1132</span><span class="del">−20</span><span class="muted truncate">feat/game-unavailable-status</span><span class="grow"></span><span class="muted">19m</span></div>
+          </button>
+          <button class="pr done"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(gaming): bulk enable/disable, tags and search</div>
+            <div class="meta">#183 openora · okapitula<span class="grow"></span><span class="rv rv-approved"><svg class="s"><path d="M20 6 9 17l-5-5"/></svg>Approved</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+1941</span><span class="del">−3</span><span class="muted truncate">feat/gaming-bulk-actions</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+          <button class="pr"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(admin-console): per-game performance</div>
+            <div class="meta">#182 openora · okapitula<span class="grow"></span><span class="rv rv-needs">Not reviewed</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+553</span><span class="del">−1</span><span class="muted truncate">feat/game-performance-view</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+          <button class="pr done"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(compliance): add per-provider geo rules</div>
+            <div class="meta">#173 openora · okapitula<span class="grow"></span><span class="rv rv-changes"><svg class="s"><path d="M12 5v14M5 12h14"/></svg>Changes requested</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+1774</span><span class="del">−82</span><span class="muted truncate">feat/add-provider-geo</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+          <button class="pr done"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(promo): grant creation with a dual approval</div>
+            <div class="meta">#178 openora · zaxovaiko<span class="grow"></span><span class="rv rv-yours">Yours</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+820</span><span class="del">−7</span><span class="muted truncate">feat/promo-grants</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+          <button class="pr done"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(promo): bonus domain foundation</div>
+            <div class="meta">#177 openora · zaxovaiko<span class="grow"></span><span class="rv rv-yours">Yours</span><span class="badge open">Open</span></div>
+            <div class="stats"><span class="add">+1248</span><span class="del">−0</span><span class="muted truncate">feat/promo-foundation</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+          <button class="pr done"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(create-openora): precheck-driven setup</div>
+            <div class="meta">#176 openora · zaxovaiko<span class="grow"></span><span class="rv rv-yours">Yours</span><span class="badge draft">Draft</span></div>
+            <div class="stats"><span class="add">+809</span><span class="del">−51</span><span class="muted truncate">chore/BF-0/review-agents</span><span class="grow"></span><span class="muted">21h</span></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- B -->
+      <div data-variant="B">
+        <div class="items">
+          <div class="section">Needs your review <span class="count">3</span></div>
+          <button class="pr on"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat: add per-IP login rate limit alongside per-account lockout</div>
+            <div class="meta">#184 openora · jakubfilinger-b<span class="grow"></span><span class="rv rv-needs">Requested</span></div>
+            <div class="stats"><span class="add">+212</span><span class="del">−1</span><span class="muted truncate">feat/per-ip-login-rate-limit</span><span class="grow"></span><span class="muted">6m</span></div>
+          </button>
+          <button class="pr"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(gaming): vendor-unavailable game status</div>
+            <div class="meta">#187 openora · okapitula<span class="grow"></span><span class="rv rv-new">New commits</span></div>
+            <div class="stats"><span class="add">+1132</span><span class="del">−20</span><span class="muted truncate">feat/game-unavailable-status</span><span class="grow"></span><span class="muted">19m</span></div>
+          </button>
+          <button class="pr"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(admin-console): per-game performance</div>
+            <div class="meta">#182 openora · okapitula</div>
+            <div class="stats"><span class="add">+553</span><span class="del">−1</span><span class="muted truncate">feat/game-performance-view</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+
+          <div class="section">Reviewed by you <span class="count">2</span></div>
+          <button class="compact"><svg class="s" style="color:var(--add)"><path d="M20 6 9 17l-5-5"/></svg><span class="grow truncate">#183 bulk enable/disable, tags and search</span><span>1h</span></button>
+          <button class="compact"><svg class="s" style="color:var(--del)"><path d="M12 5v14M5 12h14"/></svg><span class="grow truncate">#173 add per-provider geo rules</span><span>1h</span></button>
+
+          <div class="section collapsed">› Yours <span class="count">3</span></div>
+        </div>
+      </div>
+
+      <!-- C -->
+      <div data-variant="C">
+        <div class="scope"><span>4 repositories · 5 shown</span><span class="grow"></span><span class="toggle">Hide reviewed <span class="switch"></span></span></div>
+        <div class="items">
+          <button class="pr on"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat: add per-IP login rate limit alongside per-account lockout</div>
+            <div class="meta">#184 openora · jakubfilinger-b<span class="avatars"><b style="background:#e879a6">DR</b></span></div>
+            <div class="stats"><span class="add">+212</span><span class="del">−1</span><span class="muted truncate">feat/per-ip-login-rate-limit</span><span class="grow"></span><span class="muted">6m</span></div>
+          </button>
+          <button class="pr"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(gaming): vendor-unavailable game status</div>
+            <div class="meta">#187 openora · okapitula<span class="rv rv-new" style="margin-left:6px">new commits</span><span class="avatars"><b class="me" style="background:#4f5ff0">ZA</b><b style="background:#e879a6">DR</b></span></div>
+            <div class="stats"><span class="add">+1132</span><span class="del">−20</span><span class="muted truncate">feat/game-unavailable-status</span><span class="grow"></span><span class="muted">19m</span></div>
+          </button>
+          <button class="pr"><svg class="gh"><use href="#gh"/></svg>
+            <div class="title truncate">feat(admin-console): per-game performance</div>
+            <div class="meta">#182 openora · okapitula<span class="avatars"></span></div>
+            <div class="stats"><span class="add">+553</span><span class="del">−1</span><span class="muted truncate">feat/game-performance-view</span><span class="grow"></span><span class="muted">1h</span></div>
+          </button>
+          <div class="hiddenbar"><svg class="s"><path d="M20 6 9 17l-5-5"/></svg>2 reviewed by you and 3 of yours hidden<span class="grow"></span><button style="color:var(--primary)">Show</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail">
+      <div class="row"><svg style="width:18px;height:18px"><use href="#gh"/></svg><h1 class="truncate">feat: add per-IP login rate limit alongside per-account lockout</h1><span class="muted">#184</span></div>
+      <div class="reviewbar">
+        <span class="rv rv-needs">Review requested from you</span>
+        <span class="muted">Mark stays until GitHub records a review from you</span>
+        <span class="grow"></span>
+        <button class="btn">Mark as reviewed</button>
+        <button class="btn primary">Approve on GitHub</button>
+      </div>
+      <div class="skeleton"><span style="width:30%"></span><span style="width:90%"></span><span style="width:75%"></span><span style="width:82%"></span></div>
+      <div class="skeleton"><span style="width:22%"></span><span style="width:88%"></span><span style="width:60%"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div><h3>Where "reviewed" comes from</h3><ul>
+    <li>GitHub: your latest review on the PR (<span class="mono">gh pr list --json reviews,reviewRequests</span>). Approved, Changes requested and Commented all count.</li>
+    <li>GitLab: your approval, or a discussion note you left.</li>
+    <li>Local "Mark as reviewed" for PRs you skimmed without submitting a review; stored per PR head commit.</li>
+  </ul></div>
+  <div><h3>When it comes back</h3><ul>
+    <li>New commits pushed after your review (or after your local mark) put the PR back in front, labeled with the count.</li>
+    <li>A new review request from the author does the same.</li>
+    <li>Your own PRs are treated as "nothing to review" and fade with the reviewed ones.</li>
+  </ul></div>
+  <div><h3>Trade-offs</h3><ul>
+    <li><b>A</b> keeps list order and position; cheapest to scan but reviewed rows still take space.</li>
+    <li><b>B</b> makes the to-do explicit and shrinks reviewed rows to one line; order changes as state changes.</li>
+    <li><b>C</b> shows who else reviewed and hides the noise entirely; hidden rows are easy to forget.</li>
+  </ul></div>
+</div>
+
+<script>
+  const captions = {
+    A: 'Reviewed PRs fade back; a blue edge pulls one forward again when new commits land after your review.',
+    B: 'Split into Needs your review, Reviewed by you (one-line rows) and Yours (collapsed).',
+    C: 'Reviewer avatars with a ring around yours; a toggle hides reviewed and own PRs behind a summary row.'
+  }
+  document.querySelectorAll('#switch button').forEach((button) =>
+    button.addEventListener('click', () => {
+      document.querySelectorAll('#switch button').forEach((other) => other.classList.toggle('on', other === button))
+      document.querySelectorAll('[data-variant]').forEach((block) => block.classList.toggle('show', block.dataset.variant === button.dataset.for))
+      document.getElementById('caption').textContent = captions[button.dataset.for]
+    })
+  )
+</script>
+</body></html>

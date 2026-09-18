@@ -1,0 +1,6 @@
+{
+  "cleanUrls": true,
+  "redirects": [
+    { "source": "/download", "destination": "https://github.com/zaxovaiko/treeix/releases/latest/download/Treeix-arm64.dmg", "permanent": false }
+  ]
+}

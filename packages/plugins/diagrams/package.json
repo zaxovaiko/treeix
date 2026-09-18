@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-diagrams",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "diagrams",
+    "name": "Mermaid diagrams",
+    "description": "Renders mermaid code blocks in markdown. The renderer is large and loads on the first diagram.",
+    "enabledByDefault": true
+  }
+}

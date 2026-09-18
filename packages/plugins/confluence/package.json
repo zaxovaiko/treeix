@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-confluence",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "confluence",
+    "name": "Confluence",
+    "description": "A Confluence tab with recently viewed pages, search and page trees, plus previews of Confluence links in Jira items and elsewhere. Reads pages through the Atlassian CLI (acli).",
+    "enabledByDefault": false
+  }
+}

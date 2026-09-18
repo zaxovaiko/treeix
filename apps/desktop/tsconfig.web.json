@@ -1,0 +1,42 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/renderer/src/**/*",
+    "src/preload/*.d.ts",
+    "src/shared/**/*",
+    "../../packages/sdk/src/**/*",
+    "../../packages/plugins/*/renderer/**/*",
+    "../../packages/plugins/*/shared/**/*",
+    "../../packages/atlassian/renderer/**/*",
+    "../../packages/atlassian/shared.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@treeix/sdk": [
+        "../../packages/sdk/src/index.ts"
+      ],
+      "@treeix/sdk/main": [
+        "../../packages/sdk/src/main.ts"
+      ],
+      "@treeix/shared/*": [
+        "./src/shared/*"
+      ],
+      "@treeix/host/*": [
+        "./src/main/*"
+      ],
+      "@treeix/app/*": [
+        "./src/renderer/src/*"
+      ],
+      "*": [
+        "./node_modules/@types/*",
+        "./node_modules/*"
+      ],
+      "@treeix/atlassian/*": [
+        "../../packages/atlassian/*"
+      ]
+    }
+  }
+}
