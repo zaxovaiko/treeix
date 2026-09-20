@@ -9,8 +9,9 @@ export const WORKSPACE_COLORS = ['#4f5ff0', '#e0703d', '#10a37f', '#d946ef', '#e
 
 const KEY = 'workspaces'
 const CURRENT_KEY = 'workspaces.current'
+const RECENT_KEY = 'workspaces.recent'
 
-type State = { workspaces: Workspace[]; currentId: string }
+type State = { workspaces: Workspace[]; currentId: string; recentIds: string[] }
 
 const isWorkspace = (value: unknown): value is Workspace => {
   if (typeof value !== 'object' || value === null) return false
@@ -31,12 +32,25 @@ export function parseWorkspaces(raw: string | null): Workspace[] {
   }
 }
 
+function parseRecentIds(raw: string | null): string[] {
+  try {
+    const stored: unknown = JSON.parse(raw ?? '[]')
+    return Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function load(): State {
   // Absent in bun tests that import this module before stubbing storage
-  if (typeof localStorage === 'undefined') return { workspaces: [], currentId: ALL_PROJECTS }
+  if (typeof localStorage === 'undefined') return { workspaces: [], currentId: ALL_PROJECTS, recentIds: [] }
   const workspaces = parseWorkspaces(localStorage.getItem(KEY))
   const currentId = localStorage.getItem(CURRENT_KEY)
-  return { workspaces, currentId: workspaces.some((workspace) => workspace.id === currentId) ? (currentId ?? ALL_PROJECTS) : (workspaces[0]?.id ?? ALL_PROJECTS) }
+  return {
+    workspaces,
+    currentId: workspaces.some((workspace) => workspace.id === currentId) ? (currentId ?? ALL_PROJECTS) : (workspaces[0]?.id ?? ALL_PROJECTS),
+    recentIds: parseRecentIds(localStorage.getItem(RECENT_KEY))
+  }
 }
 
 let state = load()
@@ -46,6 +60,7 @@ function commit(next: State): void {
   state = next
   localStorage.setItem(KEY, JSON.stringify(next.workspaces))
   localStorage.setItem(CURRENT_KEY, next.currentId)
+  localStorage.setItem(RECENT_KEY, JSON.stringify(next.recentIds))
   listeners.forEach((listener) => listener())
 }
 
@@ -63,11 +78,24 @@ export const useWorkspaces = (): State =>
     () => state
   )
 
-export const setCurrentWorkspace = (id: string): void => commit({ ...state, currentId: id })
+export const setCurrentWorkspace = (id: string): void => commit({ ...state, currentId: id, recentIds: [id, ...state.recentIds.filter((candidate) => candidate !== id)] })
+
+/** Workspaces other than `currentId`, most recently switched to first; ones never visited keep rail order at the end */
+export function recentWorkspaces({ workspaces, currentId, recentIds }: State): Workspace[] {
+  const others = workspaces.filter((workspace) => workspace.id !== currentId)
+  return [...others].sort((a, b) => {
+    const [indexA, indexB] = [recentIds.indexOf(a.id), recentIds.indexOf(b.id)]
+    if (indexA === -1 && indexB === -1) return 0
+    if (indexA === -1) return 1
+    if (indexB === -1) return -1
+    return indexA - indexB
+  })
+}
 
 export function saveWorkspace(workspace: Workspace): void {
   const exists = state.workspaces.some((candidate) => candidate.id === workspace.id)
   commit({
+    ...state,
     // The first workspace replaces the implicit everything view
     currentId: state.workspaces.length === 0 ? workspace.id : state.currentId,
     workspaces: exists
@@ -90,7 +118,7 @@ export const moveWorkspace = (id: string, beforeId: string | null): void =>
 
 export function deleteWorkspace(id: string): void {
   const workspaces = state.workspaces.filter((workspace) => workspace.id !== id)
-  commit({ workspaces, currentId: state.currentId === id ? (workspaces[0]?.id ?? ALL_PROJECTS) : state.currentId })
+  commit({ ...state, workspaces, currentId: state.currentId === id ? (workspaces[0]?.id ?? ALL_PROJECTS) : state.currentId, recentIds: state.recentIds.filter((candidate) => candidate !== id) })
 }
 
 export function addRepoToWorkspace(id: string, repoPath: string): void {

@@ -45,6 +45,14 @@ test('reorderWorkspaces moves before a target or to the end', async () => {
   expect(ids(reorderWorkspaces(list, 'x', 'a'))).toBe('abc')
 })
 
+test('recentWorkspaces puts the most recently switched-to first, unvisited ones last', async () => {
+  const { recentWorkspaces } = await import('./workspaces')
+  const list = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id, color: '#000', repoPaths: [] }))
+  const ids = (workspaces: { id: string }[]) => workspaces.map((workspace) => workspace.id).join('')
+  expect(ids(recentWorkspaces({ workspaces: list, currentId: 'a', recentIds: ['c', 'a'] }))).toBe('cbd')
+  expect(ids(recentWorkspaces({ workspaces: list, currentId: 'a', recentIds: [] }))).toBe('bcd')
+})
+
 test('commonFolder finds the folder holding all projects', async () => {
   const { commonFolder } = await import('./workspaces')
   expect(commonFolder(['/u/oss/betfeel', '/u/oss/openora', '/u/oss/infra'])).toBe('/u/oss')

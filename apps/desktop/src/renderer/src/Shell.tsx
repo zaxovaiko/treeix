@@ -11,7 +11,7 @@ export const leaderOf = (page: string): string | undefined => Object.keys(LEADER
 const CORE_SHORTCUTS: ShortcutInfo[] = [
   ...(
     [
-      ['⌘K', 'Command palette, also ⌘⇧P'],
+      ['⌘K ⌘⇧P', 'Search everything: commands, workspaces, files, pull requests, tasks, settings'],
       ['G T', 'Terminal'],
       ['G P', 'Pull requests'],
       ['G W', 'Worktrees'],
@@ -47,7 +47,7 @@ const CORE_SHORTCUTS: ShortcutInfo[] = [
       ['⌘⌥R', 'Workspace rail'],
       ['⌘⌥T', 'Title bar'],
       ['⌘⌥S', 'Status bar'],
-      ['⌘⇧↵', 'Zen: only the main zone']
+      ['⌘⇧↵', 'Zen: only the main zone and tabs']
     ] satisfies KeyHint[]
   ).map(([keys, label]) => ({ keys, label, section: 'Panels' })),
   ...(

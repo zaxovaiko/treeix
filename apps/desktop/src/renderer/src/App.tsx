@@ -33,7 +33,7 @@ import { findService, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKey } from './Shell'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
-import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
+import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 
@@ -232,7 +232,8 @@ function App(): React.JSX.Element {
   const drag = useCodeDrag(setDraft)
   const dock = useLayout(panelIds)
   const allSessions = useSessions()
-  const { workspaces, currentId: workspaceId } = useWorkspaces()
+  const workspacesState = useWorkspaces()
+  const { workspaces, currentId: workspaceId } = workspacesState
   const browseRoot = browsedFolders[workspaceId] || null
   const setBrowsedFolder = (path: string | null): void => {
     const next = { ...browsedFolders, [workspaceId]: path ?? '' }
@@ -788,8 +789,8 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      const paletteShortcut = event.key === 'k' || (event.shiftKey && event.key.toLowerCase() === 'p')
-      if (event.metaKey && paletteShortcut) {
+      // One palette for everything, on either shortcut
+      if (event.metaKey && (event.key === 'k' || (event.shiftKey && event.key.toLowerCase() === 'p'))) {
         event.preventDefault()
         return setPaletteOpen(!paletteOpen)
       }
@@ -1148,7 +1149,8 @@ function App(): React.JSX.Element {
     )
 
   const activePage = openDocTab?.parent ?? appTab
-  const showTitle = shell.title && !shell.zen
+  // Zen hides every other zone, but the tab bar stays so there's still a way to switch pages
+  const showTitle = shell.zen || shell.title
   const showRail = shell.rail && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
@@ -1232,7 +1234,7 @@ function App(): React.JSX.Element {
       ] as const
     ).map(([panel, label, shortcut]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut, run: () => toggleShellPanel(panel) })),
     { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: '⌘I', run: () => setDrawerOpen(true) },
-    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone', icon: 'maximize', shortcut: '⌘⇧↵', run: toggleZen },
+    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone and tabs', icon: 'maximize', shortcut: '⌘⇧↵', run: toggleZen },
     { id: 'shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'keyboard', shortcut: '?', run: () => setSheetOpen(true) },
     { id: 'changed', group: 'Actions', label: 'Toggle changed files', icon: 'list', shortcut: '⌘E', run: () => setFilesOpen(!filesOpen) },
     ...panelIds.flatMap((id): Command[] => {
@@ -1259,16 +1261,18 @@ function App(): React.JSX.Element {
         ] satisfies Command[])
       : []),
     ...(paletteOpen ? plugins.flatMap(({ plugin }) => plugin.commands?.(host) ?? []) : []),
-    ...workspaces.map(
-      (candidate, index): Command => ({
+    // Most recently used first, so the workspace you flip back to sits at the top before you type
+    ...recentWorkspaces(workspacesState).map((candidate): Command => {
+      const index = workspaces.indexOf(candidate)
+      return {
         id: `workspace:${candidate.id}`,
         group: 'Actions',
         label: `Switch to ${candidate.name}`,
         icon: 'folder',
         shortcut: index < 9 ? digitLabel('workspaces', index + 1) || undefined : undefined,
         run: () => switchWorkspace(candidate.id)
-      })
-    ),
+      }
+    }),
     { id: 'workspace:new', group: 'Actions', label: 'New workspace', icon: 'folder', run: () => setEditingWorkspace(null) },
     ...(workspace ? [{ id: 'workspace:edit', group: 'Actions', label: `Edit ${workspace.name}`, icon: 'settings', run: () => setEditingWorkspace(workspace) } satisfies Command] : []),
     ...(workspaceRepos ?? []).flatMap((repo) =>
@@ -1640,52 +1644,56 @@ function App(): React.JSX.Element {
           </div>
         ))}
         <span className="flex-1" />
-        {titleBarItems(false)}
-        <button
-          title="Search commands, worktrees and files (⌘K)"
-          onClick={() => setPaletteOpen(true)}
-          // A container, so a narrow window shortens the label instead of wrapping it
-          className="@container ml-1 flex h-6 w-60 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
-        >
-          <Icon name="search" className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
-            <span className="@max-[14rem]:hidden">Search or run a command</span>
-            <span className="hidden @max-[14rem]:inline">Search</span>
-          </span>
-          <Kbd hint>⌘K</Kbd>
-        </button>
-        {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
-        {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
-          const info = panelInfo(panel)
-          const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
-          return info ? (
-            <PanelToggle
-              key={panel}
-              id={panel}
-              info={info}
-              active={dock.isVisible(panel)}
-              side={dock.sideOf(panel)}
-              badge={Badge && <Badge />}
-              onToggle={() => dock.toggle(panel)}
-              onMove={(side) => dock.move(panel, side)}
-              onDragStart={() => startPanelDrag(panel)}
-              onDragEnd={() => setDraggingPanel(null)}
-            />
-          ) : null
-        })}
-        <button
-          title="Agent comments (⌘I)"
-          onClick={() => setDrawerOpen(!drawerOpen)}
-          className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
-        >
-          <Icon name="comment" />
-          <span className="tabular-nums">{comments.length}</span>
-          <Kbd hint>⌘I</Kbd>
-        </button>
-        <IconButton label="Settings (⌘, or G S)" active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
-          <Icon name="settings" />
-        </IconButton>
-        {titleBarItems(true)}
+        {!shell.zen && (
+          <>
+            {titleBarItems(false)}
+            <button
+              title="Search commands, worktrees and files (⌘K)"
+              onClick={() => setPaletteOpen(true)}
+              // A container, so a narrow window shortens the label instead of wrapping it
+              className="@container ml-1 flex h-6 w-60 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+            >
+              <Icon name="search" className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
+                <span className="@max-[14rem]:hidden">Search or run a command</span>
+                <span className="hidden @max-[14rem]:inline">Search</span>
+              </span>
+              <Kbd hint>⌘K</Kbd>
+            </button>
+            {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
+            {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
+              const info = panelInfo(panel)
+              const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
+              return info ? (
+                <PanelToggle
+                  key={panel}
+                  id={panel}
+                  info={info}
+                  active={dock.isVisible(panel)}
+                  side={dock.sideOf(panel)}
+                  badge={Badge && <Badge />}
+                  onToggle={() => dock.toggle(panel)}
+                  onMove={(side) => dock.move(panel, side)}
+                  onDragStart={() => startPanelDrag(panel)}
+                  onDragEnd={() => setDraggingPanel(null)}
+                />
+              ) : null
+            })}
+            <button
+              title="Agent comments (⌘I)"
+              onClick={() => setDrawerOpen(!drawerOpen)}
+              className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+            >
+              <Icon name="comment" />
+              <span className="tabular-nums">{comments.length}</span>
+              <Kbd hint>⌘I</Kbd>
+            </button>
+            <IconButton label="Settings (⌘, or G S)" active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
+              <Icon name="settings" />
+            </IconButton>
+            {titleBarItems(true)}
+          </>
+        )}
       </div>
       )}
 
