@@ -33,6 +33,36 @@ Agents write code faster than anyone can read it. The reading is the bottleneck,
 - **Markdown that behaves.** Foldable headings, mermaid diagrams, images from private uploads, full screen with zoom.
 - **Everything is a plugin.** Each feature above can be switched off in Settings and stops loading its code entirely.
 
+## Before and after
+
+| | Before | With Treeix |
+| --- | --- | --- |
+| Read the ticket | Jira in a browser tab | Tasks page, grouped by whose move it is |
+| Find the spec | Search Confluence, keep the tab open all day | The page beside the branch, one keystroke to an agent |
+| See what changed | `cd` into the worktree, `git diff`, scroll | Every worktree in one sidebar, diff already open |
+| Leave feedback | Copy the file and the line numbers into a prompt | Drag across the lines, write the note, send the queue |
+| Reviewer's comment | GitHub or GitLab tab, then retype it for the agent | Add to agent comments, one click |
+| Closed a session | The conversation is gone, start a new one | History reopens it and the agent resumes |
+| Switch agents | `git checkout`, hope nothing is dirty | Click the group, its worktree is already there |
+
+## Screenshots
+
+**Every worktree, its diff and your comments on one screen.** Split or unified, comments sit on the lines they belong to.
+
+<img src="apps/landing/assets/hero.webp" alt="The diff of the feat/usage-invoices worktree with a comment being written on lines 5 to 9" width="900" />
+
+**Comments go back to the agent.** Select lines, write the note, send the whole queue to the Claude Code or Codex session running in that worktree as its next prompt.
+
+<img src="apps/landing/assets/drawer.webp" alt="The agent comments drawer with three comments ready to send to the Billing invoices session" width="900" />
+
+**A group per agent.** Its worktree, its terminals, its plan, and a badge the moment one waits for an answer.
+
+<img src="apps/landing/assets/terminal.webp" alt="Terminal page with three agent groups and one badge showing a session waiting for input" width="900" />
+
+**Pull requests, tickets and specs in the same window.** A reviewer's comment becomes an agent task with one click.
+
+<img src="apps/landing/assets/pr.webp" alt="A pull request with review threads and the Add to agent comments button" width="900" />
+
 ## Install
 
 Download the DMG from [treeix.dyvertex.com/download](https://treeix.dyvertex.com/download). Apple silicon, macOS 14 or newer.

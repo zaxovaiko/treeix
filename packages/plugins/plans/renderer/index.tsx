@@ -3,11 +3,9 @@ import { type DocumentTab, type HostApi, type RendererPlugin, useHost } from '@t
 import { Icon } from '@treeix/app/Icon'
 import type { Plan } from '../shared/types'
 import './service'
-import { listPlans } from './api'
+import { listPlans, subscribePlans } from './api'
 
 const PlanView = lazy(() => import('./PlanView').then((module) => ({ default: module.PlanView })))
-
-const PLAN_POLL_MS = 4000
 
 function PlanTab({ plan }: { plan: Plan }): React.JSX.Element {
   const host = useHost()
@@ -46,19 +44,16 @@ const openPlan = (host: HostApi, plan: Plan): void => {
 function PlanButton({ startedAt, name }: { startedAt: number; name?: string | null }): React.JSX.Element | null {
   const host = useHost()
   const [plan, setPlan] = useState<Plan | null>(null)
-  useEffect(() => {
-    const check = (): void =>
-      void listPlans().then((plans) => setPlan(plans.find((candidate) => (name ? candidate.name === name : candidate.modifiedAt >= startedAt)) ?? null))
-    check()
-    const timer = setInterval(check, PLAN_POLL_MS)
-    return () => clearInterval(timer)
-  }, [startedAt, name])
+  useEffect(
+    () => subscribePlans((plans) => setPlan(plans.find((candidate) => (name ? candidate.name === name : candidate.modifiedAt >= startedAt)) ?? null)),
+    [startedAt, name]
+  )
   if (!plan) return null
   return (
     <button
       title={`Open plan: ${plan.title}`}
       onClick={() => openPlan(host, plan)}
-      className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-indigo-300 hover:bg-accent"
+      className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <Icon name="file" className="size-3" />
       Plan

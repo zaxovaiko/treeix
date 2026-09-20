@@ -3,9 +3,9 @@ import type { Branch, Repo } from '../../shared/types'
 import { Icon } from './Icon'
 import { KindBadge } from './sessionUi'
 import { baseName, branchAge } from './Sidebar'
-import { SESSION_KINDS, type SessionKind } from '@treeix/sdk'
+import { Kbd, SESSION_KINDS, type SessionKind } from '@treeix/sdk'
 import { useService } from './plugins'
-import { errorMessage, usePersisted } from './ui'
+import { errorMessage, Popup, usePersisted } from './ui'
 
 export type NewBranchRequest = { repoPath: string; name: string; base: string; worktree: boolean; session: SessionKind | null }
 
@@ -32,6 +32,7 @@ function BranchCombobox({
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const needle = value.trim().toLowerCase()
   const exact = branches.some((branch) => branch.name.toLowerCase() === needle)
   // Showing the full list once a branch is picked makes switching to another one easy
@@ -47,6 +48,7 @@ function BranchCombobox({
   return (
     <div className="relative mt-1">
       <input
+        ref={inputRef}
         autoFocus={autoFocus}
         value={value}
         spellCheck={false}
@@ -74,14 +76,11 @@ function BranchCombobox({
           }
         }}
         placeholder={placeholder}
-        className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary/60"
+        className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
       />
       <Icon name="chevron" className="pointer-events-none absolute top-2.5 right-2.5 size-3 rotate-90 text-muted-foreground" />
       {open && suggestions.length > 0 && (
-        <div
-          ref={listRef}
-          className="absolute inset-x-0 top-9 z-10 max-h-56 overflow-y-auto rounded-lg border border-input bg-popover p-1"
-        >
+        <Popup ref={listRef} anchor={inputRef} align="stretch" className="max-h-56 overflow-y-auto rounded-lg border border-input bg-popover p-1">
           {suggestions.map((branch, index) => (
             <button
               key={branch.name}
@@ -96,11 +95,11 @@ function BranchCombobox({
             >
               <Icon name={branch.remote ? 'external' : 'branch'} className="size-3 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{branch.name}</span>
-              {branch.name === value && <Icon name="check" className="size-3 shrink-0 text-primary" />}
+              {branch.name === value && <Icon name="check" className="size-3 shrink-0 text-foreground" />}
               <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{branchAge(branch)}</span>
             </button>
           ))}
-        </div>
+        </Popup>
       )}
     </div>
   )
@@ -160,7 +159,13 @@ export function BranchDialog({
         }}
         className="w-[480px] max-w-[92vw] rounded-xl border border-border bg-popover p-4 shadow-2xl shadow-black/60 backdrop-blur-2xl"
       >
-        <h2 className="text-sm font-medium">{worktree ? 'New worktree' : 'New branch'} in {baseName(repo.path)}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="min-w-0 truncate text-sm font-medium">
+            {worktree ? 'New worktree' : 'New branch'} in {baseName(repo.path)}
+          </h2>
+          <span className="flex-1" />
+          <Kbd hint>esc</Kbd>
+        </div>
 
         <label className="mt-3 block text-xs text-muted-foreground">Branch</label>
         <BranchCombobox autoFocus value={name} onChange={setName} branches={branches ?? []} placeholder="feat/my-branch" onSubmit={submit} />
@@ -191,7 +196,7 @@ export function BranchDialog({
                 key={kind}
                 onClick={() => setSession(kind)}
                 className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ${
-                  session === kind ? 'bg-primary/15 text-foreground ring-primary/60' : 'text-muted-foreground ring-border hover:bg-accent'
+                  session === kind ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
                 }`}
               >
                 {kind === 'none' ? 'Nothing' : (
@@ -210,8 +215,9 @@ export function BranchDialog({
           <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
             Cancel
           </button>
-          <button onClick={submit} disabled={!name.trim() || busy || (!worktree && Boolean(existing))} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+          <button onClick={submit} disabled={!name.trim() || busy || (!worktree && Boolean(existing))} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
             {busy ? 'Creating…' : worktree ? 'Create worktree' : existing ? 'Branch exists' : 'Create branch'}
+            <Kbd hint>⌘⏎</Kbd>
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { splitPatch } from '@treeix/host/git'
-import { githubFilesToPatches, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview } from './prs'
+import { githubFilesToPatches, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview } from './prs'
 
 test('parseRemote', () => {
   expect(parseRemote('git@github.com:blurifycom/openora.git')).toEqual({ provider: 'github', host: 'github.com', slug: 'blurifycom/openora' })
@@ -177,4 +177,10 @@ test('githubMyReview reads the viewer verdict', () => {
   expect(githubMyReview(detail('COMMENTED'))).toBeNull()
   expect(githubMyReview(detail(null))).toBeNull()
   expect(githubMyReview(null)).toBeNull()
+})
+
+test('parseMergeTreeConflicts lists each conflicted path once and stops at the messages', () => {
+  expect(parseMergeTreeConflicts('438ac9c\nsrc/a.ts\nsrc/a.ts\nb.md\n\nAuto-merging src/a.ts\n')).toEqual(['src/a.ts', 'b.md'])
+  expect(parseMergeTreeConflicts('438ac9c\nx\n')).toEqual(['x'])
+  expect(parseMergeTreeConflicts('438ac9c\n')).toEqual([])
 })

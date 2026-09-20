@@ -1,20 +1,48 @@
-import { useEffect, useState } from 'react'
-import { useHost } from '@treeix/sdk'
+import { useEffect, useRef, useState } from 'react'
+import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
+import { type FilterGroup, FilterSearch, type FilterToken, matchesTokens, parseTokens } from '@treeix/app/FilterSearch'
 import { Icon } from '@treeix/app/Icon'
-import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
+import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { baseName } from '@treeix/app/Sidebar'
 import { timeAgo } from '@treeix/app/time'
-import { EmptyState, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
+import { EmptyState, FoldAllButton, IconButton, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import type { Page, PageList, PageSummary } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
+import { withList } from '@treeix/atlassian/renderer/panels'
 import { confluenceApi, openRequest, pageCache, pageOfUrl, recentCache, resolveImage, TTL } from './api'
 
 const MAX_OPENED = 20
 /** Pages shown per space before "Show more" */
 const PER_SPACE = 6
+const SEARCH_ID = 'confluence-search'
+const BODY_ID = 'confluence-body'
+
+const ROW = 'flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent'
+
+const RESULTS = 'Results'
+/** A listed page and the section listing it */
+type Known = { page: PageSummary; source: string }
+// Text is searched by Confluence, so it matches every page it returned
+const FILTER_GROUPS: FilterGroup<Known>[] = [
+  { kind: 'space', label: 'Space', valueOf: (known) => known.page.space },
+  { kind: 'source', label: 'List', valueOf: (known) => (known.source === RESULTS ? null : known.source) },
+  { kind: 'text', label: 'Text', valueOf: () => null, freeText: () => true }
+]
+const FILTER_KINDS = FILTER_GROUPS.map((group) => group.kind)
+
+function readJson(json: string): unknown {
+  try {
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+/** A pasted page URL or id, which opens the page instead of searching */
+const directId = (text: string): string | null => pageOfUrl(text)?.id ?? (/^\d{4,}$/.test(text) ? text : null)
 
 function parseStrings(json: string): string[] {
   try {
@@ -34,188 +62,355 @@ function parseOpened(json: string): PageSummary[] {
   }
 }
 
-function PageView({ id, onOpen }: { id: string; onOpen: (page: Page) => void }): React.JSX.Element {
-  const host = useHost()
-  const { value: page, error, refresh } = useCached<Page>(pageCache, id, TTL.page, confluenceApi.page)
-  const { value: parent } = useCached<Page>(pageCache, page?.parentId ?? '', TTL.page, confluenceApi.page)
+/** Pages of one space together, spaces in alphabetical order with unknown ones last */
+function bySpace(list: PageSummary[]): [string, PageSummary[]][] {
+  const spaces = new Map<string, PageSummary[]>()
+  for (const page of list) spaces.set(page.space ?? '', [...(spaces.get(page.space ?? '') ?? []), page])
+  return [...spaces].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+}
 
-  useEffect(() => {
-    if (page) onOpen(page)
-  }, [page?.id, page?.title, page?.space])
+/** Rows the list cursor walks: section titles and errors are not stops, space folders and pages are */
+type Entry =
+  | { kind: 'space'; id: string; space: string; count: number; open: boolean }
+  | { kind: 'page'; id: string; page: PageSummary; space: string }
+  | { kind: 'more'; id: string; space: string; hidden: number }
+type Section = { title: string; error: string | null; count: number; entries: Entry[] }
 
-  const addToComments = (): void => {
-    if (!page) return
-    const worktreePath = host.selectedWorktree
-    if (!worktreePath) return host.flash('Select a worktree first')
-    host.addComment({ id: crypto.randomUUID(), worktreePath, filePath: `Confluence: ${page.title}`, range: { start: 0, end: 0 }, code: '', text: `Read the Confluence page "${page.title}" (${page.url}):\n\n${page.body}` })
-    host.flash(`Added ${page.title} to comments on ${baseName(worktreePath)}`)
-  }
 
+function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Page | null; parent: Page | null; error: string | null; onReload: () => void; onAgent: () => void; onCopy: () => void }): React.JSX.Element {
   if (!page) return error ? <EmptyState fill icon="file" title={error} /> : <EmptyState fill title="Loading page..." />
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-8 py-5">
-      <div className="mx-auto max-w-4xl">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {parent && (
-            <button onClick={() => openRequest.update({ id: parent.id })} className="flex min-w-0 items-center gap-1 hover:text-foreground">
-              <Icon name="chevron" className="size-3 rotate-180" />
-              <span className="truncate">{parent.title}</span>
+    <MarkdownFoldScope>
+      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-xs text-muted-foreground">
+        <ListToggle />
+        {parent && (
+          <>
+            <button onClick={() => openRequest.update({ id: parent.id })} title={`Open ${parent.title}`} className="max-w-[40%] min-w-0 truncate rounded px-1 hover:text-foreground">
+              {parent.title}
             </button>
-          )}
-          <span className="flex-1" />
-          {page.updatedAt && <span>Updated {timeAgo(page.updatedAt)} ago</span>}
-          <IconButton label="Reload page" onClick={refresh}>
-            <Icon name="refresh" className="size-3.5" />
-          </IconButton>
-          <IconButton label="Copy link" onClick={() => copyText(page.url)}>
-            <Icon name="copy" className="size-3.5" />
-          </IconButton>
-          <a href={page.url} target="_blank" rel="noreferrer" className="flex h-7 items-center gap-1.5 rounded-md px-2.5 ring-1 ring-input hover:bg-accent">
-            Open in Confluence <Icon name="external" className="size-3" />
-          </a>
-        </div>
-        <h1 className="mt-2 text-xl font-semibold select-text">{page.title}</h1>
-        <div className="mt-3 flex gap-2">
-          <button onClick={addToComments} className="h-7 rounded-md px-3 text-xs ring-1 ring-input hover:bg-accent">
-            Add to agent comments
-          </button>
-        </div>
-        {page.children.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {page.children.map((child) => (
-              <button key={child.id} onClick={() => openRequest.update({ id: child.id })} className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
-                <Icon name="file" className="size-3 text-sky-400" />
-                {child.title}
-              </button>
-            ))}
-          </div>
+            <span className="text-muted-foreground/40">/</span>
+          </>
         )}
-        <div className="mt-5">{page.body ? <Markdown resolveImage={resolveImage}>{page.body}</Markdown> : <p className="text-xs text-muted-foreground">This page is empty</p>}</div>
-        <LinkPreviews urls={page.links} exclude={[page.id]} />
+        <span className="min-w-0 truncate text-foreground">{page.title}</span>
+        <span className="flex-1" />
+        <MarkdownFoldButton />
+        <IconButton label="Reload page (r)" onClick={onReload}>
+          <Icon name="refresh" className="size-3.5" />
+        </IconButton>
+        <button onClick={onAgent} title="Add to agent comments (a)" className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] ring-1 ring-border hover:bg-accent hover:text-foreground">
+          <Icon name="comment" className="size-3" />
+          To agent
+          <Kbd hint>a</Kbd>
+        </button>
+        <IconButton label="Copy link (y)" onClick={onCopy}>
+          <Icon name="copy" className="size-3.5" />
+        </IconButton>
+        <button onClick={() => window.open(page.url, '_blank')} title="Open in Confluence (o)" className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] hover:bg-accent hover:text-foreground">
+          <Icon name="external" className="size-3" />
+          <Kbd hint>o</Kbd>
+        </button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <article className="mx-auto max-w-[760px] min-w-0 px-8 py-6">
+          <h1 className="text-[22px] leading-8 font-semibold break-words select-text">{page.title}</h1>
+          <div className="mt-1 mb-4 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            {page.space && <span className="truncate">{page.space}</span>}
+            {page.space && page.updatedAt && <span>·</span>}
+            {page.updatedAt && <span className="shrink-0">Updated {timeAgo(page.updatedAt)} ago</span>}
+          </div>
+          <div id={BODY_ID}>{page.body ? <Markdown resolveImage={resolveImage}>{page.body}</Markdown> : <p className="text-xs text-muted-foreground">This page is empty</p>}</div>
+          {page.children.length > 0 && (
+            <section className="mt-6">
+              <h3 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Child pages</h3>
+              {page.children.map((child) => (
+                <button key={child.id} onClick={() => openRequest.update({ id: child.id })} className={`${ROW} -mx-2 h-8 px-2 text-[13px]`}>
+                  <Icon name="file" className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{child.title}</span>
+                </button>
+              ))}
+            </section>
+          )}
+          <LinkPreviews urls={page.links} exclude={[page.id]} />
+        </article>
       </div>
-    </div>
+    </MarkdownFoldScope>
   )
 }
 
+type PageAction = { label: string; combo: string; run: () => void }
+
+
 export function ConfluenceTab(): React.JSX.Element {
-  const [query, setQuery] = useState('')
+  const host = useHost()
+  const panels = usePanels()
+  const { zone } = useZone()
+  const [filtersJson, setFiltersJson] = usePersisted<string>(workspaceKey('confluence.filters'), '[]')
+  const filters = parseTokens(readJson(filtersJson), FILTER_KINDS)
+  const valuesOf = (kind: string): string[] => filters.filter((filter) => filter.kind === kind).map((filter) => filter.value)
+  const texts = valuesOf('text')
+  const spaceFilters = valuesOf('space')
   const [results, setResults] = useState<PageList | null>(null)
-  const { value: recent, error: recentError } = useCached<PageList>(recentCache, 'recent', TTL.recent, confluenceApi.recent)
+  const { value: recent, error: recentError, loading: recentLoading, refresh: reloadRecent } = useCached<PageList>(recentCache, 'recent', TTL.recent, confluenceApi.recent)
   const [selectedId, setSelectedId] = usePersisted<string>(workspaceKey('confluence.selected'), '')
   const [openedJson, setOpenedJson] = usePersisted<string>(workspaceKey('confluence.opened'), '[]')
-  const [listWidth, setListWidth] = usePersisted<number>('confluence.listWidth', 320)
   const [collapsedJson, setCollapsedJson] = usePersisted<string>(workspaceKey('confluence.collapsedSpaces'), '[]')
   const [expandedJson, setExpandedJson] = usePersisted<string>(workspaceKey('confluence.expandedSpaces'), '[]')
+  /** The list row under the cursor; a page can be listed twice, in Opened here and Recently viewed */
+  const [cursorId, setCursorId] = useState<string | null>(null)
   const collapsedSpaces = parseStrings(collapsedJson)
   const expandedSpaces = parseStrings(expandedJson)
-  const toggleSpace = (space: string): void =>
-    setCollapsedJson(JSON.stringify(collapsedSpaces.includes(space) ? collapsedSpaces.filter((entry) => entry !== space) : [...collapsedSpaces, space]))
+  const fold = (space: string, closed: boolean): void =>
+    setCollapsedJson(JSON.stringify(closed ? [...new Set([...collapsedSpaces, space])] : collapsedSpaces.filter((entry) => entry !== space)))
   const showAll = (space: string): void => setExpandedJson(JSON.stringify([...expandedSpaces, space]))
   const opened = parseOpened(openedJson)
   const requested = openRequest.use().id
+  const { value: page, error: pageError, refresh: reloadPage } = useCached<Page>(pageCache, selectedId, TTL.page, confluenceApi.page)
+  const shownPage = page?.id === selectedId ? page : null
+  const { value: parent } = useCached<Page>(pageCache, shownPage?.parentId ?? '', TTL.page, confluenceApi.page)
+
+  const open = (id: string, cursor: string | null = null): void => {
+    setSelectedId(id)
+    setCursorId(cursor)
+  }
 
   useEffect(() => {
     if (!requested) return
-    setSelectedId(requested)
+    open(requested)
     openRequest.update({ id: null })
   }, [requested])
 
-  // A pasted page URL or id opens directly through acli; anything else searches, which needs the API token
+  // What was opened here comes back first next time; walking the list keeps its order, so the cursor can go on
   useEffect(() => {
-    const trimmed = query.trim()
-    const direct = pageOfUrl(trimmed)?.id ?? (/^\d{4,}$/.test(trimmed) ? trimmed : null)
-    if (direct) {
-      setSelectedId(direct)
-      setQuery('')
-      return
-    }
-    if (trimmed.length < 2) return setResults(null)
-    const timer = setTimeout(() => void confluenceApi.search(trimmed).then(setResults), 300)
-    return () => clearTimeout(timer)
-  }, [query])
+    if (!shownPage) return
+    const summary: PageSummary = { id: shownPage.id, title: shownPage.title, space: shownPage.space, lastModified: shownPage.updatedAt }
+    const list = parseOpened(openedJson)
+    const known = list.some((entry) => entry.id === summary.id)
+    const next = known && cursorId !== null ? list.map((entry) => (entry.id === summary.id ? summary : entry)) : [summary, ...list.filter((entry) => entry.id !== summary.id)].slice(0, MAX_OPENED)
+    setOpenedJson(JSON.stringify(next))
+  }, [shownPage?.id, shownPage?.title, shownPage?.space])
 
-  const remember = (page: Page): void =>
-    setOpenedJson(
-      JSON.stringify([{ id: page.id, title: page.title, space: page.space, lastModified: page.updatedAt }, ...parseOpened(openedJson).filter((entry) => entry.id !== page.id)].slice(0, MAX_OPENED))
-    )
-
-  const row = (page: PageSummary): React.JSX.Element => (
-    <button
-      key={page.id}
-      onClick={() => setSelectedId(page.id)}
-      className={`flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-1.5 text-left ${page.id === selectedId ? 'bg-foreground/8 ring-1 ring-border' : 'hover:bg-accent'}`}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <Icon name="file" className="size-3.5 shrink-0 text-sky-400" />
-        <span className="truncate text-[13px]">{page.title}</span>
-      </span>
-      {page.lastModified && <span className="truncate pl-[22px] text-[11px] text-muted-foreground">{timeAgo(page.lastModified)} ago</span>}
-    </button>
-  )
-
-  /** Pages of one space together, spaces in alphabetical order with unknown ones last */
-  const bySpace = (list: PageSummary[]): [string, PageSummary[]][] => {
-    const spaces = new Map<string, PageSummary[]>()
-    for (const page of list) spaces.set(page.space ?? '', [...(spaces.get(page.space ?? '') ?? []), page])
-    return [...spaces].sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+  // A pasted page URL or id opens directly through acli; other text searches, which needs the API token
+  const setFilters = (next: FilterToken[]): void => {
+    const direct = next.flatMap((filter) => (filter.kind === 'text' ? [directId(filter.value)] : [])).find((id) => id !== null)
+    if (direct) open(direct)
+    setFiltersJson(JSON.stringify(next.filter((filter) => filter.kind !== 'text' || !directId(filter.value))))
   }
 
-  const section = (title: string, list: PageSummary[], error?: string | null): React.JSX.Element | null =>
-    list.length > 0 || error ? (
-      <div>
-        <div className="px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{title}</div>
-        {error && <p className="px-2 pb-2 text-xs break-words text-amber-400 select-text">{error}</p>}
-        {bySpace(list).map(([space, pages]) => {
-          const key = `${title}:${space}`
-          const open = !collapsedSpaces.includes(key)
-          const shown = expandedSpaces.includes(key) ? pages : pages.slice(0, PER_SPACE)
-          return (
-            <div key={space || 'unknown'}>
-              <button
-                onClick={() => toggleSpace(key)}
-                className="flex w-full items-center gap-1.5 px-2 pt-2 pb-0.5 text-left text-[11px] text-muted-foreground hover:text-foreground"
-              >
-                <Icon name="chevron" className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`} />
-                <Icon name="folder" className="size-3" />
-                <span className="truncate">{space || 'Other'}</span>
-                <span className="tabular-nums opacity-70">{pages.length}</span>
-              </button>
-              {open && shown.map(row)}
-              {open && shown.length < pages.length && (
-                <button onClick={() => showAll(key)} className="w-full rounded-lg px-2.5 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
-                  Show {pages.length - shown.length} more
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    ) : null
+  const searchKey = texts.length > 0 ? JSON.stringify([texts, spaceFilters]) : ''
+  useEffect(() => {
+    if (!searchKey) return setResults(null)
+    let current = true
+    void confluenceApi.search(texts, spaceFilters).then((list) => current && setResults(list))
+    return () => {
+      current = false
+    }
+  }, [searchKey])
 
-  return (
-    <div className="flex min-h-0 flex-1">
-      <aside style={{ width: listWidth }} className="relative flex shrink-0 flex-col border-r border-border bg-card">
-        <div className="p-2.5">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search, or paste a page link or id"
-            className="h-8 w-full rounded-lg bg-muted px-2.5 text-[12.5px] ring-1 ring-border outline-none placeholder:text-muted-foreground/70 focus:ring-primary/60"
+  const section = (title: string, all: PageSummary[], error: string | null = null): Section => {
+    // Results already are the search, so which list a page came from doesn't apply to them
+    const tokens = title === RESULTS ? filters.filter((filter) => filter.kind !== 'source') : filters
+    const list = all.filter((page) => matchesTokens({ page, source: title }, tokens, FILTER_GROUPS))
+    const entries = bySpace(list).flatMap(([space, pages]): Entry[] => {
+      const key = `${title}:${space}`
+      const isOpen = !collapsedSpaces.includes(key)
+      const shown = expandedSpaces.includes(key) ? pages : pages.slice(0, PER_SPACE)
+      return [
+        { kind: 'space', id: key, space: key, count: pages.length, open: isOpen },
+        ...(isOpen ? shown.map((summary): Entry => ({ kind: 'page', id: `${key}:${summary.id}`, page: summary, space: key })) : []),
+        ...(isOpen && shown.length < pages.length ? [{ kind: 'more', id: `${key}:more`, space: key, hidden: pages.length - shown.length } as const] : [])
+      ]
+    })
+    return { title, error, count: list.length, entries }
+  }
+  const known: Known[] = [
+    ...opened.map((page) => ({ page, source: 'Opened here' })),
+    ...(recent?.pages ?? []).map((page) => ({ page, source: 'Recently viewed' })),
+    ...(results?.pages ?? []).map((page) => ({ page, source: RESULTS }))
+  ]
+  const sections = (results ? [section(RESULTS, results.pages, results.error)] : [section('Opened here', opened), section('Recently viewed', recent?.pages ?? [], recentError)]).filter(
+    (candidate) => candidate.entries.length > 0 || candidate.error
+  )
+  const entries = sections.flatMap((candidate) => candidate.entries)
+  const byCursor = cursorId === null ? -1 : entries.findIndex((entry) => entry.id === cursorId)
+  const cursor = byCursor >= 0 ? byCursor : entries.findIndex((entry) => entry.kind === 'page' && entry.page.id === selectedId)
+  const activate = (entry: Entry): void => {
+    if (entry.kind === 'space') fold(entry.space, entry.open)
+    if (entry.kind === 'more') showAll(entry.space)
+    if (entry.kind === 'page') focusZone('main')
+  }
+  const nav = useListNav({
+    count: entries.length,
+    index: cursor,
+    onSelect: (index) => {
+      const entry = entries[index]
+      if (entry.kind === 'page') open(entry.page.id, entry.id)
+      else setCursorId(entry.id)
+    },
+    onOpen: (index) => activate(entries[index])
+  })
+
+  const addToComments = (): void => {
+    if (!shownPage) return
+    const worktreePath = host.selectedWorktree
+    if (!worktreePath) return host.flash('Select a worktree first')
+    host.addComment({
+      id: crypto.randomUUID(),
+      worktreePath,
+      filePath: `Confluence: ${shownPage.title}`,
+      range: { start: 0, end: 0 },
+      code: '',
+      // Only the reference: the agent reads the page itself
+      text: `Confluence "${shownPage.title}" ${shownPage.url}`,
+      kind: 'reference'
+    })
+    host.flash(`Added ${shownPage.title} to comments on ${baseName(worktreePath)}`)
+  }
+
+  const search: PageAction = {
+    label: 'Search',
+    combo: '/',
+    run: () => withList(panels, SEARCH_ID, () => document.querySelector<HTMLInputElement>(`#${SEARCH_ID} input`)?.focus())
+  }
+  const copyLink = (): void => {
+    if (!shownPage) return
+    copyText(shownPage.url)
+    host.flash('Copied the page link')
+  }
+  // What the open page can do by key; the header has a button for each
+  const actions: PageAction[] = shownPage
+    ? [
+        { label: 'Add to agent comments', combo: 'a', run: addToComments },
+        { label: 'Open in Confluence', combo: 'o', run: () => window.open(shownPage.url, '_blank') },
+        {
+          label: 'Copy link',
+          combo: 'y',
+          run: copyLink
+        },
+        { label: 'Reload page', combo: 'r', run: reloadPage }
+      ]
+    : []
+
+  const spaceKeys = sections.flatMap((entrySection) => entrySection.entries.flatMap((entry) => (entry.kind === 'space' ? [entry.space] : [])))
+  const anySpaceOpen = spaceKeys.some((key) => !collapsedSpaces.includes(key))
+  const foldAll = (): void => setCollapsedJson(JSON.stringify(anySpaceOpen ? [...new Set([...collapsedSpaces, ...spaceKeys])] : collapsedSpaces.filter((key) => !spaceKeys.includes(key))))
+
+  const onKey = useRef<(event: KeyboardEvent) => boolean>(() => false)
+  onKey.current = (event) => {
+    if (zone === 'list' && event.key === 'z' && spaceKeys.length > 1) {
+      foldAll()
+      return true
+    }
+    const entry = entries[cursor]
+    if (zone === 'list' && entry && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      fold(entry.space, event.key === 'ArrowLeft')
+      if (event.key === 'ArrowLeft') setCursorId(entry.space)
+      return true
+    }
+    const run = [...actions, search].find((action) => action.combo === event.key)?.run
+    run?.()
+    return run !== undefined
+  }
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void => {
+      if (isPageKey(event) && onKey.current(event)) event.preventDefault()
+    }
+    window.addEventListener('keydown', listener)
+    return () => window.removeEventListener('keydown', listener)
+  }, [])
+
+  const row = (entry: Entry, index: number): React.JSX.Element => {
+    if (entry.kind === 'space') {
+      const name = entry.space.slice(entry.space.indexOf(':') + 1)
+      return (
+        <button key={entry.id} {...nav.rowProps(index)} onClick={() => fold(entry.space, entry.open)} title={entry.open ? 'Fold (←)' : 'Unfold (→)'} className={`${ROW} mt-1 h-6 px-2 text-[11px] text-muted-foreground`}>
+          <Icon name="chevron" className={`size-3 shrink-0 ${entry.open ? 'rotate-90' : ''}`} />
+          <Icon name="folder" className="size-3 shrink-0" />
+          <span className="truncate">{name || 'Other'}</span>
+          <span className="shrink-0 tabular-nums opacity-70">{entry.count}</span>
+        </button>
+      )
+    }
+    if (entry.kind === 'more') {
+      return (
+        <button key={entry.id} {...nav.rowProps(index)} onClick={() => showAll(entry.space)} className={`${ROW} h-6 pl-7 text-[11px] text-muted-foreground`}>
+          Show {entry.hidden} more
+        </button>
+      )
+    }
+    return (
+      <button key={entry.id} {...nav.rowProps(index)} onClick={() => open(entry.page.id, entry.id)} title={entry.page.title} className={`${ROW} h-7 pr-2 pl-7 text-xs`}>
+        <Icon name="file" className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{entry.page.title}</span>
+        {entry.page.lastModified && <span className="shrink-0 text-[10.5px] text-muted-foreground">{timeAgo(entry.page.lastModified)}</span>}
+      </button>
+    )
+  }
+
+  let index = -1
+  const listPane = (
+    <>
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Confluence</span>
+        <span className="flex-1" />
+        {spaceKeys.length > 1 && (
+          <FoldAllButton anyOpen={anySpaceOpen} groups="spaces" onClick={foldAll} />
+        )}
+        <IconButton label={recentLoading ? 'Reloading...' : 'Reload recently viewed'} onClick={reloadRecent}>
+          <Icon name="refresh" className={`size-3.5 ${recentLoading ? 'opacity-40' : ''}`} />
+        </IconButton>
+      </div>
+      <div className="shrink-0 border-b border-border p-2">
+        <div
+          id={SEARCH_ID}
+          className="flex min-w-0"
+          onKeyDownCapture={(event) => {
+            // With nothing typed, Enter or ↓ goes on to the first page, where j/k continue
+            const first = entries.find((entry) => entry.kind === 'page')
+            const typed = event.target instanceof HTMLInputElement && event.target.value !== ''
+            if ((event.key === 'Enter' || event.key === 'ArrowDown') && !typed && first?.kind === 'page') {
+              event.preventDefault()
+              event.stopPropagation()
+              open(first.page.id, first.id)
+              event.currentTarget.closest<HTMLElement>('[data-zone]')?.focus()
+            }
+          }}
+          // Esc leaves the search for the list
+          onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.closest<HTMLElement>('[data-zone]')?.focus()}
+        >
+          <FilterSearch
+            items={known}
+            groups={FILTER_GROUPS}
+            tokens={filters}
+            onChange={setFilters}
+            placeholder="Search (/), filter by space, or paste a page link or id"
+            freeTextHint="Press ↵ to search Confluence for this text"
           />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {results ? (
-            section(`Results ${results.pages.length}`, results.pages, results.error) ?? <EmptyState title="No pages found" />
-          ) : (
-            <>
-              {section('Opened here', opened)}
-              {section('Recently viewed', recent?.pages ?? [], recentError)}
-            </>
-          )}
-        </div>
-        <ResizeHandle width={listWidth} min={240} max={520} onResize={setListWidth} />
-      </aside>
-      {selectedId ? <PageView key={selectedId} id={selectedId} onOpen={remember} /> : <EmptyState fill icon="file" title="Pick a page or paste a Confluence link" />}
-    </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+        {(results || filters.length > 0) && sections.length === 0 && <EmptyState title="No pages found" />}
+        {sections.map((candidate) => (
+          <div key={candidate.title}>
+            <div className="px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+              {candidate.title} {results && <span className="font-normal">{candidate.count}</span>}
+            </div>
+            {candidate.error && <p className="px-2 pb-2 text-xs break-words text-amber-400 select-text">{candidate.error}</p>}
+            {candidate.entries.map((entry) => row(entry, ++index))}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+
+  return (
+    <PageLayout
+      listLabel="Pages"
+      hints={{
+        list: [['j k', 'move'], ['⏎', 'open'], ['← →', 'fold'], ['/', 'search']],
+        main: [['a', 'to agent'], ['o', 'open'], ['y', 'copy link'], ['r', 'reload']]
+      }}
+      list={listPane}
+      main={selectedId ? <PageMain page={shownPage} parent={parent} error={pageError} onReload={reloadPage} onAgent={addToComments} onCopy={copyLink} /> : <EmptyState fill icon="file" title="Pick a page or paste a Confluence link" />}
+    />
   )
 }

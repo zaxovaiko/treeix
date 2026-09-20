@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Icon, type IconName } from './Icon'
+import { Popup } from './ui'
 
-/** Core panels are the explorer and comments; plugins add more, like the terminal */
+/** Panels come from plugins, like the terminal */
 export type PanelId = string
 export type DockSide = 'left' | 'right' | 'bottom'
 export type PanelInfo = { label: string; icon: IconName; shortcut: string }
@@ -13,20 +14,15 @@ export type Layout = {
   sizes: Record<DockSide, number>
 }
 
-export const CORE_PANELS: Record<'explorer' | 'comments', PanelInfo> = {
-  explorer: { label: 'Explorer', icon: 'folder', shortcut: '⌘P' },
-  comments: { label: 'Comments', icon: 'comment', shortcut: '⌘I' }
-}
-
 const SIDES: DockSide[] = ['left', 'right', 'bottom']
 const LAYOUT_KEY = 'layout'
 export const SIZE_LIMITS: Record<DockSide, [number, number]> = { left: [220, 640], right: [220, 640], bottom: [160, 800] }
 /** Where a panel docks before it was ever moved */
-const DEFAULT_SIDE: Record<string, DockSide> = { explorer: 'right', comments: 'right', terminal: 'bottom' }
+const DEFAULT_SIDE: Record<string, DockSide> = { terminal: 'bottom' }
 
 const DEFAULT_LAYOUT: Layout = {
   docks: { left: [], right: [], bottom: [] },
-  active: { left: null, right: 'explorer', bottom: 'terminal' },
+  active: { left: null, right: null, bottom: 'terminal' },
   hidden: [],
   sizes: { left: 320, right: 320, bottom: 320 }
 }
@@ -77,7 +73,9 @@ export function useLayout(panelIds: PanelId[]): {
   resize: (side: DockSide, size: number) => void
 } {
   const [stored, setStored] = useState(loadLayout)
-  const layout = withPanels(stored, panelIds)
+  // Stable while nothing changes, so the plugin host built from it stays stable too
+  const panelKey = panelIds.join('\0')
+  const layout = useMemo(() => withPanels(stored, panelIds), [stored, panelKey])
 
   const save = (next: Layout): void => {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(next))
@@ -133,9 +131,9 @@ export function DropZones({ onDrop }: { onDrop: (side: DockSide) => void }): Rea
             event.preventDefault()
             onDrop(side)
           }}
-          className={`absolute z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/70 text-sm font-medium text-indigo-200 capitalize ${
+          className={`absolute z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-foreground/40 text-sm font-medium text-foreground capitalize ${
             placement[side]
-          } ${over === side ? 'bg-primary/30' : 'bg-primary/10'}`}
+          } ${over === side ? 'bg-foreground/[.12]' : 'bg-foreground/[.04]'}`}
         >
           Dock {side}
         </div>
@@ -166,10 +164,12 @@ export function PanelToggle({
   onDragEnd: () => void
 }): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
+  const button = useRef<HTMLButtonElement>(null)
   const { label, icon, shortcut } = info
   return (
     <div className="relative [-webkit-app-region:no-drag]">
       <button
+        ref={button}
         draggable
         title={`${label} (${shortcut}) · drag to dock, right-click to move`}
         aria-label={label}
@@ -183,7 +183,7 @@ export function PanelToggle({
           onDragStart()
         }}
         onDragEnd={onDragEnd}
-        className={`relative inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground ${
+        className={`relative inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${
           active ? 'bg-accent text-foreground' : 'text-muted-foreground'
         }`}
       >
@@ -191,10 +191,7 @@ export function PanelToggle({
         {badge}
       </button>
       {menuOpen && (
-        <div
-          onMouseLeave={() => setMenuOpen(false)}
-          className="absolute top-8 right-0 z-50 w-40 rounded-lg border border-input bg-popover p-1"
-        >
+        <Popup anchor={button} align="end" onDismiss={() => setMenuOpen(false)} className="w-40 overflow-y-auto rounded-lg border border-input bg-popover p-1">
           {SIDES.filter((target) => target !== side).map((target) => (
             <button
               key={target}
@@ -207,7 +204,7 @@ export function PanelToggle({
               Move to {target}
             </button>
           ))}
-        </div>
+        </Popup>
       )}
     </div>
   )

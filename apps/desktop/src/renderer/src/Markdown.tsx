@@ -5,6 +5,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import { NavigableCode } from './codeNavigation'
 import { Icon } from './Icon'
+import { MarkdownFoldsContext } from './LazyMarkdown'
 import { Expandable } from './Lightbox'
 import { remarkSections } from './markdownSections'
 import { usePlugins } from './plugins'
@@ -16,12 +17,9 @@ const SCHEMA = {
   attributes: { ...defaultSchema.attributes, section: ['dataLevel'] }
 }
 
-/** "Collapse all" and "Expand all" reach the sections through this; `at` makes repeats take effect */
-const FoldAll = createContext<{ open: boolean; at: number } | null>(null)
-
 /** A heading with everything under it, folded away by clicking the heading */
 function Section({ children }: { children?: React.ReactNode }): React.JSX.Element {
-  const foldAll = useContext(FoldAll)
+  const foldAll = useContext(MarkdownFoldsContext)?.signal
   const [open, setOpen] = useState(true)
   useEffect(() => {
     if (foldAll) setOpen(foldAll.open)
@@ -39,7 +37,7 @@ function Section({ children }: { children?: React.ReactNode }): React.JSX.Elemen
       >
         <Icon
           name="chevron"
-          className={`size-3 shrink-0 translate-y-[3px] text-muted-foreground/50 transition-transform group-hover/section:text-foreground ${open ? 'rotate-90' : ''}`}
+          className={`size-3 shrink-0 translate-y-[3px] text-muted-foreground/50 group-hover/section:text-foreground ${open ? 'rotate-90' : ''}`}
         />
         <div className="min-w-0 flex-1">{heading}</div>
       </button>
@@ -100,7 +98,7 @@ function ResizableHeader({ children, ...props }: React.ThHTMLAttributes<HTMLTabl
         <span
           title="Drag to resize, double-click to reset"
           onMouseDown={(event) => startResize(event.currentTarget.parentElement instanceof HTMLTableCellElement ? event.currentTarget.parentElement.cellIndex : 0, event)}
-          className="absolute top-0 -right-1 z-10 h-full w-2 cursor-col-resize hover:bg-primary/40"
+          className="absolute top-0 -right-1 z-10 h-full w-2 cursor-col-resize hover:bg-foreground/20"
         />
       )}
     </th>
@@ -128,7 +126,7 @@ function ResolvedImage({ src, alt, resolve }: { src: string; alt: string; resolv
       cancelled = true
     }
   }, [src])
-  if (!state) return <span className="my-2 block h-24 animate-pulse rounded-lg bg-foreground/5" />
+  if (!state) return <span className="my-2 block h-24 rounded-lg bg-foreground/5" />
   if ('error' in state) {
     return (
       <span className="my-2 flex items-center gap-2 rounded-lg px-3 py-2 font-sans text-xs text-muted-foreground ring-1 ring-border">
@@ -147,55 +145,46 @@ function ResolvedImage({ src, alt, resolve }: { src: string; alt: string; resolv
 const HEADING = /^#{1,6} \S/gm
 
 export function Markdown({ children, baseUrl, resolveImage }: { children: string; baseUrl?: string; resolveImage?: ImageResolver }): React.JSX.Element {
-  const [foldAll, setFoldAll] = useState<{ open: boolean; at: number } | null>(null)
-  // One heading folds on its own; the button is for texts with a few of them
+  // One heading folds on its own; the scope's fold all button is for texts with a few of them
   const foldable = (children.match(HEADING) ?? []).length > 1
+  const register = useContext(MarkdownFoldsContext)?.register
+  useEffect(() => (foldable ? register?.() : undefined), [foldable, register])
   // Fenced blocks whose language a plugin renders, like mermaid diagrams
   const codeBlocks: Record<string, React.ComponentType<{ code: string }>> = Object.assign({}, ...usePlugins().loaded.map(({ plugin }) => plugin.codeBlocks ?? {}))
   return (
-    <div className="markdown group/markdown relative select-text">
-      {foldable && (
-        <button
-          onClick={() => setFoldAll({ open: !(foldAll?.open ?? true), at: Date.now() })}
-          className="absolute -top-1 right-0 z-10 h-6 rounded-md bg-card/80 px-2 text-[11px] text-muted-foreground opacity-0 ring-1 ring-border transition-opacity group-hover/markdown:opacity-100 hover:text-foreground"
-        >
-          {foldAll?.open === false ? 'Expand all' : 'Collapse all'}
-        </button>
-      )}
-      <FoldAll.Provider value={foldAll}>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkSections]}
-          // Raw HTML from PR bodies (details, sub, img) is parsed, then sanitized to GitHub's allowlist
-          rehypePlugins={[rehypeRaw, [rehypeSanitize, SCHEMA]]}
-          urlTransform={(url) => defaultUrlTransform(baseUrl && url.startsWith('/') ? `${baseUrl}${url}` : url)}
-          components={{
-            a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
-            section: ({ node: _node, children }) => <Section>{children}</Section>,
-            table: ({ node: _node, children }) => <ResizableTable>{children}</ResizableTable>,
-            th: ({ node: _node, ...props }) => <ResizableHeader {...props} />,
-            img: ({ node: _node, src, alt, ...props }) =>
-              resolveImage && typeof src === 'string' ? (
-                <ResolvedImage src={src} alt={alt ?? ''} resolve={resolveImage} />
-              ) : (
-                <Expandable title={alt} preview={<img src={src} alt={alt} {...props} />}>
-                  <img src={src} alt={alt} />
-                </Expandable>
-              ),
-            code: ({ node: _node, className, children: code, ...props }) => {
-              const Block = Object.hasOwn(codeBlocks, className?.replace(/^language-/, '') ?? '') ? codeBlocks[className?.replace(/^language-/, '') ?? ''] : undefined
-              return Block ? (
-                <Block code={String(code).trim()} />
-              ) : (
-                <NavigableCode className={className} {...props}>
-                  {code}
-                </NavigableCode>
-              )
-            }
-          }}
-        >
-          {children}
-        </ReactMarkdown>
-      </FoldAll.Provider>
+    <div className="markdown select-text">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkSections]}
+        // Raw HTML from PR bodies (details, sub, img) is parsed, then sanitized to GitHub's allowlist
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, SCHEMA]]}
+        urlTransform={(url) => defaultUrlTransform(baseUrl && url.startsWith('/') ? `${baseUrl}${url}` : url)}
+        components={{
+          a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+          section: ({ node: _node, children }) => <Section>{children}</Section>,
+          table: ({ node: _node, children }) => <ResizableTable>{children}</ResizableTable>,
+          th: ({ node: _node, ...props }) => <ResizableHeader {...props} />,
+          img: ({ node: _node, src, alt, ...props }) =>
+            resolveImage && typeof src === 'string' ? (
+              <ResolvedImage src={src} alt={alt ?? ''} resolve={resolveImage} />
+            ) : (
+              <Expandable title={alt} preview={<img src={src} alt={alt} {...props} />}>
+                <img src={src} alt={alt} />
+              </Expandable>
+            ),
+          code: ({ node: _node, className, children: code, ...props }) => {
+            const Block = Object.hasOwn(codeBlocks, className?.replace(/^language-/, '') ?? '') ? codeBlocks[className?.replace(/^language-/, '') ?? ''] : undefined
+            return Block ? (
+              <Block code={String(code).trim()} />
+            ) : (
+              <NavigableCode className={className} {...props}>
+                {code}
+              </NavigableCode>
+            )
+          }
+        }}
+      >
+        {children}
+      </ReactMarkdown>
     </div>
   )
 }

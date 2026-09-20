@@ -30,7 +30,7 @@ const levelColor = (percent: number): string => (percent >= 90 ? 'text-red-400' 
 
 function Bar({ window }: { window: LimitWindow | null }): React.JSX.Element {
   const percent = window?.usedPercent ?? 0
-  const fill = percent >= 90 ? 'bg-red-400' : percent >= 70 ? 'bg-amber-400' : 'bg-primary'
+  const fill = percent >= 90 ? 'bg-red-400' : percent >= 70 ? 'bg-amber-400' : 'bg-foreground/60'
   return (
     <span className="h-1.5 w-8 overflow-hidden rounded-full bg-foreground/10">
       <span style={{ width: `${percent}%` }} className={`block h-full rounded-full ${fill}`} />
@@ -95,7 +95,8 @@ export function UsageLimits(): React.JSX.Element | null {
 
   useEffect(() => {
     if (usageLabel === 'hidden') return
-    const load = (): void => void bridge.invoke<Limits>('limits').then(setLimits)
+    // Same readings keep the old object, so the title bar doesn't re-render
+    const load = (): void => void bridge.invoke<Limits>('limits').then((next) => setLimits((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next)))
     load()
     const timer = setInterval(load, POLL_MS)
     window.addEventListener('focus', load)

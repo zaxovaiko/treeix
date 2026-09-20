@@ -1,15 +1,14 @@
 import { lazy, Suspense, useEffect, useReducer } from 'react'
-import { type DocumentTab, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
-import { extractLines, type LineRange, type ReviewComment } from '@treeix/shared/comments'
-import type { FilePatch } from '@treeix/shared/types'
+import { type Command, type DocumentTab, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
 import { Row, Segmented } from '@treeix/app/settingsUi'
 import { baseName } from '@treeix/app/Sidebar'
-import { useSettings } from '@treeix/app/settings'
 import { errorMessage } from '@treeix/app/ui'
-import type { PullRequest, ReviewThread } from '../shared/types'
+import type { PullRequest } from '../shared/types'
 import { POLL_MINUTES, prSettings } from './api'
-import { findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
-import { localWorktreeFor, prefix, ProviderMark, pullRequestKey } from './pullRequestUtils'
+import { cachedPullRequests, findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
+import { PULL_REQUEST_SHORTCUTS, pullRequestCommands } from './keys'
+import type { DetailProps } from './PullRequests'
+import { localWorktreeFor, prefix, ProviderMark, pullRequestKey, threadReference } from './pullRequestUtils'
 
 // The views pull in diffs, markdown and filters, so they load when the tab first opens
 const PullRequestsView = lazy(() => import('./PullRequests').then((module) => ({ default: module.PullRequestsView })))
@@ -21,17 +20,7 @@ const TAB_ID = 'prs'
 const checkoutOf = (host: HostApi, pr: PullRequest): string => localWorktreeFor(host.repos, pr) ?? pr.repoPath
 
 /** Callbacks both views take, bound to the host */
-function useViewProps(): {
-  repos: HostApi['repos']
-  diffStyle: HostApi['diffStyle']
-  renderSend: (pr: PullRequest) => React.ReactNode
-  renderComments: (pr: PullRequest, openFile: (path: string) => void) => React.ReactNode
-  onOpenWorktree: (path: string) => void
-  onAddToComments: (pr: PullRequest, thread: ReviewThread, patch: FilePatch | undefined) => void
-  onAddNote: (pr: PullRequest, patch: FilePatch, range: LineRange | null, text: string) => void
-  onAddFile: (pr: PullRequest, patch: FilePatch) => void
-  onCreateWorktree: (pr: PullRequest) => void
-} {
+function useViewProps(): DetailProps {
   const host = useHost()
   return {
     repos: host.repos,
@@ -39,19 +28,19 @@ function useViewProps(): {
     renderSend: (pr) => host.renderSendButton(checkoutOf(host, pr), 'pill'),
     renderComments: (pr, openFile) => host.renderCommentsPanel(checkoutOf(host, pr), openFile),
     onOpenWorktree: host.openWorktree,
-    onAddToComments: (pr, thread, patch) => {
+    // A reference only: the agent reads the thread and the code itself
+    onAddToComments: (pr, thread) => {
       const worktreePath = checkoutOf(host, pr)
       const line = thread.line ?? 0
-      const range = thread.path ? { start: line, end: line, side: thread.side } : { start: 0, end: 0 }
-      const comment: ReviewComment = {
+      host.addComment({
         id: crypto.randomUUID(),
         worktreePath,
         filePath: thread.path ?? `${pr.provider === 'github' ? 'PR #' : 'MR !'}${pr.number} conversation`,
-        range,
-        code: patch && line > 0 ? extractLines(patch.patch, range) : '',
-        text: thread.comments.map((entry) => `@${entry.author}: ${entry.body.trim()}`).join('\n\n')
-      }
-      host.addComment(comment)
+        range: thread.path ? { start: line, end: line, side: thread.side } : { start: 0, end: 0 },
+        code: '',
+        text: threadReference(pr, thread),
+        kind: 'reference'
+      })
       host.flash(`Added to comments on ${baseName(worktreePath)}`)
     },
     onAddNote: (pr, patch, range, text) => {
@@ -61,7 +50,7 @@ function useViewProps(): {
         worktreePath,
         filePath: patch.path,
         range: range ?? { start: 0, end: 0 },
-        code: range ? extractLines(patch.patch, range) : '',
+        code: '',
         text: text.trim()
       })
       host.flash(`Added to comments on ${baseName(worktreePath)}`)
@@ -80,16 +69,14 @@ function useViewProps(): {
 }
 
 function DetailTab({ pr: opened }: { pr: PullRequest }): React.JSX.Element {
-  const host = useHost()
   // The tab keeps the pull request it was opened with; background refreshes bring its title, state and counts up to date
   const [, bump] = useReducer((count: number) => count + 1, 0)
   useEffect(() => onPullRequestsUpdated(bump), [])
   const pr = findCachedPullRequest(opened.url) ?? opened
   const props = useViewProps()
-  const commentCount = host.comments.filter((comment) => comment.worktreePath === checkoutOf(host, pr)).length
   return (
     <Suspense fallback={null}>
-      <PullRequestDetailView key={pullRequestKey(pr)} pr={pr} commentCount={commentCount} {...props} />
+      <PullRequestDetailView key={pullRequestKey(pr)} pr={pr} {...props} />
     </Suspense>
   )
 }
@@ -114,21 +101,11 @@ const detailTab = (pr: PullRequest): DocumentTab => ({
 function PullRequestsTab(): React.JSX.Element {
   const host = useHost()
   const props = useViewProps()
-  const { bottomPanel } = useSettings()
-  const list = (wrapDetail?: (detail: React.ReactNode) => React.ReactNode): React.JSX.Element => (
+  return (
     <Suspense fallback={<div className="flex-1" />}>
-      <PullRequestsView
-        {...props}
-        wrapDetail={wrapDetail}
-        repoPaths={host.scopeRepoPaths}
-        scopeLabel={host.scopeLabel}
-        onOpenTab={(pr) => host.openTab(detailTab(pr))}
-        commentCountFor={(pr) => host.comments.filter((comment) => comment.worktreePath === checkoutOf(host, pr)).length}
-      />
+      <PullRequestsView {...props} repoPaths={host.scopeRepoPaths} scopeLabel={host.scopeLabel} onOpenTab={(pr) => host.openTab(detailTab(pr))} />
     </Suspense>
   )
-  // A full-width bottom panel goes under the list too; otherwise only under the pane beside it, like Worktrees
-  return <>{bottomPanel === 'full' ? host.withDock(list()) : list(host.withDock)}</>
 }
 
 /** Background refresh of the current workspace's pull requests, so the tab opens on fresh data */
@@ -190,11 +167,24 @@ async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> 
   return true
 }
 
+/** The workspace's fetched pull requests in the palette, each opening in its own tab */
+const listedCommands = (host: HostApi): Command[] =>
+  (cachedPullRequests(scopeKeyOf(host.scopeRepoPaths ?? []))?.pullRequests ?? []).map((pr) => ({
+    id: `pr:${pr.url}`,
+    group: 'Pull requests',
+    label: `${prefix(pr)}${pr.number} ${pr.title}`,
+    detail: `${baseName(pr.repoPath)} · ${pr.author} · ${pr.state}`,
+    icon: 'pullRequest',
+    run: () => host.openTab(detailTab(pr))
+  }))
+
 const plugin: RendererPlugin = {
   services: { pullRequests: { open: openPullRequestUrl } },
   tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'] }],
   Root: Polling,
   Settings: PullRequestSettings,
+  shortcuts: PULL_REQUEST_SHORTCUTS,
+  commands: (host) => [...pullRequestCommands(), ...listedCommands(host)],
   toolMarks: {
     gh: () => <ProviderMark provider="github" className="size-4" />,
     glab: () => <ProviderMark provider="gitlab" className="size-4" />

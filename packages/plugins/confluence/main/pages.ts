@@ -3,7 +3,7 @@ import { acli, restFetch } from '@treeix/atlassian/main/cli'
 import { loadCredentials } from '@treeix/atlassian/main/credentials'
 import { IMAGE_HOST, isJson, object, orNull, text } from '@treeix/atlassian/shared'
 import type { Page, PageList, Space } from '../shared/types'
-import { cqlString, toPageSummaries } from './search'
+import { searchCql, toPageSummaries } from './search'
 
 const RESULT_LIMIT = 40
 
@@ -66,4 +66,9 @@ async function cqlSearch(cql: string): Promise<PageList> {
 }
 
 export const recentPages = (): Promise<PageList> => cqlSearch('type = page AND id in recentlyViewedContent(40)')
-export const searchPages = (query: string): Promise<PageList> => cqlSearch(`type = page AND siteSearch ~ ${cqlString(query)}`)
+/** Pages only know their space's name, so the names are looked up as keys; an unknown one is left to the list's own filter */
+export async function searchPages(texts: string[], spaces: string[]): Promise<PageList> {
+  const known = [...(await spaceNames()).values()]
+  const keys = known.filter((space) => spaces.includes(space.name)).map((space) => space.key)
+  return cqlSearch(searchCql(texts, keys))
+}

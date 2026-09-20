@@ -7,5 +7,14 @@
     {
       "path": "./tsconfig.web.json"
     }
-  ]
+  ],
+  // Only for bun test, which resolves imports through this file; tsc and the build use the configs above
+  "compilerOptions": {
+    "paths": {
+      "@treeix/sdk": ["../../packages/sdk/src/index.ts"],
+      "@treeix/sdk/main": ["../../packages/sdk/src/main.ts"],
+      "@treeix/shared/*": ["./src/shared/*"],
+      "@treeix/app/*": ["./src/renderer/src/*"]
+    }
+  }
 }

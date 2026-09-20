@@ -6,7 +6,8 @@ export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string 
   input: { label: 'needs input', color: '#fbbf24' },
   running: { label: 'running', color: '#34d399' },
   idle: { label: 'idle', color: '#737373' },
-  exited: { label: 'exited', color: '#f87171' }
+  exited: { label: 'exited', color: '#f87171' },
+  dormant: { label: 'not started', color: '#737373' }
 }
 
 export function worktreeLabel(repos: Repo[] | null, worktreePath: string): string {
@@ -32,7 +33,7 @@ export function StatusDot({ session, withLabel = false }: { session: Pick<Sessio
     <span style={{ color }} className="flex shrink-0 items-center gap-1.5 text-[11px]" title={text}>
       <span
         style={{ background: color }}
-        className={`size-1.5 rounded-full ${session.status === 'input' ? 'animate-pulse ring-2 ring-amber-400/25' : ''}`}
+        className={`size-1.5 rounded-full ${session.status === 'input' ? 'ring-2 ring-amber-400/25' : ''}`}
       />
       {withLabel && text}
     </span>

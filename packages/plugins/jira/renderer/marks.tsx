@@ -1,8 +1,9 @@
 import type { WorkItem } from '../shared/types'
+import { priorityRank } from './buckets'
 
 const CATEGORY_STYLE: Record<WorkItem['statusCategory'], string> = {
   new: 'bg-foreground/8 text-muted-foreground',
-  indeterminate: 'bg-primary/12 text-primary',
+  indeterminate: 'bg-sky-400/12 text-sky-400',
   done: 'bg-emerald-400/12 text-emerald-400'
 }
 
@@ -41,9 +42,28 @@ export function TypeMark({ type }: { type: string }): React.JSX.Element {
   )
 }
 
-export const StatusPill = ({ item }: { item: WorkItem }): React.JSX.Element => (
-  <span className={`h-[18px] shrink-0 rounded px-1.5 text-[10.5px] leading-[18px] font-medium whitespace-nowrap ${CATEGORY_STYLE[item.statusCategory]}`}>{item.status}</span>
+/** Long custom status names truncate inside the pill; the full name is in the tooltip */
+export const StatusPill = ({ item }: { item: Pick<WorkItem, 'status' | 'statusCategory'> }): React.JSX.Element => (
+  <span title={item.status} className={`h-[18px] max-w-36 min-w-0 truncate rounded px-1.5 text-[10.5px] leading-[18px] font-medium whitespace-nowrap ${CATEGORY_STYLE[item.statusCategory]}`}>
+    {item.status}
+  </span>
 )
+
+export const BugPill = ({ type }: { type: string }): React.JSX.Element => (
+  <span className="h-[18px] shrink-0 rounded bg-red-500/12 px-1.5 text-[10.5px] leading-[18px] font-medium text-red-400">{type}</span>
+)
+
+const PRIORITY_GLYPHS = ['⇈', '↑', '', '↓', '⇊']
+/** Arrows for anything but the default priority, so rows stay quiet unless it matters */
+export function PriorityMark({ priority }: { priority: string | null }): React.JSX.Element | null {
+  const rank = priorityRank(priority)
+  if (!priority || rank === 2) return null
+  return (
+    <span title={`${priority} priority`} className={`shrink-0 font-mono text-[11px] ${rank < 2 ? 'text-red-400' : 'text-muted-foreground'}`}>
+      {PRIORITY_GLYPHS[rank]}
+    </span>
+  )
+}
 
 /** The epic an item belongs to, as a small purple label */
 export const EpicChip = ({ summary, onClick }: { summary: string; onClick?: () => void }): React.JSX.Element => (
@@ -56,7 +76,7 @@ export const EpicChip = ({ summary, onClick }: { summary: string; onClick?: () =
         onClick()
       })
     }
-    className={`max-w-40 shrink truncate rounded bg-violet-500/12 px-1.5 text-[10.5px] leading-[18px] font-medium text-violet-400 ${onClick ? 'cursor-pointer hover:bg-violet-500/20' : ''}`}
+    className={`min-w-0 shrink truncate rounded bg-violet-500/12 px-1.5 text-[10.5px] leading-[18px] font-medium text-violet-400 ${onClick ? 'cursor-pointer hover:bg-violet-500/20' : ''}`}
   >
     {summary}
   </span>

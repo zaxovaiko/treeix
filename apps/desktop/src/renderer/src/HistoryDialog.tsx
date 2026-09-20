@@ -42,7 +42,10 @@ export function HistoryDialog({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
@@ -87,7 +90,7 @@ export function HistoryDialog({
                 key={entry.id}
                 onClick={() => setSelected(entry.id)}
                 className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[12.5px] ${
-                  entry.id === selected ? 'bg-primary/20 text-foreground' : 'text-foreground/75 hover:bg-accent'
+                  entry.id === selected ? 'bg-foreground/[.08] text-foreground' : 'text-foreground/75 hover:bg-accent'
                 }`}
               >
                 <span className="flex-1">{timeLabel(entry.savedAt)}</span>

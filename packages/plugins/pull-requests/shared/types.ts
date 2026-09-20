@@ -94,6 +94,9 @@ export type Reviewer = { login: string; avatarUrl: string | null; state: 'reques
 
 export type ImageResult = { dataUrl: string } | { error: string }
 
+/** Paths that can't merge cleanly into the target branch */
+export type ConflictResult = { files: string[] } | { error: string }
+
 export type PullRequestList = {
   pullRequests: PullRequest[]
   errors: string[]

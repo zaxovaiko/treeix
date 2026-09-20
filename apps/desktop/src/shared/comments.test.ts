@@ -25,13 +25,14 @@ test('rangeLabel', () => {
   expect(rangeLabel({ start: 9, end: 4, side: 'deletions' })).toBe('4-9 (old)')
 })
 
-test('formatComments', () => {
+test('formatComments sends the location and the note, never the stored code', () => {
   const comment = { id: '1', worktreePath: '/r', filePath: 'a.ts', range: { start: 11, end: 11 }, code: '+new', text: ' rename \n' }
-  expect(formatComments([comment])).toBe('1. a.ts:11\n```diff\n+new\n```\nrename')
+  expect(formatComments([comment])).toBe('1. a.ts:11\nrename')
   expect(isReviewComment(comment)).toBe(true)
   expect(isReviewComment({ ...comment, range: null })).toBe(false)
   const fileComment = { ...comment, kind: 'file' as const, code: 'plain' }
-  expect(formatComments([fileComment])).toBe('1. a.ts:11\n```\nplain\n```\nrename')
+  expect(formatComments([fileComment])).toBe('1. a.ts:11\nrename')
+  expect(formatComments([{ ...comment, range: { start: 9, end: 4 } }])).toBe('1. a.ts:4-9\nrename')
   expect(isReviewComment(fileComment)).toBe(true)
   const conversation = { ...comment, filePath: 'PR #12 conversation', range: { start: 0, end: 0 }, code: '' }
   expect(formatComments([conversation])).toBe('1. PR #12 conversation\nrename')
@@ -51,5 +52,6 @@ test('commentsPrompt sends references as-is and code notes as feedback on the co
   const note: ReviewComment = { ...base, id: 'b', filePath: 'src/a.ts', range: { start: 3, end: 3 }, code: '+x', text: 'rename x' }
   expect(commentsPrompt([reference], 'main (/r)')).toBe('Jira BF-627 https://x/browse/BF-627\n')
   const both = commentsPrompt([reference, note], 'main (/r)')
-  expect(both.startsWith('Jira BF-627 https://x/browse/BF-627\n\nFeedback on the code in main (/r). Address each note:\n\n1. src/a.ts:3')).toBe(true)
+  expect(both).toBe('Jira BF-627 https://x/browse/BF-627\n\nFeedback on the code in main (/r). Address each note:\n\n1. src/a.ts:3\nrename x\n')
+  expect(both).not.toContain('```')
 })

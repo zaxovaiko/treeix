@@ -14,3 +14,10 @@ export function toPageSummaries(raw: unknown): PageSummary[] {
 
 /** CQL string literal */
 export const cqlString = (value: string): string => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+
+/** Every text must match; the spaces are alternatives */
+export function searchCql(texts: string[], spaceKeys: string[]): string {
+  const clauses = ['type = page', ...texts.map((value) => `siteSearch ~ ${cqlString(value)}`)]
+  if (spaceKeys.length > 0) clauses.push(`space in (${spaceKeys.map(cqlString).join(', ')})`)
+  return clauses.join(' AND ')
+}

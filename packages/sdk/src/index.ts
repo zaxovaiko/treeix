@@ -16,6 +16,9 @@ export type PluginManifest = {
 
 export type { Command, IconName }
 
+export * from './layout'
+import type { ShortcutInfo } from './layout'
+
 /** A tab in the title bar that always exists while the plugin is enabled */
 export type TabContribution = {
   id: string
@@ -64,7 +67,8 @@ export type PanelContribution = {
 }
 
 export type SessionKind = 'claude' | 'codex' | 'shell'
-export type SessionStatus = 'running' | 'input' | 'idle' | 'exited'
+/** `dormant`: restored after a relaunch but not started yet; it starts once shown, revealed or sent text */
+export type SessionStatus = 'running' | 'input' | 'idle' | 'exited' | 'dormant'
 
 export const SESSION_KINDS: Record<SessionKind, { label: string; mark: string; color: string; command: string | null }> = {
   claude: { label: 'Claude', mark: '✳', color: '#d97757', command: 'claude' },
@@ -138,6 +142,8 @@ export type RendererPlugin = {
   linkPreviews?: LinkPreview[]
   /** Icons for command line tools the plugin's main module checks, by tool name */
   toolMarks?: Record<string, ComponentType>
+  /** Keys the plugin handles, listed in the shortcut sheet (?) and Settings */
+  shortcuts?: ShortcutInfo[]
 }
 
 /** What the app offers plugins in the renderer */
@@ -159,6 +165,8 @@ export type HostApi = {
   defaultCwd: string
   diffStyle: 'split' | 'unified'
   activeTab: string
+  /** What per-page panels are remembered for: the active tab, or a document tab's parent */
+  activePage: string
   setActiveTab: (id: string) => void
   openTab: (tab: DocumentTab) => void
   closeTab: (key: string) => void

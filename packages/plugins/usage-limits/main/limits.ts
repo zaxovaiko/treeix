@@ -124,20 +124,30 @@ async function recentRollouts(limit: number): Promise<string[]> {
   return files
 }
 
+/** Tails by path, reused while the file's mtime and size stay put: every Codex write triggers a read of all recent rollouts */
+let tails = new Map<string, { mtimeMs: number; size: number; lines: string[] }>()
+
 async function tailLines(path: string): Promise<string[]> {
+  const { mtimeMs, size } = await stat(path)
+  const cached = tails.get(path)
+  if (cached && cached.mtimeMs === mtimeMs && cached.size === size) return cached.lines
   const file = await open(path)
   try {
-    const { size } = await file.stat()
     const start = Math.max(0, size - TAIL_BYTES)
     const { buffer, bytesRead } = await file.read(Buffer.alloc(size - start), 0, size - start, start)
-    return buffer.subarray(0, bytesRead).toString('utf8').split('\n')
+    const lines = buffer.subarray(0, bytesRead).toString('utf8').split('\n')
+    tails.set(path, { mtimeMs, size, lines })
+    return lines
   } finally {
     await file.close()
   }
 }
 
 async function readCodex(): Promise<AgentLimits | null> {
-  for (const path of await recentRollouts(5)) {
+  const paths = await recentRollouts(5)
+  // Only the rollouts still read stay cached
+  tails = new Map([...tails].filter(([path]) => paths.includes(path)))
+  for (const path of paths) {
     const limits = parseCodexLimits(await tailLines(path).catch(() => []))
     if (limits) return limits
   }
@@ -150,13 +160,23 @@ export async function usageLimits(statusFile: string): Promise<UsageLimits> {
 }
 
 const CHANGE_DEBOUNCE_MS = 300
+// A running agent writes its rollout many times a second, and each call back makes every window re-read the sources
+const CHANGE_THROTTLE_MS = 5000
 
-/** Calls back shortly after any limits source is written, so the title bar updates without waiting for a poll */
+/** Calls back shortly after any limits source is written, at most once per throttle window, so the title bar updates without waiting for a poll */
 export function watchUsageSources(statusFile: string, onChange: () => void): () => void {
   let timer: NodeJS.Timeout | null = null
+  let lastCall = -Infinity
   const changed = (): void => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(onChange, CHANGE_DEBOUNCE_MS)
+    if (timer) return
+    timer = setTimeout(
+      () => {
+        timer = null
+        lastCall = Date.now()
+        onChange()
+      },
+      Math.max(CHANGE_DEBOUNCE_MS, lastCall + CHANGE_THROTTLE_MS - Date.now())
+    )
   }
   // Folders, not files: the bridges replace their file by renaming, which would orphan a file watch
   const targets: [string, boolean][] = [

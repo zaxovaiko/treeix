@@ -28,9 +28,11 @@ function createWindow(): void {
     show: false,
     title: 'Treeix',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 10 },
+    trafficLightPosition: { x: 14, y: 12 },
     // Keep the blur when the window loses focus instead of flattening to grey
     visualEffectState: 'active',
+    // macOS otherwise spends the first click on an inactive window just focusing it, so the palette button needed two
+    acceptFirstMouse: true,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
   })
   window.on('ready-to-show', () => window.show())

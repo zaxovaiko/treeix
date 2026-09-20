@@ -20,6 +20,7 @@ export type ReviewComment = {
   worktreePath: string
   filePath: string
   range: LineRange
+  /** The commented lines, shown in the app only; prompts carry `path:line` and the agent reads the code itself */
   code: string
   text: string
   /**
@@ -32,9 +33,9 @@ export type ReviewComment = {
   workspaceId?: string
 }
 
-type PatchRow = { old: number | null; new: number | null; text: string }
+export type PatchRow = { old: number | null; new: number | null; text: string }
 
-function patchRows(patch: string): PatchRow[] {
+export function patchRows(patch: string): PatchRow[] {
   const rows: PatchRow[] = []
   let oldLine = 0
   let newLine = 0
@@ -94,7 +95,6 @@ export function formatComments(comments: ReviewComment[]): string {
     .map((comment, index) =>
       [
         `${index + 1}. ${commentLocation(comment)}`,
-        ...(comment.code ? [comment.kind === 'file' ? '```' : '```diff', comment.code, '```'] : []),
         comment.text.trim(),
         ...(comment.attachments?.length ? ['Attached files:', ...comment.attachments.map((file) => `- ${file.path}`)] : [])
       ].join('\n')

@@ -4,6 +4,7 @@ import type { WebContents } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import type { LiveTerminal, TerminalOptions } from '../shared/types'
 import { withoutAgentVariables } from '@treeix/host/env'
+import { coalesceOutput } from './coalesce'
 
 // Enough for a reloaded window to redraw the screen and recent scrollback
 const MAX_BUFFERED_CHARS = 256_000
@@ -14,6 +15,10 @@ const SPAWN_ROWS = 30
 type Entry = { pty: IPty | null; owner: WebContents; meta: string; chunks: string[]; size: number; exitCode: number | null }
 const sessions = new Map<string, Entry>()
 const watchedOwners = new WeakSet<WebContents>()
+const output = coalesceOutput((id, data) => {
+  const owner = sessions.get(id)?.owner
+  if (owner && !owner.isDestroyed()) owner.send('plugin:terminal:data', id, data)
+})
 
 /** Sessions outlive page reloads (the new page reattaches via listTerminals) but not their window */
 function killSessionsWithWindow(owner: WebContents): void {
@@ -24,8 +29,8 @@ function killSessionsWithWindow(owner: WebContents): void {
   })
 }
 
-export function createTerminal(owner: WebContents, { cwd, command, cols, rows, meta }: TerminalOptions, extraEnv: Record<string, string> = {}): string {
-  const id = randomUUID()
+export function createTerminal(owner: WebContents, { cwd, command, cols, rows, meta, id: requested }: TerminalOptions, extraEnv: Record<string, string> = {}): string {
+  const id = requested && !sessions.has(requested) ? requested : randomUUID()
   // Login shell so GUI launches still get the user's PATH (claude, codex, bun...)
   const pty = spawn(process.env.SHELL ?? '/bin/zsh', ['-l'], {
     name: 'xterm-256color',
@@ -55,11 +60,12 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
       entry.chunks = [kept]
       entry.size = kept.length
     }
-    if (!entry.owner.isDestroyed()) entry.owner.send('plugin:terminal:data', id, data)
+    output.push(id, data)
   })
   pty.onExit(({ exitCode }) => {
     entry.pty = null
     entry.exitCode = exitCode
+    output.flush(id)
     // Killed on purpose (ended by the user or the app quitting): don't report it, or quitting would mark every saved session as exited
     if (sessions.get(id) === entry && !entry.owner.isDestroyed()) entry.owner.send('plugin:terminal:exit', id, exitCode)
   })
@@ -70,6 +76,8 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
 export function listTerminals(owner: WebContents): LiveTerminal[] {
   return [...sessions].map(([id, entry]) => {
     entry.owner = owner
+    // The scrollback below already has it
+    output.drop(id)
     const { cols, rows } = entry.pty ?? { cols: SPAWN_COLS, rows: SPAWN_ROWS }
     return { id, meta: entry.meta, output: entry.chunks.join('').slice(-MAX_BUFFERED_CHARS), exitCode: entry.exitCode, cols, rows }
   })
@@ -95,6 +103,7 @@ export function resizeTerminal(id: string, cols: number, rows: number): void {
 export function killTerminal(id: string): void {
   const pty = sessions.get(id)?.pty
   sessions.delete(id)
+  output.drop(id)
   pty?.kill()
 }
 

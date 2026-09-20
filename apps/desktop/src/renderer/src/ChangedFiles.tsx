@@ -56,7 +56,7 @@ export function ChangedFileList({
       title={patch.path}
       onClick={() => onOpen(patch.path)}
       onContextMenu={onFileMenu && ((event) => onFileMenu(event, patch.path))}
-      className={`flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left transition-colors ${grouped ? 'pl-4' : 'pl-2'} ${
+      className={`flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left ${grouped ? 'pl-4' : 'pl-2'} ${
         patch.path === activePath ? 'bg-accent text-foreground' : 'text-foreground/75 hover:bg-accent'
       }`}
     >
@@ -82,7 +82,7 @@ export function ChangedFileList({
           style={{ paddingLeft: 6 + depth * 12 }}
           className="flex h-6 w-full items-center gap-1.5 rounded-md pr-1.5 text-left text-[11.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <Icon name="chevron" className={`size-3 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+          <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
           <Icon name="folder" className="size-3 shrink-0" />
           <span className="truncate">{folder.name}</span>
           <span className="ml-auto pl-1 tabular-nums">{count(folder)}</span>

@@ -1,74 +1,28 @@
-import { useEffect, useState } from 'react'
+import { type ComponentType, useEffect, useRef, useState } from 'react'
+import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav } from '@treeix/sdk'
 import type { ToolStatus } from '../../shared/types'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
-import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
+import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
 import { type Theme, THEMES, type ThemeId } from './themes'
-import { EmptyState } from './ui'
-import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, settingMatches, SettingsSearch, Switch, useSettingMatch, useSettingsQuery } from './settingsUi'
+import { EmptyState, Popup } from './ui'
+import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, settingMatches, SettingsSearch, Switch, useSettingMatch, useSettingsQuery } from './settingsUi'
 import { isPluginEnabled, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { copyText } from './contextMenu'
+import { useShortcuts } from './Shell'
 
-const SHORTCUTS: { group: string; items: [keys: string, action: string][] }[] = [
-  {
-    group: 'General',
-    items: [
-      ['⌘K  ·  ⌘⇧P', 'Command palette'],
-      ['⌘,', 'Settings'],
-      ['⌃-  ·  ⌃⇧-', 'Go back or forward to the tab, worktree, file and line you were on'],
-      ['⌥⌘=  ·  ⌥⌘-  ·  ⌥⌘0', 'Bigger, smaller or default font in the focused terminal, else the editor (⌘= / ⌘- zoom the window)'],
-      ['Modifier + 1-9', 'Terminal panes, title bar tabs and workspaces; modifiers set in Number shortcuts'],
-      ['Recorded in Hotkey window', 'Show or hide the hotkey window from any app'],
-      ['Esc', 'Close dialog or cancel comment']
-    ]
-  },
-  {
-    group: 'Worktrees',
-    items: [
-      ['⌘B', 'Toggle sidebar'],
-      ['⌘E', 'Toggle changed files'],
-      ['⌘P', 'Toggle file explorer (files in the Terminal tab)'],
-      ['⌘I', 'Toggle comments'],
-      ['⌘J', 'Toggle terminal panel'],
-      ['⌘⇧J', 'Find and switch sessions'],
-      ['⌘T', 'Open the Terminal tab'],
-      ['⌘N  ·  ⇧⌘T', 'New shell or Claude session in the selected worktree (⌥⌘T also starts a shell)'],
-      ['⌘D  ·  ⇧⌘D', 'Split the active terminal right or down with a new shell'],
-      ['⌘W', 'Close the focused terminal (agents are hidden, not ended)'],
-      ['⌥⌘ arrows', 'Move focus between terminals'],
-      ['⇧⌘↵', 'Maximize or restore the focused terminal'],
-      ['J  ·  K', 'Next or previous changed file'],
-      ['R', 'Rescan worktrees'],
-      ['⇧⌘F', 'Search across projects in scope']
-    ]
-  },
-  {
-    group: 'Code navigation',
-    items: [
-      ['⌘ click', 'Go to definition, or references when on the definition'],
-      ['Recorded in Code navigation', 'Definition, type definition, implementations, references (F12 keys by default)'],
-      ['Hover', 'Type and docs; dotted underline marks a navigable symbol'],
-      ['Right click', 'All navigation actions for the symbol']
-    ]
-  },
-  {
-    group: 'Comments',
-    items: [
-      ['Drag lines', 'Comment on a range'],
-      ['⌘↵', 'Save comment'],
-      ['⌘V', 'Paste an image or file as an attachment']
-    ]
-  }
+export type SectionId = 'General' | 'Appearance' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations'
+const SECTIONS: [SectionId, IconName][] = [
+  ['General', 'settings'],
+  ['Appearance', 'palette'],
+  ['Terminal', 'terminal'],
+  ['Keyboard', 'keyboard'],
+  ['Plugins', 'plug'],
+  ['Integrations', 'cloudCheck']
 ]
 
-const DIGIT_TARGETS: { target: DigitTarget; label: string; description: string }[] = [
-  { target: 'panes', label: 'Terminal panes', description: 'Focus the nth terminal on screen, opening the Terminal tab if none is shown.' },
-  { target: 'tabs', label: 'Tabs', description: 'Worktrees, Terminal, Pull requests, then open PR and plan tabs; 9 is the last tab.' },
-  { target: 'workspaces', label: 'Workspaces', description: 'Workspaces in rail order. ⌃ digits also switch macOS desktops.' }
-]
-
-/** Click, then press the combination; Esc cancels. Bare keys like § or F12 are allowed. */
+/** Click or ⏎, then press the combination; Esc cancels. Bare keys like § or F12 are allowed. */
 function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChange: (shortcut: Shortcut | null) => void }): React.JSX.Element {
   const [recording, setRecording] = useState(false)
 
@@ -76,6 +30,7 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
     if (!recording) return
     // The current global hotkey would fire instead of being recorded
     window.api.configureHotkey({ shortcut: null, hideOnBlur: false, only: getSettings().hotkeyOnly })
+    updateShell({ recording: true })
     const capture = (event: KeyboardEvent): void => {
       event.preventDefault()
       event.stopImmediatePropagation()
@@ -92,6 +47,7 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
     window.addEventListener('keydown', capture, true)
     return () => {
       window.removeEventListener('keydown', capture, true)
+      updateShell({ recording: false })
       const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = getSettings()
       window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null })
     }
@@ -106,10 +62,10 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
           setRecording(!recording)
         }}
         className={`flex h-8 min-w-36 items-center justify-center rounded-lg px-3 font-mono text-[13px] ring-1 ${
-          recording ? 'animate-pulse text-primary ring-primary' : value ? 'text-foreground ring-border hover:bg-accent' : 'text-muted-foreground ring-border hover:bg-accent'
+          recording ? 'bg-foreground/[.08] text-foreground ring-input' : value ? 'text-foreground ring-border hover:bg-accent' : 'text-muted-foreground ring-border hover:bg-accent'
         }`}
       >
-        {recording ? 'Press shortcut…' : value ? shortcutLabel(value) : 'Record shortcut'}
+        {recording ? 'Press keys, esc cancels' : value ? shortcutLabel(value) : 'Record shortcut'}
       </button>
       {value && !recording && (
         <button title="Turn off" onClick={() => onChange(null)} className="grid size-8 place-items-center rounded-lg text-muted-foreground ring-1 ring-border hover:text-foreground">
@@ -120,128 +76,18 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
   )
 }
 
-function HotkeyWindow(): React.JSX.Element {
+function GlobalShortcut(): React.JSX.Element {
   const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = useSettings()
   const [error, setError] = useState<string | null>(null)
-
+  // main.tsx registers every change too; this call is only for the error to show here
   useEffect(() => {
     window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null }).then(setError)
   }, [hotkey, hotkeyHideOnBlur, hotkeyOnly])
-
   return (
-    <Card title="Hotkey window">
-      <Row
-        label="Global shortcut"
-        description="Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing."
-      >
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <ShortcutRecorder value={hotkey} onChange={(next) => updateSettings({ hotkey: next })} />
-          {error && <span className="max-w-72 text-right text-[11px] text-amber-400">{error}</span>}
-        </div>
-      </Row>
-      <Row label="Hide when focus is lost" description="Clicking another app puts the hotkey window away, like iTerm2.">
-        <Switch checked={hotkeyHideOnBlur} label="Hide when focus is lost" onChange={() => updateSettings({ hotkeyHideOnBlur: !hotkeyHideOnBlur })} />
-      </Row>
-      <Row
-        label="Hotkey window only"
-        description="No normal window: Treeix always stays the drop-down and only shows or hides, so nothing resizes or re-renders when it appears. Needs a global shortcut."
-      >
-        <Switch checked={hotkeyOnly} label="Hotkey window only" onChange={() => updateSettings({ hotkeyOnly: !hotkeyOnly })} />
-      </Row>
-    </Card>
-  )
-}
-
-function General(): React.JSX.Element {
-  const settings = useSettings()
-  return (
-    <>
-      <Plugins />
-      <Card title="Layout">
-        <Row label="Diff view" description="How diffs render in worktrees and pull requests. Also switchable from the diff header.">
-          <Segmented
-            value={settings.diffStyle}
-            options={[
-              ['split', 'Split'],
-              ['unified', 'Unified']
-            ]}
-            onChange={(diffStyle) => updateSettings({ diffStyle })}
-          />
-        </Row>
-        <Row
-          label="Sections"
-          description="Whether folder groups start expanded or hidden. Panels start open and remember when you close them."
-        >
-          <Segmented
-            value={settings.sections}
-            options={[
-              ['hidden', 'Hidden'],
-              ['expanded', 'Expanded']
-            ]}
-            onChange={(sections) => updateSettings({ sections })}
-          />
-        </Row>
-        <Row label="Bottom panel" description="Whether a panel docked at the bottom, like the terminal, sits beside the sidebar or spans the full width under it. Applies to every tab.">
-          <Segmented
-            value={settings.bottomPanel}
-            options={[
-              ['content', 'Beside sidebar'],
-              ['full', 'Full width']
-            ]}
-            onChange={(bottomPanel) => updateSettings({ bottomPanel })}
-          />
-        </Row>
-        <Row label="Branches in sidebar" description="List branches that have no worktree under each project in the Worktrees sidebar.">
-          <Switch checked={settings.sidebarBranches} label="Branches in sidebar" onChange={() => updateSettings({ sidebarBranches: !settings.sidebarBranches })} />
-        </Row>
-      </Card>
-      <HotkeyWindow />
-      <Card title="Number shortcuts">
-        {DIGIT_TARGETS.map(({ target, label, description }) => {
-          const modifier = settings.digitShortcuts[target]
-          const clash = modifier !== 'off' && DIGIT_TARGETS.some((other) => other.target !== target && settings.digitShortcuts[other.target] === modifier)
-          return (
-            <Row key={target} label={label} description={clash ? `${description} Same modifier as another row, so only one of them works.` : description}>
-              <Segmented
-                value={modifier}
-                options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, name])}
-                onChange={(next) => updateSettings({ digitShortcuts: { ...settings.digitShortcuts, [target]: next } })}
-              />
-            </Row>
-          )
-        })}
-      </Card>
-      <Card title="Code navigation">
-        {NAVIGATION_ACTIONS.map(({ kind, label, description }) => (
-          <Row key={kind} label={label} description={description}>
-            <ShortcutRecorder
-              value={settings.navigationKeys[kind]}
-              onChange={(next) => updateSettings({ navigationKeys: { ...getSettings().navigationKeys, [kind]: next } })}
-            />
-          </Row>
-        ))}
-      </Card>
-      <Card title="Performance">
-        <Row
-          label="Highlighting workers"
-          description="More workers highlight large diffs faster but each keeps its own grammars in memory. Applies after restart."
-        >
-          <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
-            {[1, 2, 3, 4].map((count) => (
-              <button
-                key={count}
-                onClick={() => updateSettings({ highlightWorkers: count })}
-                className={`h-6 w-7 rounded-md text-xs ${
-                  settings.highlightWorkers === count ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {count}
-              </button>
-            ))}
-          </div>
-        </Row>
-      </Card>
-    </>
+    <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <ShortcutRecorder value={hotkey} onChange={(next) => updateSettings({ hotkey: next })} />
+      {error && <span className="max-w-72 text-right text-[11px] break-words text-amber-400">{error}</span>}
+    </div>
   )
 }
 
@@ -289,12 +135,16 @@ function loadInstalledFonts(): Promise<FontFamily[]> {
 
 const MAX_FONT_SUGGESTIONS = 80
 
-/** Free-text family name with installed fonts suggested, each previewed in itself */
+/** Free-text family name with installed fonts suggested, each previewed in itself; ↑ ↓ pick one */
 function FontPicker({ value, monospace, onChange }: { value: string; monospace: boolean; onChange: (family: string) => void }): React.JSX.Element {
   const [draft, setDraft] = useState(value)
   const [fonts, setFonts] = useState<FontFamily[]>([])
   const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)
+  const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => setDraft(value), [value])
+  useEffect(() => listRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }), [active])
   const needle = draft.trim().toLowerCase()
   const exact = fonts.some((font) => font.name.toLowerCase() === needle)
   const system = SYSTEM_FONTS.filter((font) => font.monospace === monospace).map(({ value, label }) => ({ name: value, label, monospace }))
@@ -304,11 +154,13 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
   const commit = (family: string): void => {
     setDraft(family)
     setOpen(false)
+    setActive(-1)
     if (family.trim() !== value) onChange(family.trim())
   }
   return (
-    <div className="relative w-56 shrink-0">
+    <div className="relative w-56 max-w-full shrink-0">
       <input
+        ref={inputRef}
         value={draft}
         spellCheck={false}
         placeholder="Default"
@@ -320,18 +172,31 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
         onChange={(event) => {
           setDraft(event.target.value)
           setOpen(true)
+          setActive(-1)
         }}
         onBlur={() => commit(draft)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') event.currentTarget.blur()
-          if (event.key === 'Escape') {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            const step = event.key === 'ArrowDown' ? 1 : -1
+            setOpen(true)
+            setActive(Math.min(suggestions.length - 1, Math.max(0, active + step)))
+          }
+          if (event.key === 'Enter') {
+            const picked = suggestions[active]
+            if (picked) commit(picked.name)
+            event.currentTarget.blur()
+          }
+          // Esc first closes the suggestions, then hands the keys back to the row
+          if (event.key === 'Escape' && (open || draft !== value)) {
             event.stopPropagation()
             setDraft(value)
             setOpen(false)
+            setActive(-1)
           }
         }}
         style={{ fontFamily: draft.trim() ? fontStack(draft, 'sans-serif') : undefined }}
-        className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary/60"
+        className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
       />
       {value && (
         <button onMouseDown={(event) => event.preventDefault()} onClick={() => commit('')} title="Use default" className="absolute top-2 right-2 text-muted-foreground hover:text-foreground">
@@ -339,28 +204,259 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
         </button>
       )}
       {open && suggestions.length > 0 && (
-        <div className="absolute inset-x-0 top-9 z-20 max-h-64 overflow-y-auto rounded-lg border border-input bg-popover p-1">
-          {suggestions.map((font) => (
+        <Popup ref={listRef} anchor={inputRef} align="stretch" className="max-h-64 overflow-y-auto rounded-lg border border-input bg-popover p-1">
+          {suggestions.map((font, index) => (
             <button
               key={font.name}
+              tabIndex={-1}
+              data-active={index === active ? '' : undefined}
               // mousedown keeps focus in the input, so blur doesn't commit the typed text first
               onMouseDown={(event) => {
                 event.preventDefault()
                 commit(font.name)
               }}
-              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-foreground/85 hover:bg-accent"
+              className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-foreground/85 hover:bg-accent ${index === active ? 'bg-accent' : ''}`}
             >
               {/* Names in the UI font stay readable for symbol fonts; the sample shows the face itself */}
               <span className="min-w-0 flex-1 truncate">{font.label ?? font.name}</span>
               <span style={{ fontFamily: fontStack(font.name, 'sans-serif') }} className="shrink-0 text-muted-foreground">
                 Aa 0O
               </span>
-              {font.name === value && <Icon name="check" className="size-3 shrink-0 text-primary" />}
+              {font.name === value && <Icon name="check" className="size-3 shrink-0 text-foreground" />}
             </button>
           ))}
-        </div>
+        </Popup>
       )}
     </div>
+  )
+}
+
+const DIGIT_TARGETS: { target: DigitTarget; label: string; description: string }[] = [
+  { target: 'tabs', label: 'Tabs', description: 'Title bar pages, then open PR and plan tabs; 9 is the last tab. Off by default: G and a letter goes to a page from anywhere.' },
+  { target: 'workspaces', label: 'Workspaces', description: 'Workspaces in rail order, like G and a number. ⌃ digits also switch macOS desktops.' }
+]
+
+type SettingSpec = {
+  section: SectionId
+  card: string
+  label: string
+  description: string
+  Control: ComponentType
+  /** Appended to the description while it applies, like a clash with another row */
+  note?: (settings: Settings) => string
+}
+
+function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel'>(key: K, options: [Settings[K], string][]): ComponentType {
+  return function SettingSegmented() {
+    const value = useSettings()[key]
+    return <Segmented value={value} options={options} onChange={(next) => updateSettings({ [key]: next })} />
+  }
+}
+
+function toggle(key: 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly', label: string): ComponentType {
+  return function SettingSwitch() {
+    const value = useSettings()[key]
+    return <Switch checked={value} label={label} onChange={() => updateSettings({ [key]: !value })} />
+  }
+}
+
+function fontRow(key: 'uiFont' | 'editorFont' | 'terminalFont', size?: { key: 'editorFontSize' | 'terminalFontSize'; fallback: number; label: string }): ComponentType {
+  return function FontControl() {
+    const settings = useSettings()
+    const picker = <FontPicker value={settings[key]} monospace={key !== 'uiFont'} onChange={(family) => updateSettings({ [key]: family })} />
+    if (!size) return picker
+    return (
+      <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
+        {picker}
+        <FontSize label={size.label} value={settings[size.key]} fallback={size.fallback} onChange={(next) => updateSettings({ [size.key]: next })} />
+      </div>
+    )
+  }
+}
+
+function Transparency(): React.JSX.Element {
+  const { opacity } = useSettings()
+  return (
+    <div className="flex w-56 max-w-full shrink-0 items-center gap-3">
+      <input
+        type="range"
+        min={MIN_OPACITY}
+        max={100}
+        value={opacity}
+        aria-label="Window opacity"
+        onChange={(event) => updateSettings({ opacity: clampOpacity(Number(event.target.value)) })}
+        style={{ background: `linear-gradient(to right, var(--color-primary) ${((opacity - MIN_OPACITY) / (100 - MIN_OPACITY)) * 100}%, color-mix(in srgb, var(--color-foreground) 12%, transparent) 0)` }}
+        className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+      />
+      <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">{100 - opacity}%</span>
+    </div>
+  )
+}
+
+/** Every setting with a row of its own; the command palette lists them too */
+const SETTINGS: SettingSpec[] = [
+  {
+    section: 'General',
+    card: 'Layout',
+    label: 'Diff view',
+    description: 'How diffs render in worktrees and pull requests. Also switchable from the diff header.',
+    Control: segmented('diffStyle', [
+      ['split', 'Split'],
+      ['unified', 'Unified']
+    ])
+  },
+  {
+    section: 'General',
+    card: 'Layout',
+    label: 'Sections',
+    description: 'Whether folder groups start expanded or hidden. Panels start open and remember when you close them.',
+    Control: segmented('sections', [
+      ['hidden', 'Hidden'],
+      ['expanded', 'Expanded']
+    ])
+  },
+  {
+    section: 'General',
+    card: 'Layout',
+    label: 'Bottom panel',
+    description: 'Whether a panel docked at the bottom, like the terminal, sits beside the sidebar or spans the full width under it. Applies to every tab.',
+    Control: segmented('bottomPanel', [
+      ['content', 'Beside sidebar'],
+      ['full', 'Full width']
+    ])
+  },
+  {
+    section: 'General',
+    card: 'Layout',
+    label: 'Branches in sidebar',
+    description: 'List branches that have no worktree under each project in the Worktrees sidebar.',
+    Control: toggle('sidebarBranches', 'Branches in sidebar')
+  },
+  {
+    section: 'General',
+    card: 'Hotkey window',
+    label: 'Global shortcut',
+    description:
+      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing.',
+    Control: GlobalShortcut
+  },
+  {
+    section: 'General',
+    card: 'Hotkey window',
+    label: 'Hide when focus is lost',
+    description: 'Clicking another app puts the hotkey window away, like iTerm2.',
+    Control: toggle('hotkeyHideOnBlur', 'Hide when focus is lost')
+  },
+  {
+    section: 'General',
+    card: 'Hotkey window',
+    label: 'Hotkey window only',
+    description: 'No normal window: Treeix always stays the drop-down and only shows or hides, so nothing resizes or re-renders when it appears. Needs a global shortcut.',
+    Control: toggle('hotkeyOnly', 'Hotkey window only')
+  },
+  {
+    section: 'Appearance',
+    card: 'Window',
+    label: 'Transparency',
+    description: 'Lets the blurred desktop show through backgrounds while text stays solid. Applies instantly.',
+    Control: Transparency
+  },
+  {
+    section: 'Appearance',
+    card: 'Window',
+    label: 'Borders',
+    description: "How visible dividers and field outlines are, from none to the theme's full strength.",
+    Control: function Borders() {
+      const { borderStrength } = useSettings()
+      return (
+        <Segmented
+          value={`${borderStrength}`}
+          options={BORDER_STRENGTHS.map((strength): [string, string] => [`${strength}`, `${strength}%`])}
+          onChange={(value) => updateSettings({ borderStrength: BORDER_STRENGTHS.find((strength) => `${strength}` === value) ?? 100 })}
+        />
+      )
+    }
+  },
+  { section: 'Appearance', card: 'Fonts', label: 'Interface', description: "Menus, lists, markdown and everything that isn't code.", Control: fontRow('uiFont') },
+  {
+    section: 'Appearance',
+    card: 'Fonts',
+    label: 'Editor',
+    description: 'Code in the editor, diffs and pull requests. Size is independent of window zoom (⌘+ / ⌘-).',
+    Control: fontRow('editorFont', { key: 'editorFontSize', fallback: 13, label: 'editor font' })
+  },
+  {
+    section: 'Terminal',
+    card: 'Font',
+    label: 'Terminal font',
+    description: 'Terminal and agent sessions. Open terminals resize to fit; ⌥⌘= and ⌥⌘- change the size from a terminal.',
+    Control: fontRow('terminalFont', { key: 'terminalFontSize', fallback: 12, label: 'terminal font' })
+  },
+  {
+    section: 'Terminal',
+    card: 'Performance',
+    label: 'Scrollback',
+    description: 'Lines each terminal keeps to scroll back through. More lines use more memory per session. Applies to open terminals too.',
+    Control: function Scrollback() {
+      const { terminalScrollback } = useSettings()
+      const lines = ['1000', '3000', '5000', '10000', '20000'] as const
+      return <Segmented value={`${terminalScrollback}`} options={lines.map((count) => [count, Number(count).toLocaleString('en-US')])} onChange={(count) => updateSettings({ terminalScrollback: Number(count) })} />
+    }
+  },
+  {
+    section: 'Terminal',
+    card: 'Performance',
+    label: 'Highlighting workers',
+    description: 'Syntax highlighting of diffs and files. More workers highlight large diffs faster but each keeps its own grammars in memory. Applies after restart.',
+    Control: function Workers() {
+      const { highlightWorkers } = useSettings()
+      const counts = ['1', '2', '3', '4'] as const
+      return <Segmented value={`${highlightWorkers}`} options={counts.map((count) => [count, count])} onChange={(count) => updateSettings({ highlightWorkers: Number(count) })} />
+    }
+  },
+  ...DIGIT_TARGETS.map(
+    ({ target, label, description }): SettingSpec => ({
+      section: 'Terminal',
+      card: 'Number shortcuts',
+      label,
+      description,
+      note: ({ digitShortcuts }) => {
+        const modifier = digitShortcuts[target]
+        const clash = modifier !== 'off' && DIGIT_TARGETS.some((other) => other.target !== target && digitShortcuts[other.target] === modifier)
+        return clash ? ' Same modifier as another row, so only one of them works.' : ''
+      },
+      Control: function DigitModifierControl() {
+        const { digitShortcuts } = useSettings()
+        return (
+          <Segmented
+            value={digitShortcuts[target]}
+            options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, name])}
+            onChange={(next) => updateSettings({ digitShortcuts: { ...getSettings().digitShortcuts, [target]: next } })}
+          />
+        )
+      }
+    })
+  ),
+  ...NAVIGATION_ACTIONS.map(
+    ({ kind, label, description }): SettingSpec => ({
+      section: 'Keyboard',
+      card: 'Code navigation',
+      label,
+      description,
+      Control: function NavigationKey() {
+        const { navigationKeys } = useSettings()
+        return <ShortcutRecorder value={navigationKeys[kind]} onChange={(next) => updateSettings({ navigationKeys: { ...getSettings().navigationKeys, [kind]: next } })} />
+      }
+    })
+  )
+]
+
+function SettingRow({ spec: { label, description, note, Control } }: { spec: SettingSpec }): React.JSX.Element {
+  const settings = useSettings()
+  return (
+    <Row label={label} description={`${description}${note?.(settings) ?? ''}`}>
+      <Control />
+    </Row>
   )
 }
 
@@ -385,63 +481,25 @@ function ThemePreview({ theme }: { theme: Theme }): React.JSX.Element {
 function ThemeCard({ label, selected, onSelect, children }: { label: string; selected: boolean; onSelect: () => void; children: React.ReactNode }): React.JSX.Element | null {
   if (!useSettingMatch(label, 'theme')) return null
   return (
-    <button data-setting onClick={onSelect} className={`overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-2 ring-primary' : 'ring-border hover:ring-input'}`}>
+    <button
+      data-setting={label}
+      onClick={onSelect}
+      className={`min-w-0 overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-input' : 'ring-border hover:ring-input'}`}
+    >
       {children}
       <div className="flex items-center gap-2 bg-card px-2.5 py-2 text-xs">
-        {label}
-        {selected && <Icon name="check" className="ml-auto size-3 text-primary" />}
+        <span className="min-w-0 truncate">{label}</span>
+        {selected && <Icon name="check" className="ml-auto size-3 shrink-0 text-foreground" />}
       </div>
     </button>
   )
 }
 
-function Appearance(): React.JSX.Element {
-  const { theme: current, opacity, borderStrength, editorFontSize, terminalFontSize, uiFont, editorFont, terminalFont } = useSettings()
+function Themes(): React.JSX.Element {
+  const { theme: current } = useSettings()
   return (
-    <>
-    <Card title="Window">
-      <Row label="Transparency" description="Lets the blurred desktop show through backgrounds while text stays solid. Applies instantly.">
-        <div className="flex w-56 shrink-0 items-center gap-3">
-          <input
-            type="range"
-            min={MIN_OPACITY}
-            max={100}
-            value={opacity}
-            aria-label="Window opacity"
-            onChange={(event) => updateSettings({ opacity: clampOpacity(Number(event.target.value)) })}
-            style={{ background: `linear-gradient(to right, var(--color-primary) ${((opacity - MIN_OPACITY) / (100 - MIN_OPACITY)) * 100}%, color-mix(in srgb, var(--color-foreground) 12%, transparent) 0)` }}
-            className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
-          />
-          <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">{100 - opacity}%</span>
-        </div>
-      </Row>
-      <Row label="Borders" description="How visible dividers and field outlines are, from none to the theme's full strength.">
-        <Segmented
-          value={`${borderStrength}`}
-          options={BORDER_STRENGTHS.map((strength): [string, string] => [`${strength}`, `${strength}%`])}
-          onChange={(value) => updateSettings({ borderStrength: BORDER_STRENGTHS.find((strength) => `${strength}` === value) ?? 100 })}
-        />
-      </Row>
-    </Card>
-    <Card title="Fonts">
-      <Row label="Interface" description="Menus, lists, markdown and everything that isn't code.">
-        <FontPicker value={uiFont} monospace={false} onChange={(family) => updateSettings({ uiFont: family })} />
-      </Row>
-      <Row label="Editor" description="Code in the editor, diffs and pull requests. Size is independent of window zoom (⌘+ / ⌘-).">
-        <div className="flex shrink-0 items-center gap-2">
-          <FontPicker value={editorFont} monospace onChange={(family) => updateSettings({ editorFont: family })} />
-          <FontSize label="editor font" value={editorFontSize} fallback={13} onChange={(size) => updateSettings({ editorFontSize: size })} />
-        </div>
-      </Row>
-      <Row label="Terminal" description="Terminal and agent sessions. Open terminals resize to fit.">
-        <div className="flex shrink-0 items-center gap-2">
-          <FontPicker value={terminalFont} monospace onChange={(family) => updateSettings({ terminalFont: family })} />
-          <FontSize label="terminal font" value={terminalFontSize} fallback={12} onChange={(size) => updateSettings({ terminalFontSize: size })} />
-        </div>
-      </Row>
-    </Card>
     <Card title="Theme">
-      <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3 p-4">
         <ThemeCard label="System" selected={current === 'system'} onSelect={() => updateSettings({ theme: 'system' })}>
           {/* Dark and light halves: the theme follows the macOS appearance */}
           <div className="grid h-20 grid-cols-2">
@@ -456,27 +514,27 @@ function Appearance(): React.JSX.Element {
         ))}
       </div>
     </Card>
-    </>
   )
 }
 
 function ShortcutRow({ keys, action }: { keys: string; action: string }): React.JSX.Element | null {
   if (!useSettingMatch(action, keys, 'shortcut')) return null
   return (
-    <div data-setting className="flex items-center border-b border-border px-4 py-2.5 text-[13px] last:border-b-0">
-      <span className="flex-1">{action}</span>
-      <kbd className="rounded-md bg-muted px-2 py-0.5 font-sans text-xs whitespace-pre text-muted-foreground ring-1 ring-border">{keys}</kbd>
+    <div data-setting={action} tabIndex={-1} className={`flex items-center gap-4 border-b border-border px-4 py-2.5 text-[13px] last:border-b-0 ${SETTING_ROW}`}>
+      <span className="min-w-0 flex-1 break-words">{action}</span>
+      <kbd className="max-w-[45%] shrink-0 rounded-md bg-muted px-2 py-0.5 text-right font-sans text-xs break-words text-muted-foreground ring-1 ring-border">{keys}</kbd>
     </div>
   )
 }
 
+/** The same list as the ? sheet: the app's shortcuts and those of enabled plugins */
 function Shortcuts(): React.JSX.Element {
   return (
     <>
-      {SHORTCUTS.map(({ group, items }) => (
-        <Card key={group} title={`${group} shortcuts`}>
-          {items.map(([keys, action]) => (
-            <ShortcutRow key={action} keys={keys} action={action} />
+      {useShortcuts().map(([section, shortcuts]) => (
+        <Card key={section} title={`${section} shortcuts`}>
+          {shortcuts.map(({ keys, label }) => (
+            <ShortcutRow key={`${keys}:${label}`} keys={keys} action={label} />
           ))}
         </Card>
       ))}
@@ -509,7 +567,7 @@ function Plugins(): React.JSX.Element {
               <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
             </Row>
             {enabled && PluginSettings && (
-              <div className="ml-4 border-l border-border [&>div]:border-b-0">
+              <div className="mx-3 mb-3 rounded-lg bg-muted/50 ring-1 ring-border">
                 <PluginSettings />
               </div>
             )}
@@ -541,7 +599,7 @@ function UpdateButton({ command, onDone }: { command: string; onDone: () => Prom
           copyText(command)
           setCopied(true)
         }}
-        className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
+        className="h-6 max-w-full truncate rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
       >
         {copied ? 'Command copied' : `Copy ${command}`}
       </button>
@@ -557,15 +615,14 @@ function UpdateButton({ command, onDone }: { command: string; onDone: () => Prom
         // The check reruns once the update has had time to finish; watch the session for what it printed
         setTimeout(() => void onDone().finally(() => setRunning(false)), UPDATE_SETTLE_MS)
       }}
-      className="flex h-6 items-center gap-1.5 rounded-md bg-primary/15 px-2 text-[11px] font-medium text-primary ring-1 ring-primary/40 hover:bg-primary/25 disabled:opacity-70"
+      className="flex h-6 items-center rounded-md bg-primary/15 px-2 text-[11px] font-medium text-primary ring-1 ring-primary/40 hover:bg-primary/25 disabled:opacity-70"
     >
-      {running && <Icon name="refresh" className="size-3 animate-spin" />}
       {running ? 'Updating…' : 'Update'}
     </button>
   )
 }
 
-function Integrations(): React.JSX.Element {
+function Tools(): React.JSX.Element {
   const [tools, setTools] = useState<ToolStatus[] | null>(null)
   const [checking, setChecking] = useState(false)
 
@@ -580,105 +637,305 @@ function Integrations(): React.JSX.Element {
   useEffect(() => void check(), [])
 
   return (
-    <SearchGroup title="Command line tools integrations" className="mb-8">
-      <div className="mb-2 flex items-center">
-        <h2 className="text-[13px] font-medium">Command line tools</h2>
-        <button
-          onClick={() => void check()}
-          className="ml-auto flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground"
-        >
-          <Icon name="refresh" className={`size-3 ${checking ? 'animate-spin' : ''}`} />
-          Check again
+    <Card title="Command line tools">
+      <Row label="Check again" description="Looks for the tools in your login shell again, after installing one or signing in.">
+        <button disabled={checking} onClick={() => void check()} className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground disabled:opacity-70">
+          {checking ? 'Checking…' : 'Check'}
         </button>
-      </div>
-      <div className="rounded-xl border border-border bg-card">
-        {!tools && <EmptyState title="Checking your login shell..." />}
-        {tools?.map((tool) => (
-          <ToolRow key={tool.name} tool={tool} check={check} />
-        ))}
-      </div>
-    </SearchGroup>
+      </Row>
+      {!tools && <EmptyState title="Checking your login shell..." />}
+      {tools?.map((tool) => (
+        <ToolRow key={tool.name} tool={tool} check={check} />
+      ))}
+    </Card>
   )
 }
 
 function ToolRow({ tool, check }: { tool: ToolStatus; check: () => Promise<void> }): React.JSX.Element | null {
   if (!useSettingMatch(tool.name, tool.purpose)) return null
   return (
-    <div data-setting className="flex items-start gap-3 border-b border-border px-4 py-3.5 last:border-b-0">
+    <div data-setting={tool.name} tabIndex={-1} className={`flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 ${SETTING_ROW}`}>
       <span className={`mt-1.5 size-2 shrink-0 rounded-full ${tool.error ? (tool.version ? 'bg-amber-400' : 'bg-red-400') : 'bg-emerald-400'}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-[13px]">
+        <div className="flex flex-wrap items-center gap-x-2 text-[13px]">
           <ToolMark name={tool.name} />
           <span className="font-mono">{tool.name}</span>
-          <span className="text-xs text-muted-foreground">{tool.purpose}</span>
+          <span className="min-w-0 text-xs break-words text-muted-foreground">{tool.purpose}</span>
         </div>
         {tool.version && <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{tool.version}</div>}
         {tool.update && (
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-sky-400">
-            <span className="select-text">Update available: {tool.update}</span>
+            <span className="min-w-0 break-words select-text">Update available: {tool.update}</span>
             {tool.updateCommand && <UpdateButton command={tool.updateCommand} onDone={check} />}
           </div>
         )}
         {tool.accounts?.map((account) => (
-          <div key={account} className="mt-0.5 text-xs text-emerald-400">
+          <div key={account} className="mt-0.5 truncate text-xs text-emerald-400">
             Signed in as {account}
           </div>
         ))}
-        {tool.error && <div className="mt-0.5 text-xs text-amber-400 select-text">{tool.error}</div>}
+        {tool.error && <div className="mt-0.5 text-xs break-words text-amber-400 select-text">{tool.error}</div>}
       </div>
     </div>
   )
 }
 
+/** Blocks after a section's own rows */
+const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance: Themes, Keyboard: Shortcuts, Plugins, Integrations: Tools }
+
+function Section({ id }: { id: SectionId }): React.JSX.Element {
+  const specs = SETTINGS.filter((spec) => spec.section === id)
+  const Extra = SECTION_EXTRAS[id]
+  return (
+    <>
+      {[...new Set(specs.map((spec) => spec.card))].map((card) => (
+        <Card key={card} title={card}>
+          {specs
+            .filter((spec) => spec.card === card)
+            .map((spec) => (
+              <SettingRow key={spec.label} spec={spec} />
+            ))}
+        </Card>
+      ))}
+      {Extra && <Extra />}
+    </>
+  )
+}
+
+/** A setting the command palette points at: which section it's in, and its row or card label */
+export type SettingEntry = { section: SectionId; card: string; label: string; keys?: string }
+
+/** Everything in Settings the palette can jump to; plugins' own settings are found by searching Settings itself */
+export function useSettingEntries(): SettingEntry[] {
+  const shortcuts = useShortcuts()
+  return [
+    ...SETTINGS.map(({ section, card, label }) => ({ section, card, label })),
+    { section: 'Appearance', card: 'Theme', label: 'Theme' },
+    ...PLUGINS.map(({ manifest }): SettingEntry => ({ section: 'Plugins', card: 'Plugins', label: manifest.name })),
+    { section: 'Integrations', card: 'Command line tools', label: 'Command line tools' },
+    ...shortcuts.flatMap(([card, list]) => list.map(({ keys, label }): SettingEntry => ({ section: 'Keyboard', card: `${card} shortcuts`, label, keys })))
+  ]
+}
+
+let pendingReveal: SettingEntry | null = null
+let onReveal: (() => void) | null = null
+
+/** Shows the setting's section with keyboard focus on its row, once Settings is open */
+export function revealSetting(entry: SettingEntry): void {
+  pendingReveal = entry
+  onReveal?.()
+}
+
+let lastSection: SectionId = 'General'
+
 export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const [section, setSectionState] = useState<SectionId>(lastSection)
   const [query, setQuery] = useState('')
+  const [reveal, setReveal] = useState<SettingEntry | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const mainRef = useRef<HTMLDivElement>(null)
+  const panels = usePanels('settings')
+  const needle = query.trim()
+  const setSection = (next: SectionId): void => {
+    lastSection = next
+    setSectionState(next)
+    setQuery('')
+  }
+  const sectionIndex = SECTIONS.findIndex(([id]) => id === section)
+  const rows = (): HTMLElement[] => [...(mainRef.current?.querySelectorAll<HTMLElement>('[data-setting]') ?? [])]
+  const focusRow = (row: HTMLElement | undefined): void => {
+    row?.focus({ preventScroll: true })
+    row?.scrollIntoView({ block: 'nearest' })
+  }
+
+  const { rowProps } = useListNav({
+    count: SECTIONS.length,
+    index: needle ? -1 : sectionIndex,
+    onSelect: (index) => setSection(SECTIONS[index][0]),
+    onOpen: (index) => {
+      setSection(SECTIONS[index][0])
+      requestAnimationFrame(() => focusRow(rows()[0]))
+    }
+  })
 
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+    const take = (): void => {
+      if (!pendingReveal) return
+      setSection(pendingReveal.section)
+      setReveal(pendingReveal)
+      pendingReveal = null
     }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
+    onReveal = take
+    if (pendingReveal) take()
+    else focusZone('list')
+    return () => {
+      onReveal = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!reveal) return
+    requestAnimationFrame(() => {
+      const main = mainRef.current
+      const label = CSS.escape(reveal.label)
+      const row = main?.querySelector<HTMLElement>(`[data-setting="${label}"]`) ?? main?.querySelector<HTMLElement>(`[data-card="${label}"] [data-setting]`) ?? undefined
+      row?.focus({ preventScroll: true })
+      row?.scrollIntoView({ block: 'center' })
+    })
+  }, [reveal])
+
+  const latest = useRef({ onClose, list: panels.list })
+  latest.current = { onClose, list: panels.list }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const { zone, leader } = getShell()
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || leader || isTyping(event) || (zone !== 'list' && zone !== 'main')) return
+      // Keys from a drawer, dialog or menu over the page are theirs
+      const origin = event.target instanceof Element && event.target !== document.body ? event.target : null
+      if (origin && ![searchRef.current, mainRef.current].some((element) => element?.closest('[data-zone]')?.contains(origin))) return
+      // Esc in main goes back to the list through the shell; from the list, or main without one, it leaves Settings
+      if (event.key === 'Escape') {
+        if (zone === 'list' || !latest.current.list) latest.current.onClose()
+        return
+      }
+      if (event.key === '/') {
+        event.preventDefault()
+        return searchRef.current?.focus()
+      }
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const mainZone = mainRef.current?.closest('[data-zone]')
+      if (zone !== 'main' || !mainZone || (target && target !== document.body && !mainZone.contains(target))) return
+      const all = rows()
+      const row = target?.closest<HTMLElement>('[data-setting]') ?? undefined
+      const index = row ? all.indexOf(row) : -1
+      const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
+      const next = step ? Math.min(all.length - 1, Math.max(0, index + step)) : event.key === 'Home' ? 0 : event.key === 'End' || event.key === 'G' ? all.length - 1 : null
+      if (next !== null) {
+        event.preventDefault()
+        return focusRow(all[next])
+      }
+      if (!row) return
+      const shift = event.key === 'l' || event.key === 'ArrowRight' ? 1 : event.key === 'h' || event.key === 'ArrowLeft' ? -1 : 0
+      if (shift && stepSegmented(row, shift, false)) return event.preventDefault()
+      // A focused control inside the row handles ⏎ and space itself
+      if ((event.key === 'Enter' || event.key === ' ') && target === row) {
+        event.preventDefault()
+        activate(row)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-8 py-8">
-        <div className="mb-6 flex items-center">
-          <h1 className="text-lg font-semibold">Settings</h1>
-          <label className="mr-3 ml-auto flex h-7 w-64 items-center gap-2 rounded-md px-2.5 text-xs ring-1 ring-border focus-within:ring-primary">
-            <Icon name="search" className="size-3.5 shrink-0 text-muted-foreground" />
-            <input
-              autoFocus
-              value={query}
-              placeholder="Search settings"
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                // First Esc clears the search, the next one closes settings
-                if (event.key === 'Escape' && query) {
-                  event.stopPropagation()
-                  setQuery('')
-                }
-              }}
-              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-            />
-          </label>
-          <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground">
-            Done (Esc)
-          </button>
-        </div>
-        <div className={`peer ${query.trim() ? HIDE_WHEN_EMPTY : ''}`}>
-          <SettingsSearch value={query.trim()}>
-            <General />
-            <Appearance />
-            <Integrations />
-            <Shortcuts />
-          </SettingsSearch>
-        </div>
-        <p className={`hidden py-12 text-center text-[13px] text-muted-foreground ${query.trim() ? 'peer-[:not(:has([data-setting]))]:block' : ''}`}>
-          No settings match “{query.trim()}”
-        </p>
-      </div>
-    </div>
+    <PageLayout
+      id="settings"
+      listLabel="Settings"
+      listWidth={220}
+      hints={{ list: [['/', 'search']], main: [['j k', 'move'], ['⏎', 'toggle'], ['← →', 'change']] }}
+      list={
+        <>
+          <div className="flex h-9 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Settings</div>
+          <div className="shrink-0 border-b border-border p-2">
+            <label className="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-xs ring-1 ring-border">
+              <Icon name="search" className="size-3.5 shrink-0 text-muted-foreground" />
+              <input
+                ref={searchRef}
+                value={query}
+                placeholder="Search settings"
+                spellCheck={false}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  // First Esc clears the search, the next ones step back through the zones and leave
+                  if (event.key === 'Escape' && query) {
+                    event.stopPropagation()
+                    setQuery('')
+                  }
+                  if ((event.key === 'Enter' || event.key === 'ArrowDown') && rows()[0]) {
+                    event.preventDefault()
+                    focusRow(rows()[0])
+                  }
+                }}
+                className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+              />
+              {!query && <kbd data-key-hint="" className="kbd">/</kbd>}
+            </label>
+          </div>
+          <nav className="min-h-0 flex-1 overflow-y-auto p-1.5">
+            {SECTIONS.map(([id, icon], index) => (
+              <button
+                key={id}
+                {...rowProps(index)}
+                tabIndex={-1}
+                onClick={() => setSection(id)}
+                className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${needle ? 'text-muted-foreground' : ''}`}
+              >
+                <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 truncate">{id}</span>
+              </button>
+            ))}
+          </nav>
+        </>
+      }
+      main={
+        <>
+          <header className="flex h-9 shrink-0 items-center gap-3 border-b border-border px-3">
+            <ListToggle page="settings" />
+            <span className="min-w-0 truncate text-xs font-medium">{needle ? `Results for “${needle}”` : section}</span>
+          </header>
+          <div
+            ref={mainRef}
+            onKeyDown={(event) => {
+              // Esc in a field returns to its row, so j k carry on from there
+              const row = event.target instanceof HTMLInputElement ? event.target.closest<HTMLElement>('[data-setting]') : null
+              if (event.key !== 'Escape' || !row) return
+              event.preventDefault()
+              event.stopPropagation()
+              row.focus()
+            }}
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
+            <div className="mx-auto max-w-3xl px-6 py-5">
+              <div className={`peer ${needle ? HIDE_WHEN_EMPTY : ''}`}>
+                <SettingsSearch value={needle}>
+                  {needle ? (
+                    SECTIONS.map(([id]) => (
+                      <SearchGroup key={id} title={id}>
+                        <h2 className="mb-3 text-[13px] font-medium">{id}</h2>
+                        <Section id={id} />
+                      </SearchGroup>
+                    ))
+                  ) : (
+                    <Section id={section} />
+                  )}
+                </SettingsSearch>
+              </div>
+              <p className={`hidden py-12 text-center text-[13px] break-words text-muted-foreground ${needle ? 'peer-[:not(:has([data-setting]))]:block' : ''}`}>No settings match “{needle}”</p>
+            </div>
+          </div>
+        </>
+      }
+    />
   )
+}
+
+/** Picks the next or previous option of the row's segmented control; false when the row has none */
+function stepSegmented(row: HTMLElement, direction: 1 | -1, wrap: boolean): boolean {
+  const options = [...(row.querySelector('[data-segmented]')?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+  if (options.length === 0) return false
+  const current = options.findIndex((option) => option.getAttribute('aria-pressed') === 'true')
+  const next = wrap ? (current + direction + options.length) % options.length : Math.min(options.length - 1, Math.max(0, current + direction))
+  options[next]?.click()
+  return true
+}
+
+/** ⏎ or space on a row: flips its switch, steps its options, focuses its field or presses its button */
+function activate(row: HTMLElement): void {
+  if (row instanceof HTMLButtonElement) return row.click()
+  const toggleControl = row.querySelector<HTMLElement>('[role="switch"]')
+  if (toggleControl) return toggleControl.click()
+  if (stepSegmented(row, 1, true)) return
+  const control = row.querySelector<HTMLElement>('input, button:not(:disabled)')
+  if (control instanceof HTMLInputElement) control.focus()
+  else control?.click()
 }

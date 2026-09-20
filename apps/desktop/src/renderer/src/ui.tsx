@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 
 /** A stored JSON value, or null when missing or unreadable; callers narrow it */
@@ -59,7 +60,7 @@ export function ResizeHandle({
   return (
     <div onPointerDown={startDrag} className={`group absolute z-20 ${position[edge]} [-webkit-app-region:no-drag]`}>
       <div
-        className={`bg-transparent transition-colors group-hover:bg-primary/60 group-active:bg-primary ${
+        className={`bg-transparent group-hover:bg-foreground/20 group-active:bg-foreground/30 ${
           edge === 'top' ? 'my-auto h-px w-full translate-y-[3px]' : 'mx-auto h-full w-px'
         }`}
       />
@@ -101,12 +102,21 @@ export function IconButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${
+      className={`inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${
         active ? 'text-foreground' : 'text-muted-foreground'
       }`}
     >
       {children}
     </button>
+  )
+}
+
+/** A list header's fold all / unfold all: folds every group while any is open; `z` in the list's zone does the same */
+export function FoldAllButton({ anyOpen, groups = 'groups', shortcut = 'z', onClick }: { anyOpen: boolean; groups?: string; shortcut?: string | null; onClick: () => void }): React.JSX.Element {
+  return (
+    <IconButton label={`${anyOpen ? 'Fold' : 'Unfold'} all ${groups}${shortcut ? ` (${shortcut})` : ''}`} onClick={onClick}>
+      <Icon name={anyOpen ? 'collapseAll' : 'expandAll'} className="size-3.5" />
+    </IconButton>
   )
 }
 
@@ -118,6 +128,123 @@ const TOOLTIP_DELAY_MS = 350
 const SHORTCUT_SUFFIX = /^(.*?)\s*\(([⌘⇧⌥⌃][^)]*)\)$/
 
 type Tip = { text: string; shortcut: string | null; x: number; y: number; below: boolean }
+
+const EDGE_GAP = 8
+
+/** Nudges a centered tooltip sideways so its whole width stays inside the window */
+function fitInWindow(element: HTMLDivElement | null): void {
+  if (!element) return
+  const { left, right } = element.getBoundingClientRect()
+  const shift = left < EDGE_GAP ? EDGE_GAP - left : right > window.innerWidth - EDGE_GAP ? window.innerWidth - EDGE_GAP - right : 0
+  if (shift) element.style.left = `${parseFloat(element.style.left) + shift}px`
+}
+
+type Box = { left: number; top: number; right: number; bottom: number }
+export type PopupAlign = 'start' | 'end' | 'stretch'
+export type PopupSide = 'below' | 'above'
+const POPUP_GAP = 4
+
+/**
+ * Where a fixed popup of `size` goes next to `trigger`: below unless only above has room, keeping `side` while it still
+ * fits so a list that changes as you type doesn't jump; always 8px inside the window, capped to the room on its side
+ */
+export function placePopup(
+  trigger: Box,
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  align: PopupAlign,
+  side: PopupSide | null
+): { side: PopupSide; left: number; top: number | null; bottom: number | null; maxHeight: number } {
+  const room = { below: viewport.height - trigger.bottom - POPUP_GAP - EDGE_GAP, above: trigger.top - POPUP_GAP - EDGE_GAP }
+  const fits = (candidate: PopupSide): boolean => size.height <= room[candidate]
+  const next: PopupSide = side && fits(side) ? side : fits('below') || room.below >= room.above ? 'below' : 'above'
+  const x = align === 'end' ? trigger.right - size.width : trigger.left
+  return {
+    side: next,
+    left: Math.max(EDGE_GAP, Math.min(x, viewport.width - EDGE_GAP - size.width)),
+    top: next === 'below' ? trigger.bottom + POPUP_GAP : null,
+    bottom: next === 'above' ? viewport.height - trigger.top + POPUP_GAP : null,
+    maxHeight: Math.max(0, room[next])
+  }
+}
+
+/**
+ * A menu or suggestion list next to `anchor`, portaled to the body so no clipped or scrolling panel cuts it off, and
+ * placed again when its content, the window or a scrolled ancestor changes. `onDismiss` closes it on a click elsewhere.
+ * It sits above dialogs and drawers, below the which-key box and tooltips; content that scrolls needs `min-h-0`.
+ */
+export function Popup({
+  anchor,
+  align = 'start',
+  onDismiss,
+  ref,
+  className = '',
+  ...rest
+}: {
+  anchor: React.RefObject<Element | null> | DOMRect
+  align?: PopupAlign
+  onDismiss?: () => void
+  ref?: React.RefObject<HTMLDivElement | null>
+} & React.HTMLAttributes<HTMLDivElement>): React.JSX.Element {
+  const attach = useCallback(
+    (popup: HTMLDivElement | null) => {
+      if (!popup) return
+      if (ref) ref.current = popup
+      let side: PopupSide | null = null
+      const place = (): void => {
+        const trigger = 'current' in anchor ? anchor.current?.getBoundingClientRect() : anchor
+        if (!trigger) return
+        // Measured at its natural size, then capped again; the cap resets scrolling, so that is kept
+        const scrolled = popup.scrollTop
+        Object.assign(popup.style, { left: '0px', maxHeight: '', maxWidth: '' })
+        if (align === 'stretch') popup.style.width = `${trigger.width}px`
+        // Max-h and max-w classes still cap it; the window and the room left only lower those
+        const limits = getComputedStyle(popup)
+        const cap = parseFloat(limits.maxHeight) || Infinity
+        popup.style.maxWidth = `${Math.min(parseFloat(limits.maxWidth) || Infinity, window.innerWidth - 2 * EDGE_GAP)}px`
+        const spot = placePopup(trigger, popup.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight }, align, side)
+        side = spot.side
+        Object.assign(popup.style, {
+          left: `${spot.left}px`,
+          top: spot.top === null ? '' : `${spot.top}px`,
+          bottom: spot.bottom === null ? '' : `${spot.bottom}px`,
+          maxHeight: `${Math.min(cap, spot.maxHeight)}px`
+        })
+        popup.scrollTop = scrolled
+      }
+      place()
+      const observer = new MutationObserver(place)
+      observer.observe(popup, { childList: true, subtree: true, characterData: true })
+      const onScroll = (event: Event): void => {
+        if (!(event.target instanceof Node && popup.contains(event.target))) place()
+      }
+      window.addEventListener('resize', place)
+      window.addEventListener('scroll', onScroll, true)
+      return () => {
+        if (ref) ref.current = null
+        observer.disconnect()
+        window.removeEventListener('resize', place)
+        window.removeEventListener('scroll', onScroll, true)
+      }
+    },
+    [anchor, align, ref]
+  )
+  return createPortal(
+    <>
+      {onDismiss && (
+        <div
+          className="fixed inset-0 z-[64]"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            onDismiss()
+          }}
+        />
+      )}
+      <div ref={attach} {...rest} className={`fixed z-[65] ${className}`} />
+    </>,
+    document.body
+  )
+}
 
 /** Styled tooltips for every `title` in the app; the title moves to data-tip so the native one stays hidden */
 export function Tooltips(): React.JSX.Element | null {
@@ -152,7 +279,7 @@ export function Tooltips(): React.JSX.Element | null {
         setTip({
           text: match ? match[1] : text,
           shortcut: match?.[2] ?? null,
-          x: Math.min(Math.max(rect.left + rect.width / 2, 140), window.innerWidth - 140),
+          x: rect.left + rect.width / 2,
           y: below ? rect.bottom + 6 : rect.top - 6,
           below
         })
@@ -174,6 +301,9 @@ export function Tooltips(): React.JSX.Element | null {
   if (!tip) return null
   return (
     <div
+      // Remounting per tip runs the fit again for each new position
+      key={`${tip.x}:${tip.y}:${tip.text}`}
+      ref={fitInWindow}
       role="tooltip"
       style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
       className="pointer-events-none fixed z-[100] flex max-w-sm items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground shadow-lg shadow-black/40"
@@ -255,7 +385,7 @@ export function TextPrompt({
             if (event.key === 'Escape') onClose()
           }}
           placeholder={placeholder}
-          className="mt-3 h-8 w-full rounded-md border border-input bg-muted px-2.5 font-mono text-[13px] outline-none placeholder:text-muted-foreground/70 focus:border-primary/60"
+          className="mt-3 h-8 w-full rounded-md border border-input bg-muted px-2.5 font-mono text-[13px] outline-none placeholder:text-muted-foreground/70"
         />
         {error && <p className="mt-2 text-xs break-words text-red-400 select-text">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
@@ -278,11 +408,11 @@ const initialsOf = (name: string): string => {
 }
 
 /** Profile picture, or initials when there is none or it fails to load */
-export function UserAvatar({ name, url, size = 'size-[22px]' }: { name: string; url: string | null; size?: string }): React.JSX.Element {
+export function UserAvatar({ name, url, size = 'size-[22px]', title = name }: { name: string; url: string | null; size?: string; title?: string }): React.JSX.Element {
   const [failed, setFailed] = useState(false)
-  if (url && !failed) return <img src={url} alt="" title={name} onError={() => setFailed(true)} className={`${size} shrink-0 rounded-full bg-accent`} />
+  if (url && !failed) return <img src={url} alt="" title={title} onError={() => setFailed(true)} className={`${size} shrink-0 rounded-full bg-accent`} />
   return (
-    <span title={name} className={`${size} grid shrink-0 place-items-center rounded-full bg-indigo-500/80 text-[9px] font-semibold text-white uppercase`}>
+    <span title={title} className={`${size} grid shrink-0 place-items-center rounded-full bg-foreground/15 text-[9px] font-semibold text-foreground uppercase`}>
       {initialsOf(name)}
     </span>
   )

@@ -1,6 +1,6 @@
 import { createBridge, definePluginSettings } from '@treeix/sdk'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ImageResult, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread, ReviewVerdict, MergeMethod } from '../shared/types'
+import type { ConflictResult, ImageResult, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread, ReviewVerdict, MergeMethod } from '../shared/types'
 
 const bridge = createBridge('pull-requests')
 
@@ -14,14 +14,17 @@ export const api = {
   deleteComment: (pullRequest: PullRequest, commentId: string) => bridge.invoke<void>('deleteComment', pullRequest, commentId),
   merge: (pullRequest: PullRequest, method: MergeMethod, deleteBranch: boolean) => bridge.invoke<void>('merge', pullRequest, method, deleteBranch),
   submitReview: (pullRequest: PullRequest, verdict: ReviewVerdict, body: string) => bridge.invoke<void>('submitReview', pullRequest, verdict, body),
+  setDraft: (pullRequest: PullRequest, draft: boolean) => bridge.invoke<void>('setDraft', pullRequest, draft),
   requestReview: (pullRequest: PullRequest, login: string) => bridge.invoke<void>('requestReview', pullRequest, login),
   commentOnPullRequest: (pullRequest: PullRequest, comment: PullRequestComment) => bridge.invoke<void>('comment', pullRequest, comment),
   reactToPullRequestComment: (pullRequest: PullRequest, commentId: string, reaction: Reaction) => bridge.invoke<void>('react', pullRequest, commentId, reaction),
+  conflictingFiles: (pullRequest: PullRequest) => bridge.invoke<ConflictResult>('conflicts', pullRequest),
   image: (pullRequest: PullRequest, source: string) => bridge.invoke<ImageResult>('image', pullRequest, source)
 }
 
 // Attachments on a private GitLab project need the CLI's session; a browser request just gets a login page
 const PRIVATE_UPLOAD = /\/uploads\/[0-9a-f]{32}\//
+const MAX_CACHED_IMAGES = 100
 const images = new Map<string, Promise<string>>()
 
 /** Loads a description's images through the CLI when the browser can't see them */
@@ -35,7 +38,10 @@ export const imageResolver =
         if ('error' in result) throw new Error(result.error)
         return result.dataUrl
       })
+    // Re-inserted on every use, so the least recently shown image goes first
+    images.delete(source)
     images.set(source, pending)
+    if (images.size > MAX_CACHED_IMAGES) images.delete(images.keys().next().value ?? '')
     pending.catch(() => images.delete(source))
     return pending
   }

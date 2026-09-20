@@ -1,5 +1,4 @@
 import './main.css'
-import { Editor } from '@pierre/diffs/edit'
 import { EditProvider, WorkerPoolContextProvider } from '@pierre/diffs/react'
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker'
 import { StrictMode } from 'react'
@@ -8,6 +7,9 @@ import App from './App'
 import { ErrorBoundary } from './ErrorBoundary'
 import { activeTheme, fontStack, getSettings, MONO_STACK, SANS_STACK, subscribeSettings } from './settings'
 import { applyTheme, THEMES } from './themes'
+
+// Fetched while the settings below apply; ~330KB of editor code stays out of the entry chunk
+const editModule = import('@pierre/diffs/edit')
 
 function applyAppearance(): void {
   const { opacity, hotkey, hotkeyHideOnBlur, hotkeyOnly, editorFontSize, uiFont, editorFont } = getSettings()
@@ -37,6 +39,8 @@ const highlighterOptions = {
   langs: ['typescript', 'tsx', 'javascript', 'json', 'markdown']
 }
 
+// createEditor must return synchronously, so the first render waits for the editor chunk
+const { Editor } = await editModule
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <WorkerPoolContextProvider poolOptions={poolOptions} highlighterOptions={highlighterOptions}>

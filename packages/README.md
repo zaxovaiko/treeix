@@ -20,6 +20,7 @@ The folder name must match `id`. The host finds plugins with `import.meta.glob`,
 - **Talking to other plugins:** plugins don't import each other. They offer and look up services (`services` in `RendererPlugin`, `host.service(name)`, `useService(name)`). A plugin adds its service to the `Services` interface with module augmentation.
 - **Settings:** a plugin keeps its settings apart from the app's with `definePluginSettings`.
 - **Link previews:** a plugin can recognise URLs (`linkPreviews`). Any view renders `<LinkPreviews urls>` from `@treeix/app/LinkPreviews`, and each link shows through whichever enabled plugin recognises it. Jira issues and Confluence pages preview this way in Jira items, Confluence pages and pull request descriptions.
+- **Layout and keyboard:** a page renders `<PageLayout list main inspector>` so its panels follow the shell's keys (⌘⇧E list, ⌘⌥B inspector, ⌘⇧↵ zen) and are remembered per page; `usePanels()` gives toggles for buttons. Each part is a focus `<Zone>` that F6 cycles; `useZone()` tells which one has focus. Lists use `useListNav` for j/k, Enter and a cursor that is the selection. Keys a plugin handles go in `shortcuts` so the `?` sheet and Settings list them.
 - **Shared code:** code several plugins need goes in a library package instead, like `atlassian/`. It holds acli, Atlassian Document Format, the API token and attachment images, and is used by `jira` and `confluence`.
 
 ## Imports

@@ -2,32 +2,19 @@
 export type PaneLayout = string[][]
 export type DropEdge = 'left' | 'right' | 'top' | 'bottom'
 
+/** A tab holds at most this many panes; more open as a new tab, see placeBeside */
 export const MAX_PANES = 6
 const MAX_COLUMNS = 3
 
 const without = (layout: PaneLayout, id: string): PaneLayout =>
   layout.map((column) => column.filter((pane) => pane !== id)).filter((column) => column.length > 0)
 
-/** Drops the newest pane that is not `keep` until the layout fits */
-function fit(layout: PaneLayout, keep: string): PaneLayout {
-  let next = layout
-  while (next.flat().length > MAX_PANES) {
-    const victim = [...next.flat()].reverse().find((pane) => pane !== keep)
-    if (!victim) break
-    next = without(next, victim)
-  }
-  return next
-}
-
 /** New panes open as a column, or stack under the shortest column once there are enough columns */
 export function addPane(layout: PaneLayout, id: string): PaneLayout {
   if (layout.flat().includes(id)) return layout
-  if (layout.length < MAX_COLUMNS) return fit([...layout, [id]], id)
+  if (layout.length < MAX_COLUMNS) return [...layout, [id]]
   const shortest = layout.reduce((best, column, index) => (column.length < layout[best].length ? index : best), 0)
-  return fit(
-    layout.map((column, index) => (index === shortest ? [...column, id] : column)),
-    id
-  )
+  return layout.map((column, index) => (index === shortest ? [...column, id] : column))
 }
 
 export const removePane = without
@@ -49,7 +36,7 @@ export function placePane(layout: PaneLayout, id: string, targetId: string, edge
     const column = next[columnIndex]
     column.splice(column.indexOf(targetId) + (edge === 'bottom' ? 1 : 0), 0, id)
   }
-  return fit(next, id)
+  return next
 }
 
 /** The pane beside `id` in a direction; left and right land on the row at the same height in the next column */

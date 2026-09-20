@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ImageResult, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
+import type { ConflictResult, ImageResult, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
 
@@ -662,6 +662,19 @@ export async function submitReview(pullRequest: PullRequest, verdict: ReviewVerd
   }
 }
 
+/** Marks a draft ready for review, or turns it back into a draft */
+export async function setDraft(pullRequest: PullRequest, draft: boolean): Promise<void> {
+  const { repoPath, number } = pullRequest
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  try {
+    if (remote.provider === 'github') await run('gh', ['pr', 'ready', String(number), '-R', `${remote.host}/${remote.slug}`, ...(draft ? ['--undo'] : [])], repoPath)
+    else await run('glab', ['mr', 'update', String(number), draft ? '--draft' : '--ready'], repoPath)
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
+  }
+}
+
 export async function requestReview(pullRequest: PullRequest, login: string): Promise<void> {
   const { repoPath, number } = pullRequest
   if (!/^[\w.-]+$/.test(login)) throw new Error(`Invalid reviewer name: ${login}`)
@@ -673,4 +686,43 @@ export async function requestReview(pullRequest: PullRequest, login: string): Pr
   }
   // GitLab has no re-request endpoint; the quick action in a note does it, as the web UI's button does
   await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `/request_review @${login}` })
+}
+
+/** `git merge-tree --name-only` output: the tree id, then each conflicted path (once per stage), then a blank line */
+export function parseMergeTreeConflicts(stdout: string): string[] {
+  const [, ...rest] = stdout.split('\n')
+  const end = rest.indexOf('')
+  return [...new Set(end === -1 ? rest : rest.slice(0, end))]
+}
+
+/**
+ * Merges the pull request into its target in memory, like the provider does. Read-only for the checkout: shas come
+ * from ls-remote, fetch stores objects only (no refs, no FETCH_HEAD) and merge-tree never touches the worktree
+ */
+export async function conflictingFiles(pullRequest: PullRequest): Promise<ConflictResult> {
+  const { repoPath, number, targetBranch, provider } = pullRequest
+  // The provider's own ref works for forks, whose branch isn't on origin
+  const headRef = provider === 'github' ? `refs/pull/${number}/head` : `refs/merge-requests/${number}/head`
+  const baseRef = `refs/heads/${targetBranch}`
+  try {
+    const shas = new Map(
+      (await run('git', ['ls-remote', 'origin', baseRef, headRef], repoPath))
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+          const [sha, ref] = line.split('\t')
+          return [ref, sha] as const
+        })
+    )
+    const base = shas.get(baseRef)
+    const head = shas.get(headRef)
+    if (!base || !head) return { error: `Couldn't find ${base ? headRef : baseRef} on origin` }
+    await run('git', ['fetch', '--quiet', '--no-write-fetch-head', '--no-tags', 'origin', baseRef, headRef], repoPath)
+    await run('git', ['merge-tree', '--write-tree', '--name-only', '--no-messages', base, head], repoPath)
+    return { files: [] }
+  } catch (reason) {
+    // Exit 1 is merge-tree reporting conflicts, with the paths on stdout
+    if (isJson(reason) && reason.code === 1 && text(reason.stdout)) return { files: parseMergeTreeConflicts(text(reason.stdout)) }
+    return { error: failureMessage(reason) }
+  }
 }

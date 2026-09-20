@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export type Entry<T> = { value: T; fetchedAt: number }
 
@@ -16,6 +16,8 @@ export type Cache<T> = {
   get: (id: string) => Entry<T> | null
   set: (id: string, value: T) => void
   clear: () => void
+  /** Every cached value, most recently fetched first */
+  values: () => T[]
 }
 
 /** Survives restarts, so a tab opens on what it showed last time while fresh data loads behind it */
@@ -51,7 +53,8 @@ export function persistentCache<T>(name: string, max = MAX_ENTRIES): Cache<T> {
     clear: () => {
       entries.clear()
       localStorage.removeItem(key)
-    }
+    },
+    values: () => [...entries.values()].sort((a, b) => b.fetchedAt - a.fetchedAt).map((entry) => entry.value)
   }
 }
 
@@ -75,6 +78,8 @@ export function useCached<T>(cache: Cache<T>, id: string, ttlMs: number, load: (
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  /** The id `refresh` was called for, until its fetch settles; a refresh never carries over to another id */
+  const forced = useRef<string | null>(null)
   // The value for this id, even on the render where the id just changed
   const entry = state.id === id ? state : { id, value: cachedEntry?.value ?? null, fetchedAt: cachedEntry?.fetchedAt ?? null }
 
@@ -83,7 +88,9 @@ export function useCached<T>(cache: Cache<T>, id: string, ttlMs: number, load: (
     const known = cache.get(id)
     setState({ id, value: known?.value ?? null, fetchedAt: known?.fetchedAt ?? null })
     setError(null)
-    if (reload === 0 && !isStale(known, ttlMs)) return
+    setLoading(false)
+    if (forced.current !== id) forced.current = null
+    if (forced.current === null && !isStale(known, ttlMs)) return
     let cancelled = false
     setLoading(true)
     load(id)
@@ -96,11 +103,19 @@ export function useCached<T>(cache: Cache<T>, id: string, ttlMs: number, load: (
           if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
         }
       )
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+        forced.current = null
+      })
     return () => {
       cancelled = true
     }
   }, [id, reload])
 
-  return { value: entry.value, fetchedAt: entry.fetchedAt, loading, error, refresh: () => setReload((count) => count + 1) }
+  const refresh = (): void => {
+    forced.current = id
+    setReload((count) => count + 1)
+  }
+  return { value: entry.value, fetchedAt: entry.fetchedAt, loading, error, refresh }
 }

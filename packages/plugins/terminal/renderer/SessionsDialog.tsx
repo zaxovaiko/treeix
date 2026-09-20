@@ -3,178 +3,143 @@ import type { Repo } from '@treeix/shared/types'
 import { Icon } from '@treeix/app/Icon'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { timeAgo } from '@treeix/app/time'
-import { type ClosedSession, forgetClosedSession, killSession, SESSION_KINDS, type Session, type SessionKind, setSessionListOpen, useTerminals } from './terminals'
+import { Keys } from '@treeix/sdk'
+import { type Task, taskOf } from './tasks'
+import { taskLabel } from './taskUi'
+import { type ClosedSession, forgetClosedSession, killSession, type Session } from './terminals'
 
-/** Quick switcher for agent and shell sessions, opened from the title bar or ⌘⇧J */
+const GROUPS = [
+  ['input', 'Needs input'],
+  ['running', 'Working'],
+  ['idle', 'Idle'],
+  ['closed', 'Recently closed']
+] as const
+
+type Row = { group: (typeof GROUPS)[number][0]; label: string; detail: string; session?: Session; entry?: ClosedSession }
+
+/** Quick switcher for sessions of the workspace, grouped by what they need; `closed` lists only recently closed ones */
 export function SessionsDialog({
   sessions,
   history,
+  tasks,
   repos,
-  cwd,
+  mode,
   onPick,
   onRestore,
-  onNew,
   onClose
 }: {
   sessions: Session[]
-  /** Closed sessions of this workspace, newest first */
+  /** Newest first */
   history: ClosedSession[]
+  tasks: Task[]
   repos: Repo[] | null
-  /** Where new sessions start */
-  cwd: string
+  mode: 'all' | 'closed'
   onPick: (session: Session) => void
   onRestore: (entry: ClosedSession) => void
-  onNew: (kind: SessionKind) => void
   onClose: () => void
 }): React.JSX.Element {
-  const { panes, listOpen } = useTerminals()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
 
+  const where = (item: { worktreePath: string }, task: Task | undefined): string => (task ? taskLabel(task, repos) : worktreeLabel(repos, item.worktreePath))
+  const live: Row[] = mode === 'closed' ? [] : sessions.map((session) => ({ group: session.status === 'exited' || session.status === 'dormant' ? 'idle' : session.status, label: session.title, detail: where(session, taskOf(tasks, session.id)), session }))
+  const closed: Row[] = history.map((entry) => ({
+    group: 'closed',
+    label: entry.title,
+    detail: `${where(entry, tasks.find((task) => task.id === entry.taskId))} · ${timeAgo(new Date(entry.endedAt).toISOString())}`,
+    entry
+  }))
   const needle = query.trim().toLowerCase()
-  // Sessions that need an answer come first
-  const matches = (entry: { title: string; worktreePath: string; kind: string }): boolean =>
-    `${entry.title} ${worktreeLabel(repos, entry.worktreePath)} ${entry.kind}`.toLowerCase().includes(needle)
-  const results = sessions.filter(matches).sort((a, b) => Number(b.status === 'input') - Number(a.status === 'input'))
-  const closed = history.filter(matches)
-  const total = results.length + closed.length
+  const rows = GROUPS.flatMap(([group]) => [...live, ...closed].filter((row) => row.group === group && `${row.label} ${row.detail}`.toLowerCase().includes(needle)))
+  const current = Math.min(active, rows.length - 1)
 
+  // Closing puts focus back where it was; a picked session takes it right after
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    return () => previous?.focus({ preventScroll: true })
+  }, [])
   useEffect(() => setActive(0), [query])
   useEffect(() => {
-    listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })
-  }, [active])
+    listRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' })
+  }, [current])
 
-  /** Rows run live sessions first, then closed ones */
-  const pick = (index: number): void => {
-    const session = results[index]
-    const entry = closed[index - results.length]
-    if (!session && !entry) return
+  const pick = (row: Row | undefined): void => {
+    if (!row) return
     onClose()
-    if (session) onPick(session)
-    else onRestore(entry)
+    if (row.session) onPick(row.session)
+    else if (row.entry) onRestore(row.entry)
+  }
+  const remove = (row: Row | undefined): void => {
+    if (row?.session) killSession(row.session.id)
+    else if (row?.entry) forgetClosedSession(row.entry.id)
   }
 
   const onKeyDown = (event: React.KeyboardEvent): void => {
-    if (event.key === 'ArrowDown') setActive((active + 1) % Math.max(total, 1))
-    else if (event.key === 'ArrowUp') setActive((active - 1 + total) % Math.max(total, 1))
-    else if (event.key === 'Enter') pick(active)
+    if (event.key === 'ArrowDown') setActive((current + 1) % Math.max(rows.length, 1))
+    else if (event.key === 'ArrowUp') setActive((current - 1 + rows.length) % Math.max(rows.length, 1))
+    else if (event.key === 'Enter') pick(rows[current])
     else if (event.key === 'Escape') onClose()
+    else if (event.key === 'Backspace' && event.metaKey) remove(rows[current])
     else return
     event.preventDefault()
+    event.stopPropagation()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-[2px] pt-[12vh]" onClick={onClose}>
-      <div
-        onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[64vh] w-[640px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-border bg-popover backdrop-blur-2xl shadow-2xl shadow-black/60"
-      >
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/45 pt-[11vh]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="flex max-h-[72vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover shadow-2xl shadow-black/60">
         <label className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4 text-muted-foreground">
-          <Icon name="terminal" className="size-4" />
+          <Icon name="search" className="size-4 shrink-0" />
           <input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Find a session"
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
+            placeholder={mode === 'closed' ? 'Reopen a closed session' : 'Find a session by title or group'}
+            spellCheck={false}
+            className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
           />
-          <kbd className="rounded border border-border px-1.5 font-sans text-[10px]">esc</kbd>
+          <Keys combo="esc" hint />
         </label>
-
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          {total === 0 && (
-            <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-              {sessions.length || history.length ? 'No matching sessions' : 'No sessions yet, start one below'}
-            </p>
-          )}
-          {results.map((session, index) => (
-            <div
-              key={session.id}
-              data-index={index}
-              role="button"
-              tabIndex={-1}
-              onMouseMove={() => setActive(index)}
-              onClick={() => pick(index)}
-              className={`group/row flex h-11 cursor-default items-center gap-3 rounded-md px-2.5 ${index === active ? 'bg-accent' : ''}`}
-            >
-              <KindBadge kind={session.kind} />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13px] text-foreground">
-                  {session.title}
-                  {panes.includes(session.id) && <span className="ml-2 text-[11px] text-muted-foreground">shown</span>}
-                </span>
-                <span className="truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>
-              </span>
-              <StatusDot session={session} withLabel />
-              <button
-                title="Close session; it moves to History"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  killSession(session.id)
-                }}
-                className="grid size-6 place-items-center rounded text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:bg-accent hover:text-red-400"
-              >
-                <Icon name="power" className="size-3" />
-              </button>
-            </div>
-          ))}
-          {closed.length > 0 && <p className="px-2.5 pt-3 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">History</p>}
-          {closed.map((entry, offset) => {
-            const index = results.length + offset
-            return (
+          {rows.length === 0 && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{needle ? 'No matching sessions' : 'No sessions'}</p>}
+          {rows.map((row, index) => (
+            <div key={row.session?.id ?? row.entry?.id}>
+              {row.group !== rows[index - 1]?.group && (
+                <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{GROUPS.find(([group]) => group === row.group)?.[1]}</div>
+              )}
               <div
-                key={entry.id}
-                data-index={index}
-                role="button"
-                tabIndex={-1}
+                data-active={index === current ? '' : undefined}
+                role="option"
+                aria-selected={index === current}
                 onMouseMove={() => setActive(index)}
-                onClick={() => pick(index)}
-                className={`group/row flex h-11 cursor-default items-center gap-3 rounded-md px-2.5 ${index === active ? 'bg-accent' : ''}`}
+                onClick={() => pick(row)}
+                className={`group/row flex h-8 cursor-default items-center gap-2.5 rounded-md px-2.5 text-[13px] ${index === current ? 'bg-foreground/10 text-foreground' : 'text-foreground/85'}`}
               >
-                <KindBadge kind={entry.kind} />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-[13px] text-foreground/70">{entry.title}</span>
-                  <span className="truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, entry.worktreePath)}</span>
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  {index === active ? (entry.kind === 'shell' ? 'Reopen' : 'Resume') : `closed ${timeAgo(new Date(entry.endedAt).toISOString())}`}
-                </span>
+                {row.session ? <KindBadge kind={row.session.kind} /> : row.entry && <KindBadge kind={row.entry.kind} />}
+                {row.session && <StatusDot session={row.session} />}
+                <span className="min-w-0 truncate">{row.label}</span>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">{row.detail}</span>
+                <span className="flex-1" />
                 <button
-                  title="Remove from history"
+                  title={row.session ? 'Close session to History (⌘⌫)' : 'Remove from History (⌘⌫)'}
+                  aria-label={row.session ? 'Close session' : 'Remove from history'}
+                  tabIndex={-1}
                   onClick={(event) => {
                     event.stopPropagation()
-                    forgetClosedSession(entry.id)
+                    remove(row)
                   }}
-                  className="grid size-6 place-items-center rounded text-muted-foreground opacity-0 group-hover/row:opacity-100 hover:bg-background hover:text-red-400"
+                  className={`grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:text-red-400 ${index === current ? '' : 'opacity-0 group-hover/row:opacity-100'}`}
                 >
-                  <Icon name="trash" className="size-3" />
+                  <Icon name={row.session ? 'power' : 'trash'} className="size-3" />
                 </button>
               </div>
-            )
-          })}
-        </div>
-
-        <div className="flex h-11 shrink-0 items-center gap-1.5 border-t border-border px-2.5 text-[11px] text-muted-foreground">
-          <span className="mr-1 truncate">New in {worktreeLabel(repos, cwd)}</span>
-          {(Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => (
-            <button
-              key={kind}
-              onClick={() => {
-                onClose()
-                onNew(kind)
-              }}
-              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-foreground ring-1 ring-border hover:bg-accent"
-            >
-              <KindBadge kind={kind} />
-              {SESSION_KINDS[kind].label}
-            </button>
+            </div>
           ))}
-          <span className="flex-1" />
-          <button onClick={() => setSessionListOpen(!listOpen)} className="h-7 shrink-0 rounded-md px-2 whitespace-nowrap hover:bg-accent hover:text-foreground">
-            {listOpen ? 'Hide' : 'Show'} session list
-          </button>
+        </div>
+        <div className="flex h-8 shrink-0 items-center gap-3 overflow-hidden border-t border-border px-3 text-[11px] text-muted-foreground">
+          <span className="truncate">Closed sessions reopen as a new tab of their group</span>
         </div>
       </div>
     </div>

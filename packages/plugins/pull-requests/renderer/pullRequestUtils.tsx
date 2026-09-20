@@ -1,5 +1,5 @@
 import type { Repo } from '@treeix/shared/types'
-import type { PullRequest, PullRequestState, ReviewStatus } from '../shared/types'
+import type { PullRequest, PullRequestState, ReviewStatus, ReviewThread } from '../shared/types'
 import { Icon } from '@treeix/app/Icon'
 export { timeAgo, untilLabel } from '@treeix/app/time'
 export { UserAvatar } from '@treeix/app/ui'
@@ -15,6 +15,22 @@ export const STATE_STYLE: Record<PullRequestState | 'draft', { label: string; cl
 }
 
 /** GitLab links uploads relative to the project page */
+const COMMENT_ANCHORS: Record<string, string> = { review: 'discussion_r', issue: 'issuecomment-', note: 'note_' }
+
+/** Where a thread lives on the web, from its first comment's id (`review:1`, `issue:1`, `note:1`) */
+export function threadUrl(pr: PullRequest, thread: ReviewThread): string {
+  const [kind = '', id = ''] = thread.comments[0]?.id.split(':') ?? []
+  const anchor = COMMENT_ANCHORS[kind]
+  return anchor && id ? `${pr.url}#${anchor}${id}` : pr.url
+}
+
+/** A pointer to a review thread the agent opens itself; no comment bodies or code are copied */
+export function threadReference(pr: PullRequest, thread: ReviewThread): string {
+  const where = thread.path ? `${thread.path}${thread.line ? `:${thread.line}${thread.side === 'deletions' ? ' (old)' : ''}` : ''}` : 'conversation'
+  const author = thread.comments[0] ? ` by @${thread.comments[0].author}` : ''
+  return `${pr.provider === 'github' ? 'PR' : 'MR'} ${prefix(pr)}${pr.number} ${pr.url} review thread${author} on ${where}: ${threadUrl(pr, thread)}`
+}
+
 export const markdownBase = (pr: PullRequest): string | undefined => (pr.provider === 'gitlab' ? pr.url.split('/-/')[0] : undefined)
 
 export const localWorktreeFor = (repos: Repo[] | null, pr: PullRequest): string | null =>
@@ -47,11 +63,13 @@ export function StateBadge({ pr }: { pr: PullRequest }): React.JSX.Element {
   return <span className={`shrink-0 rounded-full px-2 py-px text-[11px] font-medium ${style.className}`}>{style.label}</span>
 }
 
-
 /** Reviewed by you, or your own, with nothing pushed since: the list dims these so the rest stands out */
 // Lists cached or sent by an older main process have no review field, hence the optional
 export const reviewSettled = (review?: ReviewStatus | null): boolean =>
   !!review && review.newCommits === 0 && ['yours', 'approved', 'changes', 'commented'].includes(review.state)
+
+/** Yours, asked of you, or reviewed by you; GitHub only, GitLab lists carry no review state */
+export const involvesYou = (pr: PullRequest): boolean => !!pr.review && pr.review.state !== 'unreviewed'
 
 export type PullRequestGroup = { id: 'ready' | 'settled' | 'drafts' | 'conflicts'; label: string; pullRequests: PullRequest[] }
 
@@ -83,9 +101,9 @@ export function ReviewMark({ review }: { review?: ReviewStatus | null }): React.
     return (
       <span
         title={`${review.newCommits} commit${review.newCommits === 1 ? '' : 's'} since your review`}
-        className="flex shrink-0 items-center gap-1 rounded-full bg-primary/12 px-1.5 text-[10.5px] font-medium text-primary tabular-nums"
+        className="flex shrink-0 items-center gap-1 rounded-full bg-foreground/10 px-1.5 text-[10.5px] font-medium text-foreground tabular-nums"
       >
-        <span className="size-1.5 rounded-full bg-primary" />
+        <span className="size-1.5 rounded-full bg-foreground" />
         {review.newCommits} new
       </span>
     )

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { addPane, edgeAt, MAX_PANES, neighborPane, placePane, removePane, remapPanes } from './paneLayout'
+import { addPane, edgeAt, neighborPane, placePane, removePane, remapPanes } from './paneLayout'
 
 test('addPane opens columns, then stacks into the shortest one', () => {
   let layout = addPane([], 'a')
@@ -20,11 +20,7 @@ test('placePane splits columns or stacks rows', () => {
   expect(placePane(layout, 'a', 'a', 'top')).toBe(layout)
 })
 
-test('layouts stay within the pane limit and drop empty columns', () => {
-  const full = [['a', 'b'], ['c', 'd'], ['e', 'f']]
-  const placed = placePane(full, 'g', 'a', 'top')
-  expect(placed.flat()).toHaveLength(MAX_PANES)
-  expect(placed[0][0]).toBe('g')
+test('removePane drops empty columns', () => {
   expect(removePane([['a'], ['b', 'c']], 'a')).toEqual([['b', 'c']])
 })
 

@@ -7,7 +7,7 @@ const plugin: MainPlugin = {
   activate: (context) => {
     context.handle('page', (_, id: string) => pageView(id))
     context.handle('recent', () => recentPages())
-    context.handle('search', (_, query: string) => searchPages(query))
+    context.handle('search', (_, texts: string[], spaces: string[]) => searchPages(texts, spaces))
     handleAtlassianShared(context)
   }
 }

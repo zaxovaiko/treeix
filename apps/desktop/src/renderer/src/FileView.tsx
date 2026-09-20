@@ -1,5 +1,6 @@
 import { File, type LineAnnotation, MultiFileDiff, Virtualizer } from '@pierre/diffs/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { getShell, isPageKey } from '@treeix/sdk'
 import { type Attachment, extractFileLines, type LineRange, rangeLabel, type ReviewComment } from '../../shared/comments'
 import { CommentCard, CommentDraft, orderRange, useCodeDrag } from './Comments'
 import { type Navigate, useSymbolNavigation } from './codeNavigation'
@@ -28,11 +29,12 @@ function contentHash(text: string): string {
   return (hash >>> 0).toString(36)
 }
 
-function findLineElement(root: ParentNode, line: number): Element | null {
-  const direct = root.querySelector(`[data-column-number="${line}"]`)
+/** The gutter cell of a line, inside the viewer's shadow roots; `type` picks a side of a diff, like change-addition */
+export function findLineElement(root: ParentNode, line: number, type?: string): Element | null {
+  const direct = root.querySelector(`[data-column-number="${line}"]${type ? `[data-line-type="${type}"]` : ''}`)
   if (direct) return direct
   for (const element of root.querySelectorAll('*')) {
-    const nested = element.shadowRoot && findLineElement(element.shadowRoot, line)
+    const nested = element.shadowRoot && findLineElement(element.shadowRoot, line, type)
     if (nested) return nested
   }
   return null
@@ -152,6 +154,20 @@ export function FileView({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [editable])
 
+  // c or a: an agent comment on the line the file was opened at, while the editor isn't typing
+  useEffect(() => {
+    if (!editable) return
+    const onKey = (event: KeyboardEvent): void => {
+      const focused = document.activeElement
+      const inZone = !focused || focused === document.body || scrollRef.current?.closest('[data-zone]')?.contains(focused)
+      if ((event.key !== 'c' && event.key !== 'a') || getShell().zone !== 'main' || !isPageKey(event) || !inZone) return
+      event.preventDefault()
+      setDraft({ start: line ?? 1, end: line ?? 1 })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editable, line])
+
   useEffect(() => {
     setDraft(null)
     setStatus('saved')
@@ -255,7 +271,7 @@ export function FileView({
             ) : status === 'saved' ? (
               <Icon name="cloudCheck" className="size-3.5 text-emerald-400" />
             ) : status === 'saving' ? (
-              <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
+              <Icon name="loader" className="size-3.5 text-sky-400" />
             ) : (
               <span className="size-2 rounded-full bg-amber-400" />
             )}

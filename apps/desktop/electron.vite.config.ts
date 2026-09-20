@@ -22,6 +22,8 @@ export default defineConfig({
     resolve: { alias },
     plugins: [react(), tailwindcss()],
     worker: { format: 'es' },
+    // electron-vite leaves renderer output unminified; main and preload stay readable for stack traces
+    build: { minify: true },
     server: { fs: { allow: [root] } }
   }
 })

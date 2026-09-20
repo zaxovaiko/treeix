@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './Icon'
-import { LazyMarkdown } from './LazyMarkdown'
+import { LazyMarkdown, MarkdownFoldButton } from './LazyMarkdown'
 import { EmptyState, errorMessage, usePersisted } from './ui'
 
 export const isMarkdownPath = (path: string): boolean => /\.(md|mdx|markdown)$/i.test(path)
@@ -8,16 +8,20 @@ export const isMarkdownPath = (path: string): boolean => /\.(md|mdx|markdown)$/i
 /** Remembered across files and restarts, so the preview stays on while moving between docs */
 export const useMarkdownPreview = (): [boolean, (on: boolean) => void] => usePersisted<boolean>('markdown.preview', false)
 
+/** Also holds the fold all button of the preview, which needs a MarkdownFoldScope around the header and the preview */
 export function PreviewToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }): React.JSX.Element {
   return (
-    <button
-      title={on ? 'Show source' : 'Preview markdown'}
-      aria-pressed={on}
-      onClick={() => onChange(!on)}
-      className={`grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground ${on ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
-    >
-      <Icon name="eye" className="size-3.5" />
-    </button>
+    <>
+      {on && <MarkdownFoldButton />}
+      <button
+        title={on ? 'Show source' : 'Preview markdown'}
+        aria-pressed={on}
+        onClick={() => onChange(!on)}
+        className={`grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground ${on ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
+      >
+        <Icon name="eye" className="size-3.5" />
+      </button>
+    </>
   )
 }
 

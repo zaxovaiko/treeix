@@ -7,26 +7,14 @@ import { activeTheme } from './settings'
 import { baseName } from './Sidebar'
 import { codeTheme } from './themes'
 import { errorMessage, usePersisted } from './ui'
+import { matcherFor } from './searchMatcher'
 import { workspaceKey } from './workspaces'
 
 const SEARCH_DEBOUNCE_MS = 250
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** The same pattern git grep ran, rebuilt in JS to highlight every hit on a line; null when JS can't parse it */
-export function matcherFor(query: string, options: SearchOptions): RegExp | null {
-  if (!query) return null
-  const source = options.regex ? query : escapeRegExp(query)
-  try {
-    return new RegExp(options.wholeWord ? `(?<![\\w$])(?:${source})(?![\\w$])` : source, options.caseSensitive ? 'g' : 'gi')
-  } catch {
-    return null
-  }
-}
-
 type Token = { content: string; color?: string }
+// ponytail: FIFO cap, not LRU; an evicted line just tokenizes again
+const TOKEN_CACHE_MAX = 50
 const tokenCache = new Map<string, Token[]>()
 
 /** One line tokenized with the diff theme; the language comes from the file name */
@@ -39,6 +27,7 @@ async function tokenizeLine(text: string, path: string): Promise<Token[]> {
   const highlighter = await getSharedHighlighter({ themes: [theme], langs: [lang] })
   const tokens = (highlighter.codeToTokensBase(text, { lang, theme })[0] ?? []).map(({ content, color }) => ({ content, color }))
   tokenCache.set(key, tokens)
+  if (tokenCache.size > TOKEN_CACHE_MAX) tokenCache.delete(tokenCache.keys().next().value!)
   return tokens
 }
 
@@ -305,7 +294,7 @@ export function LocationsDialog({
                       onClick={() => setExpanded((previous) => toggleKey(previous, item.key))}
                       className="flex h-7 items-center gap-1.5 rounded-md pr-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                     >
-                      <Icon name="chevron" className={`size-3 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                      <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
                       <Icon name="folder" className="size-3.5 shrink-0" />
                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
                       <span className="rounded-full bg-accent px-1.5 text-[10.5px] tabular-nums">{item.count}</span>
@@ -323,7 +312,7 @@ export function LocationsDialog({
                       onClick={() => setExpanded((previous) => toggleKey(previous, item.key))}
                       className="flex h-7 items-center gap-1.5 rounded-md pr-1.5 text-left text-xs hover:bg-accent"
                     >
-                      <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+                      <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
                       <FileIcon path={path} />
                       <span className="min-w-0 flex-1 truncate text-foreground/90">{path.split('/').pop()}</span>
                       <span className="rounded-full bg-accent px-1.5 text-[10.5px] text-muted-foreground tabular-nums">{item.inFile.length}</span>
@@ -339,7 +328,7 @@ export function LocationsDialog({
                     onClick={() => setIndex(orderIndex.get(location) ?? 0)}
                     onDoubleClick={() => onPick(location)}
                     className={`flex h-6 items-center gap-2 rounded-md pr-2 text-left font-mono text-[11.5px] ${
-                      selected ? 'bg-primary/20 text-foreground' : 'text-foreground/75 hover:bg-accent'
+                      selected ? 'bg-foreground/[.08] text-foreground' : 'text-foreground/75 hover:bg-accent'
                     }`}
                   >
                     <span className="w-8 shrink-0 text-right text-muted-foreground tabular-nums">{location.line}</span>
@@ -382,7 +371,7 @@ function Toggle({ label, title, on, onChange }: { label: string; title: string; 
       title={title}
       aria-pressed={on}
       onClick={() => onChange(!on)}
-      className={`grid h-6 min-w-6 place-items-center rounded px-1 font-mono text-[11px] ${on ? 'bg-primary/25 text-foreground ring-1 ring-primary/60' : 'text-muted-foreground hover:bg-accent'}`}
+      className={`grid h-6 min-w-6 place-items-center rounded px-1 font-mono text-[11px] ${on ? 'bg-foreground/[.12] text-foreground' : 'text-muted-foreground hover:bg-accent'}`}
     >
       {label}
     </button>

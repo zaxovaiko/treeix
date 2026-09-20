@@ -1,36 +1,61 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
-import { createBridge, definePluginSettings, type HostApi, type RendererPlugin, SESSION_KINDS, type SessionKind, type SessionSummary, useHost } from '@treeix/sdk'
+import { useEffect, useRef } from 'react'
+import {
+  createBridge,
+  definePluginSettings,
+  getShell,
+  type HostApi,
+  isTyping,
+  onShellCommand,
+  PageLayout,
+  type RendererPlugin,
+  SESSION_KINDS,
+  type SessionKind,
+  type SessionSummary,
+  type ShortcutInfo,
+  showPanel,
+  togglePanel,
+  useHost
+} from '@treeix/sdk'
 import { FileIcon, Icon } from '@treeix/app/Icon'
+import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
-import { KindBadge } from '@treeix/app/sessionUi'
-import { digitPressed, getSettings } from '@treeix/app/settings'
+import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
+import { digitPressed } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { getCurrentWorkspaceId, inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
+import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
+import { startRename, TaskList } from './TaskList'
+import { openTab, TaskTerminals } from './TerminalPanel'
 import { resolvePath } from './fileLinks'
+import { type Task, taskOf, uniqueName } from './tasks'
+import { switchTask, taskLabel } from './taskUi'
 import {
-  activePane,
+  type ClosedSession,
   closeActivePane,
   createSession,
+  createTask,
+  deleteTask,
   focusNeighbor,
   focusPaneAt,
   focusSession,
+  focusShown,
   getTerminals,
   isTerminalFocused,
+  restoreClosedSession,
+  revealSession,
+  selectTask,
   type Session,
   sendText,
+  setActiveTab,
   setFileLinkHandler,
   setWebLinkHandler,
-  showPane,
   splitPane,
   subscribeTerminals,
   toggleZoom,
-  restoreClosedSession,
   useTerminals,
   whenReady
 } from './terminals'
-
-const TerminalPanel = lazy(() => import('./TerminalPanel').then((module) => ({ default: module.TerminalPanel })))
 
 const TAB_ID = 'terminal'
 
@@ -38,17 +63,16 @@ const TAB_ID = 'terminal'
 type FilePreview = { path: string; line: number | null; root?: string }
 
 const view = definePluginSettings('terminal', (stored) => ({
-  explorerOpen: stored.explorerOpen !== false,
   /** The open file in each workspace */
   previews: (typeof stored.previews === 'object' && stored.previews !== null ? stored.previews : {}) as Record<string, FilePreview | null>,
-  /** The file preview fills the tab, the terminal stays alive behind it */
+  /** The file preview fills the main zone, the terminals stay alive behind it */
   previewMaximized: stored.previewMaximized === true
 }))
 
 const setPreview = (preview: FilePreview | null): void => view.update({ previews: { ...view.get().previews, [getCurrentWorkspaceId()]: preview } })
 
-/** Whether the ⌘⇧J session switcher is open */
-const dialog = definePluginSettings('terminal-dialog', () => ({ open: false }))
+/** The ⌘⇧J session switcher, `closed` for G H */
+const dialogs = definePluginSettings('terminal-dialog', () => ({ sessions: null as 'all' | 'closed' | null }))
 
 let summaries: { from: Session[]; list: SessionSummary[] } = { from: [], list: [] }
 /** Sessions without their xterm objects, the same array until the sessions change */
@@ -63,136 +87,116 @@ function sessionSummaries(): SessionSummary[] {
   return summaries.list
 }
 
-/** Sessions of the current workspace */
-function useWorkspaceSessions(): Session[] {
+type TaskScope = { tasks: Task[]; task: Task | null; sessions: Session[]; history: ClosedSession[] }
+
+/** Tasks, sessions and closed sessions of the current workspace, and the task on screen */
+function useTaskScope(): TaskScope {
   const { repos } = useHost()
   const { workspaces, currentId } = useWorkspaces()
   const workspace = workspaces.find((candidate) => candidate.id === currentId)
-  return useTerminals().sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces))
+  const state = useTerminals()
+  const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
+  const tasks = state.tasks.filter(include)
+  const task = tasks.find((candidate) => candidate.id === state.selected[currentId]) ?? tasks[0] ?? null
+  return { tasks, task, sessions: state.sessions.filter(include), history: state.history.filter(include) }
 }
 
-function useIncludeSession(): (session: { worktreePath: string; workspaceId: string }) => boolean {
-  const { repos } = useHost()
-  const { workspaces, currentId } = useWorkspaces()
-  const workspace = workspaces.find((candidate) => candidate.id === currentId)
-  return (session) => inWorkspace(session, workspace, repos, workspaces)
+/** The latest scope, for keys handled outside React; kept by Root, which is always mounted */
+let scope: TaskScope = { tasks: [], task: null, sessions: [], history: [] }
+
+/** Closed sessions of a task; those of deleted tasks, or from before tasks, go with the task on their folder */
+const historyOf = (history: ClosedSession[], task: Task): ClosedSession[] => {
+  const tasks = getTerminals().tasks
+  return history.filter((entry) => entry.taskId === task.id || (!tasks.some((candidate) => candidate.id === entry.taskId) && entry.worktreePath === task.worktreePath))
 }
 
 const WaitingDot = ({ className }: { className: string }): React.JSX.Element | null => {
-  const waiting = useWorkspaceSessions().filter((session) => session.status === 'input').length
+  const waiting = useTaskScope().sessions.filter((session) => session.status === 'input').length
   return waiting > 0 ? <span title={`${waiting} waiting for input`} className={`rounded-full bg-amber-400 ${className}`} /> : null
 }
 
-function TerminalTab(): React.JSX.Element {
+function TerminalPage(): React.JSX.Element {
   const host = useHost()
-  const includeSession = useIncludeSession()
-  useFileLinks()
-  const { explorerOpen, previews, previewMaximized } = view.use()
+  const { tasks, task, sessions, history } = useTaskScope()
+  const { previews, previewMaximized } = view.use()
   const preview = previews[useWorkspaces().currentId] ?? null
-  const [explorerWidth, setExplorerWidth] = usePersisted<number>('terminalTab.explorerWidth', 260)
   const [previewWidth, setPreviewWidth] = usePersisted<number>('terminalTab.previewWidth', 560)
   // The file opener is registered once, so it reads the explorer's folder through a ref
   const explorerRoot = useRef(host.explorerRoot)
   explorerRoot.current = host.explorerRoot
-  const open = (path: string, line: number | null = null): void => setPreview({ path, line, root: explorerRoot.current })
+  const open = (path: string, line: number | null = null, root = explorerRoot.current): void => setPreview({ path, line, root })
   const [markdownPreview, setMarkdownPreview] = useMarkdownPreview()
   useEffect(() => host.registerFileOpener(TAB_ID, open), [])
   const previewRoot = preview?.root ?? host.explorerRoot
+  const label = task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, host.defaultCwd)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="flex min-h-0 flex-1">
-        <div className={`min-w-0 flex-1 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
-          <Suspense fallback={null}>
-            <TerminalPanel repos={host.repos} worktreePath={host.defaultCwd} orientation="horizontal" includeSession={includeSession} />
-          </Suspense>
+    <PageLayout
+      listLabel="Groups"
+      inspectorLabel="Group"
+      listWidth={240}
+      hints={{
+        list: [['⌘⇧T', 'new group'], ['e', 'rename'], ['⌘⌫', 'delete']],
+        main: [['⌘T', 'new tab'], ['⌃⌘↑↓', 'group']]
+      }}
+      list={<TaskList tasks={tasks} current={task} sessions={sessions} repos={host.repos} onNew={() => startTask(host)} history={task ? historyOf(history, task) : history} />}
+      main={
+        <div className="flex min-h-0 min-w-0 flex-1">
+          <div className={`min-w-0 flex-1 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
+            <TaskTerminals task={task} label={label} cwd={host.defaultCwd} history={task ? historyOf(history, task) : history} repos={host.repos} orientation="horizontal" page />
+          </div>
+          {preview && (
+            <aside style={previewMaximized ? undefined : { width: previewWidth }} className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}>
+              {!previewMaximized && <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />}
+              <MarkdownFoldScope>
+                <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+                  <FileIcon path={preview.path} />
+                  <span className="min-w-0 truncate font-mono text-xs text-foreground/85 select-text" title={preview.path}>
+                    {preview.path}
+                    {preview.line && <span className="text-muted-foreground">:{preview.line}</span>}
+                  </span>
+                  <span className="flex-1" />
+                  {isMarkdownPath(preview.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+                  <IconButton label={previewMaximized ? 'Show the terminals' : 'Fill the page'} active={previewMaximized} onClick={() => view.update({ previewMaximized: !previewMaximized })}>
+                    <Icon name={previewMaximized ? 'minimize' : 'maximize'} className="size-3.5" />
+                  </IconButton>
+                  <IconButton label="Close preview" onClick={() => setPreview(null)}>
+                    <Icon name="close" className="size-3" />
+                  </IconButton>
+                </div>
+                {markdownPreview && isMarkdownPath(preview.path) ? (
+                  <div className="min-h-0 flex-1 overflow-auto">
+                    <MarkdownPreview loadKey={`${previewRoot}:${preview.path}`} load={() => window.api.readFile(previewRoot, preview.path)} />
+                  </div>
+                ) : (
+                  host.renderFileView(previewRoot, preview.path, preview.line)
+                )}
+              </MarkdownFoldScope>
+            </aside>
+          )}
         </div>
-        {preview && (
-          <aside
-            style={previewMaximized ? undefined : { width: previewWidth }}
-            className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}
-          >
-            {!previewMaximized && <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />}
-            <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-              <FileIcon path={preview.path} />
-              <span className="min-w-0 truncate font-mono text-xs text-foreground/85 select-text" title={preview.path}>
-                {preview.path}
-                {preview.line && <span className="text-muted-foreground">:{preview.line}</span>}
-              </span>
-              <span className="flex-1" />
-              {isMarkdownPath(preview.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
-              <IconButton label={previewMaximized ? 'Show the terminal' : 'Fill the tab'} active={previewMaximized} onClick={() => view.update({ previewMaximized: !previewMaximized })}>
-                <Icon name={previewMaximized ? 'minimize' : 'maximize'} className="size-3.5" />
-              </IconButton>
-              <IconButton label="Close preview" onClick={() => setPreview(null)}>
-                <Icon name="close" className="size-3" />
-              </IconButton>
-            </div>
-            {markdownPreview && isMarkdownPath(preview.path) ? (
-              <div className="min-h-0 flex-1 overflow-auto">
-                <MarkdownPreview loadKey={`${previewRoot}:${preview.path}`} load={() => window.api.readFile(previewRoot, preview.path)} />
-              </div>
-            ) : (
-              host.renderFileView(previewRoot, preview.path, preview.line)
-            )}
-          </aside>
-        )}
-        {explorerOpen && (
-          <aside style={{ width: explorerWidth }} className="relative flex shrink-0 flex-col border-l border-border">
-            <ExplorerHeader />
-            <div className="min-h-0 flex-1">{host.renderExplorer(previewRoot === host.explorerRoot ? (preview?.path ?? null) : null, (path) => open(path))}</div>
-            <ResizeHandle edge="left" width={explorerWidth} min={180} max={520} onResize={setExplorerWidth} />
-          </aside>
-        )}
-      </div>
-    </div>
+      }
+      inspector={
+        <Inspector
+          previewPath={previewRoot === host.explorerRoot ? (preview?.path ?? null) : null}
+          onOpenFile={(path, root) => open(path, null, root)}
+        />
+      }
+    />
   )
 }
 
 const bridge = createBridge('terminal')
 
-const folderLabel = (path: string, home: string): string => (path === home ? '~' : (path.split('/').pop() ?? path))
-
-/** What the files panel shows, with buttons to browse the terminal's folder or any other */
-function ExplorerHeader(): React.JSX.Element {
-  const host = useHost()
-  const label = host.browsedFolder ? folderLabel(host.browsedFolder, window.api.home) : (host.selectedWorktreeLabel ?? '~')
-  const showTerminalFolder = async (): Promise<void> => {
-    const session = activePane()
-    const cwd = session ? await bridge.invoke<string | null>('cwd', session.id) : null
-    if (cwd) host.setBrowsedFolder(cwd)
-    else host.flash('No running terminal to take the folder from')
-  }
-  const pickFolder = async (): Promise<void> => {
-    const folder = await window.api.pickFolder()
-    if (folder) host.setBrowsedFolder(folder)
-  }
-  return (
-    <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-border pr-1.5 pl-3">
-      <span title={host.explorerRoot} className="min-w-0 flex-1 truncate text-[11px] font-medium tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <IconButton label="Show the terminal's folder" onClick={showTerminalFolder}>
-        <Icon name="terminal" className="size-3.5" />
-      </IconButton>
-      <IconButton label="Open folder…" onClick={pickFolder}>
-        <Icon name="folderOpen" className="size-3.5" />
-      </IconButton>
-      {host.browsedFolder && (
-        <IconButton label={host.selectedWorktree ? 'Back to the selected worktree' : 'Back to home'} onClick={() => host.setBrowsedFolder(null)}>
-          <Icon name="close" className="size-3" />
-        </IconButton>
-      )}
-    </div>
-  )
-}
-
 /**
- * ⌘-click on a path in a session: shows the file in the Terminal tab, with the Files panel on the folder it is in
+ * ⌘-click on a path in a session: shows the file on the Terminal page, with the Files panel on the folder it is in
  * unless that folder is already shown. Relative paths start where the session's shell is now.
  */
 function useFileLinks(): void {
   const host = useHost()
+  const showInspector = (): void => {
+    if (getShell().pages[TAB_ID]?.inspector === false) togglePanel('inspector', TAB_ID)
+  }
   useEffect(() =>
     setFileLinkHandler(async (sessionId, path, line) => {
       const session = getTerminals().sessions.find((candidate) => candidate.id === sessionId)
@@ -200,18 +204,15 @@ function useFileLinks(): void {
       const absolute = resolvePath(path, cwd, window.api.home)
       const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
       const isFolder = (await window.api.listDirectory(parent, '')).includes(`${absolute.slice(parent.length + 1)}/`)
+      if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
       if (isFolder) {
         host.setBrowsedFolder(absolute)
-        view.update({ explorerOpen: true })
-        if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
-        return
+        return showInspector()
       }
       const inside = absolute.startsWith(`${host.explorerRoot}/`)
       const folder = inside ? host.explorerRoot : parent
       if (!inside) host.setBrowsedFolder(folder)
       setPreview({ path: absolute.slice(folder.length + 1), line, root: folder })
-      view.update({ explorerOpen: true })
-      if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
     })
   )
   useEffect(() =>
@@ -224,132 +225,213 @@ function useFileLinks(): void {
 
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
   const host = useHost()
-  useFileLinks()
-  const includeSession = useIncludeSession()
-  return <TerminalPanel repos={host.repos} worktreePath={host.defaultCwd} orientation={side === 'bottom' ? 'horizontal' : 'vertical'} includeSession={includeSession} />
-}
-
-function SessionsButton(): React.JSX.Element {
-  const sessions = useWorkspaceSessions()
-  const waiting = sessions.filter((session) => session.status === 'input').length
+  const { task, history } = useTaskScope()
   return (
-    <button
-      title={`Sessions${waiting ? ` · ${waiting} waiting for input` : ''} (⌘⇧J)`}
-      onClick={() => dialog.update({ open: true })}
-      className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
-    >
-      <Icon name="terminal" className="size-3.5" />
-      <span className="tabular-nums">{sessions.length}</span>
-      {waiting > 0 && <span className="size-1.5 animate-pulse rounded-full bg-amber-400" />}
-      <kbd className="font-sans text-[10.5px] text-muted-foreground/70">⌘⇧J</kbd>
-    </button>
-  )
-}
-
-function FilesToggle(): React.JSX.Element | null {
-  const { activeTab } = useHost()
-  const { explorerOpen } = view.use()
-  if (activeTab !== TAB_ID) return null
-  return (
-    <IconButton label={explorerOpen ? 'Hide files (⌘P)' : 'Show files (⌘P)'} onClick={() => view.update({ explorerOpen: !explorerOpen })}>
-      {/* A side panel, not a folder: the folder icon is for opening a folder in the panel */}
-      <Icon name="panel" className="size-3.5 -scale-x-100" />
-    </IconButton>
-  )
-}
-
-/** Shows the terminal: the tab when it is open or no dock applies, else the docked panel */
-function reveal(host: HostApi, id: string): void {
-  showPane(id)
-  if (host.activeTab === 'worktrees') {
-    if (!host.isPanelVisible(TAB_ID)) host.showPanel(TAB_ID)
-  } else if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
-  setTimeout(() => focusSession(id), 50)
-}
-
-function Root(): React.JSX.Element | null {
-  const host = useHost()
-  const { open } = dialog.use()
-  const sessions = useWorkspaceSessions()
-  const includeSession = useIncludeSession()
-  const history = useTerminals().history.filter(includeSession)
-  // An empty terminal panel is just a gap: close it once the last session in this workspace is gone
-  useEffect(() => {
-    if (sessions.length === 0 && host.isPanelVisible(TAB_ID)) host.hidePanel(TAB_ID)
-  }, [sessions.length === 0])
-  if (!open) return null
-  return (
-    <SessionsDialog
-      sessions={sessions}
-      history={history}
-      repos={host.repos}
+    <TaskTerminals
+      task={task}
+      label={task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, host.defaultCwd)}
       cwd={host.defaultCwd}
-      onClose={() => dialog.update({ open: false })}
-      onNew={(kind) => startIn(host, kind)}
-      onPick={(session) => reveal(host, session.id)}
-      onRestore={(entry) => void restoreClosedSession(entry).then((id) => reveal(host, id))}
+      history={task ? historyOf(history, task) : history}
+      repos={host.repos}
+      orientation={side === 'bottom' ? 'horizontal' : 'vertical'}
+      page={false}
     />
   )
 }
 
-function startIn(host: HostApi, kind: SessionKind, cwd = host.defaultCwd): void {
-  void createSession(cwd, kind)
-  if (host.activeTab !== TAB_ID && !host.isPanelVisible(TAB_ID)) host.showPanel(TAB_ID)
+function SessionsButton(): React.JSX.Element {
+  const { sessions } = useTaskScope()
+  const waiting = sessions.filter((session) => session.status === 'input').length
+  return (
+    <button
+      title={`Sessions${waiting ? `, ${waiting} waiting for input` : ''} (⌘⇧J)`}
+      onClick={() => dialogs.update({ sessions: 'all' })}
+      className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
+    >
+      <Icon name="terminal" className="size-3.5" />
+      <span className="tabular-nums">{sessions.length}</span>
+      {waiting > 0 && (
+        <span className="flex items-center gap-1 text-amber-400 tabular-nums">
+          <span className="size-1.5 rounded-full bg-amber-400" />
+          {waiting}
+        </span>
+      )}
+      <kbd data-key-hint="" className="font-sans text-[10.5px] text-muted-foreground/70">⌘⇧J</kbd>
+    </button>
+  )
+}
+
+/** Brings the terminals on screen: the docked panel on Worktrees, else the Terminal page */
+function showTerminals(host: HostApi): void {
+  if (host.activeTab === TAB_ID || host.isPanelVisible(TAB_ID)) return
+  if (host.activeTab === 'worktrees') host.showPanel(TAB_ID)
+  else host.setActiveTab(TAB_ID)
+}
+
+function reveal(host: HostApi, id: string): void {
+  revealSession(id)
+  showTerminals(host)
+  setTimeout(() => focusSession(id), 50)
+}
+
+/** A new tab of the task on screen, focused */
+function newTab(host: HostApi, kind: SessionKind): void {
+  openTab(scope.task?.worktreePath ?? host.defaultCwd, kind, scope.task?.id)
+  showTerminals(host)
+}
+
+/** ⌘⇧T: a task with a shell in the current folder, named after that folder */
+function startTask(host: HostApi): void {
+  const cwd = host.defaultCwd
+  const name = uniqueName(worktreeLabel(host.repos, cwd), scope.tasks.map((task) => taskLabel(task, host.repos)))
+  openTab(cwd, 'shell', createTask(name, cwd))
+  showTerminals(host)
+}
+
+/** ⌃⌘↑ ⌃⌘↓: the previous or next task; focus follows into its terminal unless it is on the task list */
+function stepTask(host: HostApi, step: 1 | -1): void {
+  const { tasks, task } = scope
+  if (tasks.length === 0) return
+  const index = tasks.findIndex((candidate) => candidate.id === task?.id)
+  switchTask(host, tasks[(index + step + tasks.length) % tasks.length])
+  showTerminals(host)
+  if (getShell().zone !== 'list') focusShown()
+}
+
+function Root(): React.JSX.Element | null {
+  const host = useHost()
+  const { sessions: switcher } = dialogs.use()
+  const current = useTaskScope()
+  scope = current
+  const { currentId } = useWorkspaces()
+  useFileLinks()
+  // Keys and new terminals act on the task on screen, so the store knows which that is
+  useEffect(() => {
+    if (current.task && getTerminals().selected[currentId] !== current.task.id) selectTask(current.task.id)
+  }, [current.task?.id, currentId])
+  useEffect(() => onShellCommand('closedSessions', () => dialogs.update({ sessions: 'closed' })), [])
+  return (
+    <>
+      {switcher && (
+        <SessionsDialog
+          sessions={current.sessions}
+          history={current.history}
+          tasks={current.tasks}
+          repos={host.repos}
+          mode={switcher}
+          onClose={() => dialogs.update({ sessions: null })}
+          onPick={(session) => reveal(host, session.id)}
+          onRestore={(entry) => void restoreClosedSession(entry).then((id) => reveal(host, id))}
+        />
+      )}
+    </>
+  )
 }
 
 const ARROWS: Record<string, 'left' | 'right' | 'top' | 'bottom'> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' }
 
 function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
-  if (event.metaKey && event.shiftKey && event.code === 'KeyJ') {
-    dialog.update({ open: !dialog.get().open })
+  const { metaKey: meta, ctrlKey: ctrl, altKey: alt, shiftKey: shift, code } = event
+  const open = dialogs.get()
+  if (meta && shift && !ctrl && !alt && code === 'KeyJ') {
+    dialogs.update({ sessions: open.sessions ? null : 'all' })
     return true
   }
-  if (event.metaKey && !event.shiftKey && !event.altKey && event.key === 'p' && host.activeTab === TAB_ID) {
-    view.update({ explorerOpen: !view.get().explorerOpen })
+  if (open.sessions) return false
+  const onPage = host.activeTab === TAB_ID
+  const terminal = isTerminalFocused()
+  if (meta && ctrl && !alt && !shift && (code === 'ArrowUp' || code === 'ArrowDown')) {
+    stepTask(host, code === 'ArrowUp' ? -1 : 1)
     return true
   }
-  const paneDigit = digitPressed(event, getSettings().digitShortcuts.panes)
-  if (paneDigit) {
-    if (!focusPaneAt(paneDigit)) {
-      host.setActiveTab(TAB_ID)
-      setTimeout(() => focusPaneAt(paneDigit), 50)
+  if (meta && shift && !ctrl && !alt && code === 'KeyT') {
+    startTask(host)
+    return true
+  }
+  // Pane and tab digits only apply inside the terminals, elsewhere the app's digits work; digits match the physical key, so ⌥ producing ¡™£ doesn't matter
+  const paneDigit = digitPressed(event, 'alt')
+  if (paneDigit && terminal) {
+    focusPaneAt(paneDigit)
+    return true
+  }
+  const tabDigit = digitPressed(event, 'meta')
+  if (tabDigit && terminal) {
+    const tabs = scope.task?.tabs ?? []
+    // 9 is the last tab, like browsers
+    const tab = tabDigit === 9 ? tabs.at(-1) : tabs[tabDigit - 1]
+    if (scope.task && tab) {
+      setActiveTab(scope.task.id, tab.id)
+      focusShown()
     }
     return true
   }
-  if (!event.metaKey || event.ctrlKey) return false
-  const terminalShown = host.activeTab === TAB_ID || host.isPanelVisible(TAB_ID)
-  // ⌘N and ⌥⌘T start a shell session, ⇧⌘T a Claude one
-  if (event.code === 'KeyN' && !event.altKey && !event.shiftKey) {
-    startIn(host, 'shell')
+  if (meta && !ctrl && !alt && !shift && (code === 'KeyT' || code === 'KeyN')) {
+    newTab(host, 'shell')
     return true
   }
-  // ⌘T opens the tab
-  if (event.code === 'KeyT' && !event.altKey && !event.shiftKey) {
-    host.setActiveTab(TAB_ID)
+  if (meta && !ctrl && !alt && code === 'KeyD' && (onPage || host.isPanelVisible(TAB_ID))) {
+    void splitPane(shift ? 'bottom' : 'right', host.defaultCwd)
     return true
   }
-  if (event.code === 'KeyT' && (event.altKey || event.shiftKey)) {
-    startIn(host, event.shiftKey ? 'claude' : 'shell')
+  if (meta && alt && !ctrl && !shift && ARROWS[code] && terminal) {
+    focusNeighbor(ARROWS[code])
     return true
   }
-  if (event.code === 'KeyD' && !event.altKey && terminalShown) {
-    if (host.activeTab !== TAB_ID && !host.isPanelVisible(TAB_ID)) host.showPanel(TAB_ID)
-    void splitPane(event.shiftKey ? 'bottom' : 'right', host.defaultCwd)
-    return true
-  }
-  if (event.altKey && !event.shiftKey && ARROWS[event.code] && isTerminalFocused()) {
-    focusNeighbor(ARROWS[event.code])
-    return true
-  }
-  if (event.shiftKey && !event.altKey && event.code === 'Enter' && isTerminalFocused()) {
+  if (meta && alt && !ctrl && !shift && code === 'Enter' && terminal) {
     toggleZoom()
+    return true
+  }
+  if (meta && !ctrl && !alt && !shift && code === 'KeyP' && onPage) {
+    togglePanel('inspector', TAB_ID)
+    return true
+  }
+  const task = scope.task
+  // Anywhere on the page, even in a terminal: F2 renames the group on screen, ⌘⇧⌫ deletes it
+  const inField = isTyping(event) && !terminal
+  if (onPage && task && !inField && code === 'F2' && !meta && !ctrl && !alt && !shift) {
+    showPanel('list', TAB_ID)
+    startRename(task.id)
+    return true
+  }
+  if (onPage && task && !inField && meta && shift && !ctrl && !alt && code === 'Backspace') {
+    deleteTask(task.id)
+    return true
+  }
+  // The task list's own keys
+  if (!onPage || !task || getShell().zone !== 'list' || isTyping(event) || ctrl || alt) return false
+  if (!meta && !shift && code === 'KeyE') {
+    startRename(task.id)
+    return true
+  }
+  if (meta && !shift && code === 'Backspace') {
+    deleteTask(task.id)
     return true
   }
   return false
 }
 
+const SHORTCUTS: ShortcutInfo[] = (
+  [
+    ['⌘⇧J', 'Find and switch sessions', undefined],
+    ['⌘⇧T', 'New group with a shell in the current folder', undefined],
+    ['⌃⌘↑ ⌃⌘↓', 'Previous or next group', undefined],
+    ['⌘T', 'New shell tab in the group, also ⌘N', undefined],
+    ['⌘1-9', 'Tab of the group, 9 is the last (in a terminal)', undefined],
+    ['⌥1-9', 'Focus the nth pane (in a terminal)', undefined],
+    ['⌘D ⌘⇧D', 'Split the active pane right or down with a new shell', undefined],
+    ['⌘W', 'Close the focused pane to History; the last pane closes its tab', undefined],
+    ['⌥⌘←→↑↓', 'Move focus between panes', undefined],
+    ['⌥⌘↵', 'Maximize the focused pane, or restore it', undefined],
+    ['⌘P', 'Inspector with files, alias of ⌘⌥B', TAB_ID],
+    ['F2', 'Rename the group on screen, from anywhere on the page', TAB_ID],
+    ['⌘⇧⌫', 'Delete the group on screen, from anywhere on the page', TAB_ID],
+    ['e', 'Rename the group in place, also double-click (group list)', TAB_ID],
+    ['⌘⌫', 'Delete the group, its sessions go to History (group list)', TAB_ID]
+  ] satisfies [string, string, string | undefined][]
+).map(([keys, label, page]) => ({ keys, label, section: 'Terminal', page }))
+
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'Terminal', icon: 'terminal', order: 10, render: TerminalTab, Badge: () => <WaitingDot className="size-1.5" /> }],
+  tabs: [{ id: TAB_ID, label: 'Terminal', icon: 'terminal', order: 10, render: TerminalPage, Badge: () => <WaitingDot className="size-1.5" /> }],
   panels: [
     {
       id: TAB_ID,
@@ -361,10 +443,7 @@ const plugin: RendererPlugin = {
     }
   ],
   Root,
-  titleBar: [
-    { order: 20, render: SessionsButton },
-    { order: 90, render: FilesToggle, end: true }
-  ],
+  titleBar: [{ order: 20, render: SessionsButton }],
   onKeyDown,
   onCloseShortcut: () => {
     if (!isTerminalFocused()) return false
@@ -372,16 +451,25 @@ const plugin: RendererPlugin = {
     return true
   },
   commands: (host) => [
-    { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: '⌘⇧J', run: () => dialog.update({ open: true }) },
+    { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: '⌘⇧J', run: () => dialogs.update({ sessions: 'all' }) },
+    { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: '⌘⇧T', run: () => startTask(host) },
     ...(Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => ({
       id: `session:${kind}`,
       group: 'Actions',
-      label: `New ${SESSION_KINDS[kind].label} session`,
-      detail: host.selectedWorktreeLabel ?? '~ home',
+      label: `New ${SESSION_KINDS[kind].label} tab`,
+      detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
       icon: 'terminal' as const,
-      run: () => startIn(host, kind)
-    }))
+      shortcut: kind === 'shell' ? '⌘T' : undefined,
+      run: () => newTab(host, kind)
+    })),
+    // @ in the palette searches these
+    ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),
+    ...scope.sessions.map((session) => {
+      const task = taskOf(scope.tasks, session.id)
+      return { id: `session-open:${session.id}`, group: 'Sessions', label: session.title, detail: task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, session.worktreePath), icon: 'terminal' as const, run: () => reveal(host, session.id) }
+    })
   ],
+  shortcuts: SHORTCUTS,
   services: {
     sessions: {
       subscribe: subscribeTerminals,
@@ -391,7 +479,7 @@ const plugin: RendererPlugin = {
       sendText,
       runCommand: (cwd, command) => createSession(cwd, 'shell', command),
       reveal: (id) => {
-        showPane(id)
+        revealSession(id)
         setTimeout(() => focusSession(id), 50)
       }
     }
@@ -403,4 +491,3 @@ const plugin: RendererPlugin = {
 }
 
 export default plugin
-

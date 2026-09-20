@@ -5,7 +5,8 @@ import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscrib
 import { terminalTitle } from './terminalTitle'
 import { findFileLinks, findWebLinks } from './fileLinks'
 import { THEMES } from '@treeix/app/themes'
-import { addPane, type DropEdge, neighborPane, type PaneLayout, placePane as placeInLayout, remapPanes, removePane } from './paneLayout'
+import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
+import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { createBridge, SESSION_KINDS, type SessionKind, type SessionStatus } from '@treeix/sdk'
 import type { LiveTerminal } from '../shared/types'
@@ -63,10 +64,11 @@ function terminalTheme(): TerminalTheme {
 
 subscribeSettings(() => {
   const theme = terminalTheme()
-  const { terminalFontSize, terminalFont } = getSettings()
+  const { terminalFontSize, terminalFont, terminalScrollback } = getSettings()
   const fontFamily = fontStack(terminalFont, MONO_STACK)
   for (const session of state.sessions) {
     session.terminal.options.theme = theme
+    if (session.terminal.options.scrollback !== terminalScrollback) session.terminal.options.scrollback = terminalScrollback
     if (session.terminal.options.fontSize === terminalFontSize && session.terminal.options.fontFamily === fontFamily) continue
     Object.assign(session.terminal.options, { fontSize: terminalFontSize, fontFamily })
     fitSession(session.id)
@@ -78,16 +80,15 @@ const ACTIVE_WINDOW_MS = 2000
 const WAITING_FOR_INPUT =
   /Do you want to|❯\s*1\.\s*Yes|Yes, and don't ask|\[y\/n\]|\(y\/n\)|Allow command|Would you like to run|Press Enter to continue/i
 
-/** A closed session, kept so it can be started again; agent sessions resume their conversation */
-export type ClosedSession = SessionMeta & { id: string; endedAt: number }
+/** A closed session, kept so it can be started again; agent sessions resume their conversation, in their task when it still exists */
+export type ClosedSession = SessionMeta & { id: string; endedAt: number; taskId?: string }
 
-/** `panes` is the flat list of shown sessions; `layout` arranges them in columns */
 type State = {
   sessions: Session[]
-  panes: string[]
-  layout: PaneLayout
-  listOpen: boolean
-  /** Pane filling the whole area, like iTerm's maximize */
+  tasks: Task[]
+  /** Task shown in each workspace, by workspace id */
+  selected: Record<string, string>
+  /** Pane filling its tab, like iTerm's maximize */
   zoomed: string | null
   /** Newest first */
   history: ClosedSession[]
@@ -105,7 +106,6 @@ export const setWebLinkHandler = (handler: typeof webLinkHandler): void => {
   webLinkHandler = handler
 }
 
-const LIST_OPEN_KEY = 'terminal.listOpen'
 const HISTORY_KEY = 'terminals.history'
 const HISTORY_LIMIT = 100
 
@@ -124,9 +124,12 @@ function loadHistory(): ClosedSession[] {
   }
 }
 
-let state: State = { sessions: [], panes: [], layout: [], listOpen: localStorage.getItem(LIST_OPEN_KEY) === 'true', zoomed: null, history: loadHistory() }
+let state: State = { sessions: [], tasks: [], selected: {}, zoomed: null, history: loadHistory() }
 const listeners = new Set<() => void>()
+/** Output of sessions not opened yet; sessions that never open (killed, another window's) must not grow it forever */
 const pendingOutput = new Map<string, string>()
+const PENDING_SESSIONS = 20
+const PENDING_CHARS = 256_000
 
 function update(next: Partial<State>): void {
   state = { ...state, ...next }
@@ -148,7 +151,10 @@ bridge.on('data', (id, data) => {
   if (typeof id !== 'string' || typeof data !== 'string') return
   const session = findSession(id)
   if (!session) {
-    pendingOutput.set(id, (pendingOutput.get(id) ?? '') + data)
+    const buffered = ((pendingOutput.get(id) ?? '') + data).slice(-PENDING_CHARS)
+    pendingOutput.delete(id)
+    pendingOutput.set(id, buffered)
+    if (pendingOutput.size > PENDING_SESSIONS) pendingOutput.delete(pendingOutput.keys().next().value ?? '')
     return
   }
   session.terminal.write(data)
@@ -177,12 +183,14 @@ const PLAN_PATH = /\.claude\/plans\/([\w.-]+\.md)/g
 const printedPlan = (screen: string, current: string | null): string | null => [...screen.matchAll(PLAN_PATH)].at(-1)?.[1] ?? current
 
 function detectStatus(session: Session, screen: string): SessionStatus {
-  if (session.status === 'exited') return 'exited'
+  if (session.status === 'exited' || session.status === 'dormant') return session.status
   if (session.kind !== 'shell' && WAITING_FOR_INPUT.test(screen)) return 'input'
   return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
 }
 
 setInterval(() => {
+  // Statuses only show on screen; a hidden window catches up within a second of showing
+  if (document.hidden) return
   const next = state.sessions.map((session) => {
     const screen = session.opened ? visibleScreen(session.terminal) : ''
     return { session, status: detectStatus(session, screen), planName: printedPlan(screen, session.planName) }
@@ -191,25 +199,85 @@ setInterval(() => {
   if (changed) update({ sessions: next.map(({ session, status, planName }) => ({ ...session, status, planName })) })
 }, 1000)
 
-const setLayout = (layout: PaneLayout): void => update({ layout, panes: layout.flat(), zoomed: layout.flat().includes(state.zoomed ?? '') ? state.zoomed : null })
+const setTasks = (tasks: Task[], selected = state.selected): void => update({ tasks, selected })
+const mapTask = (id: string, change: (task: Task) => Task): Task[] => state.tasks.map((task) => (task.id === id ? change(task) : task))
 
-export const showPane = (id: string): void => setLayout(addPane(state.layout, id))
+/** The task shown in the current workspace */
+export const currentTask = (): Task | undefined => state.tasks.find((task) => task.id === state.selected[getCurrentWorkspaceId()])
 
-/** Drops a session onto an edge of another pane */
-export const placePane = (id: string, targetId: string, edge: DropEdge): void => setLayout(placeInLayout(state.layout, id, targetId, edge))
-
-/** The session list column beside the terminals */
-export const setSessionListOpen = (listOpen: boolean): void => {
-  localStorage.setItem(LIST_OPEN_KEY, String(listOpen))
-  update({ listOpen })
+export const selectTask = (id: string): void => {
+  if (state.selected[getCurrentWorkspaceId()] !== id) update({ selected: { ...state.selected, [getCurrentWorkspaceId()]: id } })
 }
 
-export const hidePane = (id: string): void => setLayout(removePane(state.layout, id))
+/** Creates a task in the current workspace and shows it */
+export function createTask(name: string, worktreePath: string): string {
+  const task = newTask({ name, worktreePath, workspaceId: getCurrentWorkspaceId() })
+  setTasks([...state.tasks, task], { ...state.selected, [task.workspaceId]: task.id })
+  return task.id
+}
+
+export const renameTask = (id: string, name: string): void => setTasks(mapTask(id, (task) => ({ ...task, name })))
+
+/** Ends the task's sessions, which stay in the history, and forgets the task; asks first when processes are running, since shells and dev servers can't be resumed */
+export function deleteTask(id: string): void {
+  const task = state.tasks.find((candidate) => candidate.id === id)
+  if (!task) return
+  const panes = taskPanes(task)
+  const running = state.sessions.filter((session) => panes.includes(session.id) && session.status !== 'exited' && session.status !== 'dormant').length
+  if (running > 0 && !window.confirm(`Delete the group and end its ${running} running ${running === 1 ? 'process' : 'processes'}?`)) return
+  panes.forEach(killSession)
+  setTasks(state.tasks.filter((candidate) => candidate.id !== id))
+}
+
+export const setActiveTab = (taskId: string, tabId: string): void => setTasks(mapTask(taskId, (task) => ({ ...task, activeTab: tabId })))
+
+/** Remembers the pane last focused in its tab, so coming back to the tab lands there */
+export function setTabFocus(sessionId: string): void {
+  const task = taskOf(state.tasks, sessionId)
+  const tab = task?.tabs.find((candidate) => tabPanes(candidate).includes(sessionId))
+  if (!task || !tab || tab.focus === sessionId) return
+  setTasks(mapTask(task.id, (current) => ({ ...current, tabs: current.tabs.map((candidate) => (candidate === tab ? { ...tab, focus: sessionId } : candidate)) })))
+}
+
+/** Shows the session's task and tab; a session in no tab opens as a new tab of the shown task */
+export function revealSession(id: string): void {
+  const task = taskOf(state.tasks, id)
+  const tab = task?.tabs.find((candidate) => tabPanes(candidate).includes(id))
+  void wakeSession(id)
+  if (!task || !tab) return placeSession(id, currentTask()?.id)
+  setTasks(
+    mapTask(task.id, (current) => ({ ...current, activeTab: tab.id, tabs: current.tabs.map((candidate) => (candidate === tab ? { ...tab, focus: id } : candidate)) })),
+    { ...state.selected, [getCurrentWorkspaceId()]: task.id }
+  )
+}
+
+/**
+ * Opens a session as a new tab: in `taskId`, else in the shown task when it is on the same folder, else in another
+ * task of the workspace on that folder, else in a new task for the folder. `select` shows that task.
+ */
+function placeSession(id: string, taskId?: string, select = true): void {
+  const session = findSession(id)
+  if (!session) return
+  const shown = state.tasks.find((task) => task.id === state.selected[session.workspaceId])
+  const existing =
+    state.tasks.find((task) => task.id === taskId) ??
+    (shown?.worktreePath === session.worktreePath ? shown : state.tasks.find((task) => task.workspaceId === session.workspaceId && task.worktreePath === session.worktreePath))
+  const task = existing ?? newTask({ workspaceId: session.workspaceId, worktreePath: session.worktreePath })
+  const tasks = existing ? state.tasks : [...state.tasks, task]
+  setTasks(
+    tasks.map((candidate) => (candidate.id === task.id ? addTab(candidate, id) : candidate)),
+    select ? { ...state.selected, [task.workspaceId]: task.id } : state.selected
+  )
+}
+
+/** Drops sessions, a pane or a whole tab's, onto an edge of another pane */
+export const placePane = (ids: string[], targetId: string, edge: DropEdge): void => setTasks(placeBeside(state.tasks, ids, targetId, edge))
 
 /** Before its pane is fitted, xterm must match the pty: zsh pads its prompt marker to the pty width, and at xterm's default 80 columns that padding wraps and leaves a blank line above the prompt */
 const SPAWN_SIZE = { cols: 100, rows: 30 }
 
-async function openSession(id: string, meta: SessionMeta, output: string, exitCode: number | null, size = SPAWN_SIZE): Promise<void> {
+/** `dormant` makes the terminal without a process behind it; `wakeSession` starts one */
+async function openSession(id: string, meta: SessionMeta, output: string, exitCode: number | null, size = SPAWN_SIZE, dormant = false): Promise<void> {
   const [{ Terminal }, { FitAddon }] = await loadXterm()
   const terminal = new Terminal({
     ...size,
@@ -222,7 +290,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     allowTransparency: true,
     // ⌥ types characters like ą and ś on Polish and other layouts; ⌥ arrows and ⌥⌫ still move and delete by word
     macOptionIsMeta: false,
-    scrollback: 5000,
+    scrollback: getSettings().terminalScrollback,
     theme: terminalTheme()
   })
   const fit = new FitAddon()
@@ -278,8 +346,9 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     }
     // ⌃- and ⌃⇧- are the app's Go Back and Go Forward, not terminal input
     if (event.ctrlKey && event.code === 'Minus') return false
-    const { panes, tabs, workspaces } = getSettings().digitShortcuts
-    const digitShortcut = [panes, tabs, workspaces].some((modifier) => digitPressed(event, modifier) !== null)
+    // ⌥ digits pick a pane; the tab and workspace digits are set in Settings
+    const { tabs, workspaces } = getSettings().digitShortcuts
+    const digitShortcut = (['alt', tabs, workspaces] as const).some((modifier) => digitPressed(event, modifier) !== null)
     return !event.metaKey && !digitShortcut
   })
   // Programs name their window (Claude Code: the conversation topic, zsh themes: command or folder); that names the session
@@ -287,7 +356,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     const title = terminalTitle(raw)
     if (title && findSession(id)?.title !== title) update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)) })
   })
-  const status: SessionStatus = exitCode === null ? 'running' : 'exited'
+  const status: SessionStatus = dormant ? 'dormant' : exitCode === null ? 'running' : 'exited'
   const session: Session = { ...meta, id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false, planName: null }
   update({ sessions: [...state.sessions, session] })
   terminal.write(output + (pendingOutput.get(id) ?? ''), () => (replaying = false))
@@ -297,11 +366,13 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
 /** The usage-limits plugin fills the variable with its status line bridge; the terminal plugin's main module defaults it to `{}` */
 const CLAUDE = 'claude --settings "$TREEIX_CLAUDE_SETTINGS"'
 
-const spawnSession = (meta: SessionMeta, command: string | undefined): Promise<string> =>
-  bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...SPAWN_SIZE, meta: JSON.stringify(meta) })
+const spawnSession = (meta: SessionMeta, command: string | undefined, id?: string, size = SPAWN_SIZE): Promise<string> =>
+  bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), id })
 
-/** `promptArgument` is an already shell-quoted first prompt for agent sessions */
-export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string): Promise<string> {
+const metaOf = ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId }: SessionMeta): SessionMeta => ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId })
+
+/** Starts a session without showing it anywhere yet */
+async function startSession(worktreePath: string, kind: SessionKind, promptArgument?: string): Promise<string> {
   const sameKind = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind)
   const agentSessionId = kind === 'claude' ? crypto.randomUUID() : null
   const meta: SessionMeta = {
@@ -317,7 +388,13 @@ export async function createSession(worktreePath: string, kind: SessionKind, pro
   const command = base ? (promptArgument ? `${base} ${promptArgument}` : base) : promptArgument
   const id = await spawnSession(meta, command)
   await openSession(id, meta, '', null)
-  showPane(id)
+  return id
+}
+
+/** `promptArgument` is an already shell-quoted first prompt for agent sessions; the session opens as a new tab of `taskId`, or of the task for its folder */
+export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string, taskId?: string): Promise<string> {
+  const id = await startSession(worktreePath, kind, promptArgument)
+  placeSession(id, taskId)
   return id
 }
 
@@ -331,7 +408,21 @@ function resumeCommand(meta: SessionMeta): string | undefined {
 }
 
 const SAVED_KEY = 'terminals.saved'
+/** `layout` is from before tasks, read once to move those sessions into tasks */
 type Saved = { sessions: (SessionMeta & { id: string })[]; layout: PaneLayout }
+const TASKS_KEY = 'terminals.tasks'
+
+function loadTasks(): { tasks: Task[]; selected: Record<string, string> } | null {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(TASKS_KEY) ?? 'null')
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const { tasks, selected } = parsed as Record<string, unknown>
+    const picks = typeof selected === 'object' && selected !== null ? Object.entries(selected).filter((entry): entry is [string, string] => typeof entry[1] === 'string') : []
+    return { tasks: parseTasks(tasks), selected: Object.fromEntries(picks) }
+  } catch {
+    return null
+  }
+}
 
 function isSessionMeta(value: unknown): value is SessionMeta {
   if (typeof value !== 'object' || value === null) return false
@@ -362,41 +453,82 @@ const parseMeta = (text: string): SessionMeta | null => {
   }
 }
 
+const waking = new Map<string, Promise<void>>()
+
+/** Starts a dormant session's process under its own id, resuming its agent conversation; resolves once the process runs */
+function wakeSession(id: string): Promise<void> {
+  const session = findSession(id)
+  if (session?.status !== 'dormant') return Promise.resolve()
+  const pending = waking.get(id)
+  if (pending) return pending
+  const started = spawnSession(metaOf(session), resumeCommand(session), id, { cols: session.terminal.cols, rows: session.terminal.rows })
+    .then(() => {
+      // Closed while starting: killSession had no process to end yet
+      if (!findSession(id)) return bridge.send('kill', id)
+      update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, status: 'running' } : candidate)) })
+      fitSession(id)
+    })
+    .finally(() => waking.delete(id))
+  waking.set(id, started)
+  return started
+}
+
 let restored = false
 
-/** After a reload the processes are still running, so reattach; after a relaunch start them again, resuming agent conversations */
+/**
+ * After a reload the processes are still running, so reattach. After a relaunch only the panes on screen start again,
+ * resuming agent conversations; the rest stay dormant until shown, and stay dormant through reloads.
+ */
 async function restoreSessions(): Promise<void> {
   const saved = loadSaved()
+  const savedTasks = loadTasks()
   const live = await bridge.invoke<LiveTerminal[]>('list')
-  const ids = new Map<string, string>()
-  if (live.length > 0) {
-    for (const terminal of live) {
-      const meta = parseMeta(terminal.meta)
-      if (!meta) continue
-      await openSession(terminal.id, meta, terminal.output, terminal.exitCode, { cols: terminal.cols, rows: terminal.rows })
-      ids.set(terminal.id, terminal.id)
-    }
-  } else {
-    for (const { id: savedId, ...meta } of saved.sessions) {
-      const id = await spawnSession(meta, resumeCommand(meta))
-      await openSession(id, meta, '', null)
-      ids.set(savedId, id)
-    }
+  for (const terminal of live) {
+    const meta = parseMeta(terminal.meta)
+    if (meta) await openSession(terminal.id, meta, terminal.output, terminal.exitCode, { cols: terminal.cols, rows: terminal.rows })
   }
-  setLayout(remapPanes(saved.layout, (id) => ids.get(id)))
+  const eager = live.length === 0 && savedTasks ? shownPanes(savedTasks.tasks, savedTasks.selected, getCurrentWorkspaceId()) : []
+  for (const { id, ...meta } of saved.sessions) {
+    if (findSession(id)) continue
+    const dormant = !eager.includes(id)
+    if (!dormant) await spawnSession(meta, resumeCommand(meta), id)
+    await openSession(id, meta, '', null, SPAWN_SIZE, dormant)
+  }
+  const rename = (id: string): string | undefined => (findSession(id) ? id : undefined)
+  const tasks = savedTasks
+    ? remapTasks(savedTasks.tasks, rename)
+    : tasksFromSessions(state.sessions.filter((session) => !taskOf(state.tasks, session.id)), remapPanes(saved.layout, rename).flat())
+  const selected = savedTasks?.selected ?? Object.fromEntries([...tasks].reverse().map((task) => [task.workspaceId, task.id]))
+  setTasks([...tasks, ...state.tasks], { ...selected, ...state.selected })
+  placeOrphans()
   restored = true
+}
+
+/** Sessions in no tab open as tabs of the task for their folder, so every session stays reachable */
+const placeOrphans = (): void => state.sessions.filter((session) => !taskOf(state.tasks, session.id)).forEach((session) => placeSession(session.id, undefined, false))
+
+// Most updates (statuses, titles) change nothing saved, and localStorage writes are synchronous
+const written = new Map<string, string>()
+function store(key: string, json: string): void {
+  if (written.get(key) === json) return
+  written.set(key, json)
+  localStorage.setItem(key, json)
 }
 
 subscribe(() => {
   if (!restored) return
-  const sessions = state.sessions
-    .filter((session) => session.status !== 'exited')
-    .map(({ id, worktreePath, kind, title, startedAt, workspaceId, agentSessionId }) => ({ id, worktreePath, kind, title, startedAt, workspaceId, agentSessionId }))
-  const saved: Saved = { sessions, layout: remapPanes(state.layout, (id) => (sessions.some((session) => session.id === id) ? id : undefined)) }
-  localStorage.setItem(SAVED_KEY, JSON.stringify(saved))
+  const sessions = state.sessions.filter((session) => session.status !== 'exited').map((session) => ({ id: session.id, ...metaOf(session) }))
+  const saved: Saved = { sessions, layout: [] }
+  store(SAVED_KEY, JSON.stringify(saved))
+  store(TASKS_KEY, JSON.stringify({ tasks: state.tasks, selected: state.selected }))
 })
 
 void restoreSessions().catch(() => {
+  // The processes are out of reach, but the tasks stay
+  const saved = loadTasks()
+  if (saved) setTasks([...remapTasks(saved.tasks, () => undefined), ...state.tasks], { ...saved.selected, ...state.selected })
+  // Sessions reattached before the failure
+  placeOrphans()
   restored = true
 })
 
@@ -413,6 +545,7 @@ export function attachSession(id: string, container: HTMLElement): void {
     session.opened = true
   }
   fitSession(id)
+  void wakeSession(id)
 }
 
 export function fitSession(id: string): void {
@@ -436,23 +569,27 @@ const setHistory = (history: ClosedSession[]): void => {
 export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
-  bridge.send('kill', id)
+  if (session.status !== 'dormant') bridge.send('kill', id)
   session.terminal.dispose()
-  const layout = removePane(state.layout, id)
-  const { worktreePath, kind, title, startedAt, workspaceId, agentSessionId } = session
-  update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), layout, panes: layout.flat() })
-  setHistory([{ id, worktreePath, kind, title, startedAt, workspaceId, agentSessionId, endedAt: Date.now() }, ...state.history])
+  const taskId = taskOf(state.tasks, id)?.id
+  update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), tasks: removeSession(state.tasks, id), zoomed: state.zoomed === id ? null : state.zoomed })
+  setHistory([{ id, ...metaOf(session), taskId, endedAt: Date.now() }, ...state.history])
+}
+
+/** Closes every pane of a tab */
+export function closeTab(taskId: string, tabId: string): void {
+  state.tasks.find((task) => task.id === taskId)?.tabs.find((tab) => tab.id === tabId)?.layout.flat().forEach(killSession)
 }
 
 export const forgetClosedSession = (id: string): void => setHistory(state.history.filter((entry) => entry.id !== id))
 export const clearClosedSessions = (ids: string[]): void => setHistory(state.history.filter((entry) => !ids.includes(entry.id)))
 
-/** Starts a closed session again in its folder, resuming the agent conversation, and shows it */
+/** Starts a closed session again in its folder, resuming the agent conversation, as a new tab of its task, and shows it */
 export async function restoreClosedSession(entry: ClosedSession): Promise<string> {
-  const { id: _closedId, endedAt: _endedAt, ...meta } = entry
+  const { id: _closedId, endedAt: _endedAt, taskId, ...meta } = entry
   const id = await spawnSession(meta, resumeCommand(meta))
   await openSession(id, meta, '', null)
-  showPane(id)
+  placeSession(id, taskId)
   forgetClosedSession(entry.id)
   return id
 }
@@ -479,9 +616,16 @@ export function whenReady(id: string): Promise<void> {
 }
 
 export function sendText(id: string, text: string, submit: boolean): void {
-  bridge.send('write', id, `\x1b[200~${text}\x1b[201~`)
-  if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
-  showPane(id)
+  const write = (): void => {
+    bridge.send('write', id, `\x1b[200~${text}\x1b[201~`)
+    if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
+  }
+  if (findSession(id)?.status === 'dormant') {
+    // Listening before the process starts, so its first output counts
+    const ready = whenReady(id)
+    void wakeSession(id).then(() => ready).then(write)
+  } else write()
+  revealSession(id)
 }
 
 export const terminalSelection = (id: string): string => findSession(id)?.terminal.getSelection() ?? ''
@@ -491,41 +635,56 @@ export async function pasteClipboard(id: string): Promise<void> {
   findSession(id)?.terminal.paste(await navigator.clipboard.readText())
 }
 
-/** The pane holding keyboard focus, else the last one shown */
-export function activePane(): Session | undefined {
-  const focused = document.activeElement?.closest<HTMLElement>('[data-session-id]')?.dataset.sessionId
-  return findSession(focused ?? '') ?? findSession(state.panes.at(-1) ?? '')
+const shownTab = () => {
+  const task = currentTask()
+  return task && activeTabOf(task)
 }
 
-/** Focuses the nth pane on screen, in reading order; false when no terminal is shown */
-export function focusPaneAt(position: number): boolean {
-  const pane = document.querySelectorAll<HTMLElement>('[data-session-id]')[position - 1]
+/** The pane holding keyboard focus, else the one last focused in the shown tab */
+export function activePane(): Session | undefined {
+  const focused = document.activeElement?.closest<HTMLElement>('[data-session-id]')?.dataset.sessionId
+  return findSession(focused ?? '') ?? findSession(shownTab()?.focus ?? '')
+}
+
+/** Keyboard focus to the shown tab's pane, else to the start buttons of an empty task */
+export function focusShown(): void {
+  setTimeout(() => {
+    const id = shownTab()?.focus
+    if (id && findSession(id)?.opened) focusSession(id)
+    else document.querySelector<HTMLElement>('[data-terminal-empty] [data-zone-focus]')?.focus()
+  }, 50)
+}
+
+/** Focuses the nth pane, in reading order, of the terminals holding keyboard focus */
+export function focusPaneAt(position: number): void {
+  const pane = document.activeElement?.closest('[data-terminal-panes]')?.querySelectorAll<HTMLElement>('[data-session-id]')[position - 1]
   if (pane?.dataset.sessionId) focusSession(pane.dataset.sessionId)
-  return document.querySelector('[data-session-id]') !== null
 }
 
 export const isTerminalFocused = (): boolean => document.activeElement?.closest('[data-session-id]') != null
 
-/** New shell beside the active pane, in its folder, like iTerm's ⌘D and ⇧⌘D */
+/** New shell beside the active pane, in its folder, like iTerm's ⌘D and ⇧⌘D; with no pane, a new tab of the shown task */
 export async function splitPane(edge: DropEdge, fallbackCwd: string): Promise<void> {
   const anchor = activePane()
-  const id = await createSession(anchor?.worktreePath ?? fallbackCwd, 'shell')
-  if (anchor) setLayout(placeInLayout(state.layout, id, anchor.id, edge))
+  const task = currentTask()
+  const id = await startSession(anchor?.worktreePath ?? task?.worktreePath ?? fallbackCwd, 'shell')
+  if (anchor && taskOf(state.tasks, anchor.id)) setTasks(placeBeside(state.tasks, [id], anchor.id, edge))
+  else placeSession(id, task?.id)
   setTimeout(() => focusSession(id))
 }
 
-/** Ends the session; it stays in the history, so an agent conversation can be resumed */
+/** Ends the session; it stays in the history, so an agent conversation can be resumed. Focus goes to the pane that takes its place */
 export function closeActivePane(): void {
   const session = activePane()
   if (!session) return
-  const next = neighborPane(state.layout, session.id, 'top') ?? neighborPane(state.layout, session.id, 'left') ?? neighborPane(state.layout, session.id, 'bottom') ?? neighborPane(state.layout, session.id, 'right')
   killSession(session.id)
-  if (next) setTimeout(() => focusSession(next))
+  focusShown()
 }
 
 export function focusNeighbor(direction: DropEdge): void {
   const session = activePane()
-  const next = session && neighborPane(state.layout, session.id, direction)
+  const tab = session && taskOf(state.tasks, session.id)?.tabs.find((candidate) => tabPanes(candidate).includes(session.id))
+  const next = session && tab && neighborPane(tab.layout, session.id, direction)
   if (next) focusSession(next)
 }
 

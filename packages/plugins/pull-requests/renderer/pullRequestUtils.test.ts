@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { groupPullRequests, sortPullRequests, untilLabel } from './pullRequestUtils'
+import type { PullRequest, ReviewThread } from '../shared/types'
+import { groupPullRequests, involvesYou, sortPullRequests, threadReference, untilLabel } from './pullRequestUtils'
 
 test('untilLabel picks the largest sensible unit', () => {
   const now = 1_000_000_000_000
@@ -40,4 +41,30 @@ test('groupPullRequests puts reviewable first and conflicts last, keeping order'
     ['conflicts', [1, 6]]
   ])
   expect(groupPullRequests([pr(1, {})]).map((group) => group.id)).toEqual(['ready'])
+})
+
+test('involvesYou needs a known review state other than unreviewed', () => {
+  type PullRequest = Parameters<typeof involvesYou>[0]
+  const withReview = (review: PullRequest['review']) => ({ review }) as PullRequest
+  expect(involvesYou(withReview({ state: 'requested', newCommits: 0 }))).toBe(true)
+  expect(involvesYou(withReview({ state: 'yours', newCommits: 0 }))).toBe(true)
+  expect(involvesYou(withReview({ state: 'unreviewed', newCommits: 0 }))).toBe(false)
+  expect(involvesYou(withReview(null))).toBe(false)
+})
+
+test('threadReference points at the thread without copying bodies or code', () => {
+  const github = { provider: 'github', number: 12, url: 'https://github.com/o/r/pull/12' } as PullRequest
+  const gitlab = { provider: 'gitlab', number: 5, url: 'https://gitlab.com/o/r/-/merge_requests/5' } as PullRequest
+  const comment = (id: string) => ({ id, author: 'ann', avatarUrl: null, body: 'secret body', createdAt: '', reactions: { '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 } })
+  const thread = (id: string, path: string | null, line: number | null): ReviewThread => ({ id: '1', path, line, side: 'additions', comments: [comment(id)], resolved: null, resolveId: null })
+  expect(threadReference(github, thread('review:7', 'src/a.ts', 42))).toBe(
+    'PR #12 https://github.com/o/r/pull/12 review thread by @ann on src/a.ts:42: https://github.com/o/r/pull/12#discussion_r7'
+  )
+  expect(threadReference(github, thread('issue:9', null, null))).toBe(
+    'PR #12 https://github.com/o/r/pull/12 review thread by @ann on conversation: https://github.com/o/r/pull/12#issuecomment-9'
+  )
+  expect(threadReference(gitlab, { ...thread('note:3', 'b.ts', 4), side: 'deletions' })).toBe(
+    'MR !5 https://gitlab.com/o/r/-/merge_requests/5 review thread by @ann on b.ts:4 (old): https://gitlab.com/o/r/-/merge_requests/5#note_3'
+  )
+  expect(threadReference(github, thread('review:7', 'src/a.ts', 42))).not.toContain('secret body')
 })

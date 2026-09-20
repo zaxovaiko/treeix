@@ -20,7 +20,7 @@ export const confluenceApi = {
       if (list.error) throw new Error(list.error)
       return list
     }),
-  search: (query: string) => confluenceBridge.invoke<PageList>('search', query)
+  search: (texts: string[], spaces: string[]) => confluenceBridge.invoke<PageList>('search', texts, spaces)
 }
 
 export const TAB_ID = 'confluence'

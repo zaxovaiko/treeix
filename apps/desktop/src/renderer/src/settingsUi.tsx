@@ -37,18 +37,13 @@ export function SearchGroup({ title, className = '', children }: { title: string
 
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }): React.JSX.Element {
   return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-foreground/15'}`}
-    >
-      <span className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : ''}`} />
+    <button role="switch" aria-checked={checked} aria-label={label} onClick={onChange} className={`relative h-5 w-9 shrink-0 rounded-full ${checked ? 'bg-primary' : 'bg-foreground/15'}`}>
+      <span className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow ${checked ? 'translate-x-4' : ''}`} />
     </button>
   )
 }
 
+/** Options side by side; ← and → on its settings row step through them */
 export function Segmented<T extends string>({
   value,
   options,
@@ -59,12 +54,13 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void
 }): React.JSX.Element {
   return (
-    <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
+    <div data-segmented className="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
       {options.map(([option, label]) => (
         <button
           key={option}
+          aria-pressed={value === option}
           onClick={() => onChange(option)}
-          className={`h-6 rounded-md px-2.5 text-xs ${value === option ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`h-6 rounded-md px-2.5 text-xs whitespace-nowrap ${value === option ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
         >
           {label}
         </button>
@@ -73,11 +69,15 @@ export function Segmented<T extends string>({
   )
 }
 
+/** The rows' keyboard cursor is focus; focus itself draws nothing */
+export const SETTING_ROW = 'outline-none first:rounded-t-lg last:rounded-b-lg'
+
+/** One setting: label and description, its control beside them, or wrapped under them when the page is narrow */
 export function Row({ label, description, children }: { label: string; description: string; children: React.ReactNode }): React.JSX.Element | null {
   if (!useSettingMatch(label, description)) return null
   return (
-    <div data-setting className="flex items-center gap-6 border-b border-border px-4 py-3.5 last:border-b-0">
-      <span className="min-w-0 flex-1">
+    <div data-setting={label} tabIndex={-1} className={`flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0 *:max-w-full ${SETTING_ROW}`}>
+      <span className="min-w-48 flex-1 break-words">
         <span className="block text-[13px]">{label}</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
       </span>
@@ -87,9 +87,10 @@ export function Row({ label, description, children }: { label: string; descripti
 }
 
 export const Card = ({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element => (
-  <SearchGroup title={title} className="mb-8">
-    <h2 className="mb-2 text-[13px] font-medium">{title}</h2>
-    <div className="rounded-xl border border-border bg-card">{children}</div>
+  <SearchGroup title={title} className="mb-6">
+    <h2 className="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
+    <div data-card={title} className="rounded-lg border border-border bg-card">
+      {children}
+    </div>
   </SearchGroup>
 )
-

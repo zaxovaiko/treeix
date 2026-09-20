@@ -36,7 +36,7 @@ const PRIORITY_RANK: [RegExp, number][] = [
   [/lowest|trivial/i, 4],
   [/low|minor/i, 3]
 ]
-const priorityRank = (priority: string | null): number => PRIORITY_RANK.find(([pattern]) => priority && pattern.test(priority))?.[1] ?? 2
+export const priorityRank = (priority: string | null): number => PRIORITY_RANK.find(([pattern]) => priority && pattern.test(priority))?.[1] ?? 2
 
 export const SORTS = { status: 'Status', priority: 'Priority', updated: 'Updated', created: 'Created' } as const
 export type ItemSort = keyof typeof SORTS

@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { ApiToken } from '@treeix/atlassian/renderer/ApiToken'
-import { type RendererPlugin, useHost } from '@treeix/sdk'
+import { type Command, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { Row } from '@treeix/app/settingsUi'
 import { UserAvatar } from '@treeix/app/ui'
 import type { WorkItem } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
-import { DEFAULT_JQL, jiraApi, jiraBridge, jiraSettings, selection, summaryCache, TTL } from './api'
+import { DEFAULT_JQL, jiraApi, jiraBridge, jiraSettings, listCache, selection, summaryCache, TTL } from './api'
 import { StatusPill, TypeMark } from './marks'
 
 // Views load when the Tasks tab first opens
@@ -15,15 +15,10 @@ const JiraTasks = lazy(() => import('./JiraTasks').then((module) => ({ default: 
 const TAB_ID = 'tasks'
 
 function TasksTab(): React.JSX.Element {
-  const host = useHost()
   return (
-    <>
-      {host.withDock(
-        <Suspense fallback={<div className="flex-1" />}>
-          <JiraTasks />
-        </Suspense>
-      )}
-    </>
+    <Suspense fallback={<div className="flex-1" />}>
+      <JiraTasks />
+    </Suspense>
   )
 }
 
@@ -68,7 +63,7 @@ function JiraSettings(): React.JSX.Element {
           onChange={(event) => setDraft(event.target.value)}
           onBlur={() => jiraSettings.update({ jql: draft.trim() || DEFAULT_JQL })}
           onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
-          className="h-8 w-80 shrink-0 rounded-lg bg-muted px-2.5 font-mono text-[11.5px] ring-1 ring-border outline-none focus:ring-primary/60"
+          className="h-8 w-80 shrink-0 rounded-lg bg-muted px-2.5 font-mono text-[11.5px] ring-1 ring-border outline-none"
         />
       </Row>
       <ApiToken bridge={jiraBridge} purpose="Screenshots and attachments" />
@@ -76,8 +71,45 @@ function JiraSettings(): React.JSX.Element {
   )
 }
 
+const TICKET_KEYS: [keys: string, label: string][] = [
+  ['s', 'Change status'],
+  ['u', 'Assign'],
+  ['e', 'Edit summary'],
+  ['l', 'Add label'],
+  ['c', 'Comment'],
+  ['t', 'Change type'],
+  ['w', 'Open worktree, or go to it'],
+  ['a', 'Add to agent comments'],
+  ['o y', 'Open in Jira / copy branch name'],
+  ['/', 'Search Jira'],
+  ['f', 'Only mine, or everyone'],
+  ['v', 'Group by whose move or epic'],
+  ['⇧S', 'Sort'],
+  ['← →', 'Fold / unfold the group'],
+  ['z', 'Fold or unfold all groups']
+]
+
+/** Work items already fetched by the list or a preview, so ! in the palette finds them without a request */
+function ticketCommands(host: HostApi): Command[] {
+  const items = [...listCache.values().flatMap((list) => list.items), ...summaryCache.values()]
+  const unique = [...new Map(items.map((item) => [item.key, item])).values()]
+  return unique.map((item) => ({
+    id: `ticket:${item.key}`,
+    group: 'Tasks',
+    label: `${item.key} ${item.summary}`,
+    detail: item.status,
+    icon: 'ticket',
+    run: () => {
+      selection.update({ key: item.key })
+      host.setActiveTab(TAB_ID)
+    }
+  }))
+}
+
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'Tasks', icon: 'list', order: 40, render: TasksTab, panels: ['terminal'] }],
+  commands: ticketCommands,
+  shortcuts: TICKET_KEYS.map(([keys, label]) => ({ keys, label, section: 'Tasks', page: TAB_ID })),
+  tabs: [{ id: TAB_ID, label: 'Tasks', icon: 'kanban', order: 40, render: TasksTab, panels: ['terminal'] }],
   Settings: JiraSettings,
   linkPreviews: [{ label: 'Jira', keyOf: issueKeyOf, render: IssuePreview }]
 }

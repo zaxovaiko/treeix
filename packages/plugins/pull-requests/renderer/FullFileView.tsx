@@ -1,13 +1,18 @@
 import { File, Virtualizer } from '@pierre/diffs/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { EmptyState, errorMessage } from '@treeix/app/ui'
 
-/** A whole file read-only, e.g. to see a pull request change in context; closes on Escape or a click outside */
+/**
+ * A whole file read-only, e.g. to see a pull request change in context; closes on Escape or a click outside. It takes
+ * focus outside the zones, so the page's bare keys stay off while it is open, and hands focus back on close.
+ */
 export function FullFileView({ path, subtitle, load, onClose }: { path: string; subtitle: string; load: () => Promise<string | null>; onClose: () => void }): React.JSX.Element {
   const [contents, setContents] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const dialog = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -21,6 +26,12 @@ export function FullFileView({ path, subtitle, load, onClose }: { path: string; 
   }, [path])
 
   useEffect(() => {
+    const previous = document.activeElement
+    dialog.current?.focus()
+    return () => void (previous instanceof HTMLElement && previous.isConnected && previous.focus({ preventScroll: true }))
+  }, [])
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.stopPropagation()
@@ -30,9 +41,13 @@ export function FullFileView({ path, subtitle, load, onClose }: { path: string; 
     return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[6vh] backdrop-blur-[2px]" onClick={onClose}>
       <div
+        ref={dialog}
+        tabIndex={-1}
+        role="dialog"
+        aria-label={path}
         onClick={(event) => event.stopPropagation()}
         className="flex h-[84vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl"
       >
@@ -55,6 +70,7 @@ export function FullFileView({ path, subtitle, load, onClose }: { path: string; 
           </Virtualizer>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

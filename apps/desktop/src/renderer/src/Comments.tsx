@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { type Attachment, formatComments, type LineRange, rangeLabel, type ReviewComment, type Side } from '../../shared/comments'
+import { focusZone, KeyHintLabel, Keys } from '@treeix/sdk'
 import { copyText, openMenu } from './contextMenu'
 import { FileIcon, Icon } from './Icon'
 import { LazyMarkdown as Markdown } from './LazyMarkdown'
@@ -113,7 +114,7 @@ export function Attachments({
             <button
               title="Remove attachment"
               onClick={() => onRemove(attachment)}
-              className="absolute top-0.5 right-0.5 grid size-4 place-items-center rounded-full bg-black/70 text-white opacity-0 group-hover/file:opacity-100"
+              className="absolute top-0.5 right-0.5 grid size-4 place-items-center rounded-full bg-black/70 text-white opacity-0 group-hover/file:opacity-100 focus-visible:opacity-100"
             >
               <Icon name="close" className="size-2.5" />
             </button>
@@ -139,7 +140,7 @@ export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onD
         ])
       }
     >
-      <Icon name="comment" className="mt-0.5 size-3.5 text-primary" />
+      <Icon name="comment" className="mt-0.5 size-3.5 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] text-muted-foreground">{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : 'General'}</div>
         <Markdown>{comment.text}</Markdown>
@@ -148,7 +149,7 @@ export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onD
       <button
         title="Delete comment"
         onClick={onDelete}
-        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/comment:opacity-100 hover:bg-accent hover:text-foreground"
+        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover/comment:opacity-100 hover:bg-accent focus-visible:opacity-100 hover:text-foreground"
       >
         <Icon name="close" className="size-3" />
       </button>
@@ -163,7 +164,8 @@ export function CommentDraft({
   allowAttachments = true,
   onSave,
   onCancel,
-  alternative
+  alternative,
+  persistent = false
 }: {
   label: string
   placeholder?: string
@@ -173,6 +175,8 @@ export function CommentDraft({
   onCancel: () => void
   /** A second way to save the text, e.g. as an agent comment instead of posting it; ⌘⇧↵ */
   alternative?: { label: string; onSave: (text: string) => void }
+  /** Always on screen: no autofocus, Esc and Cancel only clear it while it has focus, and it empties after saving */
+  persistent?: boolean
 }): React.JSX.Element {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -180,20 +184,35 @@ export function CommentDraft({
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  const cancel = (): void => {
+    if (persistent) {
+      setText('')
+      setAttachments([])
+      textareaRef.current?.blur()
+    }
+    onCancel()
+  }
 
   // autoFocus fires before the diff mounts the annotation slot
   useEffect(() => {
+    if (persistent) return
     const frame = requestAnimationFrame(() => textareaRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [])
 
   useEffect(() => {
     const cancelOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onCancel()
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (persistent && !cardRef.current?.contains(document.activeElement)) return
+      event.preventDefault()
+      event.stopPropagation()
+      cancel()
     }
     window.addEventListener('keydown', cancelOnEscape, true)
     return () => window.removeEventListener('keydown', cancelOnEscape, true)
-  }, [onCancel])
+  }, [onCancel, persistent])
 
   const attach = (files: File[]): void => {
     if (!allowAttachments || files.length === 0) return
@@ -210,12 +229,18 @@ export function CommentDraft({
     setBusy(true)
     setError(null)
     Promise.resolve(onSave(text, attachments))
+      .then(() => {
+        if (!persistent) return
+        setText('')
+        setAttachments([])
+      })
       .catch((reason: unknown) => setError(errorMessage(reason)))
       .finally(() => setBusy(false))
   }
 
   return (
     <div
+      ref={cardRef}
       className={`${cardClass} p-2`}
       onDragOver={(event) => allowAttachments && event.preventDefault()}
       onDrop={(event) => {
@@ -243,7 +268,7 @@ export function CommentDraft({
           } else save()
         }}
         placeholder={allowAttachments ? `${placeholder}. Paste or drop files to attach` : placeholder}
-        className="w-full resize-y rounded-md border border-input bg-muted px-2.5 py-2 outline-none placeholder:text-muted-foreground/70 focus:border-primary/60"
+        className="w-full resize-y rounded-md border border-input bg-muted px-2 py-1.5 leading-5 outline-none placeholder:text-muted-foreground/70"
       />
       <Attachments attachments={attachments} onRemove={(removed) => setAttachments(attachments.filter((file) => file !== removed))} />
       {error && <p className="px-1 pt-1.5 text-[11px] break-words text-red-400">{error}</p>}
@@ -270,9 +295,11 @@ export function CommentDraft({
           </>
         )}
         <span className="mr-auto truncate px-1 text-[11px] whitespace-nowrap text-muted-foreground">⌘↵ save · esc cancel</span>
-        <button onClick={onCancel} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-          Cancel
-        </button>
+        {(!persistent || text) && (
+          <button onClick={cancel} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+            Cancel
+          </button>
+        )}
         {alternative && (
           <button
             title="⌘⇧↵"
@@ -362,7 +389,7 @@ export function CommentsPanel({
                         event.stopPropagation()
                         onDelete(comment)
                       }}
-                      className="inline-flex size-5 items-center justify-center rounded opacity-0 group-hover/item:opacity-100 hover:text-foreground"
+                      className="inline-flex size-5 items-center justify-center rounded opacity-0 group-hover/item:opacity-100 hover:text-foreground focus-visible:opacity-100"
                     >
                       <Icon name="close" className="size-3" />
                     </button>
@@ -381,6 +408,168 @@ export function CommentsPanel({
       </div>
 
       {comments.length > 0 && <div className="shrink-0 border-t border-border p-2">{footer}</div>}
+    </div>
+  )
+}
+
+/**
+ * ⌘I: every agent comment of the workspace, grouped by worktree, each group sent to a session in that checkout.
+ * j k move, Enter opens, d removes, ⇧X clears all; t and ⌘↵ reach the focused group's send button. Stays open until
+ * esc or ⌘I, and hands focus back to where it came from.
+ */
+export function AgentCommentsDrawer({
+  comments,
+  labelOf,
+  top,
+  bottom,
+  renderSend,
+  onOpen,
+  onOpenWorktree,
+  onDelete,
+  onClearAll,
+  onClose
+}: {
+  comments: ReviewComment[]
+  labelOf: (worktreePath: string) => string
+  top: number
+  bottom: number
+  /** The send button for a worktree's comments; `active` gives it the drawer's t and ⌘↵ */
+  renderSend: (worktreePath: string, active: boolean) => React.ReactNode
+  onOpen: (comment: ReviewComment) => void
+  onOpenWorktree: (worktreePath: string) => void
+  onDelete: (comment: ReviewComment) => void
+  onClearAll: () => void
+  onClose: () => void
+}): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const paths = [...new Set(comments.map((comment) => comment.worktreePath))]
+  const ordered = paths.flatMap((path) => comments.filter((comment) => comment.worktreePath === path))
+  const [cursorId, setCursorId] = useState<string | null>(null)
+  const found = ordered.findIndex((comment) => comment.id === cursorId)
+  const index = Math.max(0, found)
+  const current: ReviewComment | undefined = ordered[index]
+  const latest = useRef({ ordered, index, current, onOpen, onDelete, onClearAll, onClose })
+  latest.current = { ordered, index, current, onOpen, onDelete, onClearAll, onClose }
+
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    ref.current?.focus({ preventScroll: true })
+    const onKey = (event: KeyboardEvent): void => {
+      const { ordered, index, current, onOpen, onDelete, onClearAll, onClose } = latest.current
+      const inside = document.activeElement === document.body || ref.current?.contains(document.activeElement)
+      // cancelBubble: an earlier capture listener, like the shortcut sheet over the drawer, kept the key
+      if (event.defaultPrevented || event.cancelBubble || !inside || event.metaKey || event.ctrlKey || event.altKey) return
+      const moveTo = (next: number): void => setCursorId(ordered[Math.max(0, Math.min(ordered.length - 1, next))]?.id ?? null)
+      const action =
+        event.key === 'Escape' ? onClose
+        : event.key === 'j' || event.key === 'ArrowDown' ? () => moveTo(index + 1)
+        : event.key === 'k' || event.key === 'ArrowUp' ? () => moveTo(index - 1)
+        : event.key === 'Enter' && current && !(event.target instanceof Element && event.target.closest('button')) ? () => onOpen(current)
+        : (event.key === 'd' || event.key === 'Backspace' || event.key === 'Delete') && current ? () => {
+            onDelete(current)
+            setCursorId(ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null)
+          }
+        : event.key === 'X' && ordered.length > 0 ? onClearAll
+        : null
+      if (!action) return
+      event.preventDefault()
+      event.stopPropagation()
+      action()
+    }
+    // Capture, so the page under the drawer (like Settings' esc and /) never sees the drawer's keys
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      if (previous?.isConnected && previous !== document.body) previous.focus({ preventScroll: true })
+      else focusZone('main')
+    }
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      data-drawer
+      tabIndex={-1}
+      style={{ top, bottom }}
+      className="fixed right-0 z-[45] flex w-[440px] max-w-[90vw] flex-col border-l border-input bg-popover shadow-2xl shadow-black/60 outline-none [-webkit-app-region:no-drag]"
+    >
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+        <Icon name="comment" className="size-4 text-muted-foreground" />
+        <span className="text-[13px] font-medium">Agent comments</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{comments.length}</span>
+        <span className="flex-1" />
+        <button title="Close (esc or ⌘I)" aria-label="Close agent comments" onClick={onClose} className="flex h-6 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+          <Keys combo="esc" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        {comments.length === 0 && (
+          <EmptyState icon="comment" title="No agent comments yet. Press c on a diff line, or a on a pull request thread, ticket or page, to collect it here." />
+        )}
+        {paths.map((path) => {
+          const group = comments.filter((comment) => comment.worktreePath === path)
+          const active = current?.worktreePath === path
+          return (
+            <section key={path} className={`mb-2 rounded-lg p-1.5 ring-1 ${active ? 'ring-input' : 'ring-border'}`}>
+              <button onClick={() => onOpenWorktree(path)} title={`Open ${path}`} className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-medium hover:bg-accent">
+                <Icon name="branch" className="size-3.5 text-emerald-400" />
+                <span className="min-w-0 truncate">{labelOf(path)}</span>
+                <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">{group.length}</span>
+              </button>
+              {group.map((comment) => {
+                const isCursor = comment.id === current?.id
+                return (
+                  <div
+                    key={comment.id}
+                    onClick={() => {
+                      setCursorId(comment.id)
+                      onOpen(comment)
+                    }}
+                    className={`mt-1 cursor-default rounded-md p-2 ring-1 ${isCursor ? 'bg-foreground/[.08] ring-input' : 'ring-border hover:bg-accent'}`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="min-w-0 truncate font-mono" title={comment.filePath}>
+                        {comment.filePath}
+                        {comment.range.start > 0 ? `:${rangeLabel(comment.range)}` : ''}
+                      </span>
+                      <span className="flex-1" />
+                      <button
+                        title="Remove (d)"
+                        aria-label="Remove comment"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDelete(comment)
+                        }}
+                        className="grid size-5 shrink-0 place-items-center rounded hover:bg-accent hover:text-foreground"
+                      >
+                        <Icon name="close" className="size-3" />
+                      </button>
+                    </div>
+                    {comment.code && <div className="mt-1.5 truncate rounded bg-background px-2 py-1 font-mono text-[11px] text-foreground/75">{comment.code.split('\n')[0]}</div>}
+                    <div className="mt-1.5 text-xs break-words whitespace-pre-wrap text-foreground/90">{comment.text}</div>
+                    <Attachments attachments={comment.attachments ?? []} size="sm" />
+                  </div>
+                )
+              })}
+              <div className="mt-1.5">{renderSend(path, active)}</div>
+            </section>
+          )
+        })}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+        {(
+          [
+            ['j k', 'move'],
+            ['⏎', 'open'],
+            ['d', 'remove'],
+            ['⇧X', 'clear'],
+            ['t', 'target'],
+            ['⌘⏎', 'send']
+          ] as const
+        ).map((hint) => (
+          <KeyHintLabel key={hint[0]} hint={[hint[0], hint[1]]} />
+        ))}
+      </div>
     </div>
   )
 }

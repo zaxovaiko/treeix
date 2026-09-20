@@ -1,6 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
-import { commentOnPullRequest, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setFileViewed, setThreadResolved, submitReview } from './prs'
+import { commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
 
 const plugin: MainPlugin = {
   tools: [
@@ -11,6 +11,7 @@ const plugin: MainPlugin = {
     context.handle('list', (_, repoPaths: string[]) => listPullRequests(repoPaths))
     context.handle('detail', (_, pullRequest: PullRequest) => pullRequestDetail(pullRequest))
     context.handle('file', (_, pullRequest: PullRequest, filePath: string) => pullRequestFile(pullRequest, filePath))
+    context.handle('conflicts', (_, pullRequest: PullRequest) => conflictingFiles(pullRequest))
     context.handle('image', (_, pullRequest: PullRequest, source: string) => pullRequestImage(pullRequest, source))
     context.handle('setThreadResolved', (_, pullRequest: PullRequest, thread: ReviewThread, resolved: boolean) => setThreadResolved(pullRequest, thread, resolved))
     context.handle('setFileViewed', (_, pullRequest: PullRequest, filePath: string, viewed: boolean) => setFileViewed(pullRequest, filePath, viewed))
@@ -22,6 +23,7 @@ const plugin: MainPlugin = {
     context.handle('merge', (_, pullRequest: PullRequest, method: MergeMethod, deleteBranch: boolean) =>
       mergePullRequest(pullRequest, method === 'squash' || method === 'rebase' ? method : 'merge', deleteBranch === true)
     )
+    context.handle('setDraft', (_, pullRequest: PullRequest, draft: boolean) => setDraft(pullRequest, draft === true))
     context.handle('requestReview', (_, pullRequest: PullRequest, login: string) => requestReview(pullRequest, login))
     context.handle('comment', (_, pullRequest: PullRequest, comment: PullRequestComment) => commentOnPullRequest(pullRequest, comment))
     context.handle('react', (_, pullRequest: PullRequest, commentId: string, reaction: Reaction) => reactToPullRequestComment(pullRequest, commentId, reaction))

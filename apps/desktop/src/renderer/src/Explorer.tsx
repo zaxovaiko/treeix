@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getShell, isPageKey, useListNav, type ZoneId } from '@treeix/sdk'
 import type { WorktreeFiles } from '../../shared/types'
 import { FileIcon, Icon } from './Icon'
-import { EmptyState, usePersisted } from './ui'
+import { EmptyState, FoldAllButton, usePersisted } from './ui'
 import { workspaceKey } from './workspaces'
 
 type TreeNode = { name: string; path: string; dirs: TreeNode[]; files: string[] }
@@ -46,7 +47,9 @@ export function Explorer({
   onFileMenu,
   onFolderMenu,
   onCreate,
-  onExpand
+  onExpand,
+  onParent,
+  zone = 'inspector'
 }: {
   files: WorktreeFiles | null
   changed: Set<string>
@@ -58,6 +61,10 @@ export function Explorer({
   onCreate?: (kind: 'file' | 'folder', folder: string) => void
   /** For trees loaded a folder at a time: called when a folder opens */
   onExpand?: (path: string) => void
+  /** Browses the folder above the root; shows a `..` row first, also ⌫ */
+  onParent?: () => void
+  /** Zone whose keys move the cursor: j k, Enter, h l */
+  zone?: ZoneId
 }): React.JSX.Element {
   const [filter, setFilter] = usePersisted<string>(workspaceKey('explorer.filter'), '')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -76,6 +83,19 @@ export function Explorer({
     if (activePath) setExpanded((current) => new Set([...current, ...ancestors(activePath)]))
   }, [activePath])
 
+  const allDirs = useMemo(() => {
+    const collect = (node: TreeNode): string[] => node.dirs.flatMap((dir) => [dir.path, ...collect(dir)])
+    return collect(tree)
+  }, [tree])
+  // Filter results are a flat list with no folders
+  const canFoldAll = !needle && allDirs.length > 1
+  const anyOpen = allDirs.some((path) => expanded.has(path))
+  const foldAll = (): void => {
+    if (anyOpen) return setExpanded(new Set())
+    allDirs.forEach((path) => onExpand?.(path))
+    setExpanded(new Set(allDirs))
+  }
+
   const toggle = (path: string): void => {
     const next = new Set(expanded)
     if (next.has(path)) next.delete(path)
@@ -86,96 +106,145 @@ export function Explorer({
     setExpanded(next)
   }
 
-  const fileRow = (path: string, depth: number, label: string): React.JSX.Element => (
-    <button
-      key={path}
-      title={path}
-      onClick={() => onOpen(path)}
-      onContextMenu={onFileMenu && ((event) => onFileMenu(event, path))}
-      style={{ paddingLeft: 8 + depth * 12 + 10 }}
-      className={`flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-left text-[12.5px] ${
-        path === activePath ? 'bg-accent text-foreground' : 'text-foreground/75 hover:bg-accent'
-      } ${isIgnored(path) ? 'opacity-45' : ''}`}
-    >
-      <FileIcon path={path} />
-      <span className="truncate">{label}</span>
-      {changed.has(path) && <span className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400" />}
-    </button>
-  )
+  type Row = { path: string; label: string; depth: number; dir: TreeNode | null }
+  const dirRows = (node: TreeNode, depth: number): Row[] =>
+    node.dirs.flatMap((dir) => [
+      { path: dir.path, label: dir.name, depth, dir },
+      ...(expanded.has(dir.path) ? [...dirRows(dir, depth + 1), ...dir.files.map((path) => ({ path, label: path.split('/').pop() ?? path, depth: depth + 1, dir: null }))] : [])
+    ])
+  const rows: Row[] = needle
+    ? matches.slice(0, MAX_FILTER_RESULTS).map((path) => ({ path, label: path, depth: 0, dir: null }))
+    : [...dirRows(tree, 0), ...tree.files.map((path) => ({ path, label: path, depth: 0, dir: null }))]
+  const emptyIgnored = (row: Row): boolean => row.dir !== null && isIgnored(row.path) && row.dir.dirs.length === 0 && row.dir.files.length === 0
 
-  const dirRows = (node: TreeNode, depth: number): React.JSX.Element[] =>
-    node.dirs.flatMap((dir) => {
-      const open = expanded.has(dir.path)
-      const ignored = isIgnored(dir.path)
-      const collapsedIgnored = ignored && dir.dirs.length === 0 && dir.files.length === 0
-      return [
+  const [cursorPath, setCursorPath] = useState<string | null>(activePath)
+  useEffect(() => setCursorPath(activePath), [activePath])
+  const index = rows.findIndex((row) => row.path === cursorPath)
+  const activate = (row: Row): void => {
+    setCursorPath(row.path)
+    if (!row.dir) onOpen(row.path)
+    else if (!emptyIgnored(row)) toggle(row.path)
+  }
+  const nav = useListNav({ zone, count: rows.length, index, onSelect: (next) => setCursorPath(rows[next].path), onOpen: (next) => activate(rows[next]) })
+  // h folds the folder, or steps up to the parent; l unfolds; z folds or unfolds all. Filter results are a flat list with no folders
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      // Pages stay mounted behind other tabs, each with its own explorer
+      if (needle || !isPageKey(event) || getShell().zone !== zone || !root.current?.checkVisibility()) return
+      if (event.key === 'Backspace' && onParent) {
+        event.preventDefault()
+        return onParent()
+      }
+      const row = rows[index]
+      const open = row !== undefined && row.dir !== null && expanded.has(row.path)
+      const parent = row?.path.split('/').slice(0, -1).join('/')
+      const action =
+        event.key === 'z' && canFoldAll ? foldAll
+        : !row ? null
+        : event.key === 'h' || event.key === 'ArrowLeft' ? () => (open ? toggle(row.path) : parent && setCursorPath(parent))
+        : (event.key === 'l' || event.key === 'ArrowRight') && row.dir && !open && !emptyIgnored(row) ? () => toggle(row.path)
+        : null
+      if (!action) return
+      event.preventDefault()
+      action()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const renderRow = (row: Row, rowIndex: number): React.JSX.Element => {
+    const ignored = isIgnored(row.path)
+    if (!row.dir) {
+      return (
         <button
-          key={dir.path}
-          onClick={() => toggle(dir.path)}
-          onContextMenu={onFolderMenu && ((event) => onFolderMenu(event, dir.path))}
-          disabled={collapsedIgnored}
-          title={collapsedIgnored ? `${dir.path} is gitignored` : dir.path}
-          style={{ paddingLeft: 8 + depth * 12 }}
-          className={`flex h-6 w-full items-center gap-1 rounded-md pr-2 text-left text-[12.5px] text-foreground/85 enabled:hover:bg-accent ${
-            ignored ? 'opacity-45' : ''
-          }`}
+          key={row.path}
+          {...nav.rowProps(rowIndex)}
+          title={row.path}
+          onClick={() => activate(row)}
+          onContextMenu={onFileMenu && ((event) => onFileMenu(event, row.path))}
+          style={{ paddingLeft: 8 + row.depth * 12 + 16 }}
+          className={`flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-left text-xs ${row.path === activePath ? 'bg-accent text-foreground' : 'text-foreground/75 hover:bg-accent'} ${ignored ? 'opacity-45' : ''}`}
         >
-          <Icon
-            name="chevron"
-            className={`size-3 text-muted-foreground/65 transition-transform ${open ? 'rotate-90' : ''} ${
-              collapsedIgnored ? 'invisible' : ''
-            }`}
-          />
-          <Icon name="folder" className="size-3.5 text-muted-foreground" />
-          <span className="truncate">{dir.name}</span>
-        </button>,
-        ...(open ? [...dirRows(dir, depth + 1), ...dir.files.map((path) => fileRow(path, depth + 1, path.split('/').pop() ?? path))] : [])
-      ]
-    })
+          <FileIcon path={row.path} />
+          <span className="min-w-0 truncate">{row.label}</span>
+          {changed.has(row.path) && <span className="ml-auto shrink-0 pl-1 font-mono text-[10px] text-amber-400">M</span>}
+        </button>
+      )
+    }
+    const collapsedIgnored = emptyIgnored(row)
+    return (
+      <button
+        key={row.path}
+        {...nav.rowProps(rowIndex)}
+        onClick={() => activate(row)}
+        onContextMenu={onFolderMenu && ((event) => onFolderMenu(event, row.path))}
+        disabled={collapsedIgnored}
+        title={collapsedIgnored ? `${row.path} is gitignored` : row.path}
+        style={{ paddingLeft: 8 + row.depth * 12 }}
+        className={`flex h-6 w-full items-center gap-1 rounded-md pr-2 text-left text-xs text-foreground/85 enabled:hover:bg-accent ${ignored ? 'opacity-45' : ''}`}
+      >
+        <Icon name="chevron" className={`size-3 text-muted-foreground/65 ${expanded.has(row.path) ? 'rotate-90' : ''} ${collapsedIgnored ? 'invisible' : ''}`} />
+        <Icon name="folder" className="size-3.5 text-muted-foreground" />
+        <span className="min-w-0 truncate">{row.label}</span>
+      </button>
+    )
+  }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1 p-2">
-        <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border border-input bg-muted px-2 text-muted-foreground focus-within:border-primary/60">
+    <div ref={root} className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-1 p-2">
+        <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
           <Icon name="search" className="size-3" />
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && matches[0] && onOpen(matches[0])}
             placeholder="Filter files"
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
           />
         </label>
+        {canFoldAll && <FoldAllButton anyOpen={anyOpen} groups="folders" onClick={foldAll} />}
         {onCreate && (
           <>
-            <button title="New file" onClick={() => onCreate('file', '')} className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <button title="New file" onClick={() => onCreate('file', '')} className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
               <Icon name="filePlus" className="size-3.5" />
             </button>
-            <button title="New folder" onClick={() => onCreate('folder', '')} className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <button title="New folder" onClick={() => onCreate('folder', '')} className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
               <Icon name="folderPlus" className="size-3.5" />
             </button>
           </>
         )}
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+        className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3"
         onContextMenu={(event) => {
           if (onFolderMenu && event.target === event.currentTarget) onFolderMenu(event, '')
         }}
       >
-        {!files && <EmptyState title="Loading files..." />}
-        {needle
-          ? matches.slice(0, MAX_FILTER_RESULTS).map((path) => fileRow(path, 0, path))
-          : [...dirRows(tree, 0), ...tree.files.map((path) => fileRow(path, 0, path))]}
-        {needle && matches.length === 0 && (
-          <EmptyState title="No matching files" />
+        {onParent && !needle && (
+          <button
+            title="Parent folder (⌫)"
+            onClick={onParent}
+            tabIndex={-1}
+            style={{ paddingLeft: 8 }}
+            className="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-left text-xs text-foreground/85 hover:bg-accent"
+          >
+            <Icon name="chevron" className="invisible size-3" />
+            <Icon name="folder" className="size-3.5 text-muted-foreground" />
+            <span>..</span>
+          </button>
         )}
+        {!files && <EmptyState title="Loading files..." />}
+        {rows.map(renderRow)}
+        {needle && matches.length === 0 && <EmptyState title="No matching files" />}
       </div>
     </div>
   )
 }
 
 /** A folder outside the selected worktree, e.g. home or where a terminal is; folders load when opened, since listing everything at once is too slow */
-export function FolderExplorer({ root, activePath, onOpen }: { root: string; activePath: string | null; onOpen: (path: string) => void }): React.JSX.Element {
+export function FolderExplorer({ root, activePath, onOpen, onParent }: { root: string; activePath: string | null; onOpen: (path: string) => void; onParent?: () => void }): React.JSX.Element {
   const [files, setFiles] = useState<string[] | null>(null)
   const load = (folder: string): void => {
     window.api.listDirectory(root, folder).then((entries) =>
@@ -190,7 +259,7 @@ export function FolderExplorer({ root, activePath, onOpen }: { root: string; act
     window.api.listFiles(root).then(setRepoFiles, () => load(''))
   }, [root])
   const tree = useMemo(() => repoFiles ?? (files ? { files, ignored: [] } : null), [repoFiles, files])
-  return <Explorer files={tree} changed={NOTHING_CHANGED} activePath={activePath} onOpen={onOpen} onExpand={repoFiles ? undefined : load} />
+  return <Explorer files={tree} changed={NOTHING_CHANGED} activePath={activePath} onOpen={onOpen} onExpand={repoFiles ? undefined : load} onParent={onParent} />
 }
 
 const NOTHING_CHANGED = new Set<string>()

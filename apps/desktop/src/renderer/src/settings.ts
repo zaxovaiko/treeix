@@ -27,11 +27,13 @@ export type Settings = {
   hotkeyOnly: boolean
   /** In-app code navigation keys; macOS sends F-keys only with fn unless standard function keys are on, so they can be re-recorded */
   navigationKeys: Record<NavigationKind, Shortcut | null>
-  /** Modifier held with 1-9 to jump to a terminal pane, a title bar tab or a workspace */
+  /** Modifier held with 1-9 to jump to a terminal pane, a title bar tab or a workspace; tabs are off by default since the G leader goes to pages */
   digitShortcuts: Record<DigitTarget, DigitModifier>
   /** Code font size in px for editors, diffs and previews, independent of window zoom */
   editorFontSize: number
   terminalFontSize: number
+  /** Lines each terminal keeps above its screen */
+  terminalScrollback: number
   /** Font family names; empty keeps the built-in stack */
   uiFont: string
   editorFont: string
@@ -68,7 +70,7 @@ function parseNavigationKeys(value: unknown): Settings['navigationKeys'] {
 }
 export const DIGIT_MODIFIERS = { meta: '⌘', alt: '⌥', ctrl: '⌃', altMeta: '⌥⌘', ctrlMeta: '⌃⌘', off: 'Off' } as const
 export type DigitModifier = keyof typeof DIGIT_MODIFIERS
-export type DigitTarget = 'panes' | 'tabs' | 'workspaces'
+export type DigitTarget = 'tabs' | 'workspaces'
 const isDigitModifier = (value: unknown): value is DigitModifier => typeof value === 'string' && value in DIGIT_MODIFIERS
 
 function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
@@ -77,7 +79,7 @@ function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
     const candidate = stored[target]
     return isDigitModifier(candidate) ? candidate : DEFAULTS.digitShortcuts[target]
   }
-  return { panes: pick('panes'), tabs: pick('tabs'), workspaces: pick('workspaces') }
+  return { tabs: pick('tabs'), workspaces: pick('workspaces') }
 }
 
 /** The 0-9 digit when the physical digit key is pressed with exactly this modifier */
@@ -123,10 +125,14 @@ export function stepFontSize(key: 'editorFontSize' | 'terminalFontSize', step: -
   if (size !== settings[key]) updateSettings({ [key]: size })
 }
 
+const SCROLLBACK_RANGE = { min: 500, max: 50_000 } as const
+const clampScrollback = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(SCROLLBACK_RANGE.max, Math.max(SCROLLBACK_RANGE.min, value))) : DEFAULTS.terminalScrollback
+
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { panes: 'meta', tabs: 'alt', workspaces: 'altMeta' }, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -160,6 +166,7 @@ function load(): Settings {
       digitShortcuts: parseDigitShortcuts(candidate.digitShortcuts),
       editorFontSize: clampFontSize(candidate.editorFontSize, DEFAULTS.editorFontSize),
       terminalFontSize: clampFontSize(candidate.terminalFontSize, DEFAULTS.terminalFontSize),
+      terminalScrollback: clampScrollback(candidate.terminalScrollback),
       uiFont: typeof candidate.uiFont === 'string' ? candidate.uiFont : '',
       editorFont: typeof candidate.editorFont === 'string' ? candidate.editorFont : '',
       terminalFont: typeof candidate.terminalFont === 'string' ? candidate.terminalFont : '',

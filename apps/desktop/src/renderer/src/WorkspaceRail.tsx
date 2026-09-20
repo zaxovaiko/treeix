@@ -4,7 +4,7 @@ import { openMenu } from './contextMenu'
 import { Icon } from './Icon'
 import { digitLabel } from './settings'
 import { baseName } from './Sidebar'
-import type { SessionSummary } from '@treeix/sdk'
+import { Kbd, type ListRowProps, type SessionSummary, useListNav, useShell, useZone, Zone } from '@treeix/sdk'
 import { useSessions } from './plugins'
 import {
   deleteWorkspace,
@@ -32,6 +32,8 @@ function Tile({
   onClick,
   onContextMenu,
   drag,
+  cursor,
+  leaderKey,
   children
 }: {
   active: boolean
@@ -41,28 +43,34 @@ function Tile({
   onClick: () => void
   onContextMenu?: (event: React.MouseEvent) => void
   drag?: React.HTMLAttributes<HTMLButtonElement> & { draggable: true; dropEdge: 'top' | 'bottom' | null }
+  /** Marks the tile under the rail's keyboard cursor */
+  cursor?: ListRowProps
+  /** Shown while the leader key waits, e.g. 1 for G 1 */
+  leaderKey?: string
   children: React.ReactNode
 }): React.JSX.Element {
   const { dropEdge, ...dragProps } = drag ?? { dropEdge: null }
   return (
-    <button title={title} onClick={onClick} onContextMenu={onContextMenu} {...dragProps} className="group/tile relative grid w-full place-items-center">
-      {dropEdge && <span className={`pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-primary ${dropEdge === 'top' ? '-top-[5px]' : '-bottom-[5px]'}`} />}
-      <span
-        className={`absolute left-0 w-[3px] rounded-r-full bg-foreground transition-all ${active ? 'h-6' : 'h-0 group-hover/tile:h-3'}`}
-      />
+    <button title={title} onClick={onClick} onContextMenu={onContextMenu} {...dragProps} {...cursor} className="group/tile relative grid w-full place-items-center py-1">
+      {dropEdge && <span className={`pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-[3px]' : '-bottom-[3px]'}`} />}
       <span
         style={color ? { background: color } : undefined}
-        className={`relative grid size-9 place-items-center rounded-[10px] text-xs font-bold transition ${
-          color ? 'text-white' : 'bg-foreground/8 text-muted-foreground'
-        } ${active ? '' : 'opacity-70 group-hover/tile:opacity-100'}`}
+        className={`relative grid size-8 place-items-center rounded-[9px] text-[11px] font-bold ${color ? 'text-white' : 'bg-foreground/8 text-muted-foreground'} ${
+          active ? '' : 'opacity-60 group-hover/tile:opacity-100'
+        }`}
       >
         {children}
         {activity && (
           <span
-            className={`absolute -top-0.5 -right-0.5 size-2 rounded-full ring-2 ring-card ${activity === 'input' ? 'animate-pulse bg-amber-400' : 'bg-emerald-400'}`}
+            className={`absolute -top-0.5 -right-0.5 size-2 rounded-full ring-2 ring-card ${activity === 'input' ? 'bg-amber-400' : 'bg-emerald-400'}`}
           />
         )}
       </span>
+      {leaderKey && (
+        <span className="absolute right-0.5 bottom-0">
+          <Kbd on>{leaderKey}</Kbd>
+        </span>
+      )}
     </button>
   )
 }
@@ -79,6 +87,13 @@ export function WorkspaceRail({
 }): React.JSX.Element {
   const { workspaces, currentId } = useWorkspaces()
   const sessions = useSessions()
+  const { leader } = useShell()
+  const { zone } = useZone()
+  // The rail's cursor moves on its own; Enter switches, so walking past workspaces doesn't load each one
+  const [cursor, setCursor] = useState(-1)
+  const currentIndex = workspaces.findIndex((workspace) => workspace.id === currentId)
+  useEffect(() => setCursor(-1), [currentId])
+  const nav = useListNav({ zone: 'rail', count: workspaces.length, index: cursor < 0 ? currentIndex : cursor, onSelect: setCursor, onOpen: (index) => onSwitch(workspaces[index].id) })
   const [drop, setDrop] = useState<{ id: string; edge: 'top' | 'bottom' } | null>(null)
   const WORKSPACE_MIME = 'application/x-treeix-workspace'
   const dragProps = (workspace: Workspace, index: number) => ({
@@ -109,16 +124,18 @@ export function WorkspaceRail({
   })
 
   return (
-    <nav className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-2.5">
+    <Zone id="rail" label="Workspaces" className="w-[52px] shrink-0 items-center gap-1 border-r border-border bg-sidebar py-2">
       {workspaces.map((workspace, index) => (
         <Tile
           key={workspace.id}
           active={currentId === workspace.id}
-          title={`${workspace.name} · ${workspace.repoPaths.map(baseName).join(', ') || 'no projects'}${index < 9 && digitLabel('workspaces', index + 1) ? ` (${digitLabel('workspaces', index + 1)})` : ''}`}
+          title={`${workspace.name} · ${workspace.repoPaths.map(baseName).join(', ') || 'no projects'}${index < 9 ? ` (${[`G ${index + 1}`, digitLabel('workspaces', index + 1)].filter(Boolean).join(', ')})` : ''}`}
           color={workspace.color}
           activity={activityOf(sessions, workspace, repos, workspaces)}
           onClick={() => onSwitch(workspace.id)}
           drag={dragProps(workspace, index)}
+          cursor={zone === 'rail' ? nav.rowProps(index) : undefined}
+          leaderKey={leader && index < 9 ? String(index + 1) : undefined}
           onContextMenu={(event) =>
             openMenu(event, [
               { label: 'Open', run: () => onSwitch(workspace.id) },
@@ -137,11 +154,11 @@ export function WorkspaceRail({
       <button
         title="New workspace"
         onClick={() => onEdit(null)}
-        className="grid size-9 place-items-center rounded-[10px] border border-dashed border-foreground/15 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+        className="mt-1 grid size-8 shrink-0 place-items-center rounded-[9px] border border-dashed border-foreground/15 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
       >
         <Icon name="plus" className="size-4" />
       </button>
-    </nav>
+    </Zone>
   )
 }
 
@@ -164,7 +181,10 @@ export function WorkspaceDialog({
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
     }
     window.addEventListener('keydown', closeOnEscape, true)
     return () => window.removeEventListener('keydown', closeOnEscape, true)
@@ -218,7 +238,7 @@ export function WorkspaceDialog({
                 onChange={(event) => setName(event.target.value)}
                 onKeyDown={(event) => event.key === 'Enter' && save()}
                 placeholder={suggestion || 'Select projects or type a name'}
-                className="h-8 rounded-md border border-input bg-muted px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary/60"
+                className="h-8 rounded-md border border-input bg-muted px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60"
               />
             </label>
             <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
@@ -230,8 +250,10 @@ export function WorkspaceDialog({
                     aria-label={`Colour ${swatch}`}
                     onClick={() => setColor(swatch)}
                     style={{ background: swatch }}
-                    className={`size-5 rounded-md ${color === swatch ? 'ring-2 ring-foreground/70 ring-offset-2 ring-offset-card' : ''}`}
-                  />
+                    className="grid size-5 place-items-center rounded-md text-white"
+                  >
+                    {color === swatch && <Icon name="check" className="size-3" />}
+                  </button>
                 ))}
               </div>
             </div>
@@ -265,10 +287,10 @@ export function WorkspaceDialog({
                           onClick={() => toggleFolder(folder)}
                           className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left text-xs text-muted-foreground"
                         >
-                          <Icon name="chevron" className={`size-3 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                          <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
                           <Icon name="folder" className="size-3.5 shrink-0" />
                           <span className="truncate text-foreground/85">{folder.replace(window.api.home, '~')}</span>
-                          {checkedCount > 0 && <span className="shrink-0 text-[11px] text-primary tabular-nums">{checkedCount} selected</span>}
+                          {checkedCount > 0 && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{checkedCount} selected</span>}
                         </button>
                         <span className="text-[11px] text-muted-foreground tabular-nums">{folderRepos.length}</span>
                         <button

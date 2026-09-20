@@ -1,5 +1,4 @@
-import { useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useRef, useState } from 'react'
 import { shellQuote } from '../../shared/shell'
 import type { Repo } from '../../shared/types'
 import { Icon } from './Icon'
@@ -7,7 +6,7 @@ import { KindBadge, StatusDot, worktreeLabel } from './sessionUi'
 import type { SessionSummary as Session } from '@treeix/sdk'
 import { useService, useSessions } from './plugins'
 import { inWorkspace, useWorkspaces } from './workspaces'
-import { usePersisted } from './ui'
+import { Popup, usePersisted } from './ui'
 
 const lastTargets = new Map<string, string>()
 
@@ -25,7 +24,8 @@ export function SendButton({
   prompt,
   variant,
   onDone,
-  onClear
+  onClear,
+  hotkeys = false
 }: {
   repos: Repo[] | null
   worktreePath: string
@@ -34,6 +34,8 @@ export function SendButton({
   variant: 'pill' | 'panel'
   onDone: (message: string) => void
   onClear?: () => void
+  /** ⌘↵ sends to the default target, t picks another from the menu; for the agent comments drawer */
+  hotkeys?: boolean
 }): React.JSX.Element {
   // Only sessions of this workspace, even when another workspace has one on the same checkout
   const { workspaces, currentId } = useWorkspaces()
@@ -42,41 +44,35 @@ export function SendButton({
   const service = useService('sessions')
   const [menuOpen, setMenuOpen] = useState(false)
   const anchor = useRef<HTMLDivElement>(null)
-  // Placed against the window rather than the button's box, so panels that scroll (like the comments popover) can't cut it off
-  const [menuPlace, setMenuPlace] = useState<React.CSSProperties | null>(null)
-  const openMenu = (): void => {
-    const rect = anchor.current?.getBoundingClientRect()
-    if (!rect) return
-    const above = rect.top - 16
-    const below = window.innerHeight - rect.bottom - 16
-    setMenuPlace({
-      right: Math.max(8, window.innerWidth - rect.right),
-      ...(above >= below ? { bottom: window.innerHeight - rect.top + 8, maxHeight: above } : { top: rect.bottom + 8, maxHeight: below })
-    })
-    setMenuOpen(true)
-  }
+  const openMenu = (): void => setMenuOpen(true)
   // Off by default so extra context can be typed before sending; a new key so earlier saved choices don't turn it back on
   const [submit, setSubmit] = usePersisted<boolean>('send.submitAfterPaste', false)
   const target = defaultTarget(sessions, worktreePath)
   const label = `${count} comment${count === 1 ? '' : 's'}`
+
+  // The picked item unmounts with the menu; focus goes back to the button so the drawer keeps the keys
+  const closeMenu = (): void => {
+    setMenuOpen(false)
+    anchor.current?.querySelector('button')?.focus()
+  }
 
   const send = (session: Session): void => {
     const waiting = session.status === 'input'
     if (waiting && !window.confirm(`${session.title} is waiting for an answer. Paste the comments anyway?`)) return
     lastTargets.set(worktreePath, session.id)
     service?.sendText(session.id, prompt(), submit)
-    setMenuOpen(false)
+    closeMenu()
     onDone(`Sent ${label} to ${session.title}`)
   }
 
   const copy = (): void => {
     navigator.clipboard.writeText(prompt())
-    setMenuOpen(false)
+    closeMenu()
     onDone(`Copied ${label}`)
   }
 
   const startAgent = (kind: 'claude' | 'codex'): void => {
-    setMenuOpen(false)
+    closeMenu()
     if (!service) return
     const text = prompt()
     if (submit) {
@@ -93,6 +89,40 @@ export function SendButton({
     onDone(`Started ${kind === 'claude' ? 'Claude' : 'Codex'} with ${label}`)
   }
 
+  const sendDefault = (): void => (target ? send(target) : copy())
+  const latest = useRef({ sendDefault, openMenu })
+  latest.current = { sendDefault, openMenu }
+  useEffect(() => {
+    if (!hotkeys) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.isComposing || !anchor.current?.closest('[data-drawer]')?.contains(document.activeElement)) return
+      const action = event.metaKey && event.key === 'Enter' ? latest.current.sendDefault : !event.metaKey && !event.ctrlKey && !event.altKey && event.key === 't' ? latest.current.openMenu : null
+      if (!action) return
+      event.preventDefault()
+      action()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hotkeys])
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (menuOpen) menuRef.current?.querySelector('button')?.focus()
+  }, [menuOpen])
+  /** j k and arrows move between the menu's items, esc closes it; its keys stay inside */
+  const onMenuKey = (event: React.KeyboardEvent): void => {
+    event.stopPropagation()
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('button, input') ?? [])]
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
+    if (step) {
+      event.preventDefault()
+      items[(at + step + items.length) % items.length]?.focus()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMenu()
+    }
+  }
+
   const alive = sessions.filter((session) => session.status !== 'exited')
   const here = alive.filter((session) => session.worktreePath === worktreePath)
   const elsewhere = alive.filter((session) => session.worktreePath !== worktreePath && session.kind !== 'shell')
@@ -103,7 +133,7 @@ export function SendButton({
       onClick={() => send(session)}
       className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent"
     >
-      <span className="w-3 text-primary">{session.id === target?.id ? '✓' : ''}</span>
+      <span className="w-3 text-foreground">{session.id === target?.id ? '✓' : ''}</span>
       <KindBadge kind={session.kind} />
       <span className="min-w-0 flex-1 truncate">
         {session.title}
@@ -124,7 +154,7 @@ export function SendButton({
   return (
     <div ref={anchor} className={`relative flex items-center text-[11.5px] font-medium ${shell}`}>
       <button
-        onClick={() => (target ? send(target) : copy())}
+        onClick={sendDefault}
         title={target ? `Paste into ${target.title}` : 'No agent session in this worktree, copies to clipboard'}
         className="flex h-full min-w-0 flex-1 items-center justify-center gap-1.5 rounded-l-[inherit] pr-2 pl-3 whitespace-nowrap hover:bg-white/5"
       >
@@ -150,12 +180,15 @@ export function SendButton({
         <Icon name="chevron" className="size-3 rotate-90" />
       </button>
 
-      {menuOpen &&
-        createPortal(
-        <div
-          onMouseLeave={() => setMenuOpen(false)}
-          style={menuPlace ?? undefined}
-          className="fixed z-[60] w-80 overflow-y-auto rounded-lg border border-input bg-popover p-1 font-normal text-foreground"
+      {menuOpen && (
+        <Popup
+          ref={menuRef}
+          anchor={anchor}
+          align="end"
+          onDismiss={closeMenu}
+          data-send-menu
+          onKeyDown={onMenuKey}
+          className="w-80 overflow-y-auto rounded-lg border border-input bg-popover p-1 font-normal text-foreground"
         >
           {here.length > 0 && <div className="px-2 pt-1.5 pb-1 text-[11px] text-muted-foreground">This worktree</div>}
           {here.map(row)}
@@ -181,7 +214,7 @@ export function SendButton({
           {onClear && (
             <button
               onClick={() => {
-                setMenuOpen(false)
+                closeMenu()
                 onClear()
               }}
               className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs text-red-400 hover:bg-accent"
@@ -190,9 +223,8 @@ export function SendButton({
               <Icon name="close" className="size-3.5" /> Delete {label}
             </button>
           )}
-        </div>,
-          document.body
-        )}
+        </Popup>
+      )}
     </div>
   )
 }

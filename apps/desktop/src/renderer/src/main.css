@@ -5,9 +5,10 @@
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
-  --color-background: #0a0a0a;
-  --color-card: #111111;
-  --color-popover: #181818;
+  --color-background: #000000;
+  --color-card: #000000;
+  --color-sidebar: #000000;
+  --color-popover: #121212;
   --color-foreground: #f5f5f5;
   --color-muted-foreground: #848484;
   --color-border: rgb(255 255 255 / 6%);
@@ -70,8 +71,6 @@ body {
 
 .markdown h2 {
   font-size: 1.2em;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--color-border);
 }
 
 .markdown h3 {
@@ -130,8 +129,9 @@ body {
 }
 
 .markdown blockquote {
-  padding-left: 0.9em;
-  border-left: 3px solid color-mix(in srgb, var(--color-foreground) 15%, transparent);
+  padding: 0.4em 0.9em;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-foreground) 4%, transparent);
   color: var(--color-muted-foreground);
 }
 
@@ -179,19 +179,74 @@ body {
   }
 }
 
-/* Controls show state through their own hover and active styles, not the browser focus ring */
+/* No focus outlines or rings anywhere, not even for the keyboard: the list cursor's tint shows where you are */
 :focus,
 :focus-visible {
   outline: none;
 }
 
-/* Every icon button gives tactile feedback on press */
-button svg {
-  transition: scale 120ms ease;
+:is(:focus, :focus-visible):is([class*='focus:ring'], [class*='focus-visible:ring'], [class*='focus-within:ring']),
+:focus-within:is([class*='focus-within:ring']) {
+  box-shadow: none !important;
 }
 
+/* Fields that turned their border blue on focus keep a quiet neutral one instead */
+:focus[class*='focus:border-primary'],
+:focus-within[class*='focus-within:border-primary'] {
+  border-color: color-mix(in srgb, var(--color-foreground) 22%, transparent) !important;
+}
+
+/* No motion anywhere: every state change is instant, spinners and pulses stand still */
+*,
+*::before,
+*::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* Every icon button gives tactile feedback on press */
 button:not(:disabled):active svg {
   scale: 0.85;
+}
+
+/* Focus zones carry no frame; the row under a list's keyboard cursor is a neutral tint, a little stronger while its zone has focus */
+[data-zone] {
+  position: relative;
+}
+
+[data-cursor] {
+  background: color-mix(in srgb, var(--color-foreground) 5%, transparent);
+}
+
+[data-zone][data-focused] [data-cursor] {
+  background: color-mix(in srgb, var(--color-foreground) 9%, transparent);
+}
+
+/* Keycaps for shortcut hints */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-foreground) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-foreground) 8%, transparent);
+  font: 500 10.5px/1 var(--font-sans);
+  color: color-mix(in srgb, var(--color-foreground) 72%, transparent);
+  white-space: nowrap;
+}
+
+.kbd-on {
+  background: color-mix(in srgb, var(--color-foreground) 16%, transparent);
+  color: var(--color-foreground);
+}
+
+/* Inline hint keycaps show only while a modifier is held (useModifierHints); teaching surfaces leave them unmarked */
+html:not([data-hints]) [data-key-hint] {
+  display: none;
 }
 
 /* Palette text shades are tuned for dark backgrounds; light themes use deeper ones for contrast */

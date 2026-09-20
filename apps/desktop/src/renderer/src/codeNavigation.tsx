@@ -1,17 +1,16 @@
 import { getSharedHighlighter } from '@pierre/diffs'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { supportsLanguageService } from '../../shared/languages'
 import type { HoverInfo, NavigationKind, SymbolTarget } from '../../shared/types'
 import { matchesShortcut, toAccelerator } from '../../shared/shortcut'
 import { copyText, openMenu } from './contextMenu'
 import { activeTheme, getSettings } from './settings'
 import { LazyMarkdown } from './LazyMarkdown'
+import { Popup } from './ui'
 import { codeTheme } from './themes'
 
 const HOVER_DELAY_MS = 450
 const HOVER_GRACE_MS = 200
-const HOVER_CARD_MAX_WIDTH = 560
 
 /** Signatures are TypeScript, highlighted with the same theme as the diff; shiki escapes the code it renders */
 async function highlightSignature(code: string): Promise<string> {
@@ -136,7 +135,7 @@ export function useSymbolNavigation({
 } {
   const hovered = useRef<SymbolTarget | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const [card, setCard] = useState<{ info: HoverInfo; html: string | null; x: number; y: number } | null>(null)
+  const [card, setCard] = useState<{ info: HoverInfo; html: string | null; anchor: DOMRect } | null>(null)
 
   const hideSoon = (): void => {
     clearTimeout(timer.current)
@@ -162,7 +161,8 @@ export function useSymbolNavigation({
     },
     onTokenEnter: (token: TokenEvent, event: PointerEvent) => {
       // Measured now: the renderer re-creates token spans on hover, so the element may be gone when the card opens
-      const anchor = { x: event.clientX, y: token.tokenElement.getBoundingClientRect().bottom }
+      const { top, height } = token.tokenElement.getBoundingClientRect()
+      const anchor = new DOMRect(event.clientX - 12, top, 0, height)
       const target = targetFromToken(path, token, exact)
       hovered.current = target
       paintUnderline(target ? token.tokenElement : null, event.metaKey)
@@ -174,7 +174,7 @@ export function useSymbolNavigation({
         const info = await window.api.hover(worktreePath, target)
         const html = info && (await highlightSignature(info.signature).catch(() => null))
         if (hovered.current !== target) return
-        setCard(info ? { info, html, x: anchor.x, y: anchor.y } : null)
+        setCard(info ? { info, html, anchor } : null)
       }, HOVER_DELAY_MS)
     },
     onTokenLeave: () => {
@@ -201,14 +201,12 @@ export function useSymbolNavigation({
   }
 
   // Portaled: dialogs use backdrop-filter, which would make this fixed card position relative to the dialog
-  const hoverCard =
-    card &&
-    createPortal(
-    <div
+  const hoverCard = card && (
+    <Popup
+      anchor={card.anchor}
       onMouseEnter={() => clearTimeout(timer.current)}
       onMouseLeave={hideSoon}
-      style={{ left: Math.max(8, Math.min(card.x - 12, window.innerWidth - HOVER_CARD_MAX_WIDTH - 8)), top: card.y + 2, maxWidth: HOVER_CARD_MAX_WIDTH }}
-      className="fixed z-50 max-h-80 w-max overflow-auto rounded-lg border border-input bg-popover backdrop-blur-2xl"
+      className="max-h-80 w-max max-w-[560px] overflow-auto rounded-lg border border-input bg-popover backdrop-blur-2xl"
     >
       {card.html ? (
         <div
@@ -223,10 +221,8 @@ export function useSymbolNavigation({
           <LazyMarkdown>{card.info.documentation}</LazyMarkdown>
         </div>
       )}
-    </div>
-  ,
-      document.body
-    )
+    </Popup>
+  )
 
   return { tokenOptions, onContextMenu, hoverCard }
 }

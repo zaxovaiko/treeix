@@ -3,6 +3,8 @@ export type Theme = {
   mode: 'dark' | 'light'
   background: string
   card: string
+  /** Lists and the workspace rail; defaults to card */
+  sidebar?: string
   popover: string
   foreground: string
   mutedForeground: string
@@ -13,11 +15,45 @@ export const THEMES = {
   neutral: {
     label: 'Neutral',
     mode: 'dark',
-    background: '#0a0a0a',
-    card: '#111111',
-    popover: '#181818',
+    // One black surface everywhere, like T3 Code's sidebar; hairlines separate the areas and menus sit a step above
+    background: '#000000',
+    card: '#000000',
+    popover: '#121212',
     foreground: '#f5f5f5',
     mutedForeground: '#848484',
+    primary: '#4f5ff0'
+  },
+  // Vercel's Geist dark: black canvas, raised grays, their blue for actions
+  vercel: {
+    label: 'Vercel',
+    mode: 'dark',
+    background: '#000000',
+    card: '#0a0a0a',
+    popover: '#1a1a1a',
+    foreground: '#ededed',
+    mutedForeground: '#a1a1a1',
+    primary: '#0070f3'
+  },
+  // Still black, one step up from Neutral
+  onyx: {
+    label: 'Onyx',
+    mode: 'dark',
+    background: '#0a0a0a',
+    card: '#0a0a0a',
+    popover: '#171717',
+    foreground: '#f2f2f2',
+    mutedForeground: '#8a8a8a',
+    primary: '#4f5ff0'
+  },
+  // Two steps up: near black with a soft lift
+  coal: {
+    label: 'Coal',
+    mode: 'dark',
+    background: '#131313',
+    card: '#131313',
+    popover: '#1f1f1f',
+    foreground: '#eeeeee',
+    mutedForeground: '#8f8f8f',
     primary: '#4f5ff0'
   },
   midnight: {
@@ -99,6 +135,7 @@ export function applyTheme(id: ThemeId, opacity: number, borderStrength = 1): vo
   const root = document.documentElement.style
   root.setProperty('--color-background', withAlpha(theme.background, opacity))
   root.setProperty('--color-card', withAlpha(theme.card, opacity))
+  root.setProperty('--color-sidebar', withAlpha(theme.sidebar ?? theme.card, opacity))
   // Menus stay mostly solid so their text reads over busy content
   root.setProperty('--color-popover', withAlpha(theme.popover, Math.max(opacity, 0.92)))
   root.setProperty('--color-foreground', theme.foreground)

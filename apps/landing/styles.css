@@ -160,12 +160,27 @@ h2 { font-size: clamp(30px, 4vw, 46px); line-height: 1.08; font-weight: 600; }
 @keyframes prompt { 0%, 62% { opacity: 0; transform: translateX(-6px); } 66%, 88% { opacity: 1; transform: none; } 94%, 100% { opacity: 0; } }
 @keyframes reply { 0%, 72% { opacity: 0; } 76%, 88% { opacity: 1; } 94%, 100% { opacity: 0; } }
 
+/* before and after */
+.compare { max-width: 1200px; margin: 0 auto; padding: 100px 20px 40px; }
+.compare table { width: 100%; border-collapse: collapse; margin-top: 40px; }
+.compare th, .compare td { text-align: left; vertical-align: top; padding: 18px 24px 18px 0; border-bottom: 1px solid var(--line); font-size: 16px; font-weight: 400; }
+.compare thead th { padding-top: 0; color: var(--steel); font: 500 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.compare thead th:last-child { color: var(--white); }
+.compare tbody th { width: 200px; color: var(--steel); font: 500 13px/1.4 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+.compare td { color: var(--steel); }
+.compare td:last-child { color: var(--white); }
+
 /* more */
 .more { max-width: 1200px; margin: 0 auto; padding: 40px 20px 110px; }
 .more dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px 48px; margin: 44px 0 64px; }
 .more dl div { border-top: 1px solid var(--line); padding-top: 18px; }
 .more dt { color: var(--white); font: 600 19px var(--display); }
 .more dd { margin: 6px 0 0; color: var(--steel); font-size: 16px; }
+
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 0 0 56px; }
+.gallery figure { margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--plate); }
+.gallery img { display: block; width: 100%; }
+.gallery figcaption { padding: 14px 18px; color: var(--steel); font-size: 15px; }
 
 /* install */
 .install { max-width: 1200px; margin: 0 auto; padding: 90px 20px 130px; border-top: 1px solid var(--line); }
@@ -183,6 +198,9 @@ h2 { font-size: clamp(30px, 4vw, 46px); line-height: 1.08; font-weight: 600; }
   .nav nav a:not(.button) { display: none; }
   .loop { grid-template-columns: 1fr; padding: 80px 20px; }
   .more dl, .install ol { grid-template-columns: 1fr; gap: 28px; }
+  .gallery { grid-template-columns: 1fr; }
+  .compare tbody th { width: 120px; }
+  .compare th, .compare td { padding-right: 12px; font-size: 14px; }
   .tag { font-size: 10px; padding: 4px 7px; }
   .tag-1, .tag-3 { display: none; }
   .ln { font-size: 12px; }

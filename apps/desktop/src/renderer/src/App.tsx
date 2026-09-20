@@ -1,39 +1,43 @@
 import { type DiffLineAnnotation, PatchDiff } from '@pierre/diffs/react'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   type Attachment,
   extractLines,
   commentsPrompt as promptForComments,
   isReviewComment,
   type LineRange,
+  type PatchRow,
+  patchRows,
   rangeLabel,
   type ReviewComment
 } from '../../shared/comments'
-import { type DocumentTab, HostContext, type HostApi, type SessionKind, SESSION_KINDS } from '@treeix/sdk'
+import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, SESSION_KINDS, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
 import { HistoryDialog } from './HistoryDialog'
 import type { Branch, CodeLocation, FilePatch, SearchMatch, Repo, Worktree, WorktreeFiles } from '../../shared/types'
-import { ChangedFileList } from './ChangedFiles'
+import { allFolders, ChangedFileList, folderPaths } from './ChangedFiles'
 import { copyText, type MenuEntry, openMenu } from './contextMenu'
 import type { Command } from './CommandPalette'
-import { CommentCard, CommentDraft, CommentsPanel, orderRange, useCodeDrag } from './Comments'
-import { CORE_PANELS, type DockSide, DropZones, type PanelId, type PanelInfo, PanelToggle, SIZE_LIMITS, useLayout } from './Dock'
+import { AgentCommentsDrawer, CommentCard, CommentDraft, CommentsPanel, orderRange, useCodeDrag } from './Comments'
+import { type DockSide, DropZones, type PanelId, type PanelInfo, PanelToggle, SIZE_LIMITS, useLayout } from './Dock'
 import { ErrorBoundary } from './ErrorBoundary'
+import { MarkdownFoldScope } from './LazyMarkdown'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from './MarkdownPreview'
 import { emptyHistory, recordPlace, stepPlace } from './navigationHistory'
 import { Explorer, FolderExplorer } from './Explorer'
-import { LocationsDialog, matcherFor, SearchDialog } from './LocationBrowser'
+import { matcherFor } from './searchMatcher'
 import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindForKey, useSymbolNavigation } from './codeNavigation'
-import { codeThemeOptions, diffBackground, FileView } from './FileView'
+import { codeThemeOptions, diffBackground, FileView, findLineElement } from './FileView'
 import { FileIcon, Icon } from './Icon'
 import { findService, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
+import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKey } from './Shell'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
-import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar } from './Sidebar'
-import { digitLabel, digitPressed, stepFontSize, updateSettings, useSettings } from './settings'
+import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
+import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 
-import { CopyButton, EmptyState, errorMessage, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
+import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
@@ -81,6 +85,9 @@ const FONT_STEPS = new Map<string, -1 | 0 | 1>([
 // Dialogs and settings load on first use; plugin code loads with its plugin
 const CommandPalette = lazy(() => import('./CommandPalette').then((module) => ({ default: module.CommandPalette })))
 const SettingsView = lazy(() => import('./SettingsView').then((module) => ({ default: module.SettingsView })))
+// Pulls shiki's shared highlighter for result lines
+const SearchDialog = lazy(() => import('./LocationBrowser').then((module) => ({ default: module.SearchDialog })))
+const LocationsDialog = lazy(() => import('./LocationBrowser').then((module) => ({ default: module.LocationsDialog })))
 
 const COMMENTS_KEY = 'comments'
 const RESIZE_EDGE: Record<DockSide, 'left' | 'right' | 'top'> = { left: 'right', right: 'left', bottom: 'top' }
@@ -104,7 +111,11 @@ function loadScanCache(): Repo[] | null {
 }
 
 type WorktreeData = { patches: FilePatch[]; files: WorktreeFiles }
+// ponytail: least recently loaded worktrees drop out past the cap and load from git again
+const WORKTREE_CACHE_MAX = 20
 const worktreeCache = new Map<string, WorktreeData>()
+// Focus fires on every switch back to the app; agents' edits can wait a few seconds
+const FOCUS_REFRESH_MS = 10_000
 
 const sameList = (a: string[], b: string[]): boolean => a.length === b.length && a.every((item, index) => item === b[index])
 const samePatches = (a: FilePatch[], b: FilePatch[]): boolean =>
@@ -121,9 +132,37 @@ function loadComments(): ReviewComment[] {
 }
 
 const annotationSide = (range: LineRange): 'deletions' | 'additions' => range.endSide ?? range.side ?? 'additions'
+/** The one-line range of a patch row, on the side it shows */
+const rowRange = (row: PatchRow): LineRange =>
+  row.new !== null ? { start: row.new, end: row.new, side: 'additions' } : { start: row.old ?? 1, end: row.old ?? 1, side: 'deletions' }
 
 function Placeholder({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <EmptyState title={children} />
+}
+
+/**
+ * A tab's docked panels: around the whole tab when the bottom panel spans the window. Beside the list, a PageLayout inside
+ * docks them around its main zone; a tab without one still gets them around all of it
+ */
+function TabDock({
+  placement,
+  withDock,
+  children
+}: {
+  placement: Settings['bottomPanel']
+  withDock: (content: React.ReactNode, frames: boolean) => React.ReactNode
+  children: React.ReactNode
+}): React.JSX.Element {
+  const [claims, setClaims] = useState(0)
+  // Children claim in their layout effects, which run before this one, so the first paint already knows
+  const [settled, setSettled] = useState(false)
+  useLayoutEffect(() => setSettled(true), [])
+  const claim = useCallback(() => {
+    setClaims((count) => count + 1)
+    return () => setClaims((count) => count - 1)
+  }, [])
+  if (placement === 'full') return <>{withDock(children, true)}</>
+  return <>{withDock(<DockSlot.Provider value={claim}>{children}</DockSlot.Provider>, settled && claims === 0)}</>
 }
 
 function App(): React.JSX.Element {
@@ -132,8 +171,6 @@ function App(): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(() => SAVED_PLACE.selected)
   const [patches, setPatches] = useState<FilePatch[] | null>(null)
   const [filePath, setFilePath] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = usePersisted<boolean>('sidebar.open', true)
-  const [sidebarWidth, setSidebarWidth] = usePersisted<number>('sidebar.width', 280)
   const [filesOpen, setFilesOpen] = usePersisted<boolean>('files.open', true)
   const [filesWidth, setFilesWidth] = usePersisted<number>('files.width', 260)
   const [allComments, setAllComments] = useState<ReviewComment[]>(loadComments)
@@ -159,6 +196,9 @@ function App(): React.JSX.Element {
   const pendingTabs = useRef<string[] | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const shell = useShell()
+  const worktreePanels = usePanels('worktrees')
   const settings = useSettings()
   const { diffStyle } = settings
   const setDiffStyle = (style: 'split' | 'unified'): void => updateSettings({ diffStyle: style })
@@ -180,8 +220,8 @@ function App(): React.JSX.Element {
   /** The title bar row: Worktrees sits among the plugin tabs, all in `order` */
   const tabs = [{ id: 'worktrees', label: 'Worktrees', icon: 'branch' as const, order: WORKTREES_ORDER }, ...pluginTabs].sort((a, b) => a.order - b.order)
   const pluginPanels = plugins.flatMap(({ plugin }) => plugin.panels ?? [])
-  const panelInfo = (id: PanelId): PanelInfo | undefined => (id === 'explorer' || id === 'comments' ? CORE_PANELS[id] : pluginPanels.find((panel) => panel.id === id))
-  const panelIds = ['explorer', 'comments', ...pluginPanels.map((panel) => panel.id)]
+  const panelInfo = (id: PanelId): PanelInfo | undefined => pluginPanels.find((panel) => panel.id === id)
+  const panelIds = pluginPanels.map((panel) => panel.id)
   /** Views that open files themselves while their tab is active, like the terminal tab's preview */
   const fileOpeners = useRef(new Map<string, (path: string, line: number | null) => void>())
   const [draggingPanel, setDraggingPanel] = useState<PanelId | null>(null)
@@ -216,7 +256,8 @@ function App(): React.JSX.Element {
   /** Each workspace keeps its own agent comments, even on a checkout two workspaces share */
   const inThisWorkspace = (comment: ReviewComment): boolean =>
     comment.workspaceId ? comment.workspaceId === workspaceId : inCurrentWorkspace({ worktreePath: comment.worktreePath, workspaceId: '' })
-  const comments = allComments.filter(inThisWorkspace)
+  // Memoized so the plugin host only changes when these do
+  const comments = useMemo(() => allComments.filter(inThisWorkspace), [allComments, workspaceId, workspace, repos, workspaces])
   /** Replaces this workspace's comments and leaves the others alone; new comments are stamped with the workspace */
   const setComments = (next: ReviewComment[] | ((visible: ReviewComment[]) => ReviewComment[])): void =>
     setAllComments((current) => {
@@ -256,7 +297,10 @@ function App(): React.JSX.Element {
       const cached = worktreeCache.get(worktreePath)
       const nextPatches = cached && samePatches(cached.patches, freshPatches) ? cached.patches : freshPatches
       const nextFiles = cached && sameFiles(cached.files, freshFiles) ? cached.files : freshFiles
+      // Re-inserting keeps the Map in load order, oldest first
+      worktreeCache.delete(worktreePath)
       worktreeCache.set(worktreePath, { patches: nextPatches, files: nextFiles })
+      if (worktreeCache.size > WORKTREE_CACHE_MAX) worktreeCache.delete(worktreeCache.keys().next().value!)
       if (selectedRef.current !== worktreePath) return
       setPatches(nextPatches)
       setWorktreeFiles(nextFiles)
@@ -281,6 +325,12 @@ function App(): React.JSX.Element {
   }, [selected])
 
   // ⌃- / ⌃⇧- walk back and forward through places visited, like VS Code's Go Back
+  useEffect(() => {
+    const cancelLeader = (): void => void (getShell().leader && updateShell({ leader: false }))
+    window.addEventListener('mousedown', cancelLeader, true)
+    return () => window.removeEventListener('mousedown', cancelLeader, true)
+  }, [])
+
   const places = useRef(emptyHistory<Place>())
   /** Restoring a place settles over a few renders (worktree reset, cached diff); none of them are new places */
   const restoringUntil = useRef(0)
@@ -307,8 +357,11 @@ function App(): React.JSX.Element {
   }
 
   useEffect(() => {
+    let refreshedAt = 0
     const refresh = (): void => {
-      if (selectedRef.current) loadWorktree(selectedRef.current)
+      if (!selectedRef.current || Date.now() - refreshedAt < FOCUS_REFRESH_MS) return
+      refreshedAt = Date.now()
+      loadWorktree(selectedRef.current)
     }
     window.addEventListener('focus', refresh)
     return () => window.removeEventListener('focus', refresh)
@@ -372,6 +425,29 @@ function App(): React.JSX.Element {
   )
 
   const tabExists = (tab: string): boolean => tab === 'worktrees' || tab === 'settings' || pluginTabs.some((candidate) => candidate.id === tab) || docTabs.some((candidate) => candidate.key === tab)
+
+  /** Shows a page with the keyboard in it: its list, or the terminal on the Terminal page */
+  const goPage = (tab: string): void => {
+    if (tab === 'settings') openSettings()
+    else setAppTab(tab)
+    focusZone(tab === 'terminal' || !(shell.pages[tab]?.list ?? true) ? 'main' : 'list')
+  }
+
+  /** The key after G or ⌘G: a page letter, a workspace number, or H for recently closed sessions */
+  const onLeader = (event: KeyboardEvent): void => {
+    const digit = event.code.match(/^Digit([1-9])$/)?.[1]
+    if (digit) {
+      const target = workspaces[Number(digit) - 1]
+      return target ? switchWorkspace(target.id) : flash(`No workspace ${digit}`)
+    }
+    const letter = event.code.match(/^Key([A-Z])$/)?.[1].toLowerCase()
+    if (letter === 'a') return setDrawerOpen(true)
+    if (letter === 'h') return void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin'))
+    const page = letter ? LEADER_PAGES[letter] : undefined
+    if (!page) return
+    if (!tabExists(page)) return flash('That page belongs to a plugin that is off; turn it on in Settings')
+    goPage(page)
+  }
 
   // A tab whose plugin was switched off, or a saved tab from a plugin that no longer exists
   useEffect(() => {
@@ -652,9 +728,36 @@ function App(): React.JSX.Element {
 
   const files = patches ?? []
   const file = files.find((patch) => patch.path === filePath)
+  const folderToggles = useState<Set<string>>(new Set())
+  const changedFolders = useMemo(() => folderPaths(files), [patches])
+  const canFoldChanges = filesOpen && changedFolders.length > 1
+  const anyChangedFolderOpen = changedFolders.some((folder) => groupOpen(folderToggles[0], folder))
+  const foldChanges = (): void => folderToggles[1](allFolders(changedFolders, !anyChangedFolderOpen))
   const diffSymbols = useSymbolNavigation({ worktreePath: selected ?? '', path: file?.path ?? '', onNavigate: navigate })
 
-  useEffect(() => setDraft(null), [selected, filePath])
+  /** The diff's keyboard cursor, an index into the patch rows; -1 before j or k is pressed */
+  const [lineCursor, setLineCursor] = useState(-1)
+  const diffRows = useMemo(() => (file ? patchRows(file.patch) : []), [file?.patch])
+  const cursorRow: PatchRow | undefined = diffRows[lineCursor]
+  const diffScroll = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    setDraft(null)
+    setLineCursor(-1)
+  }, [selected, filePath])
+  useEffect(() => {
+    const container = diffScroll.current
+    if (!cursorRow || !container) return
+    const type = cursorRow.text.startsWith('+') ? 'change-addition' : cursorRow.text.startsWith('-') ? 'change-deletion' : undefined
+    const target = findLineElement(container, rowRange(cursorRow).start, type)
+    if (!target) return
+    const box = target.getBoundingClientRect()
+    const view = container.getBoundingClientRect()
+    if (box.top < view.top + 48 || box.bottom > view.bottom - 48) container.scrollTop += box.top - view.top - view.height / 3
+  }, [lineCursor, cursorRow])
+  const firstChange = diffRows.findIndex((row) => row.text.startsWith('+') || row.text.startsWith('-'))
+  const moveLineCursor = (step: 1 | -1): void => setLineCursor(lineCursor < 0 ? Math.max(0, firstChange) : Math.max(0, Math.min(diffRows.length - 1, lineCursor + step)))
+  /** Line in the new file at the cursor, for opening the file there; a deleted line uses the one above it */
+  const cursorFileLine = (): number | null => diffRows.slice(0, lineCursor + 1).findLast((row) => row.new !== null)?.new ?? null
 
   useEffect(() => {
     const path = viewer?.path
@@ -694,6 +797,11 @@ function App(): React.JSX.Element {
         event.preventDefault()
         return openSettings()
       }
+      // From anywhere, terminals included
+      if (event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey && event.code === 'KeyI') {
+        event.preventDefault()
+        return setDrawerOpen(!drawerOpen)
+      }
       // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Minus') {
         event.preventDefault()
@@ -715,12 +823,26 @@ function App(): React.JSX.Element {
         event.preventDefault()
         return navigate(navigationKind, active.target, active.worktreePath)
       }
-      if (paletteOpen || searchOpen) return
+      if (paletteOpen || searchOpen || sheetOpen) return
       if (plugins.some(({ plugin }) => plugin.onKeyDown?.(event, host))) return event.preventDefault()
-      // Digits match the physical key (event.code), so ⌥ producing ¡™£ or keyboard layouts don't matter
       // composedPath reaches into shadow roots, where the code editor's input lives
       const origin = event.composedPath()[0]
-      const typing = origin instanceof HTMLInputElement || origin instanceof HTMLTextAreaElement || (origin instanceof HTMLElement && origin.isContentEditable)
+      const typing = isTyping(event)
+      // Bare keys of the zone model, unless the page used the key or focus is in a dialog outside the zones
+      const inZones = document.activeElement === document.body || document.activeElement?.closest('[data-zone]') != null
+      if (!event.defaultPrevented && inZones && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (!typing && event.key === 'g') return (event.preventDefault(), updateShell({ leader: true }))
+        if (!typing && event.key === '?') return (event.preventDefault(), setSheetOpen(true))
+        // An open file steps back to its diff before esc leaves main
+        if (!typing && event.key === 'Escape' && appTab === 'worktrees' && getShell().zone === 'main' && viewer) return (event.preventDefault(), files.some((patch) => patch.path === viewer.path) ? showDiff(viewer.path) : setViewer(null))
+        if (!typing && event.key === 'Escape' && zoneBack()) return event.preventDefault()
+        // Settings takes / for its own search
+        if (!typing && event.key === '/' && appTab !== 'settings' && focusZoneField()) return event.preventDefault()
+        // Esc in a text field hands the keys back to its zone, as does ↓ from a filter; the terminal and the code editor keep their Esc
+        const field = origin instanceof HTMLInputElement || (origin instanceof HTMLTextAreaElement && !isTerminalFocused()) ? origin.closest<HTMLElement>('[data-zone]') : null
+        if ((event.key === 'Escape' || (event.key === 'ArrowDown' && origin instanceof HTMLInputElement)) && field) return (event.preventDefault(), field.focus({ preventScroll: true }))
+      }
+      // Digits match the physical key (event.code), so ⌥ producing ¡™£ or keyboard layouts don't matter
       const workspaceDigit = digitPressed(event, settings.digitShortcuts.workspaces)
       if (workspaceDigit !== null) {
         const target = workspaces[workspaceDigit - 1]?.id
@@ -729,8 +851,10 @@ function App(): React.JSX.Element {
         return switchWorkspace(target)
       }
       const tabDigit = digitPressed(event, settings.digitShortcuts.tabs)
-      // ⌥ digits type characters in text fields, so leave those alone (the terminal's hidden textarea excepted)
-      if (tabDigit && !(typing && !isTerminalFocused() && settings.digitShortcuts.tabs === 'alt')) {
+      // ⌥ digits type characters in text fields; a focused terminal owns ⌘ digits (its tabs) and ⌥ digits (its panes)
+      const tabModifier = settings.digitShortcuts.tabs
+      const heldByFocus = isTerminalFocused() ? tabModifier === 'alt' || tabModifier === 'meta' : typing && tabModifier === 'alt'
+      if (tabDigit && !heldByFocus) {
         const digitTabs = [...tabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
         // 9 goes to the last tab, like browsers
         const tab = tabDigit === 9 ? digitTabs.at(-1) : digitTabs[tabDigit - 1]
@@ -738,23 +862,81 @@ function App(): React.JSX.Element {
         event.preventDefault()
         return setAppTab(tab)
       }
-      // ⌘P is the explorer only in Worktrees; plugin tabs use it for their own file pickers
       const panelForKey = panelIds.find((id) => panelInfo(id)?.shortcut === `⌘${event.key.toUpperCase()}`)
-      if (event.metaKey && !event.shiftKey && !event.altKey && panelForKey && (panelForKey !== 'explorer' || appTab === 'worktrees')) {
+      if (event.metaKey && !event.shiftKey && !event.altKey && panelForKey) {
         event.preventDefault()
         return dock.toggle(panelForKey)
       }
-      if (event.metaKey && event.key === 'b') return setSidebarOpen(!sidebarOpen)
+      // ⌘P is the explorer's filter only in Worktrees; plugin tabs use it for their own file pickers
+      if (event.metaKey && !event.shiftKey && !event.altKey && event.code === 'KeyP' && appTab === 'worktrees') {
+        event.preventDefault()
+        return focusExplorerFilter()
+      }
       if (event.metaKey && event.key === 'e') return setFilesOpen(!filesOpen)
-      if (typing || event.metaKey || event.ctrlKey || appTab !== 'worktrees') return
-      if (event.key === 'r') return rescan()
-      if (viewer || (event.key !== 'j' && event.key !== 'k')) return
-      const index = files.findIndex((patch) => patch.path === filePath) + (event.key === 'j' ? 1 : -1)
-      if (files[index]) setFilePath(files[index].path)
+      if (appTab === 'worktrees' && isPageKey(event)) worktreeKey(event)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  /** Worktrees keys outside text fields: r rescans; in main n p pick a changed file, z folds or unfolds their folders, j k move the line cursor, c or a comment there, o or ⏎ open the file there, y copies its path, w switches split and unified, m previews markdown, h shows edit history, t opens a terminal */
+  const worktreeKey = (event: KeyboardEvent): void => {
+    const act = (run: () => void): void => {
+      event.preventDefault()
+      run()
+    }
+    const { key } = event
+    if (key === 'r') return act(rescan)
+    if (getShell().zone !== 'main' || !selected) return
+    const shownPath = viewer?.path ?? file?.path
+    if (key === 't') return act(() => openTerminal(selected))
+    if (key === 'w') return act(() => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'))
+    if (key === 'z' && canFoldChanges) return act(foldChanges)
+    if ((key === 'n' || key === 'p') && files.length > 0) {
+      const at = files.findIndex((patch) => patch.path === filePath)
+      return act(() => showDiff(files[Math.max(0, Math.min(files.length - 1, at + (key === 'n' ? 1 : -1)))].path))
+    }
+    if (key === 'y' && shownPath) return act(() => (copyText(shownPath), flash(`Copied ${shownPath}`)))
+    if (key === 'm' && shownPath && isMarkdownPath(shownPath)) return act(() => setMarkdownPreview(!markdownPreview))
+    if (key === 'h' && viewer) return act(() => setHistoryFor({ worktreePath: selected, path: viewer.path }))
+    // An open file handles c and a itself
+    if (viewer || !file) return
+    if (key === 'j' || key === 'k' || key === 'ArrowDown' || key === 'ArrowUp') return act(() => moveLineCursor(key === 'j' || key === 'ArrowDown' ? 1 : -1))
+    const row = cursorRow ?? diffRows[firstChange]
+    if ((key === 'c' || key === 'a') && row) {
+      return act(() => {
+        if (!cursorRow) setLineCursor(firstChange)
+        setDraft(rowRange(row))
+      })
+    }
+    const onButton = event.target instanceof Element && event.target.closest('button, a, [role="button"]')
+    if (key === 'o' || (key === 'Enter' && !onButton)) return act(() => setViewer({ path: file.path, line: cursorFileLine() }))
+  }
+
+  /** A terminal in `path`: its live session if there is one, else a new shell */
+  const openTerminal = (path: string): void => {
+    const service = findService('sessions')
+    if (!service) return flash('Terminals need the Terminal plugin; turn it on in Settings')
+    const existing = sessions.find((session) => session.worktreePath === path && session.status !== 'exited')
+    if (existing) return service.reveal(existing.id)
+    startSession('shell', path)
+  }
+
+  /** / puts the cursor in the focused zone's own text field, like a list's filter */
+  const focusZoneField = (): boolean => {
+    const zone = getShell().zone
+    const field = [...document.querySelectorAll<HTMLInputElement>(`[data-zone="${zone}"] input:not([type="checkbox"])`)].find((input) => input.closest('[data-zone]')?.getAttribute('data-zone') === zone)
+    field?.select()
+    field?.focus()
+    return Boolean(field)
+  }
+
+  /** ⌘P in Worktrees: the explorer's filter, showing the inspector first when it's hidden */
+  const focusExplorerFilter = (): void => {
+    if (!worktreePanels.inspector) togglePanel('inspector', 'worktrees')
+    // After the shown inspector took focus
+    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-zone="inspector"] input')?.focus()))
+  }
 
   const selectedRepo = repos?.find((repo) => repo.worktrees.some((worktree) => worktree.path === selected))
   const worktree = selectedRepo?.worktrees.find((candidate) => candidate.path === selected)
@@ -762,8 +944,7 @@ function App(): React.JSX.Element {
   const deletions = files.reduce((sum, patch) => sum + patch.deletions, 0)
   const worktreeComments = comments.filter((comment) => comment.worktreePath === selected)
   // Comments collected anywhere in this workspace, e.g. Jira items added from the Tasks tab, reachable from any tab
-  const workspaceComments = comments
-  const [allCommentsOpen, setAllCommentsOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const checkoutLabel = (path: string): string => {
     const repo = repos?.find((candidate) => candidate.worktrees.some((worktree) => worktree.path === path))
     const checkout = repo?.worktrees.find((worktree) => worktree.path === path)
@@ -822,7 +1003,7 @@ function App(): React.JSX.Element {
   }
 
   /** Sends the comments collected for a checkout to an agent session there; pull requests use their local worktree or repo */
-  const commentsSendButton = (worktreePath: string | null, variant: 'pill' | 'panel'): React.JSX.Element | null => {
+  const commentsSendButton = (worktreePath: string | null, variant: 'pill' | 'panel', hotkeys = false): React.JSX.Element | null => {
     const pathComments = comments.filter((comment) => comment.worktreePath === worktreePath)
     if (!worktreePath || pathComments.length === 0) return null
     const checkout = repos?.flatMap((repo) => repo.worktrees).find((candidate) => candidate.path === worktreePath)
@@ -833,6 +1014,7 @@ function App(): React.JSX.Element {
         count={pathComments.length}
         prompt={() => promptForComments(pathComments, checkout ? `${branchLabel(checkout)} (${checkout.path})` : worktreePath)}
         variant={variant}
+        hotkeys={hotkeys}
         onDone={onSent}
         onClear={() => {
           if (window.confirm(`Delete ${pathComments.length} comment${pathComments.length === 1 ? '' : 's'} on ${baseName(worktreePath)}?`)) {
@@ -842,7 +1024,6 @@ function App(): React.JSX.Element {
       />
     )
   }
-  const sendButton = (variant: 'pill' | 'panel'): React.JSX.Element | null => commentsSendButton(selected, variant)
 
   /** The Comments panel for any checkout, with sending and clearing */
   const renderCommentsPanel = (worktreePath: string, open: (path: string) => void): React.JSX.Element => {
@@ -864,48 +1045,20 @@ function App(): React.JSX.Element {
 
   const renderPanel = (panel: PanelId, side: DockSide): React.JSX.Element | null => {
     const PluginPanel = pluginPanels.find((candidate) => candidate.id === panel)?.render
-    if (PluginPanel) return <PluginPanel side={side} />
-    if (!worktree) return <Placeholder>Select a worktree</Placeholder>
-    if (panel === 'explorer') {
-      return (
-        <Explorer
-          files={worktreeFiles}
-          changed={new Set(files.map((patch) => patch.path))}
-          activePath={viewer?.path ?? null}
-          onOpen={(path) => setViewer({ path, line: null })}
-          onFileMenu={(event, path) => explorerMenu(event, path, () => setViewer({ path, line: null }))}
-          onFolderMenu={(event, path) => folderMenu(event, path, (next) => setViewer({ path: next, line: null }))}
-          onCreate={(kind, folder) => selected && askCreate(selected, kind, folder, (next) => setViewer({ path: next, line: null }))}
-        />
-      )
-    }
-    return (
-      <CommentsPanel
-        comments={worktreeComments}
-        footer={sendButton('panel')}
-        onClear={clearComments}
-        onOpen={(comment) =>
-          comment.kind === 'file' ? setViewer({ path: comment.filePath, line: comment.range.start }) : showDiff(comment.filePath)
-        }
-        onDelete={deleteComment}
-      />
-    )
+    return PluginPanel ? <PluginPanel side={side} /> : null
   }
 
-  /** `pluginPanelsOnly` is for tabs other than Worktrees, where the explorer and comments of the selected worktree don't apply */
-  const dockFrame = (side: DockSide, pluginPanelsOnly = false): React.JSX.Element | null => {
-    const visible = dock.visiblePanel(side)
-    const shown = pluginPanelsOnly ? pluginPanels.find((candidate) => dock.sideOf(candidate.id) === side && dock.isVisible(candidate.id))?.id : visible
-    const panel = shown ?? null
+  const dockFrame = (side: DockSide): React.JSX.Element | null => {
+    const panel = dock.visiblePanel(side)
     const info = panel ? panelInfo(panel) : undefined
-    if (!panel || !info) return null
+    if (!panel || !info || shell.zen) return null
     const size = dock.layout.sizes[side]
     const [min, max] = SIZE_LIMITS[side]
     const frame = { left: 'border-r', right: 'border-l', bottom: 'border-t' }[side]
-    return (
+    const aside = (
       <aside
         style={side === 'bottom' ? { height: size } : { width: size }}
-        className={`relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card ${frame}`}
+        className={`relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card ${frame} ${side === 'bottom' ? '' : 'flex-1'}`}
       >
         <ResizeHandle edge={RESIZE_EDGE[side]} width={size} min={min} max={max} onResize={(next) => dock.resize(side, next)} />
         <div
@@ -918,7 +1071,7 @@ function App(): React.JSX.Element {
           onDragEnd={() => setDraggingPanel(null)}
           className="group/grip absolute top-0 left-1/2 z-30 flex h-2.5 w-14 -translate-x-1/2 cursor-grab items-start justify-center pt-[3px] active:cursor-grabbing"
         >
-          <span className="h-1 w-8 rounded-full bg-foreground/10 transition-colors group-hover/grip:bg-primary/70" />
+          <span className="h-1 w-8 rounded-full bg-foreground/10 group-hover/grip:bg-foreground/40" />
         </div>
         <div className="min-h-0 flex-1">
           <ErrorBoundary label={info.label} resetKey={panel}>
@@ -927,18 +1080,26 @@ function App(): React.JSX.Element {
         </div>
       </aside>
     )
+    // Every dock is the dock zone, so F6 reaches a terminal docked on either side too
+    return (
+      <Zone id="dock" label={side === 'bottom' && info.label === 'Terminal' ? 'Bottom terminal' : info.label} className="shrink-0">
+        {aside}
+      </Zone>
+    )
   }
 
-  /** Tabs other than Worktrees keep plugin panels (the terminal) docked where the Worktrees tab has them */
-  const withDock = (content: React.ReactNode): React.JSX.Element => (
+  /** Tabs other than Worktrees keep plugin panels (the terminal) docked where the Worktrees tab has them; without `frames` the same structure stays so content keeps its state */
+  const withDock = (content: React.ReactNode, frames = true): React.JSX.Element => (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex min-h-0 min-w-0 flex-1">
-        {dockFrame('left', true)}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{content}</div>
-        {dockFrame('right', true)}
+        {frames && dockFrame('left')}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <DockSlot.Provider value={null}>{content}</DockSlot.Provider>
+        </div>
+        {frames && dockFrame('right')}
       </div>
-      {dockFrame('bottom', true)}
-      {draggingPanel && (
+      {frames && dockFrame('bottom')}
+      {frames && draggingPanel && (
         <DropZones
           onDrop={(side) => {
             dock.move(draggingPanel, side)
@@ -964,6 +1125,12 @@ function App(): React.JSX.Element {
   const openDocTab = docTabs.find((tab) => tab.key === appTab)
 
   const explorerRoot = browseRoot ?? selected ?? window.api.home
+  // The filesystem root has no parent
+  const parentFolder = (path: string): string | null => (path === '/' ? null : path.split('/').slice(0, -1).join('/') || '/')
+  const browseParent = (): void => {
+    const parent = parentFolder(explorerRoot)
+    if (parent) setBrowsedFolder(parent)
+  }
   const renderExplorer = (activePath: string | null, open: (path: string) => void): React.JSX.Element =>
     worktree && !browseRoot ? (
       <Explorer
@@ -974,58 +1141,99 @@ function App(): React.JSX.Element {
         onFileMenu={(event, path) => explorerMenu(event, path, () => open(path))}
         onFolderMenu={(event, path) => folderMenu(event, path, open)}
         onCreate={(kind, folder) => selected && askCreate(selected, kind, folder, open)}
+        onParent={browseParent}
       />
     ) : (
-      <FolderExplorer root={explorerRoot} activePath={activePath} onOpen={open} />
+      <FolderExplorer root={explorerRoot} activePath={activePath} onOpen={open} onParent={explorerRoot === '/' ? undefined : browseParent} />
     )
 
-  const host: HostApi = {
-    repos,
-    workspaceId,
-    scopeRepoPaths: workspaceRepos ? reposInScope(workspaceRepos, scope).map((repo) => repo.path) : null,
-    scopeLabel,
-    selectedWorktree: selected,
-    selectedWorktreeLabel: worktree ? branchLabel(worktree) : null,
-    explorerRoot,
-    browsedFolder: browseRoot,
-    setBrowsedFolder,
-    defaultCwd,
-    diffStyle,
-    activeTab: appTab,
-    setActiveTab: setAppTab,
-    openTab,
-    closeTab,
-    openWorktree,
-    createWorktree,
-    openSettings,
-    flash,
-    comments,
-    addComment: (comment) => setComments((current) => [...current, comment]),
-    deleteComment,
-    clearComments: (worktreePath) => setComments((current) => current.filter((comment) => comment.worktreePath !== worktreePath)),
-    renderSendButton: commentsSendButton,
-    renderCommentsPanel,
-    renderFileView: (worktreePath, path, line) => fileView(worktreePath, path, line),
-    renderExplorer,
-    registerFileOpener: (tabId, opener) => {
-      fileOpeners.current.set(tabId, opener)
-      return () => fileOpeners.current.delete(tabId)
-    },
-    withDock,
-    showPanel: dock.show,
-    hidePanel: dock.hide,
-    isPanelVisible: dock.isVisible,
-    isEnabled: (pluginId) => plugins.some(({ manifest }) => manifest.id === pluginId),
-    service: findService,
-    onSent
+  const activePage = openDocTab?.parent ?? appTab
+  const showTitle = shell.title && !shell.zen
+  const showRail = shell.rail && !shell.zen
+  /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
+  const toggleShellPanel = (panel: PanelName): void => {
+    if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
+    togglePanel(panel, activePage)
   }
+  useModifierHints()
+  useShellKeys({
+    enabled: !paletteOpen && !searchOpen,
+    onLeader,
+    onTogglePanel: toggleShellPanel,
+    onSheet: () => setSheetOpen(!sheetOpen)
+  })
+
+  // Plugins' host changes only with the data they render from; its functions call this render's closures, so none go stale
+  const hostCalls = { setBrowsedFolder, openTab, closeTab, openWorktree, createWorktree, openSettings, flash, setComments, deleteComment, commentsSendButton, renderCommentsPanel, fileView, renderExplorer, withDock, dock, plugins, onSent }
+  const latest = useRef(hostCalls)
+  latest.current = hostCalls
+  const scopeRepoPaths = useMemo(() => (workspaceRepos ? reposInScope(workspaceRepos, scope).map((repo) => repo.path) : null), [repos, workspace, scope.folder, scope.focus])
+  const host = useMemo(
+    (): HostApi => ({
+      repos,
+      workspaceId,
+      scopeRepoPaths,
+      scopeLabel,
+      selectedWorktree: selected,
+      selectedWorktreeLabel: worktree ? branchLabel(worktree) : null,
+      explorerRoot,
+      browsedFolder: browseRoot,
+      setBrowsedFolder: (path) => latest.current.setBrowsedFolder(path),
+      defaultCwd,
+      diffStyle,
+      activeTab: appTab,
+      activePage,
+      setActiveTab: setAppTab,
+      openTab: (tab) => latest.current.openTab(tab),
+      closeTab: (key) => latest.current.closeTab(key),
+      openWorktree: (path) => latest.current.openWorktree(path),
+      createWorktree: (repoPath, branch, base, session) => latest.current.createWorktree(repoPath, branch, base, session),
+      openSettings: () => latest.current.openSettings(),
+      flash: (message) => latest.current.flash(message),
+      comments,
+      addComment: (comment) => latest.current.setComments((current) => [...current, comment]),
+      deleteComment: (comment) => latest.current.deleteComment(comment),
+      clearComments: (worktreePath) => latest.current.setComments((current) => current.filter((comment) => comment.worktreePath !== worktreePath)),
+      renderSendButton: (worktreePath, variant) => latest.current.commentsSendButton(worktreePath, variant),
+      renderCommentsPanel: (worktreePath, open) => latest.current.renderCommentsPanel(worktreePath, open),
+      renderFileView: (worktreePath, path, line) => latest.current.fileView(worktreePath, path, line),
+      renderExplorer: (activePath, open) => latest.current.renderExplorer(activePath, open),
+      registerFileOpener: (tabId, opener) => {
+        fileOpeners.current.set(tabId, opener)
+        return () => fileOpeners.current.delete(tabId)
+      },
+      withDock: (content) => latest.current.withDock(content),
+      showPanel: (id) => latest.current.dock.show(id),
+      hidePanel: (id) => latest.current.dock.hide(id),
+      isPanelVisible: (id) => latest.current.dock.isVisible(id),
+      isEnabled: (pluginId) => latest.current.plugins.some(({ manifest }) => manifest.id === pluginId),
+      service: findService,
+      onSent: (message) => latest.current.onSent(message)
+    }),
+    // Beyond the fields: what the render functions and isPanelVisible read, so views built from them refresh
+    [repos, workspaceId, scopeRepoPaths, scopeLabel, selected, worktree, explorerRoot, browseRoot, defaultCwd, diffStyle, appTab, activePage, comments, patches, worktreeFiles, fileReload, dock.layout, shell.zen, draggingPanel, plugins]
+  )
 
   const commands: Command[] = [
     { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: 'R', run: rescan },
     { id: 'settings', group: 'Actions', label: 'Settings', icon: 'settings', shortcut: '⌘,', run: openSettings },
-    ...pluginTabs.map((tab): Command => ({ id: `tab:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()}`, icon: tab.icon, run: () => setAppTab(tab.id) })),
+    ...tabs.map((tab): Command => {
+      const letter = leaderOf(tab.id)
+      return { id: `tab:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()}`, icon: tab.icon, shortcut: letter ? `G ${letter.toUpperCase()}` : undefined, run: () => goPage(tab.id) }
+    }),
     { id: 'search', group: 'Actions', label: 'Search in projects', icon: 'search', shortcut: '⇧⌘F', run: () => setSearchOpen(true) },
-    { id: 'sidebar', group: 'Actions', label: 'Toggle sidebar', icon: 'panel', shortcut: '⌘B', run: () => setSidebarOpen(!sidebarOpen) },
+    ...(
+      [
+        ['list', 'Toggle list', '⌘⇧E'],
+        ['inspector', 'Toggle inspector', '⌘⌥B'],
+        ['rail', 'Toggle workspace rail', '⌘⌥R'],
+        ['title', 'Toggle title bar', '⌘⌥T'],
+        ['status', 'Toggle status bar', '⌘⌥S']
+      ] as const
+    ).map(([panel, label, shortcut]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut, run: () => toggleShellPanel(panel) })),
+    { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: '⌘I', run: () => setDrawerOpen(true) },
+    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone', icon: 'maximize', shortcut: '⌘⇧↵', run: toggleZen },
+    { id: 'shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'keyboard', shortcut: '?', run: () => setSheetOpen(true) },
     { id: 'changed', group: 'Actions', label: 'Toggle changed files', icon: 'list', shortcut: '⌘E', run: () => setFilesOpen(!filesOpen) },
     ...panelIds.flatMap((id): Command[] => {
       const info = panelInfo(id)
@@ -1069,9 +1277,8 @@ function App(): React.JSX.Element {
           id: `worktree:${candidate.path}`,
           group: 'Worktrees',
           label: branchLabel(candidate),
-          detail: baseName(repo.path),
           icon: 'branch',
-          shortcut: candidate.changedFiles > 0 ? `${candidate.changedFiles} changed` : undefined,
+          detail: candidate.changedFiles > 0 ? `${baseName(repo.path)} · ${candidate.changedFiles} changed` : baseName(repo.path),
           run: () => openWorktree(candidate.path)
         })
       )
@@ -1102,227 +1309,290 @@ function App(): React.JSX.Element {
   const activePluginTab = pluginTabs.find((tab) => tab.id === appTab)
   const appTabLabel = openDocTab?.title ?? activePluginTab?.label ?? (appTab === 'settings' ? 'Settings' : appTab === 'worktrees' ? 'Worktrees' : 'This tab')
 
-  const worktreeView = (
-    <div className="flex min-h-0 flex-1 flex-col">
-    <div className="flex min-h-0 flex-1">
-      {sidebarOpen && (
-        <aside style={{ width: sidebarWidth }} className="relative shrink-0 border-r border-border bg-card">
-          <Sidebar repos={workspaceRepos} scanning={scanning} selected={selected} activity={activity} scope={scope} onSelect={setSelected} onRescan={rescan} onRepoMenu={repoMenu} onWorktreeMenu={worktreeMenu} onBranchMenu={branchMenu} onOpenBranch={(branch, repo) => openBranch(branch, repo)} onNewWorktree={(repo) => setBranchDialog({ repo, worktree: true })} title={workspace?.name} folderFilter={!workspace} />
-          <ResizeHandle width={sidebarWidth} min={200} max={480} onResize={setSidebarWidth} />
-        </aside>
-      )}
-
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-          <IconButton label="Toggle sidebar (⌘B)" active={sidebarOpen} onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <Icon name="panel" />
-          </IconButton>
-          {worktree && selectedRepo ? (
-            <div className="flex min-w-0 items-center gap-2 text-[13px]">
-              <span className="truncate font-medium">{branchLabel(worktree)}</span>
-              <span className="truncate text-muted-foreground">{baseName(selectedRepo.path)}</span>
-              <span className="rounded-sm border border-border bg-muted px-1.5 font-mono text-[11px] text-muted-foreground">
-                {worktree.head}
-              </span>
-              {patches && (
-                <span className="font-mono text-[11px] whitespace-nowrap tabular-nums">
-                  <span className="text-emerald-400">+{additions}</span> <span className="text-red-400">−{deletions}</span>
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="text-[13px] text-muted-foreground">No worktree selected</span>
-          )}
-          <span className="flex-1" />
-          <div className="flex rounded-md border border-border bg-muted p-0.5">
-            {(['split', 'unified'] as const).map((style) => (
-              <button
-                key={style}
-                onClick={() => setDiffStyle(style)}
-                className={`rounded-[5px] px-2 py-0.5 text-xs transition-colors ${
-                  diffStyle === style ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {style === 'split' ? 'Split' : 'Unified'}
-              </button>
-            ))}
-          </div>
-          <IconButton label="Toggle changed files (⌘E)" active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
-            <Icon name="list" />
-          </IconButton>
-        </header>
-
-        <div className="flex min-h-0 flex-1">
-          {dockFrame('left')}
-
-          {!worktree ? (
-            <EmptyState fill icon="branch" title="Select a worktree to see its changes" />
-          ) : (
-            <div className="flex min-w-0 flex-1">
-              {filesOpen && (
-                <nav style={{ width: filesWidth }} className="relative shrink-0 border-r border-border">
-                  <div className="h-full overflow-y-auto p-2">
-                    <div className="flex items-center justify-between px-2 pt-1 pb-1.5 text-[11px] font-medium text-muted-foreground">
-                      <span>Changed files</span>
-                      <span className="tabular-nums">{files.length}</span>
-                    </div>
-                    {!patches && <Placeholder>Loading...</Placeholder>}
-                    {patches?.length === 0 && <Placeholder>Working tree clean</Placeholder>}
-                    <ChangedFileList
-                      patches={files}
-                      activePath={viewer ? null : filePath}
-                      onOpen={showDiff}
-                      onFileMenu={changedFileMenu}
-                      badge={(path) =>
-                        worktreeComments.some((comment) => comment.filePath === path) && <Icon name="comment" className="size-3 text-primary" />
-                      }
-                    />
-                  </div>
-                  <ResizeHandle width={filesWidth} min={180} max={520} onResize={setFilesWidth} />
-                </nav>
-              )}
-
-              <main className="relative flex min-w-0 flex-1 flex-col">
-              <ErrorBoundary label={viewer ? baseName(viewer.path) : 'Diff'} resetKey={`${selected}:${viewer?.path ?? filePath}`}>
-                {viewer && (
-                  <>
-                    <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-4">
-                      <div className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]">
-                        {editorTabs.map((tab) => (
-                          <div
-                            key={tab}
-                            title={tab}
-                            onMouseDown={(event) => event.button === 1 && closeEditorTab(tab)}
-                            onContextMenu={(event) =>
-                              tabMenu(event, () => closeEditorTab(tab), () => {
-                                setEditorTabs([tab])
-                                setViewer({ path: tab, line: null })
-                              })
-                            }
-                            className={`group/tab flex max-w-52 shrink-0 items-center gap-1.5 border-r border-border pr-1.5 pl-3 text-xs ${
-                              tab === viewer.path ? 'bg-background text-foreground shadow-[inset_0_-2px_0_var(--color-primary)]' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                            }`}
-                          >
-                            <button onClick={() => setViewer({ path: tab, line: null })} className="flex min-w-0 items-center gap-1.5">
-                              <FileIcon path={tab} />
-                              <span className="truncate">{baseName(tab)}</span>
-                            </button>
-                            <button
-                              aria-label={`Close ${baseName(tab)}`}
-                              onClick={() => closeEditorTab(tab)}
-                              className={`grid size-4 place-items-center rounded hover:bg-accent ${tab === viewer.path ? '' : 'opacity-0 group-hover/tab:opacity-100'}`}
-                            >
-                              <Icon name="close" className="size-2.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <CopyButton label="Copy path" text={() => `${worktree.path}/${viewer.path}`} />
-                      {files.some((patch) => patch.path === viewer.path) && (
-                        <button
-                          onClick={() => showDiff(viewer.path)}
-                          className="h-6 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                        >
-                          Show diff
-                        </button>
-                      )}
-                      {isMarkdownPath(viewer.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
-                      <IconButton label="Close all files" onClick={() => (setEditorTabs([]), setViewer(null))}>
-                        <Icon name="close" className="size-3" />
-                      </IconButton>
-                    </div>
-                    {markdownPreview && isMarkdownPath(viewer.path) ? (
-                      <div className="min-h-0 flex-1 overflow-auto">
-                        {/* Keyed by reload so a save from the editor or an agent shows up after toggling back */}
-                        <MarkdownPreview loadKey={`${worktree.path}:${viewer.path}:${fileReload}`} load={() => window.api.readFile(worktree.path, viewer.path)} />
-                      </div>
-                    ) : (
-                      fileView(worktree.path, viewer.path, viewer.line)
-                    )}
-                  </>
-                )}
-                {!viewer && file && (
-                  <>
-                    <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-4">
-                      <span className="min-w-0 shrink truncate font-mono text-xs text-foreground/85 select-text">{file.path}</span>
-                      <CopyButton label="Copy path" text={() => `${worktree.path}/${file.path}`} />
-                      <span className="min-w-4 flex-1" />
-                      <span className="min-w-0 truncate text-[11px] whitespace-nowrap text-muted-foreground">
-                        Drag lines to comment · ⌘+click to go to definition
-                      </span>
-                      <span className="shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
-                        <span className="text-emerald-400">+{file.additions}</span> <span className="text-red-400">−{file.deletions}</span>
-                      </span>
-                      {isMarkdownPath(file.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
-                      {/* The diff is for reading and commenting; editing happens in the file itself */}
-                      <IconButton label="Edit file" onClick={() => setViewer({ path: file.path, line: null })}>
-                        <Icon name="pencil" />
-                      </IconButton>
-                    </div>
-                    {markdownPreview && isMarkdownPath(file.path) ? (
-                      <div className="min-h-0 flex-1 overflow-auto">
-                        <MarkdownPreview loadKey={`${worktree.path}:${file.path}`} load={() => window.api.readFile(worktree.path, file.path)} />
-                      </div>
-                    ) : (
-                    <div
-                      className={`min-h-0 flex-1 overflow-auto ${drag.range ? 'select-none' : 'select-text'}`}
-                      onPointerDown={drag.onPointerDown}
-                      onContextMenu={diffSymbols.onContextMenu}
-                    >
-                      <PatchDiff
-                        key={file.path}
-                        patch={file.patch}
-                        className="block"
-                        style={diffBackground()}
-                        lineAnnotations={lineAnnotations}
-                        selectedLines={drag.range ?? draft}
-                        renderAnnotation={({ metadata }) => {
-                          const comment = fileComments.find((candidate) => candidate.id === metadata.commentId)
-                          if (comment) return <CommentCard comment={comment} onDelete={() => deleteComment(comment)} />
-                          return draft ? (
-                            <CommentDraft label={`Comment on line ${rangeLabel(draft)}`} onSave={addComment} onCancel={() => setDraft(null)} />
-                          ) : null
-                        }}
-                        options={{
-                          ...codeThemeOptions(),
-                          diffStyle,
-                          disableFileHeader: true,
-                          enableLineSelection: true,
-                          enableGutterUtility: true,
-                          onGutterUtilityClick: (range) => setDraft(orderRange(range)),
-                          onLineSelectionEnd: (range) => range && setDraft(orderRange(range)),
-                          onLineEnter: (line) => drag.enterLine({ lineNumber: line.lineNumber, side: line.annotationSide }),
-                          ...diffSymbols.tokenOptions
-                        }}
-                      />
-                      {diffSymbols.hoverCard}
-                    </div>
-                    )}
-                  </>
-                )}
-                {!dock.isVisible('comments') && sendButton('pill') && (
-                  <div className="absolute right-4 bottom-4 z-30">{sendButton('pill')}</div>
-                )}
-              </ErrorBoundary>
-              </main>
-            </div>
-          )}
-
-          {dockFrame('right')}
-        </div>
-
-        {settings.bottomPanel === 'content' && dockFrame('bottom')}
-        {draggingPanel && (
-          <DropZones
-            onDrop={(side) => {
-              dock.move(draggingPanel, side)
-              setDraggingPanel(null)
-            }}
+  const changedPaths = new Set(files.map((patch) => patch.path))
+  const worktreeInspector = (
+    <div className="flex h-full min-h-0 flex-col">
+      <ZoneHeader zone="inspector" title="Explorer">
+        <IconButton label="Hide inspector (⌘⌥B)" onClick={() => worktreePanels.toggle('inspector')}>
+          <Icon name="close" className="size-3" />
+        </IconButton>
+      </ZoneHeader>
+      <div className="min-h-0 flex-1">
+        {worktree ? (
+          <Explorer
+            files={worktreeFiles}
+            changed={changedPaths}
+            activePath={viewer?.path ?? null}
+            onOpen={(path) => setViewer({ path, line: null })}
+            onFileMenu={(event, path) => explorerMenu(event, path, () => setViewer({ path, line: null }))}
+            onFolderMenu={(event, path) => folderMenu(event, path, (next) => setViewer({ path: next, line: null }))}
+            onCreate={(kind, folder) => askCreate(worktree.path, kind, folder, (next) => setViewer({ path: next, line: null }))}
           />
+        ) : (
+          <EmptyState title="Select a worktree to browse its files" />
         )}
       </div>
     </div>
-    {settings.bottomPanel === 'full' && dockFrame('bottom')}
+  )
+
+  const worktreeMain = (
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card px-1.5">
+        <IconButton label="Toggle list (⌘⇧E)" active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
+          <Icon name="panel" />
+        </IconButton>
+        {worktree && selectedRepo ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2" title={worktree.path}>
+            <Icon name="branch" className="size-3.5 text-muted-foreground" />
+            <span className="min-w-0 truncate font-mono text-xs">{branchLabel(worktree)}</span>
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">{baseName(selectedRepo.path)}</span>
+            <span className="shrink-0 rounded-sm bg-foreground/6 px-1.5 font-mono text-[11px] text-muted-foreground">{worktree.head}</span>
+            {patches && (
+              <span className="shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
+                <span className="text-emerald-400">+{additions}</span> <span className="text-red-400">−{deletions}</span>
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">No worktree selected</span>
+        )}
+        <div title="Split or unified (w)" className="flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5 ring-1 ring-border">
+          {(['split', 'unified'] as const).map((style) => (
+            <button key={style} onClick={() => setDiffStyle(style)} className={`h-5 rounded px-2 text-[11px] ${diffStyle === style ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              {style === 'split' ? 'Split' : 'Unified'}
+            </button>
+          ))}
+        </div>
+        {worktree && (
+          <button
+            title="Terminal in this worktree (t)"
+            onClick={() => openTerminal(worktree.path)}
+            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
+          >
+            <Icon name="terminal" className="size-3" />
+            Terminal
+            <Kbd hint>t</Kbd>
+          </button>
+        )}
+        <IconButton label="Toggle changed files (⌘E)" active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
+          <Icon name="list" />
+        </IconButton>
+        <IconButton label="Toggle inspector (⌘⌥B)" active={worktreePanels.inspector} onClick={() => worktreePanels.toggle('inspector')}>
+          <Icon name="panel" className="size-3.5 -scale-x-100" />
+        </IconButton>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        {dockFrame('left')}
+
+        {!worktree ? (
+          <EmptyState fill icon="branch" title="Select a worktree to see its changes" />
+        ) : (
+          <div className="flex min-w-0 flex-1">
+            {filesOpen && (
+              <nav style={{ width: filesWidth }} className="relative shrink-0 border-r border-border bg-card">
+                <div className="h-full overflow-y-auto p-1.5">
+                  <div className="flex h-7 items-center gap-2 pl-2 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">
+                    <span>Changes</span>
+                    <span className="tabular-nums">{files.length}</span>
+                    <span className="flex-1" />
+                    {canFoldChanges && <FoldAllButton anyOpen={anyChangedFolderOpen} groups="folders" onClick={foldChanges} />}
+                  </div>
+                  {!patches && <Placeholder>Loading...</Placeholder>}
+                  <ChangedFileList
+                    patches={files}
+                    activePath={viewer ? null : filePath}
+                    onOpen={showDiff}
+                    onFileMenu={changedFileMenu}
+                    toggles={folderToggles}
+                    badge={(path) => worktreeComments.some((comment) => comment.filePath === path) && <Icon name="comment" className="size-3 text-muted-foreground" />}
+                  />
+                </div>
+                <ResizeHandle width={filesWidth} min={180} max={520} onResize={setFilesWidth} />
+              </nav>
+            )}
+
+            <main className="relative flex min-w-0 flex-1 flex-col">
+              <ErrorBoundary label={viewer ? baseName(viewer.path) : 'Diff'} resetKey={`${selected}:${viewer?.path ?? filePath}`}>
+                <MarkdownFoldScope>
+                  {viewer && (
+                    <>
+                      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+                        <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+                          {editorTabs.map((tab) => (
+                            <div
+                              key={tab}
+                              title={tab}
+                              onMouseDown={(event) => event.button === 1 && closeEditorTab(tab)}
+                              onContextMenu={(event) =>
+                                tabMenu(event, () => closeEditorTab(tab), () => {
+                                  setEditorTabs([tab])
+                                  setViewer({ path: tab, line: null })
+                                })
+                              }
+                              className={`flex h-6 max-w-52 shrink-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-xs ${
+                                tab === viewer.path ? 'bg-foreground/8 text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                              }`}
+                            >
+                              <button onClick={() => setViewer({ path: tab, line: null })} className="flex min-w-0 items-center gap-1.5">
+                                <FileIcon path={tab} />
+                                <span className="truncate">{baseName(tab)}</span>
+                              </button>
+                              <button aria-label={`Close ${baseName(tab)}`} title="Close (⌘W)" onClick={() => closeEditorTab(tab)} className="grid size-4 shrink-0 place-items-center rounded hover:bg-accent">
+                                <Icon name="close" className="size-2.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <CopyButton label="Copy path (y)" text={() => `${worktree.path}/${viewer.path}`} />
+                        {changedPaths.has(viewer.path) && (
+                          <button
+                            title="Back to the diff (esc)"
+                            onClick={() => showDiff(viewer.path)}
+                            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
+                          >
+                            Diff
+                            <Kbd hint>esc</Kbd>
+                          </button>
+                        )}
+                        {isMarkdownPath(viewer.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+                        <IconButton label="Close all files" onClick={() => (setEditorTabs([]), setViewer(null))}>
+                          <Icon name="close" className="size-3" />
+                        </IconButton>
+                      </div>
+                      {markdownPreview && isMarkdownPath(viewer.path) ? (
+                        <div className="min-h-0 flex-1 overflow-auto">
+                          {/* Keyed by reload so a save from the editor or an agent shows up after toggling back */}
+                          <MarkdownPreview loadKey={`${worktree.path}:${viewer.path}:${fileReload}`} load={() => window.api.readFile(worktree.path, viewer.path)} />
+                        </div>
+                      ) : (
+                        fileView(worktree.path, viewer.path, viewer.line)
+                      )}
+                    </>
+                  )}
+                  {!viewer && !file && patches?.length === 0 && (
+                    <EmptyState fill icon="check" title="Working tree clean">
+                      <KeyHintLabel hint={['t', 'terminal']} />
+                      <KeyHintLabel hint={['⌘P', 'find a file']} />
+                    </EmptyState>
+                  )}
+                  {!viewer && file && (
+                    <>
+                      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
+                        <span className="min-w-0 shrink truncate font-mono text-[11.5px] text-foreground/85 select-text" title={file.path}>
+                          {file.path}
+                        </span>
+                        <span className="shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
+                          <span className="text-emerald-400">+{file.additions}</span> <span className="text-red-400">−{file.deletions}</span>
+                        </span>
+                        <CopyButton label="Copy path (y)" text={() => `${worktree.path}/${file.path}`} />
+                        <span className="min-w-2 flex-1" />
+                        {isMarkdownPath(file.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+                        {/* The diff is for reading and commenting; editing happens in the file itself */}
+                        <button
+                          title="Open the file to edit (o)"
+                          onClick={() => setViewer({ path: file.path, line: cursorFileLine() })}
+                          className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
+                        >
+                          <Icon name="pencil" className="size-3" />
+                          Edit
+                          <Kbd hint>o</Kbd>
+                        </button>
+                      </div>
+                      {markdownPreview && isMarkdownPath(file.path) ? (
+                        <div className="min-h-0 flex-1 overflow-auto">
+                          <MarkdownPreview loadKey={`${worktree.path}:${file.path}`} load={() => window.api.readFile(worktree.path, file.path)} />
+                        </div>
+                      ) : (
+                        <div
+                          ref={diffScroll}
+                          className={`min-h-0 flex-1 overflow-auto ${drag.range ? 'select-none' : 'select-text'}`}
+                          onPointerDown={drag.onPointerDown}
+                          onContextMenu={diffSymbols.onContextMenu}
+                        >
+                          <PatchDiff
+                            key={file.path}
+                            patch={file.patch}
+                            className="block"
+                            style={diffBackground()}
+                            lineAnnotations={lineAnnotations}
+                            selectedLines={drag.range ?? draft ?? (cursorRow ? rowRange(cursorRow) : null)}
+                            renderAnnotation={({ metadata }) => {
+                              const comment = fileComments.find((candidate) => candidate.id === metadata.commentId)
+                              if (comment) return <CommentCard comment={comment} onDelete={() => deleteComment(comment)} />
+                              return draft ? <CommentDraft label={`Agent comment on line ${rangeLabel(draft)}`} onSave={addComment} onCancel={() => setDraft(null)} /> : null
+                            }}
+                            options={{
+                              ...codeThemeOptions(),
+                              diffStyle,
+                              disableFileHeader: true,
+                              enableLineSelection: true,
+                              enableGutterUtility: true,
+                              onGutterUtilityClick: (range) => setDraft(orderRange(range)),
+                              onLineSelectionEnd: (range) => range && setDraft(orderRange(range)),
+                              onLineEnter: (line) => drag.enterLine({ lineNumber: line.lineNumber, side: line.annotationSide }),
+                              ...diffSymbols.tokenOptions
+                            }}
+                          />
+                          {diffSymbols.hoverCard}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </MarkdownFoldScope>
+              </ErrorBoundary>
+            </main>
+          </div>
+        )}
+
+        {dockFrame('right')}
+      </div>
+
+      {settings.bottomPanel === 'content' && dockFrame('bottom')}
+      {draggingPanel && (
+        <DropZones
+          onDrop={(side) => {
+            dock.move(draggingPanel, side)
+            setDraggingPanel(null)
+          }}
+        />
+      )}
+    </div>
+  )
+
+  const worktreeView = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageLayout
+        listLabel="Worktrees"
+        inspectorLabel="Explorer"
+        hints={{
+          list: [['n', 'new'], ['t', 'terminal'], ['/', 'filter']],
+          main: [['n p', 'file'], ['j k', 'line'], ['c', 'comment'], ['o', 'open'], ['w', 'split'], ['t', 'terminal']],
+          inspector: [['h l', 'fold'], ['/', 'filter']]
+        }}
+        list={
+          <Sidebar
+            repos={workspaceRepos}
+            scanning={scanning}
+            selected={selected}
+            activity={activity}
+            scope={scope}
+            onSelect={setSelected}
+            onRescan={rescan}
+            onRepoMenu={repoMenu}
+            onWorktreeMenu={worktreeMenu}
+            onBranchMenu={branchMenu}
+            onOpenBranch={(branch, repo) => openBranch(branch, repo)}
+            onNewWorktree={(repo) => setBranchDialog({ repo, worktree: true })}
+            onTerminal={openTerminal}
+            onFlash={flash}
+            folderFilter={!workspace}
+          />
+        }
+        main={worktreeMain}
+        inspector={worktreeInspector}
+      />
+      {settings.bottomPanel === 'full' && dockFrame('bottom')}
     </div>
   )
 
@@ -1330,16 +1600,21 @@ function App(): React.JSX.Element {
     <HostContext.Provider value={host}>
     <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
+      {showTitle && (
       <div
-        className={`flex h-8 shrink-0 items-center gap-0.5 border-b border-border bg-card pr-1.5 ${chromeless ? 'pl-1.5' : 'pl-[88px] [-webkit-app-region:drag]'}`}
+        className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card pr-2 ${chromeless ? 'pl-2' : 'pl-[88px] [-webkit-app-region:drag]'}`}
       >
-        {tabs.map((tab, index) => (
-          <button key={tab.id} title={`${tab.label} ${digitLabel('tabs', index + 1)}`.trim()} onClick={() => setAppTab(tab.id)} className={tabClass(appTab === tab.id)}>
-            <Icon name={tab.icon} className="size-3.5" />
-            {tab.label}
-            {'Badge' in tab && tab.Badge && <tab.Badge />}
-          </button>
-        ))}
+        {tabs.map((tab, index) => {
+          const letter = leaderOf(tab.id)?.toUpperCase()
+          const keys = [letter && `G ${letter}`, digitLabel('tabs', index + 1)].filter(Boolean).join(', ')
+          return (
+            <button key={tab.id} title={keys ? `${tab.label} (${keys})` : tab.label} onClick={() => goPage(tab.id)} className={tabClass(appTab === tab.id)}>
+              {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
+              {tab.label}
+              {'Badge' in tab && tab.Badge && <tab.Badge />}
+            </button>
+          )
+        })}
         {docTabs.map((tab) => (
           <div
             key={tab.key}
@@ -1369,11 +1644,15 @@ function App(): React.JSX.Element {
         <button
           title="Search commands, worktrees and files (⌘K)"
           onClick={() => setPaletteOpen(true)}
-          className="flex h-6 w-56 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+          // A container, so a narrow window shortens the label instead of wrapping it
+          className="@container ml-1 flex h-6 w-60 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
         >
-          <Icon name="search" className="size-3.5" />
-          <span className="flex-1 text-left">Search commands, files</span>
-          <kbd className="font-sans text-[11px]">⌘K</kbd>
+          <Icon name="search" className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
+            <span className="@max-[14rem]:hidden">Search or run a command</span>
+            <span className="hidden @max-[14rem]:inline">Search</span>
+          </span>
+          <Kbd hint>⌘K</Kbd>
         </button>
         {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
         {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
@@ -1394,69 +1673,92 @@ function App(): React.JSX.Element {
             />
           ) : null
         })}
-        {workspaceComments.length > 0 && (
-          <div className="relative">
-            <IconButton label={`Agent comments (${workspaceComments.length})`} active={allCommentsOpen} onClick={() => setAllCommentsOpen(!allCommentsOpen)}>
-              <span className="relative">
-                <Icon name="comment" />
-                <span className="absolute -top-1.5 -right-2 min-w-3.5 rounded-full bg-primary px-1 text-center text-[9px] leading-3.5 font-medium text-white tabular-nums">
-                  {workspaceComments.length}
-                </span>
-              </span>
-            </IconButton>
-            {allCommentsOpen && (
-              <>
-                <div className="fixed inset-0 z-40 [-webkit-app-region:no-drag]" onClick={() => setAllCommentsOpen(false)} />
-                <div className="absolute top-full right-0 z-50 mt-1.5 flex max-h-[75vh] w-[440px] flex-col gap-2 overflow-y-auto rounded-lg border border-input bg-popover p-2 [-webkit-app-region:no-drag]">
-                  {[...new Set(workspaceComments.map((comment) => comment.worktreePath))].map((path) => (
-                    <section key={path} className="overflow-hidden rounded-md border border-border">
-                      <button
-                        onClick={() => {
-                          setAllCommentsOpen(false)
-                          openWorktree(path)
-                        }}
-                        title={`Open ${path}`}
-                        className="flex w-full items-center gap-1.5 border-b border-border bg-muted px-3 py-1.5 text-left text-xs font-medium hover:bg-accent"
-                      >
-                        <Icon name="branch" className="size-3.5 text-emerald-400" />
-                        <span className="truncate">{checkoutLabel(path)}</span>
-                      </button>
-                      <div className="max-h-96">
-                        {renderCommentsPanel(path, () => {
-                          setAllCommentsOpen(false)
-                          openWorktree(path)
-                        })}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-        <IconButton label="Settings (⌘,)" active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
+        <button
+          title="Agent comments (⌘I)"
+          onClick={() => setDrawerOpen(!drawerOpen)}
+          className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+        >
+          <Icon name="comment" />
+          <span className="tabular-nums">{comments.length}</span>
+          <Kbd hint>⌘I</Kbd>
+        </button>
+        <IconButton label="Settings (⌘, or G S)" active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
           <Icon name="settings" />
         </IconButton>
         {titleBarItems(true)}
       </div>
+      )}
 
+      {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights */}
+      {!showTitle && !chromeless && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
       <div className="flex min-h-0 flex-1">
-      <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />
+      {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
+      <Zone id="main" className="flex-1">
       {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
       <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
       {appTab === 'worktrees' && worktreeView}
       <Suspense fallback={<div className="flex-1" />}>
       {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
-      {activePluginTab && <activePluginTab.render />}
-      {openDocTab && withDock(openDocTab.content)}
+      {activePluginTab &&
+        (activePluginTab.panels?.length ? (
+          <TabDock placement={settings.bottomPanel} withDock={withDock}>
+            <activePluginTab.render />
+          </TabDock>
+        ) : (
+          <activePluginTab.render />
+        ))}
+      {openDocTab && (
+        <TabDock placement={settings.bottomPanel} withDock={withDock}>
+          {openDocTab.content}
+        </TabDock>
+      )}
       </Suspense>
       </ErrorBoundary>
       </div>
+      </Zone>
       </div>
+      {shell.status && !shell.zen && <StatusBar workspace={workspace ?? { name: scopeLabel }} pageLabel={appTabLabel} />}
+      <WhichKey
+        pages={[...tabs, { id: 'settings', label: 'Settings', icon: 'settings' as const }].flatMap((tab) => {
+          const letter = leaderOf(tab.id)
+          return letter ? [{ letter, label: tab.label, icon: tab.icon }] : []
+        })}
+        workspaces={workspaces.map((candidate) => candidate.name)}
+      />
+      {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
+      {drawerOpen && (
+        <AgentCommentsDrawer
+          comments={comments}
+          labelOf={checkoutLabel}
+          top={showTitle ? 36 : chromeless ? 0 : 28}
+          bottom={shell.status && !shell.zen ? 24 : 0}
+          renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
+          onOpen={(comment) => {
+            if (comment.kind === 'reference') return
+            const line = comment.range.start > 0 ? comment.range.start : null
+            if (comment.kind === 'file') return openLocation(comment.worktreePath, comment.filePath, line)
+            setAppTab('worktrees')
+            if (comment.worktreePath !== selected) {
+              pendingFilePath.current = comment.filePath
+              return setSelected(comment.worktreePath)
+            }
+            showDiff(comment.filePath)
+          }}
+          onOpenWorktree={openWorktree}
+          onDelete={deleteComment}
+          onClearAll={() => window.confirm(`Delete all ${comments.length} agent comments in this workspace?`) && setComments([])}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
+      {shell.zen && (
+        <button onClick={toggleZen} title="Leave zen mode (⌘⇧↵)" className="fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
+          Zen <Kbd hint>⌘⇧↵</Kbd>
+        </button>
+      )}
 
       {notice && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground shadow-lg shadow-black/40">
+        <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground shadow-lg shadow-black/40">
           {notice}
         </div>
       )}
@@ -1502,37 +1804,39 @@ function App(): React.JSX.Element {
           onClose={() => setBranchDialog(null)}
         />
       )}
-      {searchOpen && (
-        <SearchDialog
-          worktreePaths={searchPaths}
-          scopeLabel={scopeLabel}
-          renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
-          onClose={() => setSearchOpen(false)}
-          onPick={(location) => {
-            setSearchOpen(false)
-            openLocation(location.worktreePath, location.path, location.line)
-          }}
-        />
-      )}
-      {/* After search so a references lookup from a search preview opens on top of it */}
-      {peek && (
-        <LocationsDialog
-          header={
-            <span className="min-w-0 flex-1 truncate">
-              {peek.title} <span className="font-mono text-foreground">{peek.symbol}</span> · {peek.locations.length} in{' '}
-              {new Set(peek.locations.map((location) => location.path)).size} files
-            </span>
-          }
-          locations={peek.locations}
-          matcher={matcherFor(peek.symbol, { caseSensitive: true, wholeWord: true, regex: false })}
-          renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
-          onClose={() => setPeek(null)}
-          onPick={(location) => {
-            setPeek(null)
-            openLocation(location.worktreePath, location.path, location.line)
-          }}
-        />
-      )}
+      <Suspense fallback={null}>
+        {searchOpen && (
+          <SearchDialog
+            worktreePaths={searchPaths}
+            scopeLabel={scopeLabel}
+            renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
+            onClose={() => setSearchOpen(false)}
+            onPick={(location) => {
+              setSearchOpen(false)
+              openLocation(location.worktreePath, location.path, location.line)
+            }}
+          />
+        )}
+        {/* After search so a references lookup from a search preview opens on top of it */}
+        {peek && (
+          <LocationsDialog
+            header={
+              <span className="min-w-0 flex-1 truncate">
+                {peek.title} <span className="font-mono text-foreground">{peek.symbol}</span> · {peek.locations.length} in{' '}
+                {new Set(peek.locations.map((location) => location.path)).size} files
+              </span>
+            }
+            locations={peek.locations}
+            matcher={matcherFor(peek.symbol, { caseSensitive: true, wholeWord: true, regex: false })}
+            renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
+            onClose={() => setPeek(null)}
+            onPick={(location) => {
+              setPeek(null)
+              openLocation(location.worktreePath, location.path, location.line)
+            }}
+          />
+        )}
+      </Suspense>
     </div>
     </CodeNavigationContext.Provider>
     </HostContext.Provider>

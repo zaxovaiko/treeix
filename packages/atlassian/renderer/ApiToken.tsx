@@ -28,14 +28,14 @@ export function ApiToken({ bridge, purpose }: { bridge: AtlassianBridge; purpose
       description={`${status?.hasToken ? 'A token is saved.' : `${purpose} need an API token (id.atlassian.com → Security → API tokens).`} Stored encrypted with your macOS keychain, shared by Jira and Confluence.${error ? ` ${error}` : ''}`}
     >
       <div className="flex shrink-0 flex-col gap-1.5">
-        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Atlassian email" className="h-8 w-64 rounded-lg bg-muted px-2.5 text-[12px] ring-1 ring-border outline-none focus:ring-primary/60" />
+        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Atlassian email" className="h-8 w-64 rounded-lg bg-muted px-2.5 text-[12px] ring-1 ring-border outline-none" />
         <div className="flex gap-1.5">
           <input
             type="password"
             value={token}
             onChange={(event) => setToken(event.target.value)}
             placeholder={status?.hasToken ? '•••••••• saved' : 'API token'}
-            className="h-8 min-w-0 flex-1 rounded-lg bg-muted px-2.5 text-[12px] ring-1 ring-border outline-none focus:ring-primary/60"
+            className="h-8 min-w-0 flex-1 rounded-lg bg-muted px-2.5 text-[12px] ring-1 ring-border outline-none"
           />
           {token.trim() && email.trim() ? (
             <button onClick={() => save({ email: email.trim(), token: token.trim() })} className="h-8 rounded-lg bg-primary px-3 text-xs font-medium text-white">
