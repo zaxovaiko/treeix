@@ -85,9 +85,17 @@ export function isAgent(id: SessionKind): boolean
 export function useAgents(): Agent[]
 ```
 
-The three built-ins keep the exact behaviour they have today. Claude's `--settings` wrapper and its
-conditional resume snippet, and Codex's `resume --last`, move out of `terminals.ts` and into their rows
-here, so no module outside this table knows either vendor's name.
+The three built-ins keep the behaviour they have today in every case but one, noted below. Claude's
+`--settings` wrapper and its conditional resume snippet, and Codex's `resume --last`, move out of
+`terminals.ts` and into their rows here, so no module outside this table knows either vendor's name.
+
+The exception is resuming a Claude session that has no stored conversation id. Today that path reads
+`SESSION_KINDS.claude.command`, a bare `claude` with no `--settings` flag, so the resumed session silently
+loses the usage-limits status line bridge. After the change it gets the same `claude --settings ...` every
+other Claude start already uses. The path is reachable only for a session persisted before `agentSessionId`
+existed, and `TREEIX_CLAUDE_SETTINGS` always holds at least `{}` because the terminal plugin's main module
+defaults it, so the new command line is always valid. The old bare command was an oversight, not a
+behaviour worth preserving. `agents.test.ts` pins the new string so the choice stays deliberate.
 
 `getAgents` reads `customAgents` from `./settings` and merges it over `BUILTIN_AGENTS`. Keeping the whole
 registry in the host rather than the SDK means the SDK stays free of runtime dependencies on app code, and

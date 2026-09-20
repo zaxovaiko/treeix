@@ -27,7 +27,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 - **Worktrees.** Every repository and checkout in your folders shows up in one sidebar, with the diff against the base branch, split or unified.
 - **Review in place.** Select lines, leave comments, then send them to a Claude or Codex session or copy them out.
-- **Sessions keep running.** Claude, Codex and shell sessions survive a reload, docked next to the diff or in their own tab.
+- **Sessions keep running.** Claude, Codex, a shell or any CLI agent you add survive a reload, docked next to the diff or in their own tab.
 - **Pull requests.** `gh` and `glab` bring GitHub and GitLab pull requests in with their review threads, viewed files, conflict and CI state.
 - **Tasks and pages.** The Atlassian CLI opens Jira work items and Confluence pages beside the branch, and a URL previews wherever you paste it.
 - **Markdown.** Headings fold, mermaid blocks render, private uploads load their images, and full screen zooms.
@@ -82,7 +82,7 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 
 | Plugin | Default | What it adds |
 | --- | --- | --- |
-| [`terminal`](packages/plugins/terminal) | on | Terminal tab, docked panel, Claude, Codex and shell sessions |
+| [`terminal`](packages/plugins/terminal) | on | Terminal tab, docked panel, sessions for Claude, Codex, a shell or any agent you configure |
 | [`pull-requests`](packages/plugins/pull-requests) | on | GitHub and GitLab pull requests, review threads, conflicts |
 | [`plans`](packages/plugins/plans) | on | Claude plans in the palette and on sessions |
 | [`usage-limits`](packages/plugins/usage-limits) | on | Claude and Codex 5-hour and weekly limits in the title bar |

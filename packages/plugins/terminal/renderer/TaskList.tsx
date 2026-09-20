@@ -4,11 +4,12 @@ import { Icon } from '@treeix/app/Icon'
 import { openMenu } from '@treeix/app/contextMenu'
 import { worktreeLabel } from '@treeix/app/sessionUi'
 import { usePersisted } from '@treeix/app/ui'
+import { agentOr, isAgent } from '@treeix/app/agents'
 import { definePluginSettings, useHost, useListNav } from '@treeix/sdk'
 import { type Task, taskPanes } from './tasks'
 import { StatusMark, switchTask, taskLabel, taskStatus } from './taskUi'
 import { ClosedSessions, openTab } from './TerminalPanel'
-import { type ClosedSession, deleteTask, renameTask, SESSION_KINDS, type Session } from './terminals'
+import { type ClosedSession, deleteTask, renameTask, type Session } from './terminals'
 
 /** The task whose name is being edited in place */
 const renaming = definePluginSettings('terminal-rename', () => ({ id: null as string | null }))
@@ -85,7 +86,9 @@ export function TaskList({
           const status = taskStatus(task, sessions)
           const panes = taskPanes(task)
           const count = status === 'idle' ? 0 : sessions.filter((session) => panes.includes(session.id) && session.status === status).length
-          const agents = sessions.filter((session) => panes.includes(session.id) && session.kind !== 'shell').length
+          const agentsHere = sessions.filter((session) => panes.includes(session.id) && isAgent(session.kind))
+          const agents = agentsHere.length
+          const firstAgent = agents > 0 ? agentOr(agentsHere[0].kind) : null
           const selected = task.id === current?.id
           const folder = worktreeLabel(repos, task.worktreePath)
           return (
@@ -164,9 +167,9 @@ export function TaskList({
                     <Icon name="terminal" className="size-2.5" />
                     {task.tabs.length}
                   </span>
-                  {agents > 0 && (
+                  {firstAgent && (
                     <span className="flex items-center gap-0.5">
-                      <span style={{ color: SESSION_KINDS.claude.color }}>{SESSION_KINDS.claude.mark}</span>
+                      <span style={{ color: firstAgent.color }}>{firstAgent.mark}</span>
                       {agents}
                     </span>
                   )}

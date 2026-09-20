@@ -11,7 +11,8 @@ import {
   rangeLabel,
   type ReviewComment
 } from '../../shared/comments'
-import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, SESSION_KINDS, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
+import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
+import { getAgents, isAgent } from './agents'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
 import { HistoryDialog } from './HistoryDialog'
 import type { Branch, CodeLocation, FilePatch, SearchMatch, Repo, Worktree, WorktreeFiles } from '../../shared/types'
@@ -35,7 +36,8 @@ import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKe
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
-import { actionForEvent, actionKeys, matchesAction } from '../../shared/keymap'
+import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
+import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
 import { WORKTREE_ACTIONS } from './actions'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
@@ -531,8 +533,7 @@ function App(): React.JSX.Element {
   const branchMenu = (event: React.MouseEvent, branch: Branch, repo: Repo): void =>
     openMenu(event, [
       { label: 'Open as worktree', run: () => openBranch(branch, repo) },
-      sessionsAvailable && { label: 'Open as worktree with Shell', run: () => openBranch(branch, repo, 'shell') },
-      sessionsAvailable && { label: 'Open as worktree with Claude', run: () => openBranch(branch, repo, 'claude') },
+      ...(sessionsAvailable ? getAgents().map((agent) => ({ label: `Open as worktree with ${agent.label}`, run: () => openBranch(branch, repo, agent.id) })) : []),
       null,
       { label: 'New branch from here…', run: () => setBranchDialog({ repo, worktree: false, base: branch.name }) },
       { label: 'Copy branch name', run: () => copyText(branch.name) },
@@ -564,12 +565,7 @@ function App(): React.JSX.Element {
   }
 
   const sessionEntries = (cwd: string): MenuEntry[] =>
-    sessionsAvailable
-      ? (Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => ({
-          label: `New ${SESSION_KINDS[kind].label} session here`,
-          run: () => startSession(kind, cwd)
-        }))
-      : []
+    sessionsAvailable ? getAgents().map((agent) => ({ label: `New ${agent.label} session here`, run: () => startSession(agent.id, cwd) })) : []
 
   const repoMenu = (event: React.MouseEvent, repo: Repo): void =>
     openMenu(event, [
@@ -787,30 +783,56 @@ function App(): React.JSX.Element {
   openSettingsRef.current = openSettings
   // A preload from before this menu item (dev window not reloaded yet) has no listener
   useEffect(() => window.api.onOpenSettings?.(() => openSettingsRef.current()), [])
+  useEffect(() => window.api.onRunAction?.((id) => runAction(id)), [])
+  // The native menu is rebuilt from whatever is runnable now, so a plugin loading or a key rebound updates it
+  useEffect(() => {
+    // A plugin toggle drops and re-registers every runner in one tick; without this the menu bar rebuilds once per call and flashes
+    let queued = false
+    const send = (): void => {
+      if (queued) return
+      queued = true
+      queueMicrotask(() => {
+        queued = false
+        window.api.setMenuActions?.(menuActions())
+      })
+    }
+    send()
+    const drops = [subscribeRunners(send), onKeymapChange(send)]
+    return () => drops.forEach((drop) => drop())
+  }, [])
+
+    // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
+    const anywhere: Record<string, () => void> = {
+      'app.palette': () => setPaletteOpen(!paletteOpen),
+      'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
+      'app.settings': openSettings,
+      'app.comments': () => setDrawerOpen(!drawerOpen),
+      'app.back': () => goToPlace(-1),
+      'app.forward': () => goToPlace(1),
+      // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
+      'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
+      'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
+      'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
+      'app.search': () => setSearchOpen(!searchOpen),
+      'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
+      'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
+      'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
+      'app.clearComments': () => clearComments(),
+      'workspace.new': () => setEditingWorkspace(null),
+      'workspace.edit': () => workspace && setEditingWorkspace(workspace),
+      ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
+    }
+  const anywhereRef = useRef(anywhere)
+  anywhereRef.current = anywhere
+  // Everything here is runnable from the native menu too, which is why it lives outside the key handler
+  useEffect(() => {
+    const drops = Object.keys(anywhereRef.current).map((id) => registerActionRunner(id, () => anywhereRef.current[id]?.()))
+    return () => drops.forEach((drop) => drop())
+  }, [tabs.map((tab) => tab.id).join()])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
-      const anywhere: Record<string, () => void> = {
-        'app.palette': () => setPaletteOpen(!paletteOpen),
-        'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
-        'app.settings': openSettings,
-        'app.comments': () => setDrawerOpen(!drawerOpen),
-        'app.back': () => goToPlace(-1),
-        'app.forward': () => goToPlace(1),
-        // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
-        'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
-        'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
-        'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
-        'app.search': () => setSearchOpen(!searchOpen),
-        'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
-        'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
-        'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
-        'app.clearComments': clearComments,
-        'workspace.new': () => setEditingWorkspace(null),
-        'workspace.edit': () => workspace && setEditingWorkspace(workspace),
-        ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
-      }
+      const anywhere = anywhereRef.current
       const anywhereId = actionForEvent(event, Object.keys(anywhere))
       if (anywhereId) {
         event.preventDefault()
@@ -963,7 +985,7 @@ function App(): React.JSX.Element {
   const activity: Record<string, 'input' | 'running'> = {}
   for (const session of sessions) {
     if (session.status === 'input') activity[session.worktreePath] = 'input'
-    else if (session.status === 'running' && session.kind !== 'shell') activity[session.worktreePath] ??= 'running'
+    else if (session.status === 'running' && isAgent(session.kind)) activity[session.worktreePath] ??= 'running'
   }
 
   const deleteComment = (comment: ReviewComment): void =>

@@ -8,6 +8,8 @@ export type ActionDef = {
   /** `area.verb`, e.g. `shell.zen` or `prs.merge` */
   id: string
   label: string
+  /** Shown in the native menu instead of `label`, which is written to explain the key rather than to sit in a menu */
+  menuLabel?: string
   /** Groups the action in Settings and in the shortcut sheet */
   section: string
   /** Tab id when the key only works on that page */

@@ -3,7 +3,8 @@ import { shellQuote } from '../../shared/shell'
 import type { Repo } from '../../shared/types'
 import { Icon } from './Icon'
 import { KindBadge, StatusDot, worktreeLabel } from './sessionUi'
-import type { SessionSummary as Session } from '@treeix/sdk'
+import { agentOr, isAgent, useAgents } from './agents'
+import type { SessionKind, SessionSummary as Session } from '@treeix/sdk'
 import { useService, useSessions } from './plugins'
 import { inWorkspace, useWorkspaces } from './workspaces'
 import { Popup, usePersisted } from './ui'
@@ -13,7 +14,7 @@ const lastTargets = new Map<string, string>()
 function defaultTarget(sessions: Session[], worktreePath: string): Session | undefined {
   const alive = sessions.filter((session) => session.status !== 'exited')
   const remembered = alive.find((session) => session.id === lastTargets.get(worktreePath))
-  const agents = alive.filter((session) => session.worktreePath === worktreePath && session.kind !== 'shell')
+  const agents = alive.filter((session) => session.worktreePath === worktreePath && isAgent(session.kind))
   return remembered ?? agents.find((session) => session.status !== 'input') ?? agents[0]
 }
 
@@ -49,6 +50,7 @@ export function SendButton({
   const [submit, setSubmit] = usePersisted<boolean>('send.submitAfterPaste', false)
   const target = defaultTarget(sessions, worktreePath)
   const label = `${count} comment${count === 1 ? '' : 's'}`
+  const startable = useAgents().filter((agent) => agent.agent)
 
   // The picked item unmounts with the menu; focus goes back to the button so the drawer keeps the keys
   const closeMenu = (): void => {
@@ -71,7 +73,7 @@ export function SendButton({
     onDone(`Copied ${label}`)
   }
 
-  const startAgent = (kind: 'claude' | 'codex'): void => {
+  const startAgent = (kind: SessionKind): void => {
     closeMenu()
     if (!service) return
     const text = prompt()
@@ -86,7 +88,7 @@ export function SendButton({
         service.sendText(id, text, false)
       })
     }
-    onDone(`Started ${kind === 'claude' ? 'Claude' : 'Codex'} with ${label}`)
+    onDone(`Started ${agentOr(kind).label} with ${label}`)
   }
 
   const sendDefault = (): void => (target ? send(target) : copy())
@@ -125,7 +127,7 @@ export function SendButton({
 
   const alive = sessions.filter((session) => session.status !== 'exited')
   const here = alive.filter((session) => session.worktreePath === worktreePath)
-  const elsewhere = alive.filter((session) => session.worktreePath !== worktreePath && session.kind !== 'shell')
+  const elsewhere = alive.filter((session) => session.worktreePath !== worktreePath && isAgent(session.kind))
 
   const row = (session: Session): React.JSX.Element => (
     <button
@@ -196,10 +198,10 @@ export function SendButton({
           {elsewhere.map(row)}
           {alive.length > 0 && <div className="my-1 border-t border-border" />}
           {service &&
-            (['claude', 'codex'] as const).map((kind) => (
-              <button key={kind} onClick={() => startAgent(kind)} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent">
+            startable.map((agent) => (
+              <button key={agent.id} onClick={() => startAgent(agent.id)} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent">
                 <span className="w-3" />
-                <KindBadge kind={kind} /> New {kind === 'claude' ? 'Claude' : 'Codex'} session with comments
+                <KindBadge kind={agent.id} /> New {agent.label} session with comments
               </button>
             ))}
           <button onClick={copy} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent">

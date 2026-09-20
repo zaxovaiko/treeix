@@ -53,6 +53,12 @@ const api: Api = {
     ipcRenderer.on('open-settings', handler)
     return () => ipcRenderer.removeListener('open-settings', handler)
   },
+  setMenuActions: (actions) => ipcRenderer.send('setMenuActions', actions),
+  onRunAction: (listener) => {
+    const handler = (_: IpcRendererEvent, id: string): void => listener(id)
+    ipcRenderer.on('run-action', handler)
+    return () => ipcRenderer.removeListener('run-action', handler)
+  },
   saveAttachment: (name, data) => ipcRenderer.invoke('saveAttachment', name, data),
   saveFile: (worktreePath, filePath, contents, expected) => ipcRenderer.invoke('saveFile', worktreePath, filePath, contents, expected),
   watchFile: (worktreePath, filePath, listener) => {

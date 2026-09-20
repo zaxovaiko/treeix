@@ -5,6 +5,7 @@ import { actionKeys } from '@treeix/shared/keymap'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
+import { agentOr, getAgents, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
 import { ListToggle, usePanels } from '@treeix/sdk'
@@ -30,14 +31,12 @@ import {
   setTabFocus,
   splitPane,
   terminalSelection,
-  SESSION_KINDS,
   type Session,
   type SessionKind,
   useTerminals
 } from './terminals'
 
 const SESSION_MIME = 'application/x-treeix-session'
-const KINDS = Object.keys(SESSION_KINDS) as SessionKind[]
 
 /** Dragged panes or tabs carry their session ids, space separated */
 const draggingSession = (event: React.DragEvent): boolean => event.dataTransfer.types.includes(SESSION_MIME)
@@ -82,7 +81,7 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
 
 /** Actions of a session, in its pane header, tab and terminal menus */
 const sessionEntries = (session: Session, task: Task | null): MenuEntry[] => [
-  { label: `New ${SESSION_KINDS[session.kind].label} tab here`, run: () => openTab(session.worktreePath, session.kind, task?.id) },
+  { label: `New ${agentOr(session.kind).label} tab here`, run: () => openTab(session.worktreePath, session.kind, task?.id) },
   null,
   { label: 'Copy working directory', run: () => copyText(session.worktreePath) },
   { label: 'Reveal in Finder', run: () => window.api.revealInFinder(session.worktreePath) },
@@ -351,9 +350,9 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
         {task?.tabs.map((tab, index) => <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />)}
       </div>
       <button
-        title="New tab: Shell (⌘T), Claude or Codex"
+        title="New tab: Shell (⌘T) or an agent"
         aria-label="New tab"
-        onClick={(event) => openMenu(event, KINDS.map((kind) => ({ label: SESSION_KINDS[kind].label, accelerator: kind === 'shell' ? 'CmdOrCtrl+T' : undefined, run: () => newTab(kind) })))}
+        onClick={(event) => openMenu(event, getAgents().map((agent) => ({ label: agent.label, accelerator: agent.id === 'shell' ? 'CmdOrCtrl+T' : undefined, run: () => newTab(agent.id) })))}
         className={stripButton}
       >
         <Icon name="plus" className="size-3.5" />
@@ -382,6 +381,7 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
 
 /** A task with no terminals: start one, or bring back a closed one */
 function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; label: string; cwd: string; history: ClosedSession[]; repos: Repo[] | null }): React.JSX.Element {
+  const agents = useAgents()
   return (
     <div data-terminal-empty className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-y-auto bg-background p-4 text-center">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground/5 text-muted-foreground">
@@ -391,7 +391,7 @@ function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; la
         No terminals in <span className="text-foreground">{label}</span>
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        {KINDS.map((kind, index) => (
+        {agents.map(({ id: kind, label: kindLabel }, index) => (
           <button
             key={kind}
             data-zone-focus={index === 0 ? '' : undefined}
@@ -399,7 +399,7 @@ function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; la
             className="flex h-8 items-center gap-2 rounded-md bg-foreground/5 px-3 text-xs text-foreground hover:bg-accent"
           >
             <KindBadge kind={kind} />
-            {SESSION_KINDS[kind].label}
+            {kindLabel}
           </button>
         ))}
       </div>

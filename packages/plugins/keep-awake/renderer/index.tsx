@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createBridge, definePluginSettings, type RendererPlugin, useHost } from '@treeix/sdk'
+import { isAgent } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { Row, Switch } from '@treeix/app/settingsUi'
 
@@ -22,7 +23,7 @@ function KeepAwake(): null {
   const sessions = useHost().service('sessions')
   const agentsWorking = useSyncExternalStore(
     sessions?.subscribe ?? (() => () => undefined),
-    () => sessions?.getSessions().some((session) => session.kind !== 'shell' && session.status === 'running') ?? false
+    () => sessions?.getSessions().some((session) => isAgent(session.kind) && session.status === 'running') ?? false
   )
   const { keepAwakeLidClosed } = awakeSettings.use()
   const [keepAwake, setKeepAwake] = useState(false)

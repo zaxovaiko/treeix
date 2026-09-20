@@ -7,8 +7,8 @@ import { createPath, listDirectory, renamePath, saveFile, stopWatching, trashPat
 import { createHistory } from './history'
 import { enableTextMenu, showContextMenu } from './contextMenu'
 import { addWorktree, createBranch, deleteBranch, diff, listBranches, discardChanges, listFiles, searchText, readFile, removeWorktree, scan } from './git'
-import { addSettingsMenuItem } from './appMenu'
-import { addHotkeyMenuItem, configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
+import { buildMenu, type MenuAction } from './appMenu'
+import { configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
 import { hover, navigate, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { checkTools } from './tools'
@@ -38,8 +38,7 @@ function createWindow(): void {
   })
   window.on('ready-to-show', () => window.show())
   enableTextMenu(window.webContents)
-  addHotkeyMenuItem(window)
-  addSettingsMenuItem(window)
+  buildMenu(window, [])
   // ⌘W closes the focused terminal pane when there is one; the page decides and closes the window otherwise
   window.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !input.meta || input.shift || input.alt || input.control || input.code !== 'KeyW') return
@@ -91,6 +90,10 @@ app.whenReady().then(() => {
   ipcMain.handle('deleteBranch', (_, repoPath: string, name: string) => deleteBranch(repoPath, name))
   ipcMain.handle('removeWorktree', (_, worktreePath: string, force: boolean) => removeWorktree(worktreePath, force))
   ipcMain.handle('discardChanges', (_, worktreePath: string, filePath: string) => discardChanges(worktreePath, filePath))
+  ipcMain.on('setMenuActions', (event, actions: MenuAction[]) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window) buildMenu(window, actions)
+  })
   ipcMain.on('revealInFinder', (_, path: string) => shell.showItemInFolder(path))
   ipcMain.on('openPath', (_, path: string) => void shell.openPath(path))
   ipcMain.on('setTranslucent', (event, translucent: boolean, background: string, appearance: unknown) => {

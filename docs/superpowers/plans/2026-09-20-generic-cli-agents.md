@@ -31,7 +31,7 @@
 - Modify: `apps/desktop/src/renderer/src/settings.ts` (the `Settings` type near line 7, `DEFAULTS` near line 143, `load()` near line 152)
 
 **Interfaces:**
-- Consumes: `getSettings` and `subscribeSettings` from `./settings`; the `SessionKind` type from `@treeix/sdk`, which is still the three-literal union at this point and will widen in Task 3.
+- Consumes: `getSettings` and `subscribeSettings` from `./settings`. Nothing from `@treeix/sdk`.
 - Produces: `Agent`, `BUILTIN_AGENTS`, `getAgents()`, `getAgent(id)`, `agentOr(id)`, `isAgent(id)`, `useAgents()`, `startCommand(agent, prompt?, agentSessionId?)`, `resumeCommandFor(agent, agentSessionId)`, and `Settings['customAgents']`.
 
 This task adds the registry beside the existing code without wiring anything to it. Nothing changes behaviour yet, which is why it can be reviewed on its own.
@@ -40,16 +40,23 @@ This task adds the registry beside the existing code without wiring anything to 
 
 Create `apps/desktop/src/renderer/src/agents.test.ts`:
 
+Bun caches a module after its first import, and `settings.ts` calls `load()` once at module scope. Swapping
+`localStorage` between tests would therefore change nothing after the first import. The tests set the stub
+once and drive the stored agents through `updateSettings` instead, which is also the path the Settings UI
+uses in Task 4.
+
 ```ts
 import { expect, test } from 'bun:test'
 
-const stub = (customAgents: unknown[]): void => {
-  const stored = JSON.stringify({ customAgents })
-  globalThis.localStorage = { getItem: () => stored, setItem: () => undefined } as unknown as Storage
+globalThis.localStorage ??= { getItem: () => null, setItem: () => undefined } as unknown as Storage
+
+const setAgents = async (customAgents: unknown[]): Promise<void> => {
+  const { parseCustomAgents, updateSettings } = await import('./settings')
+  updateSettings({ customAgents: parseCustomAgents(customAgents) })
 }
 
 test('built-in commands keep the behaviour they had when they were hardcoded', async () => {
-  stub([])
+  await setAgents([])
   const { BUILTIN_AGENTS, startCommand, resumeCommandFor } = await import('./agents')
   const claude = BUILTIN_AGENTS.claude
   expect(startCommand(claude)).toBe('claude --settings "$TREEIX_CLAUDE_SETTINGS"')
@@ -61,7 +68,7 @@ test('built-in commands keep the behaviour they had when they were hardcoded', a
 })
 
 test('a shell session runs the prompt as its command line, or nothing at all', async () => {
-  stub([])
+  await setAgents([])
   const { BUILTIN_AGENTS, startCommand, resumeCommandFor } = await import('./agents')
   expect(startCommand(BUILTIN_AGENTS.shell)).toBeUndefined()
   expect(startCommand(BUILTIN_AGENTS.shell, 'bun run dev')).toBe('bun run dev')
@@ -70,7 +77,7 @@ test('a shell session runs the prompt as its command line, or nothing at all', a
 
 test('a custom agent gets its prompt behind the flag it declares', async () => {
   const aider = { id: 'aider', label: 'Aider', mark: 'A', color: '#fff', command: 'aider', promptFlag: '--message', agent: true }
-  stub([aider])
+  await setAgents([aider])
   const { getAgents, getAgent, isAgent, startCommand, resumeCommandFor } = await import('./agents')
   expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'aider'])
   expect(startCommand(getAgent('aider')!, "'add a test'")).toBe("aider --message 'add a test'")
@@ -80,21 +87,21 @@ test('a custom agent gets its prompt behind the flag it declares', async () => {
 })
 
 test('a custom agent replaces the built-in it shares an id with', async () => {
-  stub([{ id: 'claude', label: 'Claude', mark: '✳', color: '#fff', command: '/opt/claude', agent: true }])
+  await setAgents([{ id: 'claude', label: 'Claude', mark: '✳', color: '#fff', command: '/opt/claude', agent: true }])
   const { getAgents, getAgent } = await import('./agents')
   expect(getAgents()).toHaveLength(3)
   expect(getAgent('claude')?.command).toBe('/opt/claude')
 })
 
 test('a malformed stored agent is dropped and missing fields get defaults', async () => {
-  stub([null, 'aider', { label: 'No id' }, { id: 'bare' }])
+  await setAgents([null, 'aider', { label: 'No id' }, { id: 'bare' }])
   const { getAgents, getAgent } = await import('./agents')
   expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'bare'])
   expect(getAgent('bare')).toMatchObject({ label: 'bare', mark: '●', command: null, agent: true })
 })
 
 test('an agent that is gone falls back to a neutral row instead of crashing', async () => {
-  stub([])
+  await setAgents([])
   const { getAgent, agentOr, isAgent } = await import('./agents')
   expect(getAgent('deleted')).toBeUndefined()
   expect(agentOr('deleted')).toMatchObject({ id: 'deleted', label: 'deleted', command: null, agent: false })
@@ -111,13 +118,14 @@ Expected: FAIL, the module `./agents` cannot be resolved.
 
 Create `apps/desktop/src/renderer/src/agents.ts`:
 
+Agent ids are typed `string` here, not `SessionKind`. `parseCustomAgents` produces whatever id the user typed, and the SDK's `SessionKind` is still a union of three literals until Task 3, so importing it would fail the typecheck in this task. Task 3 makes `SessionKind = string`, at which point the two are the same type and this module needs no edit.
+
 ```ts
 import { useSyncExternalStore } from 'react'
-import type { SessionKind } from '@treeix/sdk'
 import { getSettings, subscribeSettings } from './settings'
 
 export type Agent = {
-  id: SessionKind
+  id: string
   label: string
   /** One glyph on the session's badge */
   mark: string
@@ -162,12 +170,12 @@ export function getAgents(): Agent[] {
   return [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))]
 }
 
-export const getAgent = (id: SessionKind): Agent | undefined => getAgents().find((agent) => agent.id === id)
+export const getAgent = (id: string): Agent | undefined => getAgents().find((agent) => agent.id === id)
 
 /** A session whose agent the user has deleted still has to render */
-export const agentOr = (id: SessionKind): Agent => getAgent(id) ?? { id, label: id, mark: '●', color: 'var(--color-muted-foreground)', command: null, agent: false }
+export const agentOr = (id: string): Agent => getAgent(id) ?? { id, label: id, mark: '●', color: 'var(--color-muted-foreground)', command: null, agent: false }
 
-export const isAgent = (id: SessionKind): boolean => getAgent(id)?.agent ?? false
+export const isAgent = (id: string): boolean => getAgent(id)?.agent ?? false
 
 export const useAgents = (): Agent[] => useSyncExternalStore(subscribeSettings, getAgents)
 
@@ -209,8 +217,11 @@ Add the field to the `Settings` type, after `plugins`:
 
 Add `customAgents: []` to `DEFAULTS`. Add a parser beside `parseKeymap` and `parseDigitShortcuts`:
 
+It is exported because `agents.test.ts` drives the stored agents through it, so the parser and the registry
+are tested against the same input a real settings file would carry.
+
 ```ts
-function parseCustomAgents(value: unknown): Agent[] {
+export function parseCustomAgents(value: unknown): Agent[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((entry): Agent[] => {
     if (typeof entry !== 'object' || entry === null) return []

@@ -1,28 +1,22 @@
 import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav } from '@treeix/sdk'
 import type { ToolStatus } from '../../shared/types'
-import { Icon, type IconName } from './Icon'
+import { Icon } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
 import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
 import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
+import { type Agent, useAgents } from './agents'
 import { type Theme, THEMES, type ThemeId } from './themes'
 import { EmptyState, Popup } from './ui'
-import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, settingMatches, SettingsSearch, Switch, useSettingMatch, useSettingsQuery } from './settingsUi'
-import { isPluginEnabled, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
+import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
+import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
+import { navRows, openablePage, type PageId, pluginOf, type SectionId } from './settingsNav'
 import { copyText } from './contextMenu'
 import { useKeyExtras, useShortcuts } from './Shell'
 import { checkForUpdates, updateSummary, useUpdates } from './updates'
 
-export type SectionId = 'General' | 'Appearance' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations'
-const SECTIONS: [SectionId, IconName][] = [
-  ['General', 'settings'],
-  ['Appearance', 'palette'],
-  ['Terminal', 'terminal'],
-  ['Keyboard', 'keyboard'],
-  ['Plugins', 'plug'],
-  ['Integrations', 'cloudCheck']
-]
+
 
 /** Click or ⏎, then press the combination; Esc cancels. Bare keys like § or F12 are allowed. */
 function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChange: (shortcut: Shortcut | null) => void }): React.JSX.Element {
@@ -628,38 +622,48 @@ function Shortcuts(): React.JSX.Element {
   )
 }
 
-/** While searching, names the plugin above matching settings of its own whose switch row filtered out */
-function PluginName({ name, description }: { name: string; description: string }): React.JSX.Element | null {
-  const query = useSettingsQuery()
-  return query && !settingMatches(query, name, description) ? <div className="px-4 pt-3 text-xs font-medium text-muted-foreground">{name}</div> : null
+/** What a plugin needs before its own switch means anything */
+function requirementOf(id: string, chosen: boolean, choices: Settings['plugins']): string {
+  const missing = (PLUGINS.find(({ manifest }) => manifest.id === id)?.manifest.requires ?? []).filter((needed) => !isPluginEnabled(needed, choices))
+  if (!chosen || !missing.length) return ''
+  return ` Needs ${missing.map((needed) => PLUGINS.find(({ manifest }) => manifest.id === needed)?.manifest.name ?? needed).join(', ')}.`
 }
 
-/** Everything beyond worktrees and diffs; each plugin's own settings show under its switch while it's on */
+const settingsOf = (loaded: LoadedPlugin[], id: string): ComponentType | undefined => loaded.find((entry) => entry.manifest.id === id)?.plugin.Settings
+
+/** Everything beyond worktrees and diffs; a plugin with settings of its own keeps them on its own page */
 function Plugins(): React.JSX.Element {
   const settings = useSettings()
-  const { loaded } = usePlugins()
   return (
     <Card title="Plugins">
       {PLUGINS.map(({ manifest }) => {
-        const enabled = isPluginEnabled(manifest.id, settings.plugins)
         const chosen = settings.plugins[manifest.id] ?? manifest.enabledByDefault
-        const missing = (manifest.requires ?? []).filter((id) => !isPluginEnabled(id, settings.plugins))
-        const PluginSettings = loaded.find((entry) => entry.manifest.id === manifest.id)?.plugin.Settings
-        const requirement = missing.length ? ` Needs ${missing.map((id) => PLUGINS.find((entry) => entry.manifest.id === id)?.manifest.name ?? id).join(', ')}.` : ''
         return (
           <SearchGroup key={manifest.id} title={`${manifest.name} ${manifest.description}`} className="border-b border-border last:border-b-0">
-            <PluginName name={manifest.name} description={manifest.description} />
-            <Row label={manifest.name} description={`${manifest.description}${chosen ? requirement : ''}`}>
+            <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`}>
               <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
             </Row>
-            {enabled && PluginSettings && (
-              <div className="mx-3 mb-3 rounded-lg bg-muted/50 ring-1 ring-border">
-                <PluginSettings />
-              </div>
-            )}
           </SearchGroup>
         )
       })}
+    </Card>
+  )
+}
+
+/** One plugin's own page: its switch, then the settings it brings */
+function PluginPage({ id }: { id: string }): React.JSX.Element {
+  const settings = useSettings()
+  const { loaded } = usePlugins()
+  const manifest = PLUGINS.find((entry) => entry.manifest.id === id)?.manifest
+  const PluginSettings = settingsOf(loaded, id)
+  if (!manifest) return <EmptyState icon="plug" title={`No installed plugin answers to the id ${id}.`} />
+  const chosen = settings.plugins[manifest.id] ?? manifest.enabledByDefault
+  return (
+    <Card title={manifest.name}>
+      <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`}>
+        <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
+      </Row>
+      {PluginSettings && <PluginSettings />}
     </Card>
   )
 }
@@ -766,8 +770,76 @@ function ToolRow({ tool, check }: { tool: ToolStatus; check: () => Promise<void>
   )
 }
 
+/** The text fields of an Agent; `id` is generated and `agent` is not worth a switch until something needs it */
+type AgentField = 'label' | 'command' | 'mark' | 'color' | 'promptFlag' | 'sessionIdFlag' | 'resumeCommand'
+
+const AGENT_FIELDS: { key: AgentField; label: string; placeholder: string }[] = [
+  { key: 'label', label: 'Name', placeholder: 'Aider' },
+  { key: 'command', label: 'Command', placeholder: 'aider' },
+  { key: 'mark', label: 'Badge', placeholder: 'A' },
+  { key: 'color', label: 'Colour', placeholder: '#34d399' },
+  { key: 'promptFlag', label: 'Prompt flag', placeholder: 'empty passes it as an argument' },
+  { key: 'sessionIdFlag', label: 'Session id flag', placeholder: '--session-id' },
+  { key: 'resumeCommand', label: 'Resume command', placeholder: 'aider --restore, {id} is the session id' }
+]
+
+function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React.JSX.Element {
+  const custom = useSettings().customAgents
+  const write = (next: Agent[]): void => updateSettings({ customAgents: next })
+  const edit = (key: AgentField, value: string): void =>
+    write(custom.map((entry) => (entry.id === agent.id ? { ...entry, [key]: key === 'command' && !value ? null : value } : entry)))
+  return (
+    <SearchGroup title={`${agent.label} ${agent.command ?? ''}`} className="border-b border-border last:border-b-0">
+      <Row label={agent.label} description={agent.command ?? 'Runs your login shell'}>
+        {builtin && agent.id !== 'shell' ? (
+          <button onClick={() => write([...custom, { ...agent }])} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
+            Override
+          </button>
+        ) : builtin ? null : (
+          <button onClick={() => write(custom.filter((entry) => entry.id !== agent.id))} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-red-400">
+            Remove
+          </button>
+        )}
+      </Row>
+      {!builtin &&
+        AGENT_FIELDS.map((field) => (
+          <Row key={field.key} label={field.label} description="">
+            <input
+              value={String(agent[field.key] ?? '')}
+              placeholder={field.placeholder}
+              onChange={(event) => edit(field.key, event.target.value)}
+              className="h-6 w-56 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border"
+            />
+          </Row>
+        ))}
+    </SearchGroup>
+  )
+}
+
+function Agents(): React.JSX.Element {
+  const agents = useAgents()
+  const custom = useSettings().customAgents
+  const add = (): void => {
+    // crypto.randomUUID over a counter: a counter derived from the current length repeats once an agent added earlier is removed
+    const id = crypto.randomUUID()
+    updateSettings({ customAgents: [...custom, { id, label: 'New agent', mark: '●', color: 'var(--color-foreground)', command: null, agent: true }] })
+  }
+  return (
+    <Card title="Agents">
+      {agents.map((agent) => (
+        <AgentRow key={agent.id} agent={agent} builtin={!custom.some((entry) => entry.id === agent.id)} />
+      ))}
+      <Row label="Add an agent" description="Any CLI agent Treeix can start in a worktree. Override a built-in to change its command.">
+        <button onClick={add} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
+          Add
+        </button>
+      </Row>
+    </Card>
+  )
+}
+
 /** Blocks after a section's own rows */
-const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance: Themes, Keyboard: Shortcuts, Plugins, Integrations: Tools }
+const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance: Themes, Terminal: Agents, Keyboard: Shortcuts, Plugins, Integrations: Tools }
 
 function Section({ id }: { id: SectionId }): React.JSX.Element {
   const specs = SETTINGS.filter((spec) => spec.section === id)
@@ -788,6 +860,24 @@ function Section({ id }: { id: SectionId }): React.JSX.Element {
   )
 }
 
+/** A page is a fixed section or a plugin's own; only `pluginOf` can tell them apart, so the narrowing lives here */
+function Page({ id }: { id: PageId }): React.JSX.Element {
+  const plugin = pluginOf(id)
+  return plugin ? <PluginPage id={plugin} /> : <Section id={id as SectionId} />
+}
+
+/** A plugin's switch already shows under Plugins, so in search results its page contributes only the settings it brings */
+function PluginResults({ page, label }: { page: PageId; label: string }): React.JSX.Element | null {
+  const { loaded } = usePlugins()
+  const id = pluginOf(page)
+  const PluginSettings = id ? settingsOf(loaded, id) : undefined
+  return PluginSettings ? (
+    <Card title={label}>
+      <PluginSettings />
+    </Card>
+  ) : null
+}
+
 /** A setting the command palette points at: which section it's in, and its row or card label */
 export type SettingEntry = { section: SectionId; card: string; label: string; keys?: string }
 
@@ -797,6 +887,7 @@ export function useSettingEntries(): SettingEntry[] {
   return [
     ...SETTINGS.map(({ section, card, label }) => ({ section, card, label })),
     { section: 'Appearance', card: 'Theme', label: 'Theme' },
+    { section: 'Terminal', card: 'Agents', label: 'Agents' },
     ...PLUGINS.map(({ manifest }): SettingEntry => ({ section: 'Plugins', card: 'Plugins', label: manifest.name })),
     { section: 'Integrations', card: 'Command line tools', label: 'Command line tools' },
     ...shortcuts.flatMap(([card, list]) => list.map(({ keys, label }): SettingEntry => ({ section: 'Keyboard', card: `${card} shortcuts`, label, keys })))
@@ -812,22 +903,25 @@ export function revealSetting(entry: SettingEntry): void {
   onReveal?.()
 }
 
-let lastSection: SectionId = 'General'
+let lastSection: PageId = 'General'
 
 export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const [section, setSectionState] = useState<SectionId>(lastSection)
+  const [section, setSectionState] = useState<PageId>(lastSection)
   const [query, setQuery] = useState('')
   const [reveal, setReveal] = useState<SettingEntry | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const mainRef = useRef<HTMLDivElement>(null)
   const panels = usePanels('settings')
+  const { loaded } = usePlugins()
+  const nav = navRows(PLUGINS, loaded)
+  const page = openablePage(section, nav)
   const needle = query.trim()
-  const setSection = (next: SectionId): void => {
+  const setSection = (next: PageId): void => {
     lastSection = next
     setSectionState(next)
     setQuery('')
   }
-  const sectionIndex = SECTIONS.findIndex(([id]) => id === section)
+  const sectionIndex = nav.findIndex((row) => row.page === page)
   const rows = (): HTMLElement[] => [...(mainRef.current?.querySelectorAll<HTMLElement>('[data-setting]') ?? [])]
   const focusRow = (row: HTMLElement | undefined): void => {
     row?.focus({ preventScroll: true })
@@ -835,11 +929,11 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
   }
 
   const { rowProps } = useListNav({
-    count: SECTIONS.length,
+    count: nav.length,
     index: needle ? -1 : sectionIndex,
-    onSelect: (index) => setSection(SECTIONS[index][0]),
+    onSelect: (index) => setSection(nav[index].page),
     onOpen: (index) => {
-      setSection(SECTIONS[index][0])
+      setSection(nav[index].page)
       requestAnimationFrame(() => focusRow(rows()[0]))
     }
   })
@@ -948,16 +1042,16 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
             </label>
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto p-1.5">
-            {SECTIONS.map(([id, icon], index) => (
+            {nav.map((row, index) => (
               <button
-                key={id}
+                key={row.page}
                 {...rowProps(index)}
                 tabIndex={-1}
-                onClick={() => setSection(id)}
-                className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${needle ? 'text-muted-foreground' : ''}`}
+                onClick={() => setSection(row.page)}
+                className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${needle ? 'text-muted-foreground' : ''} ${row.child ? 'pl-7' : ''}`}
               >
-                <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 truncate">{id}</span>
+                {!row.child && <Icon name={row.icon} className="size-3.5 shrink-0 text-muted-foreground" />}
+                <span className={`min-w-0 truncate ${row.child ? 'text-muted-foreground' : ''}`}>{row.label}</span>
               </button>
             ))}
           </nav>
@@ -967,7 +1061,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
         <>
           <header className="flex h-9 shrink-0 items-center gap-3 border-b border-border px-3">
             <ListToggle page="settings" />
-            <span className="min-w-0 truncate text-xs font-medium">{needle ? `Results for “${needle}”` : section}</span>
+            <span className="min-w-0 truncate text-xs font-medium">{needle ? `Results for “${needle}”` : (nav[sectionIndex]?.label ?? page)}</span>
           </header>
           <div
             ref={mainRef}
@@ -985,14 +1079,18 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
               <div className={`peer ${needle ? HIDE_WHEN_EMPTY : ''}`}>
                 <SettingsSearch value={needle}>
                   {needle ? (
-                    SECTIONS.map(([id]) => (
-                      <SearchGroup key={id} title={id}>
-                        <h2 className="mb-3 text-[13px] font-medium">{id}</h2>
-                        <Section id={id} />
-                      </SearchGroup>
-                    ))
+                    nav.map((row) =>
+                      row.child ? (
+                        <PluginResults key={row.page} page={row.page} label={row.label} />
+                      ) : (
+                        <SearchGroup key={row.page} title={row.label}>
+                          <h2 className="mb-3 text-[13px] font-medium">{row.label}</h2>
+                          <Page id={row.page} />
+                        </SearchGroup>
+                      )
+                    )
                   ) : (
-                    <Section id={section} />
+                    <Page id={page} />
                   )}
                 </SettingsSearch>
               </div>

@@ -8,7 +8,6 @@ import {
   onShellCommand,
   PageLayout,
   type RendererPlugin,
-  SESSION_KINDS,
   type SessionKind,
   type SessionSummary,
   type ShortcutInfo,
@@ -16,6 +15,7 @@ import {
   togglePanel,
   useHost
 } from '@treeix/sdk'
+import { getAgents } from '@treeix/app/agents'
 import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
@@ -252,25 +252,16 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
   )
 }
 
-function SessionsButton(): React.JSX.Element {
+/** On the Terminal tab: how many sessions are open, with an amber dot while any waits for an answer */
+function SessionsCount(): React.JSX.Element | null {
   const { sessions } = useTaskScope()
   const waiting = sessions.filter((session) => session.status === 'input').length
+  if (!sessions.length) return null
   return (
-    <button
-      title={`Sessions${waiting ? `, ${waiting} waiting for input` : ''}${actionKeys('terminal.sessions') ? ` (${actionKeys('terminal.sessions')})` : ''}`}
-      onClick={() => dialogs.update({ sessions: 'all' })}
-      className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
-    >
-      <Icon name="terminal" className="size-3.5" />
-      <span className="tabular-nums">{sessions.length}</span>
-      {waiting > 0 && (
-        <span className="flex items-center gap-1 text-amber-400 tabular-nums">
-          <span className="size-1.5 rounded-full bg-amber-400" />
-          {waiting}
-        </span>
-      )}
-      <kbd data-key-hint="" className="font-sans text-[10.5px] text-muted-foreground/70">{actionKeys('terminal.sessions')}</kbd>
-    </button>
+    <span title={`${sessions.length} session${sessions.length === 1 ? '' : 's'}${waiting ? `, ${waiting} waiting for input` : ''}`} className="flex items-center gap-1 text-muted-foreground tabular-nums">
+      {sessions.length}
+      {waiting > 0 && <span className="size-1.5 rounded-full bg-amber-400" />}
+    </span>
   )
 }
 
@@ -459,7 +450,7 @@ const SHORTCUTS: ShortcutInfo[] = (
 ).map(([keys, label, page]) => ({ keys, label, section: 'Terminal', page }))
 
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'Terminal', icon: 'terminal', order: 10, render: TerminalPage, Badge: () => <WaitingDot className="size-1.5" /> }],
+  tabs: [{ id: TAB_ID, label: 'Terminal', icon: 'terminal', order: 10, render: TerminalPage, Badge: SessionsCount }],
   panels: [
     {
       id: TAB_ID,
@@ -470,7 +461,6 @@ const plugin: RendererPlugin = {
     }
   ],
   Root,
-  titleBar: [{ order: 20, render: SessionsButton }],
   onKeyDown,
   onCloseShortcut: () => {
     if (!isTerminalFocused()) return false
@@ -480,14 +470,14 @@ const plugin: RendererPlugin = {
   commands: (host) => [
     { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: actionKeys('terminal.sessions') || undefined, run: () => dialogs.update({ sessions: 'all' }) },
     { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: actionKeys('terminal.newGroup') || undefined, run: () => startTask(host) },
-    ...(Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => ({
-      id: `session:${kind}`,
+    ...getAgents().map((agent) => ({
+      id: `session:${agent.id}`,
       group: 'Actions',
-      label: `New ${SESSION_KINDS[kind].label} tab`,
+      label: `New ${agent.label} tab`,
       detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
       icon: 'terminal' as const,
-      shortcut: kind === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
-      run: () => newTab(host, kind)
+      shortcut: agent.id === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
+      run: () => newTab(host, agent.id)
     })),
     // @ in the palette searches these
     ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),
