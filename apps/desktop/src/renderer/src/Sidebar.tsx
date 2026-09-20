@@ -4,7 +4,7 @@ import type { Branch, Repo, Worktree } from '../../shared/types'
 import { copyText } from './contextMenu'
 import { Icon } from './Icon'
 import { groupOpen, toggleIn, useSettings } from './settings'
-import { EmptyState, FoldAllButton, IconButton, readStored, usePersisted } from './ui'
+import { EmptyState, FoldAllButton, IconButton, Popup, readStored, usePersisted } from './ui'
 import { workspaceKey } from './workspaces'
 
 export const baseName = (path: string): string => path.split('/').pop() ?? path
@@ -103,6 +103,27 @@ export function Sidebar({
   const [cursorKey, setCursorKey] = useState<string | null>(selected && `wt:${selected}`)
   const { zone } = useZone()
   useEffect(() => void (selected && setCursorKey(`wt:${selected}`)), [selected])
+
+  const [folderOpen, setFolderOpen] = useState(false)
+  const folderAnchor = useRef<HTMLDivElement>(null)
+  const folderMenu = useRef<HTMLDivElement>(null)
+  const closeFolders = (): void => {
+    setFolderOpen(false)
+    folderAnchor.current?.querySelector('button')?.focus()
+  }
+  const onFolderKey = (event: React.KeyboardEvent): void => {
+    event.stopPropagation()
+    const items = [...(folderMenu.current?.querySelectorAll<HTMLElement>('button') ?? [])]
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
+    if (step) {
+      event.preventDefault()
+      items[(at + step + items.length) % items.length]?.focus()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      closeFolders()
+    }
+  }
 
   const folders = [...new Set((repos ?? []).map((repo) => parentDir(repo.path)))].sort()
   const needle = query.trim().toLowerCase()
@@ -377,22 +398,42 @@ export function Sidebar({
           </button>
         </label>
         {folderFilter && (
-          <label
-            title={focus ? 'Exit focus to filter by folder' : folder ? tildify(folder) : 'Filter by folder'}
-            className={`relative flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 text-xs ${focus ? 'opacity-40' : 'hover:bg-accent'} ${folder ? 'text-foreground' : 'text-muted-foreground'}`}
-          >
-            <Icon name="folder" className="size-3.5 text-muted-foreground" />
-            <span className="truncate">{folder ? baseName(folder) : 'All folders'}</span>
-            <Icon name="chevron" className="ml-auto size-3 rotate-90 text-muted-foreground/65" />
-            <select value={folder} disabled={Boolean(focus)} onChange={(event) => setFolder(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-default">
-              <option value="">All folders</option>
-              {folders.map((path) => (
-                <option key={path} value={path}>
-                  {tildify(path)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div ref={folderAnchor} className="relative flex min-w-0">
+            <button
+              title={focus ? 'Exit focus to filter by folder' : folder ? tildify(folder) : 'Filter by folder'}
+              disabled={Boolean(focus)}
+              onClick={() => (folderOpen ? closeFolders() : setFolderOpen(true))}
+              className={`flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-xs ${focus ? 'opacity-40' : 'hover:bg-accent'} ${folder ? 'text-foreground' : 'text-muted-foreground'}`}
+            >
+              <Icon name="folder" className="size-3.5 text-muted-foreground" />
+              <span className="truncate">{folder ? baseName(folder) : 'All folders'}</span>
+              <Icon name="chevron" className="ml-auto size-3 rotate-90 text-muted-foreground/65" />
+            </button>
+            {folderOpen && (
+              <Popup
+                ref={folderMenu}
+                anchor={folderAnchor}
+                onDismiss={closeFolders}
+                onKeyDown={onFolderKey}
+                className="max-h-72 w-72 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground"
+              >
+                {['', ...folders].map((path) => (
+                  <button
+                    key={path || 'all'}
+                    title={path ? tildify(path) : undefined}
+                    onClick={() => {
+                      setFolder(path)
+                      closeFolders()
+                    }}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent"
+                  >
+                    <Icon name="check" className={`size-3 ${path === folder ? '' : 'opacity-0'}`} />
+                    <span className="truncate">{path ? tildify(path) : 'All folders'}</span>
+                  </button>
+                ))}
+              </Popup>
+            )}
+          </div>
         )}
         {focus && (
           <div className="flex h-7 items-center gap-2 rounded-md bg-foreground/[.08] pr-1 pl-2 text-xs text-foreground">
