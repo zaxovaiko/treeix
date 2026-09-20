@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy - Treeix</title>
+  <meta name="description" content="Treeix runs entirely on your Mac. It has no account, no server and no analytics." />
+  <meta name="robots" content="index, follow" />
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400;500;600;700&family=Funnel+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/"><img src="/assets/icon.webp" alt="" width="28" height="28" />Treeix</a>
+    <nav>
+      <a href="/#faq">FAQ</a>
+      <a class="button button-small" href="/download">Download</a>
+    </nav>
+  </header>
+
+  <main class="prose">
+    <h1>Privacy</h1>
+    <p class="prose-date">Last updated 20 September 2026</p>
+
+    <h2>What Treeix collects</h2>
+    <p>Nothing. The app has no account, no server of its own and no analytics or crash reporting. It never phones home, including to check for updates on your behalf without asking.</p>
+
+    <h2>What stays on your Mac</h2>
+    <p>Your repositories, diffs, comments, terminal sessions, window layout and settings are read from and written to your own disk. Comments live next to the worktree they belong to, and the app's settings live in its application support folder.</p>
+
+    <h2>Which connections the app makes</h2>
+    <p>Treeix runs the command line tools you already have, under your own credentials, and only for the features you use:</p>
+    <ul>
+      <li><b>git</b> for repositories, worktrees and diffs. Local only.</li>
+      <li><b>gh</b> and <b>glab</b> for pull requests and merge requests, talking to GitHub or GitLab as you.</li>
+      <li><b>claude</b> and <b>codex</b> for agent sessions. Whatever you send in a session goes to that vendor under their terms, exactly as it would in your own terminal.</li>
+      <li><b>acli</b> for Jira and Confluence, talking to your Atlassian site as you.</li>
+      <li>GitHub's release feed, to tell you when a newer Treeix exists.</li>
+    </ul>
+    <p>Each of these is a plugin. Switch one off in Settings and its code stops loading, connections included.</p>
+
+    <h2>This website</h2>
+    <p>treeix.dyvertex.com is a static page hosted on Vercel, with no cookies and no analytics. Vercel writes its own server logs, which include your IP address and user agent, under <a href="https://vercel.com/legal/privacy-policy">Vercel's privacy policy</a>. Downloads are served by GitHub Releases, under <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>.</p>
+
+    <h2>Questions</h2>
+    <p>Open an issue on <a href="https://github.com/zaxovaiko/treeix/issues">GitHub</a>, or read the source and check for yourself.</p>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-bottom">
+      <span>© 2026 Treeix. Open source under Apache 2.0.</span>
+      <a class="made-by" href="https://dyvertex.com">
+        <span>Made by</span>
+        <svg viewBox="0 0 161 161" aria-hidden="true">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M38.2 37H65.8L75.3 46.5V68L65.8 77.5H38.2L36.8 76.1V56.62L38.2 55.23H45.6L47 56.62V67.3H65.1V52.42L59.88 47.2H36.8V38.4L38.2 37Z" fill="currentColor"/>
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M86.2 37H95V52.92L97.1 55.02H111.5L113.6 52.92V37H122.4L123.8 38.4V55.02L114.3 64.52H109.9V76.1L108.5 77.5H101.1L99.7 76.1V64.52H94.3L84.8 55.02V38.4L86.2 37Z" fill="currentColor"/>
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M38.2 87H73.9L75.3 88.4V95.8L73.9 97.2H61.15V124.6L59.75 126H52.35L50.95 124.6V97.2H38.2L36.8 95.8V88.4L38.2 87Z" fill="currentColor"/>
+          <path d="M92.3 87H107.3L130.9 126.4H115.9L92.3 87Z" fill="currentColor"/>
+          <path d="M115.9 87H130.9L107.3 126.4H92.3L115.9 87Z" fill="currentColor"/>
+          <rect x="8.5" y="8.5" width="144" height="144" stroke="currentColor" stroke-width="11" fill="none"/>
+        </svg>
+        <span class="made-by-name">Dyvertex</span>
+      </a>
+    </div>
+  </footer>
+</body>
+</html>

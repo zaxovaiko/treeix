@@ -22,3 +22,11 @@ new IntersectionObserver(([entry]) => {
     clearInterval(timer)
   }
 }, { threshold: 0.4 }).observe(stage)
+
+// The ticker needs the row twice: the keyframe scrolls exactly one copy's width
+const row = document.querySelector('.rail-row')
+row.append(...[...row.children].map((item) => {
+  const copy = item.cloneNode(true)
+  copy.setAttribute('aria-hidden', 'true')
+  return copy
+}))
