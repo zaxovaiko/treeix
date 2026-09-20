@@ -19,6 +19,12 @@ files:
   # node-pty ships a 14MB prebuild per platform and only ever loads its own. Packaging for Windows needs this revisited.
   - '!node_modules/node-pty/prebuilds/{darwin-x64,win32-arm64,win32-x64}/**'
   - '!node_modules/node-pty/{src,deps,third_party,scripts}/**'
+  # The language service only calls the typescript API and its lib.*.d.ts files; the CLI compiler, tsserver and the
+  # translated diagnostics are two thirds of the package and are never loaded.
+  - '!node_modules/typescript/lib/{_tsc.js,_tsserver.js,_typingsInstaller.js,tsc.js,tsserver.js,tsserverlibrary.js,typingsInstaller.js,watchGuard.js}'
+  - '!node_modules/typescript/lib/{typescript.d.ts,tsserverlibrary.d.ts}'
+  - '!node_modules/typescript/lib/{cs,de,es,fr,it,ja,ko,pl,pt-br,ru,tr,zh-cn,zh-tw}/**'
+  - '!node_modules/typescript/bin/**'
 asarUnpack:
   - resources/**
   - node_modules/node-pty/**
@@ -48,6 +54,8 @@ mac:
   # Notarizes only when APPLE_API_KEY/APPLE_API_KEY_ID/APPLE_API_ISSUER or APPLE_ID/APPLE_APP_SPECIFIC_PASSWORD/APPLE_TEAM_ID are set
 dmg:
   artifactName: ${productName}-${arch}.${ext}
+  # ULFO is lzfse; UDZO, the default, is zlib. Needs macOS 10.11+, and the app asks for 14.
+  format: ULFO
 mas:
   hardenedRuntime: false
   entitlements: build/entitlements.mas.plist
