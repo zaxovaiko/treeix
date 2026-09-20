@@ -142,9 +142,14 @@ three literals to `typeof candidate.kind === 'string'`.
 ## Unknown agents
 
 A saved session whose agent the user has since deleted must not crash the list. `getAgent` returns
-`undefined`, and every call site renders a fallback row: the stored `kind` as its label, `●` in the muted
-foreground, and no restart. The session can still be deleted from history. This is the only new behaviour
-in the change; everything else is a rename of existing logic.
+`undefined`, and `agentOr` supplies a fallback row for display: the stored `kind` as its label, `●` in the
+muted foreground, and `agent: false`, so it stops counting as an agent for badges and status detection.
+
+Reopening such a session spawns no command, which drops the user into a plain login shell in the session's
+own worktree. That falls out of the existing `command: undefined` path in `pty.ts` and costs no code.
+Refusing to reopen it would need a guard at each of the three spawn sites, and a shell in the right folder
+is more useful than a session that does nothing. This is the only new behaviour in the change; everything
+else is a rename of existing logic.
 
 ## Removing `kind !== 'shell'`
 
