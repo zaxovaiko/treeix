@@ -2,6 +2,7 @@ import type { FitAddon } from '@xterm/addon-fit'
 import type { Terminal } from '@xterm/xterm'
 import { useSyncExternalStore } from 'react'
 import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscribeSettings } from '@treeix/app/settings'
+import { agentOr, getAgent, isAgent, resumeCommandFor, startCommand } from '@treeix/app/agents'
 import { terminalTitle } from './terminalTitle'
 import { findFileLinks, findWebLinks } from './fileLinks'
 import { THEMES } from '@treeix/app/themes'
@@ -184,7 +185,7 @@ const printedPlan = (screen: string, current: string | null): string | null => [
 
 function detectStatus(session: Session, screen: string): SessionStatus {
   if (session.status === 'exited' || session.status === 'dormant') return session.status
-  if (session.kind !== 'shell' && WAITING_FOR_INPUT.test(screen)) return 'input'
+  if (isAgent(session.kind) && WAITING_FOR_INPUT.test(screen)) return 'input'
   return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
 }
 
@@ -363,9 +364,6 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
   pendingOutput.delete(id)
 }
 
-/** The usage-limits plugin fills the variable with its status line bridge; the terminal plugin's main module defaults it to `{}` */
-const CLAUDE = 'claude --settings "$TREEIX_CLAUDE_SETTINGS"'
-
 const spawnSession = (meta: SessionMeta, command: string | undefined, id?: string, size = SPAWN_SIZE): Promise<string> =>
   bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), id })
 
@@ -374,19 +372,17 @@ const metaOf = ({ worktreePath, kind, title, startedAt, workspaceId, agentSessio
 /** Starts a session without showing it anywhere yet */
 async function startSession(worktreePath: string, kind: SessionKind, promptArgument?: string): Promise<string> {
   const sameKind = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind)
-  const agentSessionId = kind === 'claude' ? crypto.randomUUID() : null
+  const agent = agentOr(kind)
+  const agentSessionId = agent.sessionIdFlag ? crypto.randomUUID() : null
   const meta: SessionMeta = {
     worktreePath,
     kind,
-    title: `${SESSION_KINDS[kind].label}${sameKind.length ? ` ${sameKind.length + 1}` : ''}`,
+    title: `${agent.label}${sameKind.length ? ` ${sameKind.length + 1}` : ''}`,
     startedAt: Date.now(),
     workspaceId: getCurrentWorkspaceId(),
     agentSessionId
   }
-  const base = agentSessionId ? `${CLAUDE} --session-id ${agentSessionId}` : (SESSION_KINDS[kind].command ?? undefined)
-  // A shell session takes the argument as the command line to run
-  const command = base ? (promptArgument ? `${base} ${promptArgument}` : base) : promptArgument
-  const id = await spawnSession(meta, command)
+  const id = await spawnSession(meta, startCommand(agent, promptArgument, agentSessionId))
   await openSession(id, meta, '', null)
   return id
 }
@@ -398,13 +394,10 @@ export async function createSession(worktreePath: string, kind: SessionKind, pro
   return id
 }
 
-// ponytail: Codex can't be given an id up front, so relaunch resumes its latest conversation; read ~/.codex/sessions if two Codex sessions clash
+/** An agent the user has since deleted has no command, so its session reopens as a plain shell in its folder */
 function resumeCommand(meta: SessionMeta): string | undefined {
-  if (meta.kind === 'codex') return 'codex resume --last'
-  if (meta.kind !== 'claude' || !meta.agentSessionId) return SESSION_KINDS[meta.kind].command ?? undefined
-  const id = meta.agentSessionId
-  // A session closed before its first message has no transcript, and --resume would fail on it
-  return `if ls ~/.claude/projects/*/${id}.jsonl >/dev/null 2>&1; then ${CLAUDE} --resume ${id}; else ${CLAUDE} --session-id ${id}; fi`
+  const agent = getAgent(meta.kind)
+  return agent ? resumeCommandFor(agent, meta.agentSessionId) : undefined
 }
 
 const SAVED_KEY = 'terminals.saved'
@@ -427,7 +420,7 @@ function loadTasks(): { tasks: Task[]; selected: Record<string, string> } | null
 function isSessionMeta(value: unknown): value is SessionMeta {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Partial<SessionMeta>
-  return typeof candidate.worktreePath === 'string' && typeof candidate.title === 'string' && (candidate.kind === 'claude' || candidate.kind === 'codex' || candidate.kind === 'shell')
+  return typeof candidate.worktreePath === 'string' && typeof candidate.title === 'string' && typeof candidate.kind === 'string'
 }
 
 function loadSaved(): Saved {
