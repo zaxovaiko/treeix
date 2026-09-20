@@ -204,6 +204,8 @@ function useFileLinks(): void {
       const absolute = resolvePath(path, cwd, window.api.home)
       const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
       const isFolder = (await window.api.listDirectory(parent, '')).includes(`${absolute.slice(parent.length + 1)}/`)
+      // Binary and oversized files have no viewer here; the Finder knows what opens them
+      if (!isFolder && (await window.api.readFile(absolute, '').catch(() => null)) === null) return window.api.revealInFinder(absolute)
       if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
       if (isFolder) {
         host.setBrowsedFolder(absolute)
