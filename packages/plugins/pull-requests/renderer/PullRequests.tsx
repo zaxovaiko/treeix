@@ -1556,7 +1556,7 @@ export function PullRequestDetailView({
           title={`${panels.inspector ? 'Hide' : 'Show'} details and ${agentComments} agent comment${agentComments === 1 ? '' : 's'} (⌘⌥B)`}
           className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent hover:text-foreground ${panels.inspector ? 'bg-foreground/10 text-foreground' : ''}`}
         >
-          <Icon name="panel" className="size-4 -scale-x-100" />
+          <Icon name="panel" className="size-3.5 -scale-x-100" />
           {agentComments > 0 && (
             <span className="flex items-center gap-1 text-foreground tabular-nums">
               <Icon name="comment" className="size-3" />
