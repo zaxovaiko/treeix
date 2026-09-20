@@ -29,7 +29,9 @@ Ad-hoc builds open only after System Settings > Privacy & Security > Open Anyway
 ## Signing in CI
 
 The workflow signs when `MAC_CERT_P12` and `APPLE_API_KEY_P8` exist, and otherwise falls back to the unsigned DMG,
-so a repository without the secrets still releases.
+so a repository without the secrets still releases. It imports the certificate into a keychain itself rather than
+handing electron-builder `CSC_LINK`: electron-builder creates its keychain with one password and then unlocks it
+with the certificate's, so its own import always fails (`security set-key-partition-list`, macCodeSign.js).
 
 1. **Certificate.** A Developer ID Application certificate, made from a CSR whose private key stays on the Mac:
 
