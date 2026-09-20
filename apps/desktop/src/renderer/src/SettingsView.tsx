@@ -6,6 +6,7 @@ import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/short
 import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
 import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
+import { type Agent, useAgents } from './agents'
 import { type Theme, THEMES, type ThemeId } from './themes'
 import { EmptyState, Popup } from './ui'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, settingMatches, SettingsSearch, Switch, useSettingMatch, useSettingsQuery } from './settingsUi'
@@ -766,8 +767,76 @@ function ToolRow({ tool, check }: { tool: ToolStatus; check: () => Promise<void>
   )
 }
 
+/** The text fields of an Agent; `id` is generated and `agent` is not worth a switch until something needs it */
+type AgentField = 'label' | 'command' | 'mark' | 'color' | 'promptFlag' | 'sessionIdFlag' | 'resumeCommand'
+
+const AGENT_FIELDS: { key: AgentField; label: string; placeholder: string }[] = [
+  { key: 'label', label: 'Name', placeholder: 'Aider' },
+  { key: 'command', label: 'Command', placeholder: 'aider' },
+  { key: 'mark', label: 'Badge', placeholder: 'A' },
+  { key: 'color', label: 'Colour', placeholder: '#34d399' },
+  { key: 'promptFlag', label: 'Prompt flag', placeholder: 'empty passes it as an argument' },
+  { key: 'sessionIdFlag', label: 'Session id flag', placeholder: '--session-id' },
+  { key: 'resumeCommand', label: 'Resume command', placeholder: 'aider --restore, {id} is the session id' }
+]
+
+function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React.JSX.Element {
+  const custom = useSettings().customAgents
+  const write = (next: Agent[]): void => updateSettings({ customAgents: next })
+  const edit = (key: AgentField, value: string): void =>
+    write(custom.map((entry) => (entry.id === agent.id ? { ...entry, [key]: key === 'command' && !value ? null : value } : entry)))
+  return (
+    <SearchGroup title={`${agent.label} ${agent.command ?? ''}`} className="border-b border-border last:border-b-0">
+      <Row label={agent.label} description={agent.command ?? 'Runs your login shell'}>
+        {builtin ? (
+          <button onClick={() => write([...custom, { ...agent }])} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
+            Override
+          </button>
+        ) : (
+          <button onClick={() => write(custom.filter((entry) => entry.id !== agent.id))} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-red-400">
+            Remove
+          </button>
+        )}
+      </Row>
+      {!builtin &&
+        AGENT_FIELDS.map((field) => (
+          <Row key={field.key} label={field.label} description="">
+            <input
+              value={String(agent[field.key] ?? '')}
+              placeholder={field.placeholder}
+              onChange={(event) => edit(field.key, event.target.value)}
+              className="h-6 w-56 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border"
+            />
+          </Row>
+        ))}
+    </SearchGroup>
+  )
+}
+
+function Agents(): React.JSX.Element {
+  const agents = useAgents()
+  const custom = useSettings().customAgents
+  const add = (): void => {
+    // crypto.randomUUID over a counter: a counter derived from the current length repeats once an agent added earlier is removed
+    const id = crypto.randomUUID()
+    updateSettings({ customAgents: [...custom, { id, label: 'New agent', mark: '●', color: 'var(--color-foreground)', command: '', agent: true }] })
+  }
+  return (
+    <Card title="Agents">
+      {agents.map((agent) => (
+        <AgentRow key={agent.id} agent={agent} builtin={!custom.some((entry) => entry.id === agent.id)} />
+      ))}
+      <Row label="Add an agent" description="Any CLI agent Treeix can start in a worktree. Override a built-in to change its command.">
+        <button onClick={add} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
+          Add
+        </button>
+      </Row>
+    </Card>
+  )
+}
+
 /** Blocks after a section's own rows */
-const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance: Themes, Keyboard: Shortcuts, Plugins, Integrations: Tools }
+const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance: Themes, Terminal: Agents, Keyboard: Shortcuts, Plugins, Integrations: Tools }
 
 function Section({ id }: { id: SectionId }): React.JSX.Element {
   const specs = SETTINGS.filter((spec) => spec.section === id)
@@ -797,6 +866,7 @@ export function useSettingEntries(): SettingEntry[] {
   return [
     ...SETTINGS.map(({ section, card, label }) => ({ section, card, label })),
     { section: 'Appearance', card: 'Theme', label: 'Theme' },
+    { section: 'Terminal', card: 'Agents', label: 'Agents' },
     ...PLUGINS.map(({ manifest }): SettingEntry => ({ section: 'Plugins', card: 'Plugins', label: manifest.name })),
     { section: 'Integrations', card: 'Command line tools', label: 'Command line tools' },
     ...shortcuts.flatMap(([card, list]) => list.map(({ keys, label }): SettingEntry => ({ section: 'Keyboard', card: `${card} shortcuts`, label, keys })))
