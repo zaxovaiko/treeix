@@ -324,7 +324,7 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
 }
 
 /** Tabs of the task with new tab and split buttons; on the Terminal page also the list and inspector toggles. `sessions` are the task's */
-function TabStrip({ task, label, cwd, sessions, page }: { task: Task | null; label: string; cwd: string; sessions: Session[]; page: boolean }): React.JSX.Element {
+function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | null; label: string; cwd: string; sessions: Session[]; page: boolean; onHide?: () => void }): React.JSX.Element {
   const panels = usePanels()
   const newTab = (kind: SessionKind): void => openTab(task?.worktreePath ?? cwd, kind, task?.id)
   const plans = useService('plans')
@@ -368,6 +368,11 @@ function TabStrip({ task, label, cwd, sessions, page }: { task: Task | null; lab
       {page && (
         <button title={`${panels.inspector ? 'Hide' : 'Show'} inspector (⌘⌥B)`} aria-label="Toggle inspector" onClick={() => panels.toggle('inspector')} className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}>
           <Icon name="panel" className="size-3.5 -scale-x-100" />
+        </button>
+      )}
+      {onHide && (
+        <button title="Hide the terminal panel (⌘J)" aria-label="Hide terminal panel" onClick={onHide} className={stripButton}>
+          <Icon name="close" className="size-3.5" />
         </button>
       )}
     </div>
@@ -418,7 +423,8 @@ export function TaskTerminals({
   history,
   repos,
   orientation,
-  page
+  page,
+  onHide
 }: {
   task: Task | null
   /** The task's name for headers */
@@ -431,6 +437,8 @@ export function TaskTerminals({
   orientation: 'horizontal' | 'vertical'
   /** On the Terminal page rather than docked */
   page: boolean
+  /** Closes the panel, when docked */
+  onHide?: () => void
 }): React.JSX.Element {
   const { sessions: allSessions, zoomed } = useTerminals()
   const [weights, setWeights] = useState<Record<string, number>>({})
@@ -449,7 +457,7 @@ export function TaskTerminals({
 
   return (
     <div data-terminal-panes className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} />
+      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} />
       {columns.length === 0 ? (
         <EmptyTask task={task} label={label} cwd={cwd} history={history} repos={repos} />
       ) : (

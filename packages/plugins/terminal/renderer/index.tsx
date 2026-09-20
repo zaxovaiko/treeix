@@ -227,7 +227,16 @@ function useFileLinks(): void {
 
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
   const host = useHost()
-  const { task, history } = useTaskScope()
+  const { task, sessions, history } = useTaskScope()
+  // The panel closes itself once the last session exits; opened empty by hand (⌘J) it stays
+  const hadSessions = useRef(sessions.length > 0)
+  useEffect(() => {
+    if (sessions.length > 0) hadSessions.current = true
+    else if (hadSessions.current) {
+      hadSessions.current = false
+      host.hidePanel(TAB_ID)
+    }
+  }, [sessions.length])
   return (
     <TaskTerminals
       task={task}
@@ -237,6 +246,7 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
       repos={host.repos}
       orientation={side === 'bottom' ? 'horizontal' : 'vertical'}
       page={false}
+      onHide={() => host.hidePanel(TAB_ID)}
     />
   )
 }

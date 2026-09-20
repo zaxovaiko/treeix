@@ -23,7 +23,7 @@ const DEFAULT_SIDE: Record<string, DockSide> = { terminal: 'bottom' }
 const DEFAULT_LAYOUT: Layout = {
   docks: { left: [], right: [], bottom: [] },
   active: { left: null, right: null, bottom: 'terminal' },
-  hidden: [],
+  hidden: ['terminal'],
   sizes: { left: 320, right: 320, bottom: 320 }
 }
 
@@ -39,7 +39,7 @@ function isLayout(value: unknown): value is Layout {
   )
 }
 
-// Panels start visible so new users find them; ones closed by hand stay closed
+// The terminal panel starts closed; starting a session opens it, and it closes again when the last one exits
 function loadLayout(): Layout {
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? 'null')
