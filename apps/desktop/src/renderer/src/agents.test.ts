@@ -29,11 +29,14 @@ test('a shell session runs the prompt as its command line, or nothing at all', a
 
 test('a custom agent gets its prompt behind the flag it declares', async () => {
   const aider = { id: 'aider', label: 'Aider', mark: 'A', color: '#fff', command: 'aider', promptFlag: '--message', agent: true }
-  await setAgents([aider])
+  const resumable = { id: 'resumable', label: 'Resumable', mark: 'R', color: '#fff', command: 'resumable', resumeCommand: 'resumable --resume {id}', agent: true }
+  await setAgents([aider, resumable])
   const { getAgents, getAgent, isAgent, startCommand, resumeCommandFor } = await import('./agents')
-  expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'aider'])
+  expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'aider', 'resumable'])
   expect(startCommand(getAgent('aider')!, "'add a test'")).toBe("aider --message 'add a test'")
   expect(resumeCommandFor(getAgent('aider')!, 'abc')).toBe('aider')
+  expect(resumeCommandFor(getAgent('resumable')!, 'abc')).toBe('resumable --resume abc')
+  expect(resumeCommandFor(getAgent('resumable')!, null)).toBe('resumable')
   expect(isAgent('aider')).toBe(true)
   expect(isAgent('shell')).toBe(false)
 })
@@ -50,6 +53,18 @@ test('a malformed stored agent is dropped and missing fields get defaults', asyn
   const { getAgents, getAgent } = await import('./agents')
   expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'bare'])
   expect(getAgent('bare')).toMatchObject({ label: 'bare', mark: '●', command: null, agent: true })
+})
+
+test('getAgents returns the identical array while customAgents is unchanged, and a fresh one once it changes', async () => {
+  await setAgents([])
+  const { getAgents } = await import('./agents')
+  const { updateSettings, parseCustomAgents } = await import('./settings')
+  const first = getAgents()
+  expect(getAgents()).toBe(first)
+  updateSettings({ customAgents: parseCustomAgents([{ id: 'aider', label: 'Aider', mark: 'A', color: '#fff', command: 'aider', agent: true }]) })
+  const second = getAgents()
+  expect(second).not.toBe(first)
+  expect(getAgents()).toBe(second)
 })
 
 test('an agent that is gone falls back to a neutral row instead of crashing', async () => {

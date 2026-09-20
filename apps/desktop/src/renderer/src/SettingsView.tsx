@@ -788,11 +788,11 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
   return (
     <SearchGroup title={`${agent.label} ${agent.command ?? ''}`} className="border-b border-border last:border-b-0">
       <Row label={agent.label} description={agent.command ?? 'Runs your login shell'}>
-        {builtin ? (
+        {builtin && agent.id !== 'shell' ? (
           <button onClick={() => write([...custom, { ...agent }])} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
             Override
           </button>
-        ) : (
+        ) : builtin ? null : (
           <button onClick={() => write(custom.filter((entry) => entry.id !== agent.id))} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-red-400">
             Remove
           </button>
@@ -819,7 +819,7 @@ function Agents(): React.JSX.Element {
   const add = (): void => {
     // crypto.randomUUID over a counter: a counter derived from the current length repeats once an agent added earlier is removed
     const id = crypto.randomUUID()
-    updateSettings({ customAgents: [...custom, { id, label: 'New agent', mark: '●', color: 'var(--color-foreground)', command: '', agent: true }] })
+    updateSettings({ customAgents: [...custom, { id, label: 'New agent', mark: '●', color: 'var(--color-foreground)', command: null, agent: true }] })
   }
   return (
     <Card title="Agents">

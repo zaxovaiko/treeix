@@ -41,10 +41,14 @@ export const BUILTIN_AGENTS = {
 } as const satisfies Record<string, Agent>
 
 /** Built-ins first, then the user's; a custom agent sharing a built-in id replaces it in place */
+let cache: { from: Agent[]; list: Agent[] } | null = null
 export function getAgents(): Agent[] {
   const custom = getSettings().customAgents
-  const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? agent)
-  return [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))]
+  if (cache?.from !== custom) {
+    const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? agent)
+    cache = { from: custom, list: [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))] }
+  }
+  return cache.list
 }
 
 export const getAgent = (id: string): Agent | undefined => getAgents().find((agent) => agent.id === id)

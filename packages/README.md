@@ -22,6 +22,7 @@ The folder name must match `id`. The host finds plugins with `import.meta.glob`,
 - **Link previews:** a plugin can recognise URLs (`linkPreviews`). Any view renders `<LinkPreviews urls>` from `@treeix/app/LinkPreviews`, and each link shows through whichever enabled plugin recognises it. Jira issues and Confluence pages preview this way in Jira items, Confluence pages and pull request descriptions.
 - **Layout and keyboard:** a page renders `<PageLayout list main inspector>` so its panels follow the shell's keys (⌘⇧E list, ⌘⌥B inspector, ⌘⇧↵ zen) and are remembered per page; `usePanels()` gives toggles for buttons. Each part is a focus `<Zone>` that F6 cycles; `useZone()` tells which one has focus. Lists use `useListNav` for j/k, Enter and a cursor that is the selection. Keys a plugin handles go in `shortcuts` so the `?` sheet and Settings list them.
 - **Shared code:** code several plugins need goes in a library package instead, like `atlassian/`. It holds acli, Atlassian Document Format, the API token and attachment images, and is used by `jira` and `confluence`.
+- **Agent identity:** the built-in and user-defined coding agents (id, label, mark, colour, command) live in the host at `@treeix/app/agents`, not in `@treeix/sdk`. A plugin that needs to know which agents exist imports from there.
 
 ## Imports
 

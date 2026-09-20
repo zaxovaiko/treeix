@@ -88,6 +88,7 @@ export function TaskList({
           const count = status === 'idle' ? 0 : sessions.filter((session) => panes.includes(session.id) && session.status === status).length
           const agentsHere = sessions.filter((session) => panes.includes(session.id) && isAgent(session.kind))
           const agents = agentsHere.length
+          const firstAgent = agents > 0 ? agentOr(agentsHere[0].kind) : null
           const selected = task.id === current?.id
           const folder = worktreeLabel(repos, task.worktreePath)
           return (
@@ -166,9 +167,9 @@ export function TaskList({
                     <Icon name="terminal" className="size-2.5" />
                     {task.tabs.length}
                   </span>
-                  {agents > 0 && (
+                  {firstAgent && (
                     <span className="flex items-center gap-0.5">
-                      <span style={{ color: agentOr(agentsHere[0].kind).color }}>{agentOr(agentsHere[0].kind).mark}</span>
+                      <span style={{ color: firstAgent.color }}>{firstAgent.mark}</span>
                       {agents}
                     </span>
                   )}
