@@ -57,11 +57,11 @@ export type LinkPreview = {
 }
 
 /** A panel that docks left, right or bottom of the Worktrees tab */
+/** The panel's key is an action named `panel.<id>`, declared with defineActions like every other key */
 export type PanelContribution = {
   id: string
   label: string
   icon: IconName
-  shortcut: string
   render: ComponentType<{ side: 'left' | 'right' | 'bottom' }>
   Badge?: ComponentType
 }

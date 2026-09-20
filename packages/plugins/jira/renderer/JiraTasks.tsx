@@ -1,3 +1,4 @@
+import { actionForEvent } from '@treeix/shared/keymap'
 import { useEffect, useRef, useState } from 'react'
 import { focusZone, isPageKey, Kbd, PageLayout, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
 import { copyText, openMenu } from '@treeix/app/contextMenu'
@@ -199,17 +200,17 @@ export function JiraTasks(): React.JSX.Element {
   }
   const ticketKeys: Record<string, KeyRun> = ticket
     ? {
-        s: () => setPicker('status'),
-        u: () => setPicker('assignee'),
-        e: () => setEditingSummary(true),
-        l: () => focusDetailField(LABEL_INPUT),
-        c: () => focusDetailField(COMMENT_INPUT),
-        w: ticket.openWorktree,
-        W: ticket.newWorktree,
-        a: ticket.addToComments,
-        o: ticket.openInBrowser,
-        y: ticket.copyBranch,
-        t: () => setPicker('type')
+        'jira.status': () => setPicker('status'),
+        'jira.assign': () => setPicker('assignee'),
+        'jira.editSummary': () => setEditingSummary(true),
+        'jira.label': () => focusDetailField(LABEL_INPUT),
+        'jira.comment': () => focusDetailField(COMMENT_INPUT),
+        'jira.worktree': ticket.openWorktree,
+        'jira.newWorktree': ticket.newWorktree,
+        'jira.agentComments': ticket.addToComments,
+        'jira.open': ticket.openInBrowser,
+        'jira.copyBranch': ticket.copyBranch,
+        'jira.type': () => setPicker('type')
       }
     : {}
 
@@ -221,18 +222,19 @@ export function JiraTasks(): React.JSX.Element {
   onKey.current = (event) => {
     const entry = entries[cursor]
     const listKeys: Record<string, KeyRun> = {
-      '/': () => withList(panels, FILTER_ID, () => document.querySelector<HTMLInputElement>(`#${FILTER_ID} input`)?.focus()),
-      f: toggleMine,
-      v: () => setGroupBy(groupBy === 'status' ? 'epic' : 'status'),
-      S: () => withList(panels, FILTER_ID, () => setPicker('sort')),
-      ...(zone === 'list' && groupIds.length > 1 ? { z: foldAll } : {})
+      'jira.search': () => withList(panels, FILTER_ID, () => document.querySelector<HTMLInputElement>(`#${FILTER_ID} input`)?.focus()),
+      'jira.mine': toggleMine,
+      'jira.groupBy': () => setGroupBy(groupBy === 'status' ? 'epic' : 'status'),
+      'jira.sort': () => withList(panels, FILTER_ID, () => setPicker('sort')),
+      ...(zone === 'list' && groupIds.length > 1 ? { 'jira.fold': foldAll } : {})
     }
     if (zone === 'list' && entry && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
       fold(entry.group, event.key === 'ArrowLeft')
       if (event.key === 'ArrowLeft') setCursorGroup(entry.group)
       return true
     }
-    const run = listKeys[event.key] ?? ticketKeys[event.key]
+    const id = actionForEvent(event, [...Object.keys(listKeys), ...Object.keys(ticketKeys)])
+    const run = id ? (listKeys[id] ?? ticketKeys[id]) : undefined
     return run !== undefined && run() !== false
   }
   useEffect(() => {

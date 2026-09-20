@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { Repo } from '@treeix/shared/types'
 import { useService } from '@treeix/app/plugins'
+import { actionKeys } from '@treeix/shared/keymap'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
@@ -371,7 +372,7 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
         </button>
       )}
       {onHide && (
-        <button title="Hide the terminal panel (⌘J)" aria-label="Hide terminal panel" onClick={onHide} className={stripButton}>
+        <button title={`Hide the terminal panel${actionKeys('panel.terminal') ? ` (${actionKeys('panel.terminal')})` : ''}`} aria-label="Hide terminal panel" onClick={onHide} className={stripButton}>
           <Icon name="close" className="size-3.5" />
         </button>
       )}

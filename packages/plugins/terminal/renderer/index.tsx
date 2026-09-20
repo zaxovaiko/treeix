@@ -16,6 +16,7 @@ import {
   togglePanel,
   useHost
 } from '@treeix/sdk'
+import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
@@ -256,7 +257,7 @@ function SessionsButton(): React.JSX.Element {
   const waiting = sessions.filter((session) => session.status === 'input').length
   return (
     <button
-      title={`Sessions${waiting ? `, ${waiting} waiting for input` : ''} (⌘⇧J)`}
+      title={`Sessions${waiting ? `, ${waiting} waiting for input` : ''}${actionKeys('terminal.sessions') ? ` (${actionKeys('terminal.sessions')})` : ''}`}
       onClick={() => dialogs.update({ sessions: 'all' })}
       className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
     >
@@ -268,7 +269,7 @@ function SessionsButton(): React.JSX.Element {
           {waiting}
         </span>
       )}
-      <kbd data-key-hint="" className="font-sans text-[10.5px] text-muted-foreground/70">⌘⇧J</kbd>
+      <kbd data-key-hint="" className="font-sans text-[10.5px] text-muted-foreground/70">{actionKeys('terminal.sessions')}</kbd>
     </button>
   )
 }
@@ -340,24 +341,51 @@ function Root(): React.JSX.Element | null {
   )
 }
 
-const ARROWS: Record<string, 'left' | 'right' | 'top' | 'bottom'> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' }
+/** The plugin's keys, all rebindable in Settings */
+defineActions([
+  { id: 'panel.terminal', label: 'Toggle the terminal panel', section: 'Terminal', keys: key('KeyJ', { meta: true }) },
+  { id: 'terminal.sessions', label: 'Find and switch sessions', section: 'Terminal', keys: key('KeyJ', { meta: true, shift: true }) },
+  { id: 'terminal.newGroup', label: 'New group with a shell in the current folder', section: 'Terminal', keys: key('KeyT', { meta: true, shift: true }) },
+  { id: 'terminal.previousGroup', label: 'Previous group', section: 'Terminal', keys: key('ArrowUp', { meta: true, ctrl: true }) },
+  { id: 'terminal.nextGroup', label: 'Next group', section: 'Terminal', keys: key('ArrowDown', { meta: true, ctrl: true }) },
+  { id: 'terminal.newTab', label: 'New shell tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true }) },
+  { id: 'terminal.newTabAlt', label: 'New shell tab, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
+  { id: 'terminal.splitRight', label: 'Split the active pane right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
+  { id: 'terminal.splitDown', label: 'Split the active pane down with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true, shift: true }) },
+  { id: 'terminal.paneLeft', label: 'Focus the pane to the left', section: 'Terminal', keys: key('ArrowLeft', { meta: true, alt: true }) },
+  { id: 'terminal.paneRight', label: 'Focus the pane to the right', section: 'Terminal', keys: key('ArrowRight', { meta: true, alt: true }) },
+  { id: 'terminal.paneUp', label: 'Focus the pane above', section: 'Terminal', keys: key('ArrowUp', { meta: true, alt: true }) },
+  { id: 'terminal.paneDown', label: 'Focus the pane below', section: 'Terminal', keys: key('ArrowDown', { meta: true, alt: true }) },
+  { id: 'terminal.zoomPane', label: 'Maximize the focused pane, or restore it', section: 'Terminal', keys: key('Enter', { meta: true, alt: true }) },
+  { id: 'terminal.inspector', label: 'Inspector with files, alias of ⌘⌥B', section: 'Terminal', page: TAB_ID, keys: key('KeyP', { meta: true }) },
+  { id: 'terminal.renameGroup', label: 'Rename the group on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('F2') },
+  { id: 'terminal.deleteGroup', label: 'Delete the group on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true, shift: true }) },
+  { id: 'terminal.renameInList', label: 'Rename the group in place, also double-click (group list)', section: 'Terminal', page: TAB_ID, keys: key('KeyE') },
+  { id: 'terminal.deleteInList', label: 'Delete the group, its sessions go to History (group list)', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true }) }
+])
+
+const PANE_SIDES: Record<string, 'left' | 'right' | 'top' | 'bottom'> = { 'terminal.paneLeft': 'left', 'terminal.paneRight': 'right', 'terminal.paneUp': 'top', 'terminal.paneDown': 'bottom' }
 
 function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
-  const { metaKey: meta, ctrlKey: ctrl, altKey: alt, shiftKey: shift, code } = event
   const open = dialogs.get()
-  if (meta && shift && !ctrl && !alt && code === 'KeyJ') {
+  if (matchesAction(event, 'terminal.sessions')) {
     dialogs.update({ sessions: open.sessions ? null : 'all' })
     return true
   }
   if (open.sessions) return false
   const onPage = host.activeTab === TAB_ID
   const terminal = isTerminalFocused()
-  if (meta && ctrl && !alt && !shift && (code === 'ArrowUp' || code === 'ArrowDown')) {
-    stepTask(host, code === 'ArrowUp' ? -1 : 1)
-    return true
+  // Keys that work from anywhere in the app
+  const anywhere: Record<string, () => void> = {
+    'terminal.previousGroup': () => stepTask(host, -1),
+    'terminal.nextGroup': () => stepTask(host, 1),
+    'terminal.newGroup': () => startTask(host),
+    'terminal.newTab': () => newTab(host, 'shell'),
+    'terminal.newTabAlt': () => newTab(host, 'shell')
   }
-  if (meta && shift && !ctrl && !alt && code === 'KeyT') {
-    startTask(host)
+  const anywhereId = actionForEvent(event, Object.keys(anywhere))
+  if (anywhereId) {
+    anywhere[anywhereId]()
     return true
   }
   // Pane and tab digits only apply inside the terminals, elsewhere the app's digits work; digits match the physical key, so ⌥ producing ¡™£ doesn't matter
@@ -377,68 +405,56 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     }
     return true
   }
-  if (meta && !ctrl && !alt && !shift && (code === 'KeyT' || code === 'KeyN')) {
-    newTab(host, 'shell')
+  const split = actionForEvent(event, ['terminal.splitRight', 'terminal.splitDown'])
+  if (split && (onPage || host.isPanelVisible(TAB_ID))) {
+    void splitPane(split === 'terminal.splitDown' ? 'bottom' : 'right', host.defaultCwd)
     return true
   }
-  if (meta && !ctrl && !alt && code === 'KeyD' && (onPage || host.isPanelVisible(TAB_ID))) {
-    void splitPane(shift ? 'bottom' : 'right', host.defaultCwd)
-    return true
-  }
-  if (meta && alt && !ctrl && !shift && ARROWS[code] && terminal) {
-    focusNeighbor(ARROWS[code])
-    return true
-  }
-  if (meta && alt && !ctrl && !shift && code === 'Enter' && terminal) {
+  // Moving between panes and zooming one only make sense with a terminal focused
+  const pane = terminal ? actionForEvent(event, ['terminal.paneLeft', 'terminal.paneRight', 'terminal.paneUp', 'terminal.paneDown', 'terminal.zoomPane']) : undefined
+  if (pane === 'terminal.zoomPane') {
     toggleZoom()
     return true
   }
-  if (meta && !ctrl && !alt && !shift && code === 'KeyP' && onPage) {
+  if (pane) {
+    focusNeighbor(PANE_SIDES[pane])
+    return true
+  }
+  if (onPage && matchesAction(event, 'terminal.inspector')) {
     togglePanel('inspector', TAB_ID)
     return true
   }
   const task = scope.task
-  // Anywhere on the page, even in a terminal: F2 renames the group on screen, ⌘⇧⌫ deletes it
+  // Anywhere on the page, even in a terminal: the group on screen can be renamed or deleted
   const inField = isTyping(event) && !terminal
-  if (onPage && task && !inField && code === 'F2' && !meta && !ctrl && !alt && !shift) {
+  if (onPage && task && !inField && matchesAction(event, 'terminal.renameGroup')) {
     showPanel('list', TAB_ID)
     startRename(task.id)
     return true
   }
-  if (onPage && task && !inField && meta && shift && !ctrl && !alt && code === 'Backspace') {
+  if (onPage && task && !inField && matchesAction(event, 'terminal.deleteGroup')) {
     deleteTask(task.id)
     return true
   }
   // The task list's own keys
-  if (!onPage || !task || getShell().zone !== 'list' || isTyping(event) || ctrl || alt) return false
-  if (!meta && !shift && code === 'KeyE') {
+  if (!onPage || !task || getShell().zone !== 'list' || isTyping(event)) return false
+  if (matchesAction(event, 'terminal.renameInList')) {
     startRename(task.id)
     return true
   }
-  if (meta && !shift && code === 'Backspace') {
+  if (matchesAction(event, 'terminal.deleteInList')) {
     deleteTask(task.id)
     return true
   }
   return false
 }
 
+/** Keys the plugin owns that aren't single actions: the digit rows and the pane close that rides the app's ⌘W */
 const SHORTCUTS: ShortcutInfo[] = (
   [
-    ['⌘⇧J', 'Find and switch sessions', undefined],
-    ['⌘⇧T', 'New group with a shell in the current folder', undefined],
-    ['⌃⌘↑ ⌃⌘↓', 'Previous or next group', undefined],
-    ['⌘T', 'New shell tab in the group, also ⌘N', undefined],
     ['⌘1-9', 'Tab of the group, 9 is the last (in a terminal)', undefined],
     ['⌥1-9', 'Focus the nth pane (in a terminal)', undefined],
-    ['⌘D ⌘⇧D', 'Split the active pane right or down with a new shell', undefined],
-    ['⌘W', 'Close the focused pane to History; the last pane closes its tab', undefined],
-    ['⌥⌘←→↑↓', 'Move focus between panes', undefined],
-    ['⌥⌘↵', 'Maximize the focused pane, or restore it', undefined],
-    ['⌘P', 'Inspector with files, alias of ⌘⌥B', TAB_ID],
-    ['F2', 'Rename the group on screen, from anywhere on the page', TAB_ID],
-    ['⌘⇧⌫', 'Delete the group on screen, from anywhere on the page', TAB_ID],
-    ['e', 'Rename the group in place, also double-click (group list)', TAB_ID],
-    ['⌘⌫', 'Delete the group, its sessions go to History (group list)', TAB_ID]
+    ['⌘W', 'Close the focused pane to History; the last pane closes its tab', undefined]
   ] satisfies [string, string, string | undefined][]
 ).map(([keys, label, page]) => ({ keys, label, section: 'Terminal', page }))
 
@@ -449,7 +465,6 @@ const plugin: RendererPlugin = {
       id: TAB_ID,
       label: 'Terminal',
       icon: 'terminal',
-      shortcut: '⌘J',
       render: DockedTerminal,
       Badge: () => <WaitingDot className="absolute top-1 right-1 size-1.5 ring-2 ring-background" />
     }
@@ -463,15 +478,15 @@ const plugin: RendererPlugin = {
     return true
   },
   commands: (host) => [
-    { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: '⌘⇧J', run: () => dialogs.update({ sessions: 'all' }) },
-    { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: '⌘⇧T', run: () => startTask(host) },
+    { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: actionKeys('terminal.sessions') || undefined, run: () => dialogs.update({ sessions: 'all' }) },
+    { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: actionKeys('terminal.newGroup') || undefined, run: () => startTask(host) },
     ...(Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => ({
       id: `session:${kind}`,
       group: 'Actions',
       label: `New ${SESSION_KINDS[kind].label} tab`,
       detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
       icon: 'terminal' as const,
-      shortcut: kind === 'shell' ? '⌘T' : undefined,
+      shortcut: kind === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
       run: () => newTab(host, kind)
     })),
     // @ in the palette searches these

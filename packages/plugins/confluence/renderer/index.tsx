@@ -1,3 +1,4 @@
+import { defineActions, key } from '@treeix/shared/keymap'
 import { lazy, Suspense, useState } from 'react'
 import { ApiToken } from '@treeix/atlassian/renderer/ApiToken'
 import { type RendererPlugin, useHost } from '@treeix/sdk'
@@ -60,17 +61,17 @@ function PagePreview({ url }: { url: string }): React.JSX.Element {
   )
 }
 
-const PAGE_KEYS: [keys: string, label: string][] = [
-  ['/', 'Search, or paste a page link'],
-  ['a', 'Add the page to agent comments'],
-  ['o y', 'Open in Confluence / copy link'],
-  ['r', 'Reload the page'],
-  ['← →', 'Fold / unfold the space'],
-  ['z', 'Fold or unfold all spaces']
-]
+defineActions([
+  { id: 'confluence.search', label: 'Search, or paste a page link', section: 'Confluence', page: TAB_ID, keys: key('Slash') },
+  { id: 'confluence.agentComments', label: 'Add the page to agent comments', section: 'Confluence', page: TAB_ID, keys: key('KeyA') },
+  { id: 'confluence.open', label: 'Open in Confluence', section: 'Confluence', page: TAB_ID, keys: key('KeyO') },
+  { id: 'confluence.copyLink', label: 'Copy link', section: 'Confluence', page: TAB_ID, keys: key('KeyY') },
+  { id: 'confluence.reload', label: 'Reload the page', section: 'Confluence', page: TAB_ID, keys: key('KeyR') },
+  { id: 'confluence.fold', label: 'Fold or unfold all spaces', section: 'Confluence', page: TAB_ID, keys: key('KeyZ') }
+])
 
 const plugin: RendererPlugin = {
-  shortcuts: PAGE_KEYS.map(([keys, label]) => ({ keys, label, section: 'Confluence', page: TAB_ID })),
+  shortcuts: [{ keys: '← →', label: 'Fold / unfold the space', section: 'Confluence', page: TAB_ID }],
   tabs: [{ id: TAB_ID, label: 'Confluence', icon: 'bookOpen', order: 50, render: Tab, panels: ['terminal'] }],
   Settings: () => <ApiToken bridge={confluenceBridge} purpose="Search, recently viewed pages and images" />,
   linkPreviews: [{ label: 'Confluence', keyOf: (url) => pageOfUrl(url)?.id ?? null, render: PagePreview }]

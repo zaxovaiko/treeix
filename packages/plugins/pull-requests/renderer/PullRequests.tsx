@@ -7,6 +7,7 @@ import { allFolders, ChangedFileList, folderPaths } from '@treeix/app/ChangedFil
 import { groupOpen } from '@treeix/app/settings'
 import { api, imageResolver, prSettings } from './api'
 import { CodeNavigationContext, useSymbolNavigation } from '@treeix/app/codeNavigation'
+import { matchesAction } from '@treeix/shared/keymap'
 import { CommandPalette } from '@treeix/app/CommandPalette'
 import { cachedPullRequests, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
 import { ErrorBoundary } from '@treeix/app/ErrorBoundary'
@@ -1181,10 +1182,10 @@ export function PullRequestDetailView({
     openFile(savedPlace.filePath)
   }, [detail, view])
 
-  // ⌘P goes to a changed file, like VS Code's quick open
+  // Goes to a changed file, like VS Code's quick open
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (!event.metaKey || event.shiftKey || event.altKey || event.key !== 'p' || !detail) return
+      if (!matchesAction(event, 'prs.findFile') || !detail) return
       event.preventDefault()
       setView('files')
       setPicker('files')

@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
+import { actionKeys } from '../../shared/keymap'
 import { Icon, type IconName } from './Icon'
 import { Popup } from './ui'
 
 /** Panels come from plugins, like the terminal */
 export type PanelId = string
 export type DockSide = 'left' | 'right' | 'bottom'
-export type PanelInfo = { label: string; icon: IconName; shortcut: string }
+/** A panel's key lives in the keymap under `panel.<id>`, so Settings can rebind it like any other action */
+export type PanelInfo = { label: string; icon: IconName }
 
 export type Layout = {
   docks: Record<DockSide, PanelId[]>
@@ -165,13 +167,14 @@ export function PanelToggle({
 }): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null)
-  const { label, icon, shortcut } = info
+  const { label, icon } = info
+  const shortcut = actionKeys(`panel.${id}`)
   return (
     <div className="relative [-webkit-app-region:no-drag]">
       <button
         ref={button}
         draggable
-        title={`${label} (${shortcut}) · drag to dock, right-click to move`}
+        title={`${label}${shortcut ? ` (${shortcut})` : ''} · drag to dock, right-click to move`}
         aria-label={label}
         onClick={onToggle}
         onContextMenu={(event) => {

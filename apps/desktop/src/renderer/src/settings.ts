@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { setKeymapOverrides } from '../../shared/keymap'
 import { isShortcut, type Shortcut } from '../../shared/shortcut'
 import type { NavigationKind } from '../../shared/types'
 import { isThemeId, type ThemeId } from './themes'
@@ -29,6 +30,8 @@ export type Settings = {
   navigationKeys: Record<NavigationKind, Shortcut | null>
   /** Modifier held with 1-9 to jump to a terminal pane, a title bar tab or a workspace; tabs are off by default since the G leader goes to pages */
   digitShortcuts: Record<DigitTarget, DigitModifier>
+  /** Rebound action keys by action id; an id absent here keeps the key it ships with, one set to null is unbound */
+  keymap: Record<string, Shortcut | null>
   /** Code font size in px for editors, diffs and previews, independent of window zoom */
   editorFontSize: number
   terminalFontSize: number
@@ -72,6 +75,11 @@ export const DIGIT_MODIFIERS = { meta: '⌘', alt: '⌥', ctrl: '⌃', altMeta: 
 export type DigitModifier = keyof typeof DIGIT_MODIFIERS
 export type DigitTarget = 'tabs' | 'workspaces'
 const isDigitModifier = (value: unknown): value is DigitModifier => typeof value === 'string' && value in DIGIT_MODIFIERS
+
+function parseKeymap(value: unknown): Settings['keymap'] {
+  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, Shortcut | null] => entry[1] === null || isShortcut(entry[1])))
+}
 
 function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
   const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
@@ -132,7 +140,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -164,6 +172,7 @@ function load(): Settings {
       hotkeyOnly: flag('hotkeyOnly'),
       navigationKeys: parseNavigationKeys(candidate.navigationKeys),
       digitShortcuts: parseDigitShortcuts(candidate.digitShortcuts),
+      keymap: parseKeymap(candidate.keymap),
       editorFontSize: clampFontSize(candidate.editorFontSize, DEFAULTS.editorFontSize),
       terminalFontSize: clampFontSize(candidate.terminalFontSize, DEFAULTS.terminalFontSize),
       terminalScrollback: clampScrollback(candidate.terminalScrollback),
@@ -178,6 +187,7 @@ function load(): Settings {
 }
 
 let settings = load()
+setKeymapOverrides(settings.keymap)
 const listeners = new Set<() => void>()
 
 export const getSettings = (): Settings => settings
@@ -185,6 +195,7 @@ export const getSettings = (): Settings => settings
 export function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch }
   localStorage.setItem(KEY, JSON.stringify(settings))
+  if (patch.keymap) setKeymapOverrides(settings.keymap)
   listeners.forEach((listener) => listener())
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cycleZone, getShell, isTyping, type KeyHint, KeyHintLabel, Keys, type ShortcutInfo, toggleZen, updateShell, useShell, useZone, type ZoneId } from '@treeix/sdk'
+import { actionForEvent, actionKeys, actionList } from '../../shared/keymap'
 import { Icon, type IconName } from './Icon'
 import { usePlugins } from './plugins'
 import { DIGIT_MODIFIERS, useSettings } from './settings'
@@ -8,107 +9,25 @@ import { DIGIT_MODIFIERS, useSettings } from './settings'
 export const LEADER_PAGES: Record<string, string> = { t: 'terminal', p: 'prs', w: 'worktrees', j: 'tasks', c: 'confluence', s: 'settings' }
 export const leaderOf = (page: string): string | undefined => Object.keys(LEADER_PAGES).find((letter) => LEADER_PAGES[letter] === page)
 
-const CORE_SHORTCUTS: ShortcutInfo[] = [
-  ...(
-    [
-      ['⌘K ⌘⇧P', 'Search everything: commands, workspaces, files, pull requests, tasks, settings'],
-      ['G T', 'Terminal'],
-      ['G P', 'Pull requests'],
-      ['G W', 'Worktrees'],
-      ['G J', 'Tasks'],
-      ['G C', 'Confluence'],
-      ['G S', 'Settings'],
-      ['G 1-9', 'Workspace by rail order'],
-      ['G H', 'Recently closed sessions'],
-      ['G A', 'Agent comments'],
-      ['⌘I', 'Agent comments drawer: j k move, d remove, ⇧X clear, t target, ⌘↵ send'],
-      ['⌘G', 'Leader from anywhere, also inside terminals'],
-      ['⌘,', 'Settings'],
-      ['⌃- ⌃⇧-', 'Back or forward to the tab, worktree, file and line you were on']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'Go to' })),
-  ...(
-    [
-      ['F6', 'Next zone'],
-      ['⇧F6', 'Previous zone'],
-      ['⌃`', 'Next zone, alternative to F6'],
-      ['j k', 'Move down / up in a list (arrows work too)'],
-      ['⏎', 'Open or activate'],
-      ['esc', 'Back one level: detail to list, input to zone'],
-      ['?', 'This sheet, also ⌘/']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'Focus' })),
-  ...(
-    [
-      ['⌘⇧E', 'List'],
-      ['⌘B', 'List, alias'],
-      ['⌘⌥B', 'Inspector'],
-      ['⌘J', 'Bottom terminal'],
-      ['⌘⌥R', 'Workspace rail'],
-      ['⌘⌥T', 'Title bar'],
-      ['⌘⌥S', 'Status bar'],
-      ['⌘⇧↵', 'Zen: only the main zone and tabs']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'Panels' })),
-  ...(
-    [
-      ['n p', 'Next or previous changed file'],
-      ['j k', 'Move the line cursor in the diff'],
-      ['c a', 'Agent comment on the line'],
-      ['o ⏎', 'Open the file at the line to edit'],
-      ['esc', 'Back from the file to its diff'],
-      ['y', 'Copy the file or worktree path'],
-      ['w', 'Split or unified diff'],
-      ['m', 'Markdown preview'],
-      ['h', 'Edit history of the open file'],
-      ['t', 'Terminal in the worktree'],
-      ['n', 'New worktree, in the list'],
-      ['f', 'Focus on the project, in the list'],
-      ['h l', 'Fold or unfold, in the list and explorer'],
-      ['z', 'Fold or unfold all, in the list, changed files and explorer'],
-      ['/', 'Filter the list or explorer'],
-      ['r', 'Rescan worktrees'],
-      ['⌘E', 'Changed files column'],
-      ['⌘P', 'Find a file in the explorer'],
-      ['⌘⇧F', 'Search across projects in scope']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'Worktrees', page: 'worktrees' })),
-  ...(
-    [
-      ['⌥⌘= ⌥⌘- ⌥⌘0', 'Bigger, smaller or default font in the focused terminal, else the editor (⌘= and ⌘- zoom the window)'],
-      ['Hotkey', 'Show or hide the hotkey window from any app, recorded in Hotkey window'],
-      ['esc', 'Close dialog or cancel comment']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'General' })),
-  ...(
-    [
-      ['⌘click', 'Go to definition, or references when on the definition'],
-      ['F12', 'Definition, type definition, implementations, references; recorded in Code navigation'],
-      ['Hover', 'Type and docs; dotted underline marks a navigable symbol'],
-      ['Right-click', 'All navigation actions for the symbol']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'Code navigation' })),
-  ...(
-    [
-      ['Drag', 'Comment on a range of lines'],
-      ['⌘↵', 'Save comment'],
-      ['⌘V', 'Paste an image or file as an attachment']
-    ] satisfies KeyHint[]
-  ).map(([keys, label]) => ({ keys, label, section: 'Comments' }))
-]
-
-/** Every shortcut, the app's and those of enabled plugins, grouped by section in first-seen order */
-export function useShortcuts(): [section: string, shortcuts: ShortcutInfo[]][] {
+/** Keys that aren't single actions: digit rows, the leader's letters, the focus model and what plugins list */
+export function useKeyExtras(): ShortcutInfo[] {
   const { loaded } = usePlugins()
   const { digitShortcuts } = useSettings()
   const digits = (target: 'tabs' | 'workspaces', label: string): ShortcutInfo[] =>
     digitShortcuts[target] === 'off' ? [] : [{ keys: `${DIGIT_MODIFIERS[digitShortcuts[target]]}1-9`, label, section: 'Go to' }]
-  const all = [
-    ...CORE_SHORTCUTS,
+  return [
     ...digits('tabs', 'Title bar page by position, 9 is the last'),
     ...digits('workspaces', 'Workspace by rail order'),
+    { keys: 'G then a letter', label: 'Pages: T terminal, P pull requests, W worktrees, J tasks, C Confluence, S settings, H closed sessions, A agent comments', section: 'Go to' },
+    { keys: 'j k ⏎ esc', label: 'Move in a list, open, step back: the focus model, fixed', section: 'Focus' },
     ...loaded.flatMap(({ plugin }) => plugin.shortcuts ?? [])
   ]
+}
+
+/** Every key the app answers to: the actions in the keymap and the fixed ones beside them, grouped by section */
+export function useShortcuts(): [section: string, shortcuts: ShortcutInfo[]][] {
+  const extras = useKeyExtras()
+  const all: ShortcutInfo[] = [...actionList().map(({ id, label, section, page }) => ({ keys: actionKeys(id) || 'unbound', label, section, page })), ...extras]
   const sections = [...new Set(all.map((shortcut) => shortcut.section))]
   return sections.map((section) => [section, all.filter((shortcut) => shortcut.section === section)])
 }
@@ -139,20 +58,27 @@ export function useShellKeys(options: ShellKeys): void {
         return
       }
       if (!enabled) return
-      const { metaKey: meta, altKey: alt, shiftKey: shift, ctrlKey: ctrl, code } = event
-      const action =
-        meta && !ctrl && !alt && !shift && code === 'KeyG' ? () => updateShell({ leader: true })
-        : meta && !ctrl && !alt && ((shift && code === 'KeyE') || (!shift && code === 'KeyB')) ? () => onTogglePanel('list')
-        : meta && alt && !ctrl && !shift && code === 'KeyB' ? () => onTogglePanel('inspector')
-        : meta && alt && !ctrl && !shift && code === 'KeyR' ? () => onTogglePanel('rail')
-        : meta && alt && !ctrl && !shift && code === 'KeyT' ? () => onTogglePanel('title')
-        : meta && alt && !ctrl && !shift && code === 'KeyS' ? () => onTogglePanel('status')
-        // Composers take ⌘⇧↵ for their second action
-        : meta && shift && !ctrl && !alt && code === 'Enter' && !isTyping(event) ? toggleZen
-        : meta && !ctrl && !alt && code === 'Slash' && !isTyping(event) ? onSheet
-        : !meta && !ctrl && !alt && code === 'F6' ? () => cycleZone(shift ? -1 : 1)
-        : ctrl && !meta && !alt && code === 'Backquote' ? () => cycleZone(shift ? -1 : 1)
-        : null
+      // Every chord here is a named action, so Settings can rebind it
+      const runs: Record<string, () => void> = {
+        'app.leader': () => updateShell({ leader: true }),
+        'panel.list': () => onTogglePanel('list'),
+        'panel.listAlt': () => onTogglePanel('list'),
+        'panel.inspector': () => onTogglePanel('inspector'),
+        'panel.rail': () => onTogglePanel('rail'),
+        'panel.title': () => onTogglePanel('title'),
+        'panel.status': () => onTogglePanel('status'),
+        'shell.zen': toggleZen,
+        'app.shortcuts': onSheet,
+        'app.shortcutsBare': onSheet,
+        'zone.next': () => cycleZone(1),
+        'zone.nextAlt': () => cycleZone(event.shiftKey ? -1 : 1),
+        'zone.previous': () => cycleZone(-1)
+      }
+      // Composers own ⌘⇧↵ and text fields own the sheet keys; a terminal owns neither, so zen works from inside one
+      const typing = isTyping(event)
+      const live = Object.keys(runs).filter((id) => (id === 'shell.zen' ? !typing || terminalFocused() : id.startsWith('app.shortcuts') ? !typing : true))
+      const id = actionForEvent(event, live)
+      const action = id ? runs[id] : null
       if (!action) return
       event.preventDefault()
       event.stopPropagation()
@@ -163,11 +89,13 @@ export function useShellKeys(options: ShellKeys): void {
   }, [])
 }
 
+const terminalFocused = (): boolean => document.activeElement?.closest('[data-session-id]') != null
+
 /** Whether keyboard focus is in a terminal, where bare keys are typed rather than acted on */
 function useTerminalFocused(): boolean {
   const [focused, setFocused] = useState(false)
   useEffect(() => {
-    const update = (): void => setFocused(document.activeElement?.closest('[data-session-id]') != null)
+    const update = (): void => setFocused(terminalFocused())
     window.addEventListener('focusin', update)
     window.addEventListener('focusout', update)
     return () => {
@@ -191,7 +119,18 @@ export function StatusBar({ workspace, pageLabel }: { workspace: { name: string;
   const { zone, label } = useZone()
   const { hints } = useShell()
   const terminal = useTerminalFocused()
-  const shown: KeyHint[] = terminal ? [['⌘T', 'new tab'], ['⌘D', 'split'], ['⌥1-9', 'pane'], ['⌘W', 'close'], ['⌘G', 'go to'], ['F6', 'leave terminal']] : [...hints, ...DEFAULT_HINTS[zone]]
+  const hint = (id: string, label: string): KeyHint[] => (actionKeys(id) ? [[actionKeys(id), label] as KeyHint] : [])
+  const shown: KeyHint[] = terminal
+    ? [
+        ...hint('terminal.newTab', 'new tab'),
+        ...hint('terminal.splitRight', 'split'),
+        ['⌥1-9', 'pane'],
+        ['⌘W', 'close'],
+        ...hint('shell.zen', 'zen'),
+        ...hint('app.leader', 'go to'),
+        ...hint('zone.next', 'leave terminal')
+      ]
+    : [...hints, ...DEFAULT_HINTS[zone]]
   return (
     <footer className="flex h-6 shrink-0 items-center gap-3 overflow-hidden border-t border-border bg-card px-2 text-[11px] text-muted-foreground">
       <span className="flex shrink-0 items-center gap-1.5 text-foreground/80">

@@ -6,7 +6,7 @@ import { errorMessage } from '@treeix/app/ui'
 import type { PullRequest } from '../shared/types'
 import { POLL_MINUTES, prSettings } from './api'
 import { cachedPullRequests, findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
-import { PULL_REQUEST_SHORTCUTS, pullRequestCommands } from './keys'
+import { pullRequestCommands } from './keys'
 import type { DetailProps } from './PullRequests'
 import { localWorktreeFor, prefix, ProviderMark, pullRequestKey, threadReference } from './pullRequestUtils'
 
@@ -183,7 +183,6 @@ const plugin: RendererPlugin = {
   tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'] }],
   Root: Polling,
   Settings: PullRequestSettings,
-  shortcuts: PULL_REQUEST_SHORTCUTS,
   commands: (host) => [...pullRequestCommands(), ...listedCommands(host)],
   toolMarks: {
     gh: () => <ProviderMark provider="github" className="size-4" />,

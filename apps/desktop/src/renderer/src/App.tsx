@@ -35,7 +35,10 @@ import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKe
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
+import { actionForEvent, actionKeys, matchesAction } from '../../shared/keymap'
+import { WORKTREE_ACTIONS } from './actions'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
+import { UpdateBanner } from './updates'
 
 import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
 
@@ -71,14 +74,11 @@ const samePlace = (a: Place, b: Place): boolean =>
   a.appTab === b.appTab && a.selected === b.selected && a.filePath === b.filePath && a.viewer?.path === b.viewer?.path && a.viewer?.line === b.viewer?.line
 const PLACE_SETTLE_MS = 400
 
-/** ⌥⌘ with these keys changes font size by a pixel; 0 resets */
-const FONT_STEPS = new Map<string, -1 | 0 | 1>([
-  ['Equal', 1],
+/** The numpad twins of the font size keys, which the recorded shortcuts don't cover */
+const NUMPAD_FONT_STEPS = new Map<string, -1 | 0 | 1>([
   ['NumpadEqual', 1],
   ['NumpadAdd', 1],
-  ['Minus', -1],
   ['NumpadSubtract', -1],
-  ['Digit0', 0],
   ['Numpad0', 0]
 ])
 
@@ -195,6 +195,7 @@ function App(): React.JSX.Element {
   const pendingFilePath = useRef<string | null>(null)
   const pendingTabs = useRef<string[] | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [updateDismissed, setUpdateDismissed] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const shell = useShell()
@@ -789,33 +790,36 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      // One palette for everything, on either shortcut
-      if (event.metaKey && (event.key === 'k' || (event.shiftKey && event.key.toLowerCase() === 'p'))) {
-        event.preventDefault()
-        return setPaletteOpen(!paletteOpen)
+      // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
+      const anywhere: Record<string, () => void> = {
+        'app.palette': () => setPaletteOpen(!paletteOpen),
+        'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
+        'app.settings': openSettings,
+        'app.comments': () => setDrawerOpen(!drawerOpen),
+        'app.back': () => goToPlace(-1),
+        'app.forward': () => goToPlace(1),
+        // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
+        'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
+        'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
+        'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
+        'app.search': () => setSearchOpen(!searchOpen),
+        'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
+        'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
+        'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
+        'app.clearComments': clearComments,
+        'workspace.new': () => setEditingWorkspace(null),
+        'workspace.edit': () => workspace && setEditingWorkspace(workspace),
+        ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
       }
-      if (event.metaKey && event.key === ',') {
+      const anywhereId = actionForEvent(event, Object.keys(anywhere))
+      if (anywhereId) {
         event.preventDefault()
-        return openSettings()
+        return anywhere[anywhereId]()
       }
-      // From anywhere, terminals included
-      if (event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey && event.code === 'KeyI') {
+      const numpadStep = event.metaKey && event.altKey && !event.shiftKey && !event.ctrlKey ? NUMPAD_FONT_STEPS.get(event.code) : undefined
+      if (numpadStep !== undefined) {
         event.preventDefault()
-        return setDrawerOpen(!drawerOpen)
-      }
-      // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
-      if (event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Minus') {
-        event.preventDefault()
-        return goToPlace(event.shiftKey ? 1 : -1)
-      }
-      const fontStep = event.metaKey && event.altKey && !event.shiftKey && !event.ctrlKey ? FONT_STEPS.get(event.code) : undefined
-      if (fontStep !== undefined) {
-        event.preventDefault()
-        return stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', fontStep)
-      }
-      if (event.metaKey && event.shiftKey && event.code === 'KeyF') {
-        event.preventDefault()
-        return setSearchOpen(!searchOpen)
+        return stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', numpadStep)
       }
       // Before the dialog guard: previews inside search and references results navigate too
       const navigationKind = navigationKindForKey(event)
@@ -832,13 +836,12 @@ function App(): React.JSX.Element {
       // Bare keys of the zone model, unless the page used the key or focus is in a dialog outside the zones
       const inZones = document.activeElement === document.body || document.activeElement?.closest('[data-zone]') != null
       if (!event.defaultPrevented && inZones && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        if (!typing && event.key === 'g') return (event.preventDefault(), updateShell({ leader: true }))
-        if (!typing && event.key === '?') return (event.preventDefault(), setSheetOpen(true))
+        if (!typing && matchesAction(event, 'app.leaderBare')) return (event.preventDefault(), updateShell({ leader: true }))
         // An open file steps back to its diff before esc leaves main
         if (!typing && event.key === 'Escape' && appTab === 'worktrees' && getShell().zone === 'main' && viewer) return (event.preventDefault(), files.some((patch) => patch.path === viewer.path) ? showDiff(viewer.path) : setViewer(null))
         if (!typing && event.key === 'Escape' && zoneBack()) return event.preventDefault()
-        // Settings takes / for its own search
-        if (!typing && event.key === '/' && appTab !== 'settings' && focusZoneField()) return event.preventDefault()
+        // Settings takes the filter key for its own search
+        if (!typing && matchesAction(event, 'app.filterZone') && appTab !== 'settings' && focusZoneField()) return event.preventDefault()
         // Esc in a text field hands the keys back to its zone, as does ↓ from a filter; the terminal and the code editor keep their Esc
         const field = origin instanceof HTMLInputElement || (origin instanceof HTMLTextAreaElement && !isTerminalFocused()) ? origin.closest<HTMLElement>('[data-zone]') : null
         if ((event.key === 'Escape' || (event.key === 'ArrowDown' && origin instanceof HTMLInputElement)) && field) return (event.preventDefault(), field.focus({ preventScroll: true }))
@@ -863,55 +866,59 @@ function App(): React.JSX.Element {
         event.preventDefault()
         return setAppTab(tab)
       }
-      const panelForKey = panelIds.find((id) => panelInfo(id)?.shortcut === `⌘${event.key.toUpperCase()}`)
-      if (event.metaKey && !event.shiftKey && !event.altKey && panelForKey) {
+      const panelForKey = panelIds.find((id) => matchesAction(event, `panel.${id}`))
+      if (panelForKey) {
         event.preventDefault()
         return dock.toggle(panelForKey)
       }
-      // ⌘P is the explorer's filter only in Worktrees; plugin tabs use it for their own file pickers
-      if (event.metaKey && !event.shiftKey && !event.altKey && event.code === 'KeyP' && appTab === 'worktrees') {
+      // The explorer's filter and the changed files column belong to Worktrees; plugin tabs use their keys themselves
+      if (appTab === 'worktrees' && matchesAction(event, 'wt.findFile')) {
         event.preventDefault()
         return focusExplorerFilter()
       }
-      if (event.metaKey && event.key === 'e') return setFilesOpen(!filesOpen)
+      if (appTab === 'worktrees' && matchesAction(event, 'wt.changedFiles')) {
+        event.preventDefault()
+        return setFilesOpen(!filesOpen)
+      }
       if (appTab === 'worktrees' && isPageKey(event)) worktreeKey(event)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  /** Worktrees keys outside text fields: r rescans; in main n p pick a changed file, z folds or unfolds their folders, j k move the line cursor, c or a comment there, o or ⏎ open the file there, y copies its path, w switches split and unified, m previews markdown, h shows edit history, t opens a terminal */
+  /** Worktrees keys outside text fields; which key runs which action comes from the keymap, so Settings can rebind them */
   const worktreeKey = (event: KeyboardEvent): void => {
     const act = (run: () => void): void => {
       event.preventDefault()
       run()
     }
-    const { key } = event
-    if (key === 'r') return act(rescan)
+    const id = actionForEvent(event, WORKTREE_ACTIONS)
+    if (id === 'wt.rescan') return act(rescan)
     if (getShell().zone !== 'main' || !selected) return
     const shownPath = viewer?.path ?? file?.path
-    if (key === 't') return act(() => openTerminal(selected))
-    if (key === 'w') return act(() => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'))
-    if (key === 'z' && canFoldChanges) return act(foldChanges)
-    if ((key === 'n' || key === 'p') && files.length > 0) {
+    if (id === 'wt.terminal') return act(() => openTerminal(selected))
+    if (id === 'wt.diffStyle') return act(() => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'))
+    if (id === 'wt.fold' && canFoldChanges) return act(foldChanges)
+    if ((id === 'wt.nextFile' || id === 'wt.previousFile') && files.length > 0) {
       const at = files.findIndex((patch) => patch.path === filePath)
-      return act(() => showDiff(files[Math.max(0, Math.min(files.length - 1, at + (key === 'n' ? 1 : -1)))].path))
+      return act(() => showDiff(files[Math.max(0, Math.min(files.length - 1, at + (id === 'wt.nextFile' ? 1 : -1)))].path))
     }
-    if (key === 'y' && shownPath) return act(() => (copyText(shownPath), flash(`Copied ${shownPath}`)))
-    if (key === 'm' && shownPath && isMarkdownPath(shownPath)) return act(() => setMarkdownPreview(!markdownPreview))
-    if (key === 'h' && viewer) return act(() => setHistoryFor({ worktreePath: selected, path: viewer.path }))
-    // An open file handles c and a itself
+    if (id === 'wt.copyPath' && shownPath) return act(() => (copyText(shownPath), flash(`Copied ${shownPath}`)))
+    if (id === 'wt.markdown' && shownPath && isMarkdownPath(shownPath)) return act(() => setMarkdownPreview(!markdownPreview))
+    if (id === 'wt.history' && viewer) return act(() => setHistoryFor({ worktreePath: selected, path: viewer.path }))
+    // An open file handles the comment keys itself
     if (viewer || !file) return
-    if (key === 'j' || key === 'k' || key === 'ArrowDown' || key === 'ArrowUp') return act(() => moveLineCursor(key === 'j' || key === 'ArrowDown' ? 1 : -1))
+    const arrow = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
+    if (id === 'wt.lineDown' || id === 'wt.lineUp' || arrow) return act(() => moveLineCursor(id === 'wt.lineDown' || arrow === 1 ? 1 : -1))
     const row = cursorRow ?? diffRows[firstChange]
-    if ((key === 'c' || key === 'a') && row) {
+    if ((id === 'wt.comment' || id === 'wt.commentAlt') && row) {
       return act(() => {
         if (!cursorRow) setLineCursor(firstChange)
         setDraft(rowRange(row))
       })
     }
     const onButton = event.target instanceof Element && event.target.closest('button, a, [role="button"]')
-    if (key === 'o' || (key === 'Enter' && !onButton)) return act(() => setViewer({ path: file.path, line: cursorFileLine() }))
+    if (id === 'wt.open' || (event.key === 'Enter' && !onButton)) return act(() => setViewer({ path: file.path, line: cursorFileLine() }))
   }
 
   /** A terminal in `path`: its live session if there is one, else a new shell */
@@ -1149,8 +1156,7 @@ function App(): React.JSX.Element {
     )
 
   const activePage = openDocTab?.parent ?? appTab
-  // Zen hides every other zone, but the tab bar stays so there's still a way to switch pages
-  const showTitle = shell.zen || shell.title
+  const showTitle = shell.title && !shell.zen
   const showRail = shell.rail && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
@@ -1217,35 +1223,36 @@ function App(): React.JSX.Element {
   )
 
   const commands: Command[] = [
-    { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: 'R', run: rescan },
-    { id: 'settings', group: 'Actions', label: 'Settings', icon: 'settings', shortcut: '⌘,', run: openSettings },
+    { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: actionKeys('wt.rescan') || undefined, run: rescan },
+    { id: 'settings', group: 'Actions', label: 'Settings', icon: 'settings', shortcut: actionKeys('app.settings') || undefined, run: openSettings },
     ...tabs.map((tab): Command => {
       const letter = leaderOf(tab.id)
       return { id: `tab:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()}`, icon: tab.icon, shortcut: letter ? `G ${letter.toUpperCase()}` : undefined, run: () => goPage(tab.id) }
     }),
-    { id: 'search', group: 'Actions', label: 'Search in projects', icon: 'search', shortcut: '⇧⌘F', run: () => setSearchOpen(true) },
+    { id: 'search', group: 'Actions', label: 'Search in projects', icon: 'search', shortcut: actionKeys('app.search') || undefined, run: () => setSearchOpen(true) },
     ...(
       [
-        ['list', 'Toggle list', '⌘⇧E'],
-        ['inspector', 'Toggle inspector', '⌘⌥B'],
-        ['rail', 'Toggle workspace rail', '⌘⌥R'],
-        ['title', 'Toggle title bar', '⌘⌥T'],
-        ['status', 'Toggle status bar', '⌘⌥S']
+        ['list', 'Toggle list'],
+        ['inspector', 'Toggle inspector'],
+        ['rail', 'Toggle workspace rail'],
+        ['title', 'Toggle title bar'],
+        ['status', 'Toggle status bar']
       ] as const
-    ).map(([panel, label, shortcut]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut, run: () => toggleShellPanel(panel) })),
-    { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: '⌘I', run: () => setDrawerOpen(true) },
-    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone and tabs', icon: 'maximize', shortcut: '⌘⇧↵', run: toggleZen },
-    { id: 'shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'keyboard', shortcut: '?', run: () => setSheetOpen(true) },
-    { id: 'changed', group: 'Actions', label: 'Toggle changed files', icon: 'list', shortcut: '⌘E', run: () => setFilesOpen(!filesOpen) },
+    ).map(([panel, label]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut: actionKeys(`panel.${panel}`) || undefined, run: () => toggleShellPanel(panel) })),
+    { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: actionKeys('app.comments') || undefined, run: () => setDrawerOpen(true) },
+    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone, nothing else (⌘G still switches pages)', icon: 'maximize', shortcut: actionKeys('shell.zen') || undefined, run: toggleZen },
+    { id: 'shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'keyboard', shortcut: actionKeys('app.shortcuts') || undefined, run: () => setSheetOpen(true) },
+    { id: 'changed', group: 'Actions', label: 'Toggle changed files', icon: 'list', shortcut: actionKeys('wt.changedFiles') || undefined, run: () => setFilesOpen(!filesOpen) },
     ...panelIds.flatMap((id): Command[] => {
       const info = panelInfo(id)
-      return info ? [{ id: `panel:${id}`, group: 'Actions', label: `Toggle ${info.label.toLowerCase()}`, icon: info.icon, shortcut: info.shortcut, run: () => dock.toggle(id) }] : []
+      return info ? [{ id: `panel:${id}`, group: 'Actions', label: `Toggle ${info.label.toLowerCase()}`, icon: info.icon, shortcut: actionKeys(`panel.${id}`) || undefined, run: () => dock.toggle(id) }] : []
     }),
     {
       id: 'style',
       group: 'Actions',
       label: diffStyle === 'split' ? 'Switch to unified diff' : 'Switch to split diff',
       icon: 'list',
+      shortcut: actionKeys('app.diffStyle') || undefined,
       run: () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split')
     },
     ...(worktreeComments.length > 0
@@ -1255,9 +1262,10 @@ function App(): React.JSX.Element {
             group: 'Actions',
             label: `Copy ${commentCount} for agent`,
             icon: 'copy',
+            shortcut: actionKeys('app.copyComments') || undefined,
             run: () => navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`))
           },
-          { id: 'clear', group: 'Actions', label: `Delete ${commentCount}`, icon: 'close', run: clearComments }
+          { id: 'clear', group: 'Actions', label: `Delete ${commentCount}`, icon: 'close', shortcut: actionKeys('app.clearComments') || undefined, run: clearComments }
         ] satisfies Command[])
       : []),
     ...(paletteOpen ? plugins.flatMap(({ plugin }) => plugin.commands?.(host) ?? []) : []),
@@ -1273,8 +1281,8 @@ function App(): React.JSX.Element {
         run: () => switchWorkspace(candidate.id)
       }
     }),
-    { id: 'workspace:new', group: 'Actions', label: 'New workspace', icon: 'folder', run: () => setEditingWorkspace(null) },
-    ...(workspace ? [{ id: 'workspace:edit', group: 'Actions', label: `Edit ${workspace.name}`, icon: 'settings', run: () => setEditingWorkspace(workspace) } satisfies Command] : []),
+    { id: 'workspace:new', group: 'Actions', label: 'New workspace', icon: 'folder', shortcut: actionKeys('workspace.new') || undefined, run: () => setEditingWorkspace(null) },
+    ...(workspace ? [{ id: 'workspace:edit', group: 'Actions', label: `Edit ${workspace.name}`, icon: 'settings', shortcut: actionKeys('workspace.edit') || undefined, run: () => setEditingWorkspace(workspace) } satisfies Command] : []),
     ...(workspaceRepos ?? []).flatMap((repo) =>
       repo.worktrees.map(
         (candidate): Command => ({
@@ -1317,7 +1325,7 @@ function App(): React.JSX.Element {
   const worktreeInspector = (
     <div className="flex h-full min-h-0 flex-col">
       <ZoneHeader zone="inspector" title="Explorer">
-        <IconButton label="Hide inspector (⌘⌥B)" onClick={() => worktreePanels.toggle('inspector')}>
+        <IconButton label={`Hide inspector (${actionKeys('panel.inspector')})`} onClick={() => worktreePanels.toggle('inspector')}>
           <Icon name="close" className="size-3" />
         </IconButton>
       </ZoneHeader>
@@ -1342,7 +1350,7 @@ function App(): React.JSX.Element {
   const worktreeMain = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card px-1.5">
-        <IconButton label="Toggle list (⌘⇧E)" active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
+        <IconButton label={`Toggle list (${actionKeys('panel.list')})`} active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
           <Icon name="panel" />
         </IconButton>
         {worktree && selectedRepo ? (
@@ -1378,10 +1386,10 @@ function App(): React.JSX.Element {
             <Kbd hint>t</Kbd>
           </button>
         )}
-        <IconButton label="Toggle changed files (⌘E)" active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
+        <IconButton label={`Toggle changed files (${actionKeys('wt.changedFiles')})`} active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           <Icon name="list" />
         </IconButton>
-        <IconButton label="Toggle inspector (⌘⌥B)" active={worktreePanels.inspector} onClick={() => worktreePanels.toggle('inspector')}>
+        <IconButton label={`Toggle inspector (${actionKeys('panel.inspector')})`} active={worktreePanels.inspector} onClick={() => worktreePanels.toggle('inspector')}>
           <Icon name="panel" className="size-3.5 -scale-x-100" />
         </IconButton>
       </header>
@@ -1477,7 +1485,7 @@ function App(): React.JSX.Element {
                   {!viewer && !file && patches?.length === 0 && (
                     <EmptyState fill icon="check" title="Working tree clean">
                       <KeyHintLabel hint={['t', 'terminal']} />
-                      <KeyHintLabel hint={['⌘P', 'find a file']} />
+                      <KeyHintLabel hint={[actionKeys('wt.findFile'), 'find a file']} />
                     </EmptyState>
                   )}
                   {!viewer && file && (
@@ -1644,56 +1652,52 @@ function App(): React.JSX.Element {
           </div>
         ))}
         <span className="flex-1" />
-        {!shell.zen && (
-          <>
-            {titleBarItems(false)}
-            <button
-              title="Search commands, worktrees and files (⌘K)"
-              onClick={() => setPaletteOpen(true)}
-              // A container, so a narrow window shortens the label instead of wrapping it
-              className="@container ml-1 flex h-6 w-60 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
-            >
-              <Icon name="search" className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
-                <span className="@max-[14rem]:hidden">Search or run a command</span>
-                <span className="hidden @max-[14rem]:inline">Search</span>
-              </span>
-              <Kbd hint>⌘K</Kbd>
-            </button>
-            {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
-            {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
-              const info = panelInfo(panel)
-              const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
-              return info ? (
-                <PanelToggle
-                  key={panel}
-                  id={panel}
-                  info={info}
-                  active={dock.isVisible(panel)}
-                  side={dock.sideOf(panel)}
-                  badge={Badge && <Badge />}
-                  onToggle={() => dock.toggle(panel)}
-                  onMove={(side) => dock.move(panel, side)}
-                  onDragStart={() => startPanelDrag(panel)}
-                  onDragEnd={() => setDraggingPanel(null)}
-                />
-              ) : null
-            })}
-            <button
-              title="Agent comments (⌘I)"
-              onClick={() => setDrawerOpen(!drawerOpen)}
-              className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
-            >
-              <Icon name="comment" />
-              <span className="tabular-nums">{comments.length}</span>
-              <Kbd hint>⌘I</Kbd>
-            </button>
-            <IconButton label="Settings (⌘, or G S)" active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
-              <Icon name="settings" />
-            </IconButton>
-            {titleBarItems(true)}
-          </>
-        )}
+        {titleBarItems(false)}
+        <button
+          title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
+          onClick={() => setPaletteOpen(true)}
+          // A container, so a narrow window shortens the label instead of wrapping it
+          className="@container ml-1 flex h-6 w-60 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+        >
+          <Icon name="search" className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
+            <span className="@max-[14rem]:hidden">Search or run a command</span>
+            <span className="hidden @max-[14rem]:inline">Search</span>
+          </span>
+          <Kbd hint>{actionKeys('app.palette')}</Kbd>
+        </button>
+        {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
+        {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
+          const info = panelInfo(panel)
+          const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
+          return info ? (
+            <PanelToggle
+              key={panel}
+              id={panel}
+              info={info}
+              active={dock.isVisible(panel)}
+              side={dock.sideOf(panel)}
+              badge={Badge && <Badge />}
+              onToggle={() => dock.toggle(panel)}
+              onMove={(side) => dock.move(panel, side)}
+              onDragStart={() => startPanelDrag(panel)}
+              onDragEnd={() => setDraggingPanel(null)}
+            />
+          ) : null
+        })}
+        <button
+          title={`Agent comments (${actionKeys('app.comments')})`}
+          onClick={() => setDrawerOpen(!drawerOpen)}
+          className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+        >
+          <Icon name="comment" />
+          <span className="tabular-nums">{comments.length}</span>
+          <Kbd hint>{actionKeys('app.comments')}</Kbd>
+        </button>
+        <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
+          <Icon name="settings" />
+        </IconButton>
+        {titleBarItems(true)}
       </div>
       )}
 
@@ -1760,8 +1764,8 @@ function App(): React.JSX.Element {
         />
       )}
       {shell.zen && (
-        <button onClick={toggleZen} title="Leave zen mode (⌘⇧↵)" className="fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
-          Zen <Kbd hint>⌘⇧↵</Kbd>
+        <button onClick={toggleZen} title={`Leave zen mode (${actionKeys('shell.zen')})`} className="fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
+          Zen <Kbd hint>{actionKeys('shell.zen')}</Kbd>
         </button>
       )}
 
@@ -1770,6 +1774,7 @@ function App(): React.JSX.Element {
           {notice}
         </div>
       )}
+      {!updateDismissed && !shell.zen && <UpdateBanner onDismiss={() => setUpdateDismissed(true)} />}
       <Suspense fallback={null}>
         {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
       </Suspense>

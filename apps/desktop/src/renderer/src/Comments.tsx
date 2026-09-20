@@ -1,3 +1,4 @@
+import { actionForEvent } from '../../shared/keymap'
 import { useEffect, useRef, useState } from 'react'
 import { type Attachment, formatComments, type LineRange, rangeLabel, type ReviewComment, type Side } from '../../shared/comments'
 import { focusZone, KeyHintLabel, Keys } from '@treeix/sdk'
@@ -262,10 +263,11 @@ export function CommentDraft({
           attach(files)
         }}
         onKeyDown={(event) => {
-          if (event.key !== 'Enter' || !event.metaKey) return
-          if (event.shiftKey && alternative) {
+          const id = actionForEvent(event.nativeEvent, ['composer.saveAlternative', 'composer.save'])
+          if (!id) return
+          if (id === 'composer.saveAlternative' && alternative) {
             if (text.trim()) alternative.onSave(text)
-          } else save()
+          } else if (id === 'composer.save') save()
         }}
         placeholder={allowAttachments ? `${placeholder}. Paste or drop files to attach` : placeholder}
         className="w-full resize-y rounded-md border border-input bg-muted px-2 py-1.5 leading-5 outline-none placeholder:text-muted-foreground/70"

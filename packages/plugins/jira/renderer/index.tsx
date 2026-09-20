@@ -1,3 +1,4 @@
+import { defineActions, key } from '@treeix/shared/keymap'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { ApiToken } from '@treeix/atlassian/renderer/ApiToken'
 import { type Command, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
@@ -71,23 +72,25 @@ function JiraSettings(): React.JSX.Element {
   )
 }
 
-const TICKET_KEYS: [keys: string, label: string][] = [
-  ['s', 'Change status'],
-  ['u', 'Assign'],
-  ['e', 'Edit summary'],
-  ['l', 'Add label'],
-  ['c', 'Comment'],
-  ['t', 'Change type'],
-  ['w', 'Open worktree, or go to it'],
-  ['a', 'Add to agent comments'],
-  ['o y', 'Open in Jira / copy branch name'],
-  ['/', 'Search Jira'],
-  ['f', 'Only mine, or everyone'],
-  ['v', 'Group by whose move or epic'],
-  ['⇧S', 'Sort'],
-  ['← →', 'Fold / unfold the group'],
-  ['z', 'Fold or unfold all groups']
-]
+/** The page's keys; Settings rebinds them through the keymap */
+defineActions([
+  { id: 'jira.status', label: 'Change status', section: 'Tasks', page: TAB_ID, keys: key('KeyS') },
+  { id: 'jira.assign', label: 'Assign', section: 'Tasks', page: TAB_ID, keys: key('KeyU') },
+  { id: 'jira.editSummary', label: 'Edit summary', section: 'Tasks', page: TAB_ID, keys: key('KeyE') },
+  { id: 'jira.label', label: 'Add label', section: 'Tasks', page: TAB_ID, keys: key('KeyL') },
+  { id: 'jira.comment', label: 'Comment', section: 'Tasks', page: TAB_ID, keys: key('KeyC') },
+  { id: 'jira.type', label: 'Change type', section: 'Tasks', page: TAB_ID, keys: key('KeyT') },
+  { id: 'jira.worktree', label: 'Open worktree, or go to it', section: 'Tasks', page: TAB_ID, keys: key('KeyW') },
+  { id: 'jira.newWorktree', label: 'New worktree for the item', section: 'Tasks', page: TAB_ID, keys: key('KeyW', { shift: true }) },
+  { id: 'jira.agentComments', label: 'Add to agent comments', section: 'Tasks', page: TAB_ID, keys: key('KeyA') },
+  { id: 'jira.open', label: 'Open in Jira', section: 'Tasks', page: TAB_ID, keys: key('KeyO') },
+  { id: 'jira.copyBranch', label: 'Copy branch name', section: 'Tasks', page: TAB_ID, keys: key('KeyY') },
+  { id: 'jira.search', label: 'Search Jira', section: 'Tasks', page: TAB_ID, keys: key('Slash') },
+  { id: 'jira.mine', label: 'Only mine, or everyone', section: 'Tasks', page: TAB_ID, keys: key('KeyF') },
+  { id: 'jira.groupBy', label: 'Group by whose move or epic', section: 'Tasks', page: TAB_ID, keys: key('KeyV') },
+  { id: 'jira.sort', label: 'Sort', section: 'Tasks', page: TAB_ID, keys: key('KeyS', { shift: true }) },
+  { id: 'jira.fold', label: 'Fold or unfold all groups', section: 'Tasks', page: TAB_ID, keys: key('KeyZ') }
+])
 
 /** Work items already fetched by the list or a preview, so ! in the palette finds them without a request */
 function ticketCommands(host: HostApi): Command[] {
@@ -108,7 +111,7 @@ function ticketCommands(host: HostApi): Command[] {
 
 const plugin: RendererPlugin = {
   commands: ticketCommands,
-  shortcuts: TICKET_KEYS.map(([keys, label]) => ({ keys, label, section: 'Tasks', page: TAB_ID })),
+  shortcuts: [{ keys: '← →', label: 'Fold / unfold the group', section: 'Tasks', page: TAB_ID }],
   tabs: [{ id: TAB_ID, label: 'Tasks', icon: 'kanban', order: 40, render: TasksTab, panels: ['terminal'] }],
   Settings: JiraSettings,
   linkPreviews: [{ label: 'Jira', keyOf: issueKeyOf, render: IssuePreview }]

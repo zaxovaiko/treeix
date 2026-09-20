@@ -3,6 +3,7 @@ import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, use
 import type { ToolStatus } from '../../shared/types'
 import { Icon, type IconName } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
+import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
 import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
 import { type Theme, THEMES, type ThemeId } from './themes'
@@ -10,7 +11,8 @@ import { EmptyState, Popup } from './ui'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, settingMatches, SettingsSearch, Switch, useSettingMatch, useSettingsQuery } from './settingsUi'
 import { isPluginEnabled, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { copyText } from './contextMenu'
-import { useShortcuts } from './Shell'
+import { useKeyExtras, useShortcuts } from './Shell'
+import { checkForUpdates, updateSummary, useUpdates } from './updates'
 
 export type SectionId = 'General' | 'Appearance' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations'
 const SECTIONS: [SectionId, IconName][] = [
@@ -293,8 +295,50 @@ function Transparency(): React.JSX.Element {
   )
 }
 
+/** Version, what the updater is doing, and the button that acts on it */
+function UpdateControl(): React.JSX.Element {
+  const status = useUpdates()
+  const [checking, setChecking] = useState(false)
+  const busy = checking || status.phase === 'checking' || status.phase === 'downloading'
+  const check = (): void => {
+    setChecking(true)
+    void checkForUpdates().finally(() => setChecking(false))
+  }
+  if (status.phase === 'ready') {
+    return (
+      <button onClick={() => window.api.updates.install()} className="h-7 shrink-0 rounded-md bg-foreground/10 px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent">
+        Restart and install {status.version}
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={check}
+      disabled={busy || status.phase === 'unsupported'}
+      className="h-7 shrink-0 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent disabled:text-muted-foreground disabled:hover:bg-transparent"
+    >
+      {busy ? 'Checking…' : 'Check for updates'}
+    </button>
+  )
+}
+
 /** Every setting with a row of its own; the command palette lists them too */
 const SETTINGS: SettingSpec[] = [
+  {
+    section: 'General',
+    card: 'Updates',
+    label: 'Version',
+    description: 'Treeix checks GitHub for a new build on launch and every few hours, downloads it in the background, and installs it when you restart.',
+    Control: function Updates() {
+      const status = useUpdates()
+      return (
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="truncate text-xs text-muted-foreground">{updateSummary(status)}</span>
+          <UpdateControl />
+        </div>
+      )
+    }
+  },
   {
     section: 'General',
     card: 'Layout',
@@ -527,13 +571,55 @@ function ShortcutRow({ keys, action }: { keys: string; action: string }): React.
   )
 }
 
-/** The same list as the ? sheet: the app's shortcuts and those of enabled plugins */
+/** One action: its key, recorded here or reset to the one it ships with */
+function ActionRow({ action }: { action: ActionDef }): React.JSX.Element | null {
+  const current = shortcutOf(action.id)
+  const keys = current ? shortcutLabel(current) : ''
+  const clash = conflictsOf(action.id)
+    .map((id) => actionOf(id)?.label)
+    .filter((label): label is string => label !== undefined)
+  if (!useSettingMatch(action.label, keys, 'shortcut')) return null
+  const rebind = (next: Shortcut | null): void => updateSettings({ keymap: { ...getSettings().keymap, [action.id]: next } })
+  const reset = (): void => {
+    const { [action.id]: _removed, ...rest } = getSettings().keymap
+    updateSettings({ keymap: rest })
+  }
+  return (
+    <div data-setting={action.label} tabIndex={-1} className={`flex items-center gap-3 border-b border-border px-4 py-2.5 text-[13px] last:border-b-0 ${SETTING_ROW}`}>
+      <span className="min-w-0 flex-1 break-words">
+        {action.label}
+        {clash.length > 0 && <span className="block text-[11px] text-amber-400">Same key as {clash.join(', ')}</span>}
+      </span>
+      <ShortcutRecorder value={current} onChange={rebind} />
+      {isRebound(action.id) && (
+        <button onClick={reset} title="Back to the key it ships with" className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+          Reset
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Every action with its key, rebindable; the fixed keys of the focus model and the digit rows follow them */
 function Shortcuts(): React.JSX.Element {
+  // Rebinding writes to settings, so this re-renders with the new keys
+  useSettings()
+  const actions = actionList()
+  const sections = [...new Set(actions.map((action) => action.section))]
+  const extras = useKeyExtras()
+  const extraSections = [...new Set(extras.map((shortcut) => shortcut.section))]
   return (
     <>
-      {useShortcuts().map(([section, shortcuts]) => (
+      {sections.map((section) => (
         <Card key={section} title={`${section} shortcuts`}>
-          {shortcuts.map(({ keys, label }) => (
+          {actions.filter((action) => action.section === section).map((action) => (
+            <ActionRow key={action.id} action={action} />
+          ))}
+        </Card>
+      ))}
+      {extraSections.map((section) => (
+        <Card key={`fixed:${section}`} title={`${section}: fixed keys`}>
+          {extras.filter((shortcut) => shortcut.section === section).map(({ keys, label }) => (
             <ShortcutRow key={`${keys}:${label}`} keys={keys} action={label} />
           ))}
         </Card>

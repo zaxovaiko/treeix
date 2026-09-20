@@ -1,3 +1,4 @@
+import { actionForEvent, matchesAction } from '@treeix/shared/keymap'
 import { useEffect, useRef, useState } from 'react'
 import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
@@ -137,7 +138,8 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
   )
 }
 
-type PageAction = { label: string; combo: string; run: () => void }
+/** `id` names the key in the keymap, so Settings can rebind it */
+type PageAction = { label: string; id: string; run: () => void }
 
 
 export function ConfluenceTab(): React.JSX.Element {
@@ -268,7 +270,7 @@ export function ConfluenceTab(): React.JSX.Element {
 
   const search: PageAction = {
     label: 'Search',
-    combo: '/',
+    id: 'confluence.search',
     run: () => withList(panels, SEARCH_ID, () => document.querySelector<HTMLInputElement>(`#${SEARCH_ID} input`)?.focus())
   }
   const copyLink = (): void => {
@@ -279,14 +281,14 @@ export function ConfluenceTab(): React.JSX.Element {
   // What the open page can do by key; the header has a button for each
   const actions: PageAction[] = shownPage
     ? [
-        { label: 'Add to agent comments', combo: 'a', run: addToComments },
-        { label: 'Open in Confluence', combo: 'o', run: () => window.open(shownPage.url, '_blank') },
+        { label: 'Add to agent comments', id: 'confluence.agentComments', run: addToComments },
+        { label: 'Open in Confluence', id: 'confluence.open', run: () => window.open(shownPage.url, '_blank') },
         {
           label: 'Copy link',
-          combo: 'y',
+          id: 'confluence.copyLink',
           run: copyLink
         },
-        { label: 'Reload page', combo: 'r', run: reloadPage }
+        { label: 'Reload page', id: 'confluence.reload', run: reloadPage }
       ]
     : []
 
@@ -296,7 +298,7 @@ export function ConfluenceTab(): React.JSX.Element {
 
   const onKey = useRef<(event: KeyboardEvent) => boolean>(() => false)
   onKey.current = (event) => {
-    if (zone === 'list' && event.key === 'z' && spaceKeys.length > 1) {
+    if (zone === 'list' && matchesAction(event, 'confluence.fold') && spaceKeys.length > 1) {
       foldAll()
       return true
     }
@@ -306,7 +308,9 @@ export function ConfluenceTab(): React.JSX.Element {
       if (event.key === 'ArrowLeft') setCursorId(entry.space)
       return true
     }
-    const run = [...actions, search].find((action) => action.combo === event.key)?.run
+    const all = [...actions, search]
+    const id = actionForEvent(event, all.map((action) => action.id))
+    const run = all.find((action) => action.id === id)?.run
     run?.()
     return run !== undefined
   }
