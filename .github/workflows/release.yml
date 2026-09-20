@@ -9,8 +9,8 @@ permissions:
 
 jobs:
   dmg:
-    # macos-14 and later are Apple silicon, which is what the DMG targets
-    runs-on: macos-14
+    # Apple silicon, which is what the DMG targets, and Xcode 26 for the Icon Composer icon actool 15 cannot read
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
