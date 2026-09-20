@@ -29,8 +29,9 @@ case "${1:-}" in
     openssl x509 -inform DER -in "$CER" -out "$DIR/developerID.pem"
     curl -fsSL "$INTERMEDIATE_URL" -o "$DIR/intermediate.cer"
     openssl x509 -inform DER -in "$DIR/intermediate.cer" -out "$DIR/intermediate.pem"
-    # A fresh random password: the workflow is the only reader, so nobody has to remember it
-    openssl rand -base64 24 > "$PASSWORD_FILE"
+    # A fresh random password: the workflow is the only reader, so nobody has to remember it.
+    # No trailing newline: openssl reads the line without it, and a secret carrying one fails the keychain import.
+    printf '%s' "$(openssl rand -base64 24)" > "$PASSWORD_FILE"
     openssl pkcs12 -export -legacy \
       -inkey "$KEY" -in "$DIR/developerID.pem" -certfile "$DIR/intermediate.pem" \
       -name "Developer ID Application" -out "$P12" -passout "file:$PASSWORD_FILE"
