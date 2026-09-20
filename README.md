@@ -4,7 +4,7 @@
 
 # Treeix
 
-**The AI coding workspace for macOS - worktrees, diffs, pull requests, tasks and AI agent terminals in one window.**
+**Read what your coding agents wrote. Worktrees, diffs, pull requests, tickets and agent terminals in one macOS window.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)](#install)
@@ -25,13 +25,13 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## What it does
 
-- **Worktrees.** Every repository and checkout in your folders, with the diff against the base branch, split or unified.
+- **Worktrees.** Every repository and checkout in your folders shows up in one sidebar, with the diff against the base branch, split or unified.
 - **Review in place.** Select lines, leave comments, then send them to a Claude or Codex session or copy them out.
-- **Sessions that survive.** Claude, Codex and shell sessions keep running across reloads, docked next to the diff or in their own tab.
-- **Pull requests.** GitHub and GitLab, through `gh` and `glab`: threads, viewed files, conflict and CI state.
-- **Tasks and pages.** Jira work items and Confluence pages through the Atlassian CLI, with link previews anywhere a URL appears.
-- **Markdown that behaves.** Foldable headings, mermaid diagrams, images from private uploads, full screen with zoom.
-- **Everything is a plugin.** Each feature above can be switched off in Settings and stops loading its code entirely.
+- **Sessions keep running.** Claude, Codex and shell sessions survive a reload, docked next to the diff or in their own tab.
+- **Pull requests.** `gh` and `glab` bring GitHub and GitLab pull requests in with their review threads, viewed files, conflict and CI state.
+- **Tasks and pages.** The Atlassian CLI opens Jira work items and Confluence pages beside the branch, and a URL previews wherever you paste it.
+- **Markdown.** Headings fold, mermaid blocks render, private uploads load their images, and full screen zooms.
+- **Everything is a plugin.** Switch any feature above off in Settings and it stops loading its code entirely.
 
 ## Before and after
 
@@ -51,11 +51,11 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 <img src="apps/landing/assets/hero.webp" alt="The diff of the feat/usage-invoices worktree with a comment being written on lines 5 to 9" width="900" />
 
-**Comments go back to the agent.** Select lines, write the note, send the whole queue to the Claude Code or Codex session running in that worktree as its next prompt.
+**Comments go back to the agent.** Select the lines that need another pass and write your note. The whole queue then goes to the Claude Code or Codex session running in that worktree as its next prompt.
 
 <img src="apps/landing/assets/drawer.webp" alt="The agent comments drawer with three comments ready to send to the Billing invoices session" width="900" />
 
-**A group per agent.** Its worktree, its terminals, its plan, and a badge the moment one waits for an answer.
+**A group per agent.** A group holds one agent's worktree, terminals and plan, and it gets a badge the moment that agent waits for an answer.
 
 <img src="apps/landing/assets/terminal.webp" alt="Terminal page with three agent groups and one badge showing a session waiting for input" width="900" />
 
