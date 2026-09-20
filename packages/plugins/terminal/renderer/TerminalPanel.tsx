@@ -350,7 +350,7 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
         {task?.tabs.map((tab, index) => <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />)}
       </div>
       <button
-        title="New tab: Shell (⌘T), Claude or Codex"
+        title="New tab: Shell (⌘T) or an agent"
         aria-label="New tab"
         onClick={(event) => openMenu(event, getAgents().map((agent) => ({ label: agent.label, accelerator: agent.id === 'shell' ? 'CmdOrCtrl+T' : undefined, run: () => newTab(agent.id) })))}
         className={stripButton}

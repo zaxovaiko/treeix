@@ -125,7 +125,7 @@ export function BranchDialog({
   const [branches, setBranches] = useState<Branch[] | null>(null)
   const [name, setName] = useState(initialName)
   const [worktree, setWorktree] = useState(initialWorktree)
-  const [session, setSession] = usePersisted<SessionKind | null>('branchDialog.session', null)
+  const [session, setSession] = usePersisted<SessionKind | null>('branchDialog.agent', null)
   const [busy, setBusy] = useState(false)
   const sessionsAvailable = useService('sessions') !== null
   const [error, setError] = useState<string | null>(null)
