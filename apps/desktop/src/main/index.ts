@@ -14,6 +14,8 @@ import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { checkTools } from './tools'
 import { setupUpdates } from './updates'
 
+app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_VERSION__, version: '', copyright: 'Apache 2.0' })
+
 // ponytail: apps launched from Finder get a minimal PATH, add Homebrew so gh/glab resolve
 process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean).join(':')
 

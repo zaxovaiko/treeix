@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
@@ -14,11 +15,16 @@ const alias = {
   '@treeix/app': resolve(__dirname, 'src/renderer/src')
 }
 
+// Unpackaged Electron answers app.getVersion() with its own version, so the app's is baked in instead
+const { version } = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }
+const define = { __APP_VERSION__: JSON.stringify(version) }
+
 export default defineConfig({
-  main: { resolve: { alias } },
-  preload: { resolve: { alias } },
+  main: { define, resolve: { alias } },
+  preload: { define, resolve: { alias } },
   // The diff highlighter worker lazy-loads grammars, which needs code-splitting ES workers
   renderer: {
+    define,
     resolve: { alias },
     plugins: [react(), tailwindcss()],
     worker: { format: 'es' },

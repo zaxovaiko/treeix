@@ -8,10 +8,10 @@ const { autoUpdater } = electronUpdater
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 const FIRST_CHECK_MS = 10_000
 
-let status: UpdateStatus = { current: app.getVersion(), phase: 'idle' }
+let status: UpdateStatus = { current: __APP_VERSION__, phase: 'idle' }
 
 function publish(next: Omit<UpdateStatus, 'current'>): void {
-  status = { current: app.getVersion(), ...next }
+  status = { current: __APP_VERSION__, ...next }
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('updates:status', status)
 }
 

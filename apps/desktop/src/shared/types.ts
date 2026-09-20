@@ -179,3 +179,8 @@ export type Api = {
     on: (listener: (status: UpdateStatus) => void) => () => void
   }
 }
+
+/** The app's own version, baked in at build time; unpackaged Electron reports its own from `app.getVersion()` */
+declare global {
+  const __APP_VERSION__: string
+}
