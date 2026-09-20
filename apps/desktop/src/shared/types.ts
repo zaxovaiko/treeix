@@ -86,6 +86,22 @@ export type ContextMenuItem =
   | { type: 'separator' }
   | { type?: 'item'; id: string; label: string; enabled?: boolean; accelerator?: string }
 
+/**
+ * Where the app is in getting its next version. `unsupported` covers builds that update elsewhere:
+ * a dev run, the Mac App Store, or an unsigned build macOS would refuse to replace.
+ */
+export type UpdateStatus = {
+  /** The running version, for Settings */
+  current: string
+  phase: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'unsupported' | 'error'
+  /** The version being downloaded or waiting to be installed */
+  version?: string
+  /** 0-100 while downloading */
+  percent?: number
+  /** Why the check failed, or why updates are unsupported here */
+  message?: string
+}
+
 export type Api = {
   home: string
   scan: () => Promise<Repo[]>
@@ -148,4 +164,14 @@ export type Api = {
   renamePath: (worktreePath: string, from: string, to: string) => Promise<void>
   /** Moves to the system Trash */
   trashPath: (worktreePath: string, filePath: string) => Promise<void>
+  updates: {
+    /** The status right now; the app checks on its own, this is for Settings opening mid-check */
+    status: () => Promise<UpdateStatus>
+    /** Asks GitHub now; resolves with the status the check ended on */
+    check: () => Promise<UpdateStatus>
+    /** Quits and installs the downloaded version */
+    install: () => void
+    /** Fires on every change; returns the unsubscribe */
+    on: (listener: (status: UpdateStatus) => void) => () => void
+  }
 }

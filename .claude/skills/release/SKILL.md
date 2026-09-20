@@ -47,8 +47,12 @@ The release ends up with `Treeix-arm64.dmg` and the matching `.zip` attached. Th
 - **`node-gyp` on the runner** - the native `mac-window` module needs Xcode command line tools; the `macos-14` image has them. A failure here is usually a dependency bump, not the runner.
 - **Release already exists** - `gh release create` refuses to overwrite. Delete the release and the tag before retrying.
 
-## Notarisation
+## Signing, notarisation and in-app updates
 
-The workflow ships an ad-hoc signed DMG, so first launch needs System Settings > Privacy & Security > Open Anyway. To publish a notarised
-build instead, add `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` as repository secrets, pass them to the build step, and
-switch it to `dist:dmg:notarized`. Details in `docs/releasing.md`.
+The workflow signs and notarises when `MAC_CERT_P12` and `APPLE_API_KEY_P8` are set, and publishes through
+`electron-builder --publish always`, which is what uploads `latest-mac.yml`. That file is the update feed: without it,
+or without a Developer ID signature, installed copies never move off their version. Setting the secrets up is
+`apps/desktop/scripts/signing-secrets.sh`, described in `docs/releasing.md`.
+
+Without those secrets the run falls back to the ad-hoc DMG, and first launch needs System Settings > Privacy &
+Security > Open Anyway. Say so when reporting a release built that way, since those users have to update by hand.

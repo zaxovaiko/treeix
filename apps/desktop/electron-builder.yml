@@ -1,5 +1,11 @@
 appId: com.zaxovaiko.treeix
 productName: Treeix
+# The feed the app updates from: the tag's GitHub release, with the latest-mac.yml electron-builder uploads beside the zip
+publish:
+  provider: github
+  owner: zaxovaiko
+  repo: treeix
+  releaseType: release
 directories:
   buildResources: build
 files:

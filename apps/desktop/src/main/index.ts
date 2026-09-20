@@ -12,6 +12,7 @@ import { addHotkeyMenuItem, configureHotkey, isSummoned, releaseHotkey } from '.
 import { hover, navigate, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { checkTools } from './tools'
+import { setupUpdates } from './updates'
 
 // ponytail: apps launched from Finder get a minimal PATH, add Homebrew so gh/glab resolve
 process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean).join(':')
@@ -114,6 +115,7 @@ app.whenReady().then(() => {
   ipcMain.handle('createPath', (_, worktreePath: string, filePath: string) => createPath(worktreePath, filePath))
   ipcMain.handle('renamePath', (_, worktreePath: string, from: string, to: string) => renamePath(worktreePath, from, to))
   ipcMain.handle('trashPath', (_, worktreePath: string, filePath: string) => trashPath(worktreePath, filePath))
+  setupUpdates()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

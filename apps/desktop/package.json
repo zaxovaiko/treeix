@@ -16,6 +16,7 @@
     "dist:dmg": "bun run build && electron-builder --mac dmg zip --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false",
     "dist:dmg:notarized": "bun run build && electron-builder --mac dmg zip --publish never",
     "dist:mas": "bun run build && electron-builder --mac mas --publish never",
+    "release:mac": "bun run build && electron-builder --mac dmg zip --publish always",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper && node-gyp rebuild -C native/mac-window && sh scripts/dev-app-name.sh",
     "build:native": "node-gyp rebuild -C native/mac-window"
   },
@@ -25,6 +26,7 @@
     "@pierre/diffs": "^1.4.2",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
+    "electron-updater": "^6.8.9",
     "mermaid": "^11.17.2",
     "node-pty": "1.1.0",
     "react-markdown": "10.1.0",

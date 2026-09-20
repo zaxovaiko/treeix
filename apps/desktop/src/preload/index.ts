@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
-import type { Api } from '../shared/types'
+import type { Api, UpdateStatus } from '../shared/types'
 
 const api: Api = {
   home: homedir(),
@@ -72,6 +72,16 @@ const api: Api = {
   createPath: (worktreePath, filePath) => ipcRenderer.invoke('createPath', worktreePath, filePath),
   renamePath: (worktreePath, from, to) => ipcRenderer.invoke('renamePath', worktreePath, from, to),
   trashPath: (worktreePath, filePath) => ipcRenderer.invoke('trashPath', worktreePath, filePath),
+  updates: {
+    status: () => ipcRenderer.invoke('updates:status'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    install: () => ipcRenderer.send('updates:install'),
+    on: (listener) => {
+      const handler = (_: IpcRendererEvent, status: UpdateStatus): void => listener(status)
+      ipcRenderer.on('updates:status', handler)
+      return () => ipcRenderer.removeListener('updates:status', handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
