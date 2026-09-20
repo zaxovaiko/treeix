@@ -8,14 +8,17 @@ publish:
   releaseType: release
 directories:
   buildResources: build
+# An allowlist: Vite bundles the app into out/, so only that, the runtime dependencies and the native pieces ship.
+# A denylist let dist/ and src/ in as soon as node_modules stopped dominating the archive.
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!scripts/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - out/**
+  - resources/**
+  - native/mac-window/build/Release/*.node
+  - node_modules/**
+  - package.json
+  # node-pty ships a 14MB prebuild per platform and only ever loads its own. Packaging for Windows needs this revisited.
+  - '!node_modules/node-pty/prebuilds/{darwin-x64,win32-arm64,win32-x64}/**'
+  - '!node_modules/node-pty/{src,deps,third_party,scripts}/**'
 asarUnpack:
   - resources/**
   - node_modules/node-pty/**
@@ -28,6 +31,9 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # 220 locale bundles ship by default and the app has no translations; English alone saves ~50MB before compression
+  electronLanguages:
+    - en
   # Icon Composer file: macOS 26 puts legacy .icns icons on a grey plate; build/icon.icns stays for older macOS
   icon: build/icon.icon
   entitlementsInherit: build/entitlements.mac.plist
