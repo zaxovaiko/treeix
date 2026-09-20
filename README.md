@@ -4,7 +4,7 @@
 
 # Treeix
 
-**Review what your coding agents did - worktrees, diffs, pull requests, tasks and terminals in one window.**
+**The AI coding workspace for macOS - worktrees, diffs, pull requests, tasks and AI agent terminals in one window.**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)](#install)
@@ -21,7 +21,7 @@
 
 ## Why
 
-Agents write code faster than anyone can read it. The reading is the bottleneck, and it is spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, its review comments, its pull request and the agent session that produced it on a single screen, and sends your comments straight back to the agent.
+AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, its review comments, its pull request and the agent session that produced it on a single screen, and sends your comments straight back to the agent.
 
 ## What it does
 
