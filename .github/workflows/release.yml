@@ -58,29 +58,29 @@ jobs:
           rm -f "$RUNNER_TEMP/certificate.p12"
           security find-identity -v -p codesigning "$keychain"
 
-      - name: Build, sign, notarize and publish
-        if: steps.signing.outputs.signed == 'true'
+      # An empty APPLE_API_KEY is what tells electron-builder to skip notarization, so an unsigned build
+      # takes the same path through the same script
+      - name: Build, sign and notarize
         env:
-          GH_TOKEN: ${{ github.token }}
-          APPLE_API_KEY: ${{ runner.temp }}/AuthKey.p8
+          APPLE_API_KEY: ${{ steps.signing.outputs.signed == 'true' && format('{0}/AuthKey.p8', runner.temp) || '' }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
-          printf '%s' "${{ secrets.APPLE_API_KEY_P8 }}" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          if [ -n "$APPLE_API_KEY" ]; then printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"; fi
           bun run --cwd apps/desktop release:mac
           rm -f "$RUNNER_TEMP/AuthKey.p8"
 
-      - name: Build the DMG unsigned
-        if: steps.signing.outputs.signed != 'true'
-        run: bun run dist:dmg
-
-      - name: Publish the unsigned release
-        if: steps.signing.outputs.signed != 'true'
+      # electron-builder's own uploader quits before the uploads finish when it runs under bun, leaving a
+      # release with a stray blockmap, so the assets go up here. latest-mac.yml is the update feed itself.
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            apps/desktop/dist/Treeix-arm64.dmg \
-            apps/desktop/dist/Treeix-*-arm64-mac.zip
+          cd apps/desktop/dist
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            Treeix-arm64.dmg Treeix-arm64.dmg.blockmap \
+            Treeix-*-arm64-mac.zip Treeix-*-arm64-mac.zip.blockmap \
+            latest-mac.yml

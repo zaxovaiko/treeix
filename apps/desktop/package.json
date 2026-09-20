@@ -16,7 +16,7 @@
     "dist:dmg": "bun run build && electron-builder --mac dmg zip --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false",
     "dist:dmg:notarized": "bun run build && electron-builder --mac dmg zip --publish never",
     "dist:mas": "bun run build && electron-builder --mac mas --publish never",
-    "release:mac": "bun run build && electron-builder --mac dmg zip --publish always",
+    "release:mac": "bun run build && electron-builder --mac dmg zip --publish never",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper && node-gyp rebuild -C native/mac-window && sh scripts/dev-app-name.sh",
     "build:native": "node-gyp rebuild -C native/mac-window"
   },

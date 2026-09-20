@@ -11,8 +11,9 @@ Updates). Nothing installs without that restart, except on the next quit.
 
 Two things have to hold or the app silently stays on its version:
 
-- **The release carries `latest-mac.yml`.** `electron-builder --publish always` uploads it; a release made by hand
-  with `gh release create` does not.
+- **The release carries `latest-mac.yml`.** electron-builder writes it into `dist` next to the zip; the workflow
+  uploads it with `gh release upload`. electron-builder's own `--publish always` cannot be used here: under bun it
+  exits while the uploads are still running and leaves the release with a stray blockmap.
 - **The build is signed with a Developer ID certificate.** macOS refuses to swap an app for one with a different
   signature, so ad-hoc builds (`dist:dmg`) can download an update and then fail to apply it.
 
