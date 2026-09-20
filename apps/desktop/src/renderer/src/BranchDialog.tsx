@@ -3,7 +3,8 @@ import type { Branch, Repo } from '../../shared/types'
 import { Icon } from './Icon'
 import { KindBadge } from './sessionUi'
 import { baseName, branchAge } from './Sidebar'
-import { Kbd, SESSION_KINDS, type SessionKind } from '@treeix/sdk'
+import { Kbd, type SessionKind } from '@treeix/sdk'
+import { type Agent, useAgents } from './agents'
 import { useService } from './plugins'
 import { errorMessage, Popup, usePersisted } from './ui'
 
@@ -124,7 +125,7 @@ export function BranchDialog({
   const [branches, setBranches] = useState<Branch[] | null>(null)
   const [name, setName] = useState(initialName)
   const [worktree, setWorktree] = useState(initialWorktree)
-  const [session, setSession] = usePersisted<string>('branchDialog.session', 'none')
+  const [session, setSession] = usePersisted<SessionKind | null>('branchDialog.session', null)
   const [busy, setBusy] = useState(false)
   const sessionsAvailable = useService('sessions') !== null
   const [error, setError] = useState<string | null>(null)
@@ -137,7 +138,8 @@ export function BranchDialog({
 
   const existing = branches?.find((branch) => localName(branch.name) === name.trim())
   const baseValue = base.trim() || 'HEAD'
-  const sessionKind = !sessionsAvailable || session === 'none' ? null : (session as SessionKind)
+  const sessionKind = sessionsAvailable ? session : null
+  const agents = useAgents()
 
   const submit = (): void => {
     if (!name.trim() || busy || (!worktree && existing)) return
@@ -191,19 +193,21 @@ export function BranchDialog({
         {worktree && sessionsAvailable && (
           <div className="mt-3 flex items-center gap-1.5">
             <span className="mr-1 text-xs text-muted-foreground">Then open</span>
-            {(['none', 'shell', 'claude', 'codex'] as const).map((kind) => (
+            {[null, ...agents].map((agent: Agent | null) => (
               <button
-                key={kind}
-                onClick={() => setSession(kind)}
+                key={agent?.id ?? 'none'}
+                onClick={() => setSession(agent?.id ?? null)}
                 className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ${
-                  session === kind ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
+                  (session ?? null) === (agent?.id ?? null) ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
                 }`}
               >
-                {kind === 'none' ? 'Nothing' : (
+                {agent ? (
                   <>
-                    <KindBadge kind={kind} />
-                    {SESSION_KINDS[kind].label}
+                    <KindBadge kind={agent.id} />
+                    {agent.label}
                   </>
+                ) : (
+                  'Nothing'
                 )}
               </button>
             ))}

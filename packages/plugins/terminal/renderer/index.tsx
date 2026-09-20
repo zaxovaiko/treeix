@@ -8,7 +8,6 @@ import {
   onShellCommand,
   PageLayout,
   type RendererPlugin,
-  SESSION_KINDS,
   type SessionKind,
   type SessionSummary,
   type ShortcutInfo,
@@ -16,6 +15,7 @@ import {
   togglePanel,
   useHost
 } from '@treeix/sdk'
+import { getAgents } from '@treeix/app/agents'
 import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
@@ -480,14 +480,14 @@ const plugin: RendererPlugin = {
   commands: (host) => [
     { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: actionKeys('terminal.sessions') || undefined, run: () => dialogs.update({ sessions: 'all' }) },
     { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: actionKeys('terminal.newGroup') || undefined, run: () => startTask(host) },
-    ...(Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => ({
-      id: `session:${kind}`,
+    ...getAgents().map((agent) => ({
+      id: `session:${agent.id}`,
       group: 'Actions',
-      label: `New ${SESSION_KINDS[kind].label} tab`,
+      label: `New ${agent.label} tab`,
       detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
       icon: 'terminal' as const,
-      shortcut: kind === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
-      run: () => newTab(host, kind)
+      shortcut: agent.id === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
+      run: () => newTab(host, agent.id)
     })),
     // @ in the palette searches these
     ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),

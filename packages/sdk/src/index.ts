@@ -66,15 +66,10 @@ export type PanelContribution = {
   Badge?: ComponentType
 }
 
-export type SessionKind = 'claude' | 'codex' | 'shell'
+/** An agent id, open because users define their own in Settings; the table of known ids is `@treeix/app/agents` */
+export type SessionKind = string
 /** `dormant`: restored after a relaunch but not started yet; it starts once shown, revealed or sent text */
 export type SessionStatus = 'running' | 'input' | 'idle' | 'exited' | 'dormant'
-
-export const SESSION_KINDS: Record<SessionKind, { label: string; mark: string; color: string; command: string | null }> = {
-  claude: { label: 'Claude', mark: '✳', color: '#d97757', command: 'claude' },
-  codex: { label: 'Codex', mark: '◎', color: 'var(--color-foreground)', command: 'codex' },
-  shell: { label: 'Shell', mark: '$', color: '#34d399', command: null }
-}
 
 /** What the app knows about a terminal or agent session, without the terminal itself */
 export type SessionSummary = {

@@ -5,6 +5,7 @@ import { Icon } from './Icon'
 import { digitLabel } from './settings'
 import { baseName } from './Sidebar'
 import { Kbd, type ListRowProps, type SessionSummary, useListNav, useShell, useZone, Zone } from '@treeix/sdk'
+import { isAgent } from './agents'
 import { useSessions } from './plugins'
 import {
   deleteWorkspace,
@@ -21,7 +22,7 @@ import {
 function activityOf(sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): 'input' | 'running' | null {
   const mine = sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces))
   if (mine.some((session) => session.status === 'input')) return 'input'
-  return mine.some((session) => session.status === 'running' && session.kind !== 'shell') ? 'running' : null
+  return mine.some((session) => session.status === 'running' && isAgent(session.kind)) ? 'running' : null
 }
 
 function Tile({

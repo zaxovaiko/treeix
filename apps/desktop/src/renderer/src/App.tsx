@@ -11,7 +11,8 @@ import {
   rangeLabel,
   type ReviewComment
 } from '../../shared/comments'
-import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, SESSION_KINDS, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
+import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
+import { getAgents, isAgent } from './agents'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
 import { HistoryDialog } from './HistoryDialog'
 import type { Branch, CodeLocation, FilePatch, SearchMatch, Repo, Worktree, WorktreeFiles } from '../../shared/types'
@@ -531,8 +532,7 @@ function App(): React.JSX.Element {
   const branchMenu = (event: React.MouseEvent, branch: Branch, repo: Repo): void =>
     openMenu(event, [
       { label: 'Open as worktree', run: () => openBranch(branch, repo) },
-      sessionsAvailable && { label: 'Open as worktree with Shell', run: () => openBranch(branch, repo, 'shell') },
-      sessionsAvailable && { label: 'Open as worktree with Claude', run: () => openBranch(branch, repo, 'claude') },
+      ...(sessionsAvailable ? getAgents().map((agent) => ({ label: `Open as worktree with ${agent.label}`, run: () => openBranch(branch, repo, agent.id) })) : []),
       null,
       { label: 'New branch from here…', run: () => setBranchDialog({ repo, worktree: false, base: branch.name }) },
       { label: 'Copy branch name', run: () => copyText(branch.name) },
@@ -564,12 +564,7 @@ function App(): React.JSX.Element {
   }
 
   const sessionEntries = (cwd: string): MenuEntry[] =>
-    sessionsAvailable
-      ? (Object.keys(SESSION_KINDS) as SessionKind[]).map((kind) => ({
-          label: `New ${SESSION_KINDS[kind].label} session here`,
-          run: () => startSession(kind, cwd)
-        }))
-      : []
+    sessionsAvailable ? getAgents().map((agent) => ({ label: `New ${agent.label} session here`, run: () => startSession(agent.id, cwd) })) : []
 
   const repoMenu = (event: React.MouseEvent, repo: Repo): void =>
     openMenu(event, [
@@ -963,7 +958,7 @@ function App(): React.JSX.Element {
   const activity: Record<string, 'input' | 'running'> = {}
   for (const session of sessions) {
     if (session.status === 'input') activity[session.worktreePath] = 'input'
-    else if (session.status === 'running' && session.kind !== 'shell') activity[session.worktreePath] ??= 'running'
+    else if (session.status === 'running' && isAgent(session.kind)) activity[session.worktreePath] ??= 'running'
   }
 
   const deleteComment = (comment: ReviewComment): void =>

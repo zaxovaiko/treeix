@@ -11,9 +11,11 @@ export function readStored(key: string): unknown {
   }
 }
 
-export function usePersisted<T extends string | number | boolean>(key: string, initial: T): [T, (value: T) => void] {
+export function usePersisted<T extends string | number | boolean | null>(key: string, initial: T): [T, (value: T) => void] {
   const [value, setValue] = useState<T>(() => {
-    const matches = (candidate: unknown): candidate is T => typeof candidate === typeof initial
+    // A nullable default (e.g. a selection that starts unset) accepts a stored string alongside null itself
+    const matches = (candidate: unknown): candidate is T =>
+      initial === null ? candidate === null || typeof candidate === 'string' : typeof candidate === typeof initial
     try {
       const stored: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
       return matches(stored) ? stored : initial

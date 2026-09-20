@@ -1,6 +1,7 @@
 import type { Repo } from '../../shared/types'
 import { baseName, branchLabel } from './Sidebar'
-import { SESSION_KINDS, type SessionKind, type SessionStatus, type SessionSummary } from '@treeix/sdk'
+import { agentOr } from './agents'
+import type { SessionKind, SessionStatus, SessionSummary } from '@treeix/sdk'
 
 export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
   input: { label: 'needs input', color: '#fbbf24' },
@@ -18,7 +19,7 @@ export function worktreeLabel(repos: Repo[] | null, worktreePath: string): strin
 }
 
 export function KindBadge({ kind }: { kind: SessionKind }): React.JSX.Element {
-  const { mark, color } = SESSION_KINDS[kind]
+  const { mark, color } = agentOr(kind)
   return (
     <span style={{ color }} className="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">
       {mark}

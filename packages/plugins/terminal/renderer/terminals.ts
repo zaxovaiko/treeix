@@ -9,10 +9,10 @@ import { THEMES } from '@treeix/app/themes'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
-import { createBridge, SESSION_KINDS, type SessionKind, type SessionStatus } from '@treeix/sdk'
+import { createBridge, type SessionKind, type SessionStatus } from '@treeix/sdk'
 import type { LiveTerminal } from '../shared/types'
 
-export { SESSION_KINDS, type SessionKind, type SessionStatus }
+export { type SessionKind, type SessionStatus }
 
 const bridge = createBridge('terminal')
 
