@@ -43,6 +43,18 @@ cwebp -q 82 shot.png -o apps/landing/assets/<name>.webp
 `og.png` is different: it comes from `marketing/og.html`, not the app. Re-render it whenever the landing's look changes, or the link
 preview keeps showing the old design.
 
+`social-preview.png` is the GitHub repository preview, which is cropped to 2:1 rather than the 1.91:1 of `og.png`, so it has its own
+source in `marketing/social-preview.html`. Render it at 2x and halve it, which keeps the type crisp:
+
+```sh
+cd marketing && "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --hide-scrollbars \
+  --force-device-scale-factor=2 --window-size=1280,640 --virtual-time-budget=6000 \
+  --screenshot=/tmp/social-2x.png "file://$PWD/social-preview.html"
+sips -z 640 1280 /tmp/social-2x.png --out ../apps/landing/assets/social-preview.png
+```
+
+Upload it in Settings, General, Social preview. GitHub caps the file at 1MB.
+
 ## Check the result
 
 Serve the landing and look at the page, do not trust the file on its own:
