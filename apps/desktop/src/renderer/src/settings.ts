@@ -2,11 +2,14 @@ import { useSyncExternalStore } from 'react'
 import { setKeymapOverrides } from '../../shared/keymap'
 import { isShortcut, type Shortcut } from '../../shared/shortcut'
 import type { NavigationKind } from '../../shared/types'
+import type { Agent } from './agents'
 import { isThemeId, type ThemeId } from './themes'
 
 export type Settings = {
   /** Plugins switched on or off in Settings, by id; absent ones follow their manifest's default */
   plugins: Record<string, boolean>
+  /** Agents the user added or redefined, merged over the built-in table by id */
+  customAgents: Agent[]
   /** Background syntax highlighting workers; applied on next launch */
   highlightWorkers: number
   /** 'system' follows the macOS appearance: Neutral when dark, Light when light */
@@ -140,7 +143,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -149,6 +152,30 @@ function parsePluginChoices(candidate: Record<string, unknown>): Record<string, 
   const legacy = Object.entries(LEGACY_MODULES).flatMap(([key, id]) => (typeof candidate[key] === 'boolean' ? [[id, candidate[key]]] : []))
   const stored = typeof candidate.plugins === 'object' && candidate.plugins !== null ? Object.entries(candidate.plugins) : []
   return Object.fromEntries([...legacy, ...stored.filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean')])
+}
+
+export function parseCustomAgents(value: unknown): Agent[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry): Agent[] => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const candidate = entry as Record<string, unknown>
+    const text = (key: string): string | undefined => (typeof candidate[key] === 'string' ? (candidate[key] as string) : undefined)
+    const id = text('id')
+    if (!id) return []
+    return [
+      {
+        id,
+        label: text('label') ?? id,
+        mark: text('mark') ?? '●',
+        color: text('color') ?? 'var(--color-foreground)',
+        command: text('command') ?? null,
+        promptFlag: text('promptFlag'),
+        sessionIdFlag: text('sessionIdFlag'),
+        resumeCommand: text('resumeCommand'),
+        agent: candidate.agent !== false
+      }
+    ]
+  })
 }
 
 function load(): Settings {
@@ -160,6 +187,7 @@ function load(): Settings {
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
+      customAgents: parseCustomAgents(candidate.customAgents),
       theme: candidate.theme === 'system' || isThemeId(candidate.theme) ? candidate.theme : DEFAULTS.theme,
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
