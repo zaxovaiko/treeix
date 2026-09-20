@@ -1,4 +1,5 @@
 import { actionOf, shortcutOf } from '../../shared/keymap'
+import { MENU_SECTIONS, NO_ACCELERATOR, NOT_IN_MENU } from '../../shared/menu'
 import { toAccelerator } from '../../shared/shortcut'
 
 /** What the native menu shows for one action */
@@ -27,18 +28,17 @@ export const subscribeRunners = (listener: () => void): (() => void) => {
   return () => listeners.delete(listener)
 }
 
-/** Sections the native menu carries, in the order their menus appear */
-export const MENU_SECTIONS = ['Go to', 'Panels'] as const
+const sectionOrder = (section: string): number => MENU_SECTIONS.findIndex(([candidate]) => candidate === section)
 
 /** Every runnable action of a menu section, with the key it currently answers to */
 export function menuActions(): MenuAction[] {
   return [...runners.keys()]
     .flatMap((id) => {
       const action = actionOf(id)
-      if (!action || !MENU_SECTIONS.some((section) => section === action.section)) return []
-      const shortcut = shortcutOf(id)
+      if (!action || NOT_IN_MENU.has(id) || sectionOrder(action.section) === -1) return []
+      const shortcut = NO_ACCELERATOR.has(id) ? null : shortcutOf(id)
       const accelerator = shortcut ? toAccelerator(shortcut) : null
       return [{ id, label: action.menuLabel ?? action.label, section: action.section, ...(accelerator ? { accelerator } : {}) }]
     })
-    .sort((a, b) => MENU_SECTIONS.indexOf(a.section as (typeof MENU_SECTIONS)[number]) - MENU_SECTIONS.indexOf(b.section as (typeof MENU_SECTIONS)[number]))
+    .sort((a, b) => sectionOrder(a.section) - sectionOrder(b.section))
 }

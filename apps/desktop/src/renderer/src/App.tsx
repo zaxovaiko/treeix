@@ -786,7 +786,16 @@ function App(): React.JSX.Element {
   useEffect(() => window.api.onRunAction?.((id) => runAction(id)), [])
   // The native menu is rebuilt from whatever is runnable now, so a plugin loading or a key rebound updates it
   useEffect(() => {
-    const send = (): void => window.api.setMenuActions?.(menuActions())
+    // A plugin toggle drops and re-registers every runner in one tick; without this the menu bar rebuilds once per call and flashes
+    let queued = false
+    const send = (): void => {
+      if (queued) return
+      queued = true
+      queueMicrotask(() => {
+        queued = false
+        window.api.setMenuActions?.(menuActions())
+      })
+    }
     send()
     const drops = [subscribeRunners(send), onKeymapChange(send)]
     return () => drops.forEach((drop) => drop())

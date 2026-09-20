@@ -56,11 +56,11 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'wt.changedFiles', label: 'Changed files column', section: 'Worktrees', page: 'worktrees', keys: key('KeyE', { meta: true }) },
   { id: 'wt.findFile', label: 'Find a file in the explorer', section: 'Worktrees', page: 'worktrees', keys: key('KeyP', { meta: true }) },
 
-  { id: 'app.diffStyle', label: 'Switch between split and unified diffs', section: 'Go to', keys: null },
+  { id: 'app.diffStyle', label: 'Switch between split and unified diffs', menuLabel: 'Split or unified diff', section: 'Go to', keys: null },
   { id: 'app.copyComments', label: 'Copy the agent comments of the worktree', section: 'Comments', keys: null },
   { id: 'app.clearComments', label: 'Delete the agent comments of the worktree', section: 'Comments', keys: null },
-  { id: 'workspace.new', label: 'New workspace', section: 'Go to', keys: null },
-  { id: 'workspace.edit', label: 'Edit the current workspace', section: 'Go to', keys: null },
+  { id: 'workspace.new', label: 'New workspace', menuLabel: 'New workspace', section: 'Go to', keys: null },
+  { id: 'workspace.edit', label: 'Edit the current workspace', menuLabel: 'Edit workspace', section: 'Go to', keys: null },
 
   { id: 'composer.save', label: 'Save the comment or message being written', section: 'Comments', keys: key('Enter', { meta: true }) },
   { id: 'composer.saveAlternative', label: 'Save it the second way, e.g. as an agent comment', section: 'Comments', keys: key('Enter', { meta: true, shift: true }) },

@@ -31,6 +31,18 @@ test('the menu carries the short label and the key the action answers to', () =>
   drops.forEach((drop) => drop())
 })
 
+test('an alias key and a context-guarded key are kept out of the menu payload', async () => {
+  const { defineActions: define, key: bind } = await import('../../shared/keymap')
+  define([
+    { id: 'app.paletteAlt', label: 'Search everything, second key', section: 'Go to', keys: bind('KeyP', { meta: true, shift: true }) },
+    { id: 'shell.zen', label: 'Zen', section: 'Panels', keys: bind('Enter', { meta: true, shift: true }) }
+  ])
+  const drops = [registerActionRunner('app.paletteAlt', () => undefined), registerActionRunner('shell.zen', () => undefined)]
+  // The second key never reaches the menu, and zen reaches it without its key, since macOS would skip the typing guard
+  expect(menuActions()).toEqual([{ id: 'shell.zen', label: 'Zen', section: 'Panels' }])
+  drops.forEach((drop) => drop())
+})
+
 test('running an id calls its runner, and an unknown id is a no-op', () => {
   let ran = 0
   const drop = registerActionRunner('test.zen', () => (ran += 1))

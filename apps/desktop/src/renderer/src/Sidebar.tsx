@@ -111,6 +111,10 @@ export function Sidebar({
     setFolderOpen(false)
     folderAnchor.current?.querySelector('button')?.focus()
   }
+  // Focus moves into the popup, or its keys never fire and j/k walk the worktree list behind it
+  useEffect(() => {
+    if (folderOpen) folderMenu.current?.querySelector('button')?.focus()
+  }, [folderOpen])
   const onFolderKey = (event: React.KeyboardEvent): void => {
     event.stopPropagation()
     const items = [...(folderMenu.current?.querySelectorAll<HTMLElement>('button') ?? [])]

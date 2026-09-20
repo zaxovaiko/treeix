@@ -1,14 +1,9 @@
 import { type BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
+import { MENU_SECTIONS } from '../shared/menu'
 import { toggleHotkeyWindow } from './hotkeyWindow'
 
 /** One action the renderer offers the menu; `section` is the action's own, which decides the menu it lands in */
 export type MenuAction = { id: string; label: string; section: string; accelerator?: string }
-
-/** Which menu each action section becomes, in menu bar order */
-const MENUS: [section: string, label: string][] = [
-  ['Go to', 'Go'],
-  ['Panels', 'View']
-]
 
 const isMac = process.platform === 'darwin'
 
@@ -27,16 +22,37 @@ export function buildMenu(window: BrowserWindow, actions: MenuAction[]): void {
     ? [{ role: 'appMenu', submenu: [{ role: 'about' }, { type: 'separator' }, ...settings, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
     : [{ label: 'File', submenu: [...settings, { role: 'quit' }] }]
 
-  const fromActions = MENUS.flatMap(([section, label]): MenuItemConstructorOptions[] => {
+  const fromActions = MENU_SECTIONS.flatMap(([section, label]): MenuItemConstructorOptions[] => {
     const items = actions.filter((action) => action.section === section)
     if (!items.length) return []
     return [{ label, submenu: items.map(({ id, label: item, accelerator }) => ({ label: item, accelerator, click: run(id) })) }]
   })
 
-  const viewExtras: MenuItemConstructorOptions = {
+  // The window commands keep their roles, which is what gives macOS its window list and Bring All to Front
+  const windowMenu: MenuItemConstructorOptions = {
     label: 'Window',
-    submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { label: 'Toggle Hotkey Window', click: () => toggleHotkeyWindow(window) }]
+    submenu: [
+      { role: 'minimize' },
+      { role: 'zoom' },
+      ...(isMac ? [{ role: 'front' as const }] : []),
+      { type: 'separator' },
+      { label: 'Toggle Hotkey Window', click: () => toggleHotkeyWindow(window) }
+    ]
   }
+  const viewExtras: MenuItemConstructorOptions[] = [
+    { type: 'separator' },
+    { role: 'togglefullscreen' },
+    { role: 'resetZoom' },
+    { role: 'zoomIn' },
+    { role: 'zoomOut' },
+    { type: 'separator' },
+    { role: 'reload' },
+    { role: 'forceReload' },
+    { role: 'toggleDevTools' }
+  ]
+  // The panels menu is the app's own View, so the stock view commands join it rather than starting a second one
+  const withExtras = fromActions.map((menu) => (menu.label === 'View' ? { ...menu, submenu: [...(menu.submenu as MenuItemConstructorOptions[]), ...viewExtras] } : menu))
+  const view: MenuItemConstructorOptions[] = withExtras.some((menu) => menu.label === 'View') ? withExtras : [...withExtras, { label: 'View', submenu: viewExtras.slice(1) }]
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate([...appMenu, { role: 'editMenu' }, ...fromActions, viewExtras]))
+  Menu.setApplicationMenu(Menu.buildFromTemplate([...appMenu, { role: 'editMenu' }, ...view, windowMenu]))
 }
