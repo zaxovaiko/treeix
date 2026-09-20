@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, Menu, MenuItem, type Rectangle, screen } from 'electron'
+import { app, BrowserWindow, globalShortcut, type Rectangle, screen } from 'electron'
 import { carbonModifiers, isShortcut, macKeyCode, toAccelerator } from '../shared/shortcut'
 import type { HotkeyOptions } from '../shared/types'
 import { nativeHotkeys, setDockHidden, setSquareCorners } from './macWindow'
@@ -72,19 +72,9 @@ function dismiss(window: BrowserWindow): void {
 }
 
 /** `focused` is whether the window had focus when the shortcut was pressed */
-function toggle(window: BrowserWindow, focused = window.isFocused()): void {
+export function toggleHotkeyWindow(window: BrowserWindow, focused = window.isFocused()): void {
   if (summoned && window.isVisible() && focused) dismiss(window)
   else summon(window)
-}
-
-/** Window menu entry, also handy when the global shortcut is taken */
-export function addHotkeyMenuItem(window: BrowserWindow): void {
-  const menu = Menu.getApplicationMenu()
-  const windowMenu = menu?.items.find((item) => item.role === 'window' || item.label === 'Window')?.submenu
-  if (!menu || !windowMenu) return
-  windowMenu.append(new MenuItem({ type: 'separator' }))
-  windowMenu.append(new MenuItem({ label: 'Toggle Hotkey Window', click: () => toggle(window) }))
-  Menu.setApplicationMenu(menu)
 }
 
 /** Registers the global shortcut; returns an error message when it cannot be used */
@@ -121,13 +111,13 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
   const keyCode = macKeyCode(shortcut)
   if (nativeHotkeys && keyCode !== null) {
     // The native handler already activated the app, so focus must come from before the key press
-    if (!nativeHotkeys.register(keyCode, carbonModifiers(shortcut), (wasActive) => toggle(window, wasActive && window.isFocused()))) {
+    if (!nativeHotkeys.register(keyCode, carbonModifiers(shortcut), (wasActive) => toggleHotkeyWindow(window, wasActive && window.isFocused()))) {
       return 'This shortcut is already taken by another app or macOS'
     }
   } else {
     const accelerator = toAccelerator(shortcut)
     if (!accelerator) return 'This key can only be used with the native macOS helper (bun run build:native)'
-    if (!globalShortcut.register(accelerator, () => toggle(window))) return 'This shortcut is already taken by another app or macOS'
+    if (!globalShortcut.register(accelerator, () => toggleHotkeyWindow(window))) return 'This shortcut is already taken by another app or macOS'
   }
   registered = key
   return null

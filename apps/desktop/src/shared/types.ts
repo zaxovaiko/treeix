@@ -148,6 +148,10 @@ export type Api = {
   onCloseShortcut: (listener: () => void) => () => void
   /** Settings… in the app menu */
   onOpenSettings: (listener: () => void) => () => void
+  /** The actions the native menu should offer; sent again whenever a plugin loads or a key is rebound */
+  setMenuActions: (actions: { id: string; label: string; section: string; accelerator?: string }[]) => void
+  /** A native menu item was picked; the id names an action with a registered runner */
+  onRunAction: (listener: (id: string) => void) => () => void
   /** Copies an attachment into app data and returns its absolute path */
   saveAttachment: (name: string, data: Uint8Array) => Promise<string>
   /**

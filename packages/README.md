@@ -23,6 +23,7 @@ The folder name must match `id`. The host finds plugins with `import.meta.glob`,
 - **Layout and keyboard:** a page renders `<PageLayout list main inspector>` so its panels follow the shell's keys (⌘⇧E list, ⌘⌥B inspector, ⌘⇧↵ zen) and are remembered per page; `usePanels()` gives toggles for buttons. Each part is a focus `<Zone>` that F6 cycles; `useZone()` tells which one has focus. Lists use `useListNav` for j/k, Enter and a cursor that is the selection. Keys a plugin handles go in `shortcuts` so the `?` sheet and Settings list them.
 - **Shared code:** code several plugins need goes in a library package instead, like `atlassian/`. It holds acli, Atlassian Document Format, the API token and attachment images, and is used by `jira` and `confluence`.
 - **Agent identity:** the built-in and user-defined coding agents (id, label, mark, colour, command) live in the host at `@treeix/app/agents`, not in `@treeix/sdk`. A plugin that needs to know which agents exist imports from there.
+- **Native menu:** an action reaches the menu bar only once something can run it. Call `registerActionRunner(id, run)` from `@treeix/sdk` and the action appears under Go or View, with its current key, as long as its section is `Go to` or `Panels`. Page-scoped keys stay out because nothing registers a runner for them.
 
 ## Imports
 

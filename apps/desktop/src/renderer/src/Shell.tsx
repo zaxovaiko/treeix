@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cycleZone, getShell, isTyping, type KeyHint, KeyHintLabel, Keys, type ShortcutInfo, toggleZen, updateShell, useShell, useZone, type ZoneId } from '@treeix/sdk'
 import { actionForEvent, actionKeys, actionList } from '../../shared/keymap'
+import { registerActionRunner } from './actionRunners'
 import { Icon, type IconName } from './Icon'
 import { usePlugins } from './plugins'
 import { DIGIT_MODIFIERS, useSettings } from './settings'
@@ -41,10 +42,25 @@ type ShellKeys = {
   onSheet: () => void
 }
 
+/** The shell's actions, keyed by id; the key handler and the native menu both run them from here */
+const shellActions = (latest: React.RefObject<ShellKeys>): Record<string, () => void> => ({
+  'panel.list': () => latest.current.onTogglePanel('list'),
+  'panel.inspector': () => latest.current.onTogglePanel('inspector'),
+  'panel.rail': () => latest.current.onTogglePanel('rail'),
+  'panel.title': () => latest.current.onTogglePanel('title'),
+  'panel.status': () => latest.current.onTogglePanel('status'),
+  'shell.zen': toggleZen,
+  'app.shortcuts': () => latest.current.onSheet()
+})
+
 /** ⌘ chords the shell owns; caught before the focused element, so they work inside terminals and the editor too */
 export function useShellKeys(options: ShellKeys): void {
   const latest = useRef(options)
   latest.current = options
+  useEffect(() => {
+    const drops = Object.entries(shellActions(latest)).map(([id, run]) => registerActionRunner(id, run))
+    return () => drops.forEach((drop) => drop())
+  }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.isComposing || getShell().recording) return
@@ -60,15 +76,9 @@ export function useShellKeys(options: ShellKeys): void {
       if (!enabled) return
       // Every chord here is a named action, so Settings can rebind it
       const runs: Record<string, () => void> = {
+        ...shellActions(latest),
         'app.leader': () => updateShell({ leader: true }),
-        'panel.list': () => onTogglePanel('list'),
         'panel.listAlt': () => onTogglePanel('list'),
-        'panel.inspector': () => onTogglePanel('inspector'),
-        'panel.rail': () => onTogglePanel('rail'),
-        'panel.title': () => onTogglePanel('title'),
-        'panel.status': () => onTogglePanel('status'),
-        'shell.zen': toggleZen,
-        'app.shortcuts': onSheet,
         'app.shortcutsBare': onSheet,
         'zone.next': () => cycleZone(1),
         'zone.nextAlt': () => cycleZone(event.shiftKey ? -1 : 1),

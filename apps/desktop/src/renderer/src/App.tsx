@@ -36,7 +36,8 @@ import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKe
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
-import { actionForEvent, actionKeys, matchesAction } from '../../shared/keymap'
+import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
+import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
 import { WORKTREE_ACTIONS } from './actions'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
@@ -782,30 +783,47 @@ function App(): React.JSX.Element {
   openSettingsRef.current = openSettings
   // A preload from before this menu item (dev window not reloaded yet) has no listener
   useEffect(() => window.api.onOpenSettings?.(() => openSettingsRef.current()), [])
+  useEffect(() => window.api.onRunAction?.((id) => runAction(id)), [])
+  // The native menu is rebuilt from whatever is runnable now, so a plugin loading or a key rebound updates it
+  useEffect(() => {
+    const send = (): void => window.api.setMenuActions?.(menuActions())
+    send()
+    const drops = [subscribeRunners(send), onKeymapChange(send)]
+    return () => drops.forEach((drop) => drop())
+  }, [])
+
+    // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
+    const anywhere: Record<string, () => void> = {
+      'app.palette': () => setPaletteOpen(!paletteOpen),
+      'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
+      'app.settings': openSettings,
+      'app.comments': () => setDrawerOpen(!drawerOpen),
+      'app.back': () => goToPlace(-1),
+      'app.forward': () => goToPlace(1),
+      // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
+      'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
+      'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
+      'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
+      'app.search': () => setSearchOpen(!searchOpen),
+      'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
+      'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
+      'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
+      'app.clearComments': () => clearComments(),
+      'workspace.new': () => setEditingWorkspace(null),
+      'workspace.edit': () => workspace && setEditingWorkspace(workspace),
+      ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
+    }
+  const anywhereRef = useRef(anywhere)
+  anywhereRef.current = anywhere
+  // Everything here is runnable from the native menu too, which is why it lives outside the key handler
+  useEffect(() => {
+    const drops = Object.keys(anywhereRef.current).map((id) => registerActionRunner(id, () => anywhereRef.current[id]?.()))
+    return () => drops.forEach((drop) => drop())
+  }, [tabs.map((tab) => tab.id).join()])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
-      const anywhere: Record<string, () => void> = {
-        'app.palette': () => setPaletteOpen(!paletteOpen),
-        'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
-        'app.settings': openSettings,
-        'app.comments': () => setDrawerOpen(!drawerOpen),
-        'app.back': () => goToPlace(-1),
-        'app.forward': () => goToPlace(1),
-        // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
-        'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
-        'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
-        'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
-        'app.search': () => setSearchOpen(!searchOpen),
-        'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
-        'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
-        'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
-        'app.clearComments': clearComments,
-        'workspace.new': () => setEditingWorkspace(null),
-        'workspace.edit': () => workspace && setEditingWorkspace(workspace),
-        ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
-      }
+      const anywhere = anywhereRef.current
       const anywhereId = actionForEvent(event, Object.keys(anywhere))
       if (anywhereId) {
         event.preventDefault()
