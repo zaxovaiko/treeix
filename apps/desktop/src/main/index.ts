@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import type { ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
@@ -13,7 +13,7 @@ import { hover, navigate, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { checkTools } from './tools'
 import { setupUpdates } from './updates'
-import { hardenWebview } from './webviewPolicy'
+import { BROWSER_PARTITION, configureBrowserSession, hardenWebview } from './webviewPolicy'
 
 app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_VERSION__, version: '', copyright: 'Apache 2.0' })
 
@@ -64,6 +64,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // Packaged builds take the icon from the bundle; dev runs inside the stock Electron app
   if (is.dev) app.dock?.setIcon(join(__dirname, '../../resources/icon.png'))
+  configureBrowserSession(session.fromPartition(BROWSER_PARTITION), app.userAgentFallback, app.getName())
   ipcMain.handle('scan', () => scan())
   ipcMain.handle('diff', (_, worktreePath: string) => diff(worktreePath))
   ipcMain.handle('listFiles', (_, worktreePath: string) => listFiles(worktreePath))

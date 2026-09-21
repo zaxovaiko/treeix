@@ -30,6 +30,8 @@ export function watchGuest(guest: WebContents, context: MainContext): void {
   watched.add(guest)
   const host = guest.hostWebContents
   guest.setWindowOpenHandler(({ url, disposition }) => {
+    // Chromium blocks web pages from opening file: and other local schemes; a tab or window here must not get around it
+    if (!/^https?:/i.test(url) && url !== 'about:blank') return { action: 'deny' }
     // window.open with features, like OAuth popups, needs a real window with an opener
     if (disposition === 'new-window') return { action: 'allow' }
     if (host) context.send(host, 'open', url)
