@@ -260,8 +260,9 @@ function App(): React.JSX.Element {
     setFolder: setScopeFolder,
     setFocus: setScopeFocus
   }
-  // New sessions start in the selected worktree, else the focused project, folder filter or the folder holding the workspace projects
-  const defaultCwd = selected ?? (scope.focus || scope.folder || commonFolder(workspace?.repoPaths ?? []) || window.api.home)
+  // New sessions start in the selected worktree, else the focused project, folder filter, the workspace's chosen project or the folder holding its projects
+  const terminalPath = workspace?.terminalPath && workspace.repoPaths.includes(workspace.terminalPath) ? workspace.terminalPath : ''
+  const defaultCwd = selected ?? (scope.focus || scope.folder || terminalPath || commonFolder(workspace?.repoPaths ?? []) || window.api.home)
 
   const inCurrentWorkspace = (session: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(session, workspace, repos, workspaces)
   const sessions = allSessions.filter(inCurrentWorkspace)
@@ -1191,7 +1192,8 @@ function App(): React.JSX.Element {
 
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
-  const showRail = shell.rail && !shell.zen
+  // One workspace needs no switcher; New workspace stays in the palette and the Go menu
+  const showRail = shell.rail && !shell.zen && workspaces.length >= 2
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1725,7 +1727,7 @@ function App(): React.JSX.Element {
           className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
         >
           <Icon name="comment" />
-          <span className="tabular-nums">{comments.length}</span>
+          {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
           <Kbd hint>{actionKeys('app.comments')}</Kbd>
         </button>
         <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>

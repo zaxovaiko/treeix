@@ -1,7 +1,14 @@
 import { useSyncExternalStore } from 'react'
 import type { Repo } from '../../shared/types'
 
-export type Workspace = { id: string; name: string; color: string; repoPaths: string[] }
+export type Workspace = {
+  id: string
+  name: string
+  color: string
+  repoPaths: string[]
+  /** Project new terminals open in; unset means the folder holding all the workspace's projects */
+  terminalPath?: string
+}
 
 /** Only used before any workspace exists, when every project shows */
 export const ALL_PROJECTS = 'all'
@@ -19,7 +26,8 @@ const isWorkspace = (value: unknown): value is Workspace => {
   return (
     ['id', 'name', 'color'].every((key) => typeof candidate[key] === 'string') &&
     Array.isArray(candidate.repoPaths) &&
-    candidate.repoPaths.every((path) => typeof path === 'string')
+    candidate.repoPaths.every((path) => typeof path === 'string') &&
+    (candidate.terminalPath === undefined || typeof candidate.terminalPath === 'string')
   )
 }
 

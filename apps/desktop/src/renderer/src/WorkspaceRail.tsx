@@ -178,6 +178,7 @@ export function WorkspaceDialog({
   const [name, setName] = useState(workspace?.name ?? '')
   const [color, setColor] = useState(workspace?.color ?? WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length])
   const [selected, setSelected] = useState<string[]>(workspace?.repoPaths ?? [])
+  const [terminalPath, setTerminalPath] = useState(workspace?.terminalPath ?? '')
   const [filter, setFilter] = useState('')
 
   useEffect(() => {
@@ -211,7 +212,13 @@ export function WorkspaceDialog({
 
   const save = (): void => {
     if (!canSave) return
-    const next = { id: workspace?.id ?? crypto.randomUUID(), name: finalName, color, repoPaths: selected }
+    const next = {
+      id: workspace?.id ?? crypto.randomUUID(),
+      name: finalName,
+      color,
+      repoPaths: selected,
+      ...(terminalPath && selected.includes(terminalPath) ? { terminalPath } : {})
+    }
     saveWorkspace(next)
     onSaved(next)
   }
@@ -328,6 +335,28 @@ export function WorkspaceDialog({
               </div>
             </div>
           </div>
+
+          {selected.length >= 2 && (
+            <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+              New terminals open in
+              <div className="flex flex-wrap gap-1">
+                {['', ...selected].map((path) => {
+                  const chosen = (selected.includes(terminalPath) ? terminalPath : '') === path
+                  return (
+                    <button
+                      key={path || 'common'}
+                      aria-pressed={chosen}
+                      onClick={() => setTerminalPath(path)}
+                      title={path ? path.replace(window.api.home, '~') : 'The folder that holds all selected projects'}
+                      className={`h-7 rounded-md px-2.5 text-xs ring-1 ${chosen ? 'bg-accent text-foreground ring-border' : 'text-muted-foreground ring-transparent hover:bg-accent/60 hover:text-foreground'}`}
+                    >
+                      {path ? baseName(path) : 'Common folder'}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2 border-t border-border px-4 py-3">
