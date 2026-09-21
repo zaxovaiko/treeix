@@ -107,3 +107,26 @@ export function reduce(feed: Feed, event: ChatEvent, now: number): Feed {
     }
   }
 }
+
+/** Lines only in the new text and only in the old one, counted as multisets; close enough for a card's +/- */
+export function diffCounts(oldText: string | null, newText: string): { added: number; removed: number } {
+  const remaining = new Map<string, number>()
+  const oldLines = oldText === null ? [] : oldText.split('\n')
+  for (const line of oldLines) remaining.set(line, (remaining.get(line) ?? 0) + 1)
+  let added = 0
+  for (const line of newText.split('\n')) {
+    const count = remaining.get(line) ?? 0
+    if (count > 0) remaining.set(line, count - 1)
+    else added++
+  }
+  const removed = [...remaining.values()].reduce((sum, count) => sum + count, 0)
+  return { added, removed }
+}
+
+/** Where the file view opens an agent's path: relative to the chat's folder when inside it, else from the file's own folder */
+export function fileTarget(cwd: string, path: string): { root: string; path: string } {
+  if (!path.startsWith('/')) return { root: cwd, path }
+  if (path.startsWith(`${cwd}/`)) return { root: cwd, path: path.slice(cwd.length + 1) }
+  const slash = path.lastIndexOf('/')
+  return { root: path.slice(0, slash) || '/', path: path.slice(slash + 1) }
+}

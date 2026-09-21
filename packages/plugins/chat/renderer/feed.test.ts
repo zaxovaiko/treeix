@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ChatEvent } from '@treeix/sdk'
-import { emptyFeed, reduce } from './feed'
+import { diffCounts, emptyFeed, fileTarget, reduce } from './feed'
 
 const run = (events: ChatEvent[]) => events.reduce((feed, event, index) => reduce(feed, event, index * 1000), emptyFeed)
 
@@ -67,4 +67,16 @@ test('disconnected clears pending permissions, stops running and waiting, and ad
   expect(feed.waiting).toBe(false)
   expect(feed.blocks.find((block) => block.type === 'tool')).toMatchObject({ permission: null })
   expect(feed.blocks[feed.blocks.length - 1]).toEqual({ type: 'error', message: 'Agent process exited' })
+})
+
+test('diff counts lines only on one side', () => {
+  expect(diffCounts(null, 'a\nb')).toEqual({ added: 2, removed: 0 })
+  expect(diffCounts('a\nb\nc', 'a\nx\nc\nd')).toEqual({ added: 2, removed: 1 })
+  expect(diffCounts('a\na', 'a')).toEqual({ added: 0, removed: 1 })
+})
+
+test('a file inside the folder opens relative to it, one outside from its own folder', () => {
+  expect(fileTarget('/repo', '/repo/src/a.ts')).toEqual({ root: '/repo', path: 'src/a.ts' })
+  expect(fileTarget('/repo', '/etc/hosts')).toEqual({ root: '/etc', path: 'hosts' })
+  expect(fileTarget('/repo', 'src/a.ts')).toEqual({ root: '/repo', path: 'src/a.ts' })
 })

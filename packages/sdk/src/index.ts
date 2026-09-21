@@ -118,6 +118,20 @@ export interface Services {
   pullRequests: PullRequestsService
   /** The built-in browser: `handles` says whether a link should open there, per the user's setting */
   browser: { open: (url: string) => void; handles: (url: string) => boolean }
+  /** Chat sessions with agents, provided by the chat plugin */
+  chat: ChatService
+}
+
+export type ChatService = {
+  View: ComponentType<{ chatId: string }>
+  /** Connects and remembers the agent session id; resolves with it */
+  start: (chatId: string, options: { agent: string; adapter: string; command: string; cwd: string; resume: string | null }) => Promise<string>
+  stop: (chatId: string) => void
+  status: (chatId: string) => SessionStatus
+  /** Puts text into the composer, e.g. review comments sent to the session */
+  draft: (chatId: string, text: string) => void
+  terminalCommand: (chatId: string) => string | null
+  subscribe: (listener: () => void) => () => void
 }
 
 export type PullRequestsService = {
