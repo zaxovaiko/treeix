@@ -31,8 +31,12 @@ export function BrowserSettings(): React.JSX.Element {
   const chosenProfile = profiles.find((profile) => profile.key === chosen)
   const runImport = async (): Promise<void> => {
     if (chosenProfile?.blocked) {
+      setBusy(true)
       const list = await bridge.invoke<BrowserProfile[]>('profiles')
+      setBusy(false)
       setProfiles(list)
+      const unblocked = list.find((profile) => !profile.blocked && profile.browser === chosenProfile.browser)
+      if (unblocked) setChosen(unblocked.key)
       return
     }
     setBusy(true)
@@ -77,7 +81,7 @@ export function BrowserSettings(): React.JSX.Element {
         <Card title="Cookies">
           <Row
             label="Import from another browser"
-            description={`A one-off copy of your sign-ins, so sites open signed in. macOS will ask for access to the browser's key, click Allow, not Always Allow. Last import: ${importLabel(info)}`}
+            description={`A one-off copy of your sign-ins, so sites open signed in. macOS will ask for access to the browser's key. Click Allow, not Always Allow. Last import: ${importLabel(info)}`}
           >
             <div className="flex items-center gap-2">
               <select value={chosen} onChange={(event) => setChosen(event.target.value)} className="h-7 rounded-md border border-border bg-background px-2 text-xs">
@@ -90,7 +94,7 @@ export function BrowserSettings(): React.JSX.Element {
                 ))}
               </select>
               <button disabled={!chosen || busy} onClick={() => void runImport()} className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent disabled:opacity-50">
-                {busy ? 'Importing…' : chosenProfile?.blocked ? 'Check again' : info ? 'Import again' : 'Import'}
+                {busy ? (chosenProfile?.blocked ? 'Checking…' : 'Importing…') : chosenProfile?.blocked ? 'Check again' : info ? 'Import again' : 'Import'}
               </button>
             </div>
           </Row>
