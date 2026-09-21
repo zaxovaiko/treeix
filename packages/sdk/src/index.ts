@@ -85,11 +85,16 @@ export type SessionSummary = {
   startedAt: number
 }
 
+/** A TCP port a session's process listens on, e.g. a dev server */
+export type SessionPort = { sessionId: string; port: number; url: string }
+
 /** Agent and terminal sessions, provided by the terminal plugin */
 export type SessionsService = {
   subscribe: (listener: () => void) => () => void
   /** Same array until something changes, as React's useSyncExternalStore needs */
   getSessions: () => SessionSummary[]
+  /** Ports live sessions listen on, sorted by port; same array until they change */
+  getPorts: () => SessionPort[]
   /** Resolves with the session id once its process started */
   start: (cwd: string, kind: SessionKind, promptArgument?: string) => Promise<string>
   /** Resolves once the agent is ready for input */

@@ -42,6 +42,7 @@ import {
   focusPaneAt,
   focusSession,
   focusShown,
+  getPorts,
   getTerminals,
   isTerminalFocused,
   restoreClosedSession,
@@ -512,6 +513,7 @@ const plugin: RendererPlugin = {
     sessions: {
       subscribe: subscribeTerminals,
       getSessions: sessionSummaries,
+      getPorts,
       start: createSession,
       whenReady,
       sendText,

@@ -9,7 +9,7 @@ import { THEMES } from '@treeix/app/themes'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
-import { createBridge, type SessionKind, type SessionStatus } from '@treeix/sdk'
+import { createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { LiveTerminal } from '../shared/types'
 
 export { type SessionKind, type SessionStatus }
@@ -132,9 +132,43 @@ const pendingOutput = new Map<string, string>()
 const PENDING_SESSIONS = 20
 const PENDING_CHARS = 256_000
 
+const notify = (): void => listeners.forEach((listener) => listener())
+
 function update(next: Partial<State>): void {
   state = { ...state, ...next }
-  listeners.forEach((listener) => listener())
+  notify()
+  syncPortPolling()
+}
+
+const PORTS_POLL_MS = 3000
+let ports: SessionPort[] = []
+let portsTimer: ReturnType<typeof setInterval> | null = null
+export const getPorts = (): SessionPort[] => ports
+
+const samePorts = (a: SessionPort[], b: SessionPort[]): boolean => a.length === b.length && a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port)
+
+function setPorts(next: SessionPort[]): void {
+  if (samePorts(ports, next)) return
+  ports = next
+  notify()
+}
+
+async function pollPorts(): Promise<void> {
+  const found = await bridge.invoke<{ sessionId: string; port: number }[]>('ports').catch(() => null)
+  if (found && portsTimer) setPorts(found.map(({ sessionId, port }) => ({ sessionId, port, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
+}
+
+/** Asks main for listening ports only while some session has a running process */
+function syncPortPolling(): void {
+  const live = state.sessions.some((session) => session.status !== 'exited' && session.status !== 'dormant')
+  if (live && !portsTimer) {
+    portsTimer = setInterval(() => void pollPorts(), PORTS_POLL_MS)
+    void pollPorts()
+  } else if (!live && portsTimer) {
+    clearInterval(portsTimer)
+    portsTimer = null
+    setPorts([])
+  }
 }
 
 const subscribe = (listener: () => void): (() => void) => {
