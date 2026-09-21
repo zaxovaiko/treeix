@@ -4,8 +4,7 @@ import { toUrl } from './address'
 import { pageOf, useSlot } from './pages'
 import { browserSettings } from './settings'
 import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
-
-type Action = 'back' | 'forward' | 'reload' | 'newTab' | 'closeTab' | 'reopenTab' | 'focusAddress'
+import type { BrowserAction } from '../shared/keys'
 
 let focusAddress = (): void => undefined
 
@@ -17,7 +16,7 @@ export function navigate(input: string): void {
   if (page) void page.loadURL(url)
 }
 
-export function runBrowserAction(action: Action): void {
+export function runBrowserAction(action: BrowserAction): void {
   const tab = activeTab()
   const page = tab && pageOf(tab.id)
   if (action === 'newTab') {
@@ -29,6 +28,7 @@ export function runBrowserAction(action: Action): void {
   else if (action === 'back') page?.goBack()
   else if (action === 'forward') page?.goForward()
   else if (action === 'reload') page?.reload()
+  // devtools and designMode: filled in by Tasks 8 and 9
 }
 
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'

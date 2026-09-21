@@ -222,7 +222,10 @@ function useFileLinks(): void {
   useEffect(() =>
     setWebLinkHandler(async (url) => {
       const opened = (await host.service('pullRequests')?.open(url, host).catch(() => false)) ?? false
-      if (!opened) window.open(url)
+      if (opened) return
+      const browser = host.service('browser')
+      if (browser?.handles(url)) browser.open(url)
+      else window.open(url)
     })
   )
 }
