@@ -1,0 +1,12 @@
+{
+  "name": "@treeix/plugin-chat",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "chat",
+    "name": "Chat",
+    "description": "Chat view for Claude, Codex, Gemini and any agent with a chat command, next to their terminals.",
+    "enabledByDefault": true,
+    "requires": ["terminal"]
+  }
+}

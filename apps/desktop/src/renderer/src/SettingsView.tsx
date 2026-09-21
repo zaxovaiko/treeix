@@ -432,6 +432,26 @@ const SETTINGS: SettingSpec[] = [
   },
   {
     section: 'Terminal',
+    card: 'Agent sessions',
+    label: 'Thinking in chats',
+    description: 'How a chat session shows an agent’s thinking blocks.',
+    Control: function ChatThinking() {
+      const { chatThinking } = useSettings()
+      return (
+        <Segmented
+          value={chatThinking}
+          options={[
+            ['collapsed', 'Collapsed'],
+            ['expanded', 'Expanded'],
+            ['hidden', 'Hidden']
+          ]}
+          onChange={(next) => updateSettings({ chatThinking: next })}
+        />
+      )
+    }
+  },
+  {
+    section: 'Terminal',
     card: 'Performance',
     label: 'Scrollback',
     description: 'Lines each terminal keeps to scroll back through. More lines use more memory per session. Applies to open terminals too.',
@@ -783,11 +803,41 @@ const AGENT_FIELDS: { key: AgentField; label: string; placeholder: string }[] = 
   { key: 'resumeCommand', label: 'Resume command', placeholder: 'aider --restore, {id} is the session id' }
 ]
 
+/** How to install the adapter behind a built-in agent's chat command, shown once it's not found on PATH */
+const CHAT_INSTALL_HINTS: Record<string, string> = {
+  claude: 'npm i -g @agentclientprotocol/claude-agent-acp',
+  codex: 'npm i -g @zed-industries/codex-acp',
+  gemini: 'npm i -g @google/gemini-cli'
+}
+
+/** The binary a chat command needs on PATH: its first word, e.g. `npx` for an npx-run adapter */
+const chatCommandTool = (command: string): string => command.trim().split(/\s+/)[0] ?? command
+
+function ChatAvailability({ agentId, command }: { agentId: string; command: string }): React.JSX.Element | null {
+  const [available, setAvailable] = useState<boolean | null>(null)
+  useEffect(() => {
+    setAvailable(null)
+    let cancelled = false
+    void window.api.commandExists(chatCommandTool(command)).then((found) => {
+      if (!cancelled) setAvailable(found)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [command])
+  if (available === null) return null
+  if (available) return <span className="text-xs text-emerald-400">Ready</span>
+  const hint = CHAT_INSTALL_HINTS[agentId]
+  return <span className="text-xs break-words text-amber-400 select-text">Not found{hint ? `: ${hint}` : ''}</span>
+}
+
 function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React.JSX.Element {
-  const custom = useSettings().customAgents
+  const { customAgents: custom, agentViews } = useSettings()
   const write = (next: Agent[]): void => updateSettings({ customAgents: next })
   const edit = (key: AgentField, value: string): void =>
     write(custom.map((entry) => (entry.id === agent.id ? { ...entry, [key]: key === 'command' && !value ? null : value } : entry)))
+  const editChat = (command: string): void =>
+    write(custom.map((entry) => (entry.id === agent.id ? { ...entry, chat: command ? { adapter: 'acp', command } : undefined } : entry)))
   return (
     <SearchGroup title={`${agent.label} ${agent.command ?? ''}`} className="border-b border-border last:border-b-0">
       <Row label={agent.label} description={agent.command ?? 'Runs your login shell'}>
@@ -801,6 +851,21 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
           </button>
         )}
       </Row>
+      {agent.chat && (
+        <Row label="Opens as" description={agent.chat.command}>
+          <div className="flex items-center gap-2">
+            <ChatAvailability agentId={agent.id} command={agent.chat.command} />
+            <Segmented
+              value={agentViews[agent.id] === 'chat' ? 'chat' : 'terminal'}
+              options={[
+                ['chat', 'Chat'],
+                ['terminal', 'Terminal']
+              ]}
+              onChange={(next) => updateSettings({ agentViews: { ...getSettings().agentViews, [agent.id]: next } })}
+            />
+          </div>
+        </Row>
+      )}
       {!builtin &&
         AGENT_FIELDS.map((field) => (
           <Row key={field.key} label={field.label} description="">
@@ -812,6 +877,16 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
             />
           </Row>
         ))}
+      {!builtin && (
+        <Row label="Chat command" description="Starts an ACP adapter for chat; empty keeps this agent terminal only.">
+          <input
+            value={agent.chat?.command ?? ''}
+            placeholder="npx -y my-acp-adapter"
+            onChange={(event) => editChat(event.target.value)}
+            className="h-6 w-56 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border"
+          />
+        </Row>
+      )}
     </SearchGroup>
   )
 }

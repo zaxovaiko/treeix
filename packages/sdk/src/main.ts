@@ -1,4 +1,7 @@
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
+import type { ChatAdapter } from './chat'
+
+export type * from './chat'
 
 /** A command line tool the plugin relies on, shown with its version and sign-in state in Settings */
 export type ToolDefinition = {
@@ -27,6 +30,8 @@ export type MainContext = {
   sessionEnv: () => Promise<Record<string, string>>
   /** Runs when the plugin is disabled or the app quits */
   onDispose: (dispose: () => void) => void
+  /** An adapter contributed by any enabled plugin */
+  chatAdapter: (id: string) => ChatAdapter | null
 }
 
 export type MainPlugin = {
@@ -35,4 +40,6 @@ export type MainPlugin = {
   activate?: (context: MainContext) => void
   /** Variables added to every new terminal session while enabled */
   sessionEnv?: () => Promise<Record<string, string>>
+  /** Chat adapters this plugin offers; the chat plugin connects agents through them by id */
+  chatAdapters?: ChatAdapter[]
 }

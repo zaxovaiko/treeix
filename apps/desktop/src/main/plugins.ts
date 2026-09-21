@@ -1,7 +1,8 @@
 import { BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { MainContext, MainPlugin, ToolDefinition } from '@treeix/sdk/main'
+import type { ChatAdapter, MainContext, MainPlugin, ToolDefinition } from '@treeix/sdk/main'
+import { adaptersOf } from './pluginAdapters'
 
 const modules = import.meta.glob<MainPlugin>('../../../../packages/plugins/*/main/index.ts', { eager: true, import: 'default' })
 const pluginIdOf = (path: string): string => path.split('/').at(-3) ?? path
@@ -41,7 +42,8 @@ function activate(pluginId: string, plugin: MainPlugin, userData: string): { dis
       return dataPath
     },
     sessionEnv,
-    onDispose: (dispose) => disposers.push(dispose)
+    onDispose: (dispose) => disposers.push(dispose),
+    chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null
   }
   plugin.activate?.(context)
   return { dispose: () => disposers.splice(0).reverse().forEach((dispose) => dispose()) }
@@ -67,3 +69,6 @@ export const enabledTools = (): ToolDefinition[] => {
   const tools = [...active.keys()].flatMap((id) => MAIN_PLUGINS.get(id)?.tools ?? [])
   return tools.filter((tool, index) => tools.findIndex((other) => other.name === tool.name) === index)
 }
+
+/** Chat adapters of the enabled plugins, first one wins per id */
+export const enabledChatAdapters = (): ChatAdapter[] => adaptersOf(MAIN_PLUGINS, [...active.keys()])

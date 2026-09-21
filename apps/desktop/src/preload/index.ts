@@ -15,6 +15,7 @@ const api: Api = {
   hover: (worktreePath, target) => ipcRenderer.invoke('hover', worktreePath, target),
   searchText: (worktreePaths, query, options) => ipcRenderer.invoke('searchText', worktreePaths, query, options),
   checkTools: () => ipcRenderer.invoke('checkTools'),
+  commandExists: (name) => ipcRenderer.invoke('commandExists', name),
   plugins: {
     setEnabled: (ids) => ipcRenderer.invoke('plugins:setEnabled', ids),
     invoke: (pluginId, channel, ...args) => ipcRenderer.invoke(`plugin:${pluginId}:${channel}`, ...args),

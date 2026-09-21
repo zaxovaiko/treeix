@@ -3,16 +3,18 @@ import type { Terminal } from '@xterm/xterm'
 import { useSyncExternalStore } from 'react'
 import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscribeSettings } from '@treeix/app/settings'
 import { agentOr, getAgent, isAgent, resumeCommandFor, startCommand } from '@treeix/app/agents'
+import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
 import { findFileLinks, findWebLinks } from './fileLinks'
 import { THEMES } from '@treeix/app/themes'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
-import { createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
+import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { LiveTerminal } from '../shared/types'
+import { isDefaultChatTitle, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 
-export { type SessionKind, type SessionStatus }
+export { type SessionKind, type SessionStatus, type SessionView }
 
 const bridge = createBridge('terminal')
 
@@ -20,20 +22,9 @@ const bridge = createBridge('terminal')
 const loadXterm = (): Promise<[typeof import('@xterm/xterm'), typeof import('@xterm/addon-fit'), unknown]> =>
   Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit'), import('@xterm/xterm/css/xterm.css')])
 
-/** What survives a reload or relaunch; the process itself does not survive quitting */
-type SessionMeta = {
-  worktreePath: string
-  kind: SessionKind
-  title: string
-  startedAt: number
-  /** Workspace active when the session started */
-  workspaceId: string
-  /** Claude conversation id chosen at start, so a relaunch resumes exactly this conversation */
-  agentSessionId: string | null
-}
-
-export type Session = SessionMeta & {
+export type TerminalSession = SessionMeta & {
   id: string
+  view: 'terminal'
   status: SessionStatus
   exitCode: number | null
   lastOutput: number
@@ -44,6 +35,11 @@ export type Session = SessionMeta & {
   /** Last Claude plan file the session printed, e.g. when Claude runs inside a shell session */
   planName: string | null
 }
+
+/** A chat with an agent, drawn by the chat plugin; `status` mirrors the chat's */
+export type ChatSession = SessionMeta & { id: string; view: 'chat'; status: SessionStatus; exitCode: null; lastOutput: number }
+
+export type Session = TerminalSession | ChatSession
 
 /** Readline control codes that ⌘ arrows and ⌘⌫ send in macOS terminals */
 const LINE_KEYS: Record<string, string> = { ArrowLeft: '\x01', ArrowRight: '\x05', Backspace: '\x15' }
@@ -68,6 +64,7 @@ subscribeSettings(() => {
   const { terminalFontSize, terminalFont, terminalScrollback } = getSettings()
   const fontFamily = fontStack(terminalFont, MONO_STACK)
   for (const session of state.sessions) {
+    if (session.view !== 'terminal') continue
     session.terminal.options.theme = theme
     if (session.terminal.options.scrollback !== terminalScrollback) session.terminal.options.scrollback = terminalScrollback
     if (session.terminal.options.fontSize === terminalFontSize && session.terminal.options.fontFamily === fontFamily) continue
@@ -110,16 +107,16 @@ export const setWebLinkHandler = (handler: typeof webLinkHandler): void => {
 const HISTORY_KEY = 'terminals.history'
 const HISTORY_LIMIT = 100
 
-function isClosedSession(value: unknown): value is ClosedSession {
-  if (!isSessionMeta(value)) return false
-  const { id, endedAt } = value as Partial<ClosedSession>
-  return typeof id === 'string' && typeof endedAt === 'number'
+function parseClosedSession(value: unknown): ClosedSession | null {
+  const meta = parseMeta(value)
+  const { id, endedAt } = (meta ?? {}) as Partial<ClosedSession>
+  return meta && typeof id === 'string' && typeof endedAt === 'number' ? (meta as ClosedSession) : null
 }
 
 function loadHistory(): ClosedSession[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter(isClosedSession) : []
+    return Array.isArray(parsed) ? parsed.map(parseClosedSession).filter((entry) => entry !== null) : []
   } catch {
     return []
   }
@@ -165,7 +162,7 @@ async function pollPorts(): Promise<void> {
 
 /** Asks main for listening ports only while some session has a running process */
 function syncPortPolling(): void {
-  const live = state.sessions.some((session) => session.status !== 'exited' && session.status !== 'dormant')
+  const live = state.sessions.some((session) => session.view === 'terminal' && session.status !== 'exited' && session.status !== 'dormant')
   if (live && !portsTimer) {
     portsTimer = setInterval(() => void pollPorts(), PORTS_POLL_MS)
     void pollPorts()
@@ -186,10 +183,11 @@ export const subscribeTerminals = subscribe
 export const getTerminals = (): State => state
 
 const findSession = (id: string): Session | undefined => state.sessions.find((session) => session.id === id)
+const findTerminal = (id: string): TerminalSession | undefined => state.sessions.find((session): session is TerminalSession => session.id === id && session.view === 'terminal')
 
 bridge.on('data', (id, data) => {
   if (typeof id !== 'string' || typeof data !== 'string') return
-  const session = findSession(id)
+  const session = findTerminal(id)
   if (!session) {
     const buffered = ((pendingOutput.get(id) ?? '') + data).slice(-PENDING_CHARS)
     pendingOutput.delete(id)
@@ -204,7 +202,7 @@ bridge.on('data', (id, data) => {
 bridge.on('exit', (id, exitCode) => {
   if (typeof id !== 'string' || typeof exitCode !== 'number') return
   update({
-    sessions: state.sessions.map((session) => (session.id === id ? { ...session, status: 'exited', exitCode } : session))
+    sessions: state.sessions.map((session) => (session.id === id && session.view === 'terminal' ? { ...session, status: 'exited', exitCode } : session))
   })
 })
 
@@ -222,7 +220,7 @@ function visibleScreen(terminal: Terminal): string {
 const PLAN_PATH = /\.claude\/plans\/([\w.-]+\.md)/g
 const printedPlan = (screen: string, current: string | null): string | null => [...screen.matchAll(PLAN_PATH)].at(-1)?.[1] ?? current
 
-function detectStatus(session: Session, screen: string): SessionStatus {
+function detectStatus(session: TerminalSession, screen: string): SessionStatus {
   if (session.status === 'exited' || session.status === 'dormant') return session.status
   if (isAgent(session.kind) && WAITING_FOR_INPUT.test(screen)) return 'input'
   return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
@@ -231,12 +229,15 @@ function detectStatus(session: Session, screen: string): SessionStatus {
 setInterval(() => {
   // Statuses only show on screen; a hidden window catches up within a second of showing
   if (document.hidden) return
-  const next = state.sessions.map((session) => {
+  const next = state.sessions.map((session): Session => {
+    // Chats take their status from the chat plugin
+    if (session.view !== 'terminal') return session
     const screen = session.opened ? visibleScreen(session.terminal) : ''
-    return { session, status: detectStatus(session, screen), planName: printedPlan(screen, session.planName) }
+    const status = detectStatus(session, screen)
+    const planName = printedPlan(screen, session.planName)
+    return status !== session.status || planName !== session.planName ? { ...session, status, planName } : session
   })
-  const changed = next.some(({ session, status, planName }) => status !== session.status || planName !== session.planName)
-  if (changed) update({ sessions: next.map(({ session, status, planName }) => ({ ...session, status, planName })) })
+  if (next.some((session, index) => session !== state.sessions[index])) update({ sessions: next })
 }, 1000)
 
 const setTasks = (tasks: Task[], selected = state.selected): void => update({ tasks, selected })
@@ -397,7 +398,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     if (title && findSession(id)?.title !== title) update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)) })
   })
   const status: SessionStatus = dormant ? 'dormant' : exitCode === null ? 'running' : 'exited'
-  const session: Session = { ...meta, id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false, planName: null }
+  const session: TerminalSession = { ...meta, view: 'terminal', id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false, planName: null }
   update({ sessions: [...state.sessions, session] })
   terminal.write(output + (pendingOutput.get(id) ?? ''), () => (replaying = false))
   pendingOutput.delete(id)
@@ -406,28 +407,52 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
 const spawnSession = (meta: SessionMeta, command: string | undefined, id?: string, size = SPAWN_SIZE): Promise<string> =>
   bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), id })
 
-const metaOf = ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId }: SessionMeta): SessionMeta => ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId })
+const metaOf = ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId, view }: SessionMeta): SessionMeta => ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId, view })
+
+function newMeta(worktreePath: string, kind: SessionKind, view: SessionView): SessionMeta {
+  const same = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind && session.view === view).length
+  const agent = agentOr(kind)
+  const title = view === 'chat' ? NEW_CHAT_TITLE : agent.label
+  // Chats learn their conversation id from the agent once connected
+  const agentSessionId = view === 'terminal' && agent.sessionIdFlag ? crypto.randomUUID() : null
+  return { worktreePath, kind, title: `${title}${same ? ` ${same + 1}` : ''}`, startedAt: Date.now(), workspaceId: getCurrentWorkspaceId(), agentSessionId, view }
+}
 
 /** Starts a session without showing it anywhere yet */
 async function startSession(worktreePath: string, kind: SessionKind, promptArgument?: string): Promise<string> {
-  const sameKind = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind)
-  const agent = agentOr(kind)
-  const agentSessionId = agent.sessionIdFlag ? crypto.randomUUID() : null
-  const meta: SessionMeta = {
-    worktreePath,
-    kind,
-    title: `${agent.label}${sameKind.length ? ` ${sameKind.length + 1}` : ''}`,
-    startedAt: Date.now(),
-    workspaceId: getCurrentWorkspaceId(),
-    agentSessionId
-  }
-  const id = await spawnSession(meta, startCommand(agent, promptArgument, agentSessionId))
+  const meta = newMeta(worktreePath, kind, 'terminal')
+  const id = await spawnSession(meta, startCommand(agentOr(kind), promptArgument, meta.agentSessionId))
   await openSession(id, meta, '', null)
   return id
 }
 
-/** `promptArgument` is an already shell-quoted first prompt for agent sessions; the session opens as a new tab of `taskId`, or of the task for its folder */
-export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string, taskId?: string): Promise<string> {
+/** Chat needs the chat plugin on and an agent with a chat command */
+const canChat = (kind: SessionKind): boolean => isPluginEnabled('chat') && getAgent(kind)?.chat !== undefined
+
+/** A chat that can't be one any more opens as a terminal, resuming the agent's conversation */
+const openable = (meta: SessionMeta): SessionMeta => (meta.view === 'chat' && !canChat(meta.kind) ? { ...meta, view: 'terminal' } : meta)
+
+/** Adds a chat, dormant: `wakeSession` connects it */
+function openChat(id: string, meta: SessionMeta): void {
+  const session: ChatSession = { ...meta, view: 'chat', id, status: 'dormant', exitCode: null, lastOutput: Date.now() }
+  update({ sessions: [...state.sessions, session] })
+}
+
+/** A chat with the agent as a new tab, resuming the agent's conversation `resume` when given */
+function startChat(worktreePath: string, kind: SessionKind, taskId?: string, resume: string | null = null): string {
+  const id = crypto.randomUUID()
+  openChat(id, { ...newMeta(worktreePath, kind, 'chat'), agentSessionId: resume })
+  placeSession(id, taskId)
+  void wakeSession(id)
+  return id
+}
+
+/**
+ * `promptArgument` is an already shell-quoted first prompt for agent terminals; the session opens as a new tab of `taskId`,
+ * or of the task for its folder. A chat for an agent that can't chat opens as a terminal.
+ */
+export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string, taskId?: string, view: SessionView = 'terminal'): Promise<string> {
+  if (view === 'chat' && canChat(kind)) return startChat(worktreePath, kind, taskId)
   const id = await startSession(worktreePath, kind, promptArgument)
   placeSession(id, taskId)
   return id
@@ -456,19 +481,18 @@ function loadTasks(): { tasks: Task[]; selected: Record<string, string> } | null
   }
 }
 
-function isSessionMeta(value: unknown): value is SessionMeta {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Partial<SessionMeta>
-  return typeof candidate.worktreePath === 'string' && typeof candidate.title === 'string' && typeof candidate.kind === 'string'
-}
-
 function loadSaved(): Saved {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(SAVED_KEY) ?? 'null')
     if (typeof parsed !== 'object' || parsed === null) return { sessions: [], layout: [] }
     const { sessions, layout } = parsed as Partial<Saved>
     return {
-      sessions: Array.isArray(sessions) ? sessions.filter((session) => isSessionMeta(session) && typeof session.id === 'string') : [],
+      sessions: Array.isArray(sessions)
+        ? sessions.flatMap((session) => {
+            const meta = parseMeta(session)
+            return meta && typeof session.id === 'string' ? [{ ...meta, id: session.id }] : []
+          })
+        : [],
       layout: Array.isArray(layout) ? layout.filter((column) => Array.isArray(column) && column.every((id) => typeof id === 'string')) : []
     }
   } catch {
@@ -476,10 +500,9 @@ function loadSaved(): Saved {
   }
 }
 
-const parseMeta = (text: string): SessionMeta | null => {
+const parseMetaText = (text: string): SessionMeta | null => {
   try {
-    const parsed: unknown = JSON.parse(text)
-    return isSessionMeta(parsed) ? parsed : null
+    return parseMeta(JSON.parse(text))
   } catch {
     return null
   }
@@ -487,22 +510,82 @@ const parseMeta = (text: string): SessionMeta | null => {
 
 const waking = new Map<string, Promise<void>>()
 
-/** Starts a dormant session's process under its own id, resuming its agent conversation; resolves once the process runs */
-function wakeSession(id: string): Promise<void> {
+/**
+ * Starts a dormant session under its own id, resuming its agent conversation; resolves once the process runs or the
+ * chat connected. A chat waits while the chat plugin is still loading; its pane wakes it once the plugin is there.
+ */
+export function wakeSession(id: string): Promise<void> {
   const session = findSession(id)
   if (session?.status !== 'dormant') return Promise.resolve()
   const pending = waking.get(id)
   if (pending) return pending
-  const started = spawnSession(metaOf(session), resumeCommand(session), id, { cols: session.terminal.cols, rows: session.terminal.rows })
-    .then(() => {
-      // Closed while starting: killSession had no process to end yet
-      if (!findSession(id)) return bridge.send('kill', id)
-      update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, status: 'running' } : candidate)) })
-      fitSession(id)
+  const started = session.view === 'chat' ? connectChat(session) : spawnTerminal(session)
+  if (!started) return Promise.resolve()
+  const tracked = started.finally(() => waking.delete(id))
+  waking.set(id, tracked)
+  return tracked
+}
+
+const spawnTerminal = (session: TerminalSession): Promise<void> =>
+  spawnSession(metaOf(session), resumeCommand(session), session.id, { cols: session.terminal.cols, rows: session.terminal.rows }).then(() => {
+    const { id } = session
+    // Closed while starting: killSession had no process to end yet
+    if (!findSession(id)) return bridge.send('kill', id)
+    update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, status: 'running' } : candidate)) })
+    fitSession(id)
+  })
+
+/** Chats connecting show as running; the chat plugin only knows them once connected */
+const connecting = new Set<string>()
+
+function connectChat(session: ChatSession): Promise<void> | null {
+  const chat = findService('chat')
+  const agent = getAgent(session.kind)
+  if (!chat || !agent?.chat) return null
+  followChats(chat)
+  const { id } = session
+  connecting.add(id)
+  update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, status: 'running' } : candidate)) })
+  return chat
+    .start(id, { agent: agent.id, adapter: agent.chat.adapter, command: agent.chat.command, cwd: session.worktreePath, resume: session.agentSessionId })
+    .then(
+      (agentSessionId) => {
+        // Closed while connecting
+        if (!findSession(id)) return chat.stop(id)
+        update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, agentSessionId } : candidate)) })
+      },
+      // The chat shows why, with Retry
+      () => undefined
+    )
+    .finally(() => {
+      connecting.delete(id)
+      syncChats()
     })
-    .finally(() => waking.delete(id))
-  waking.set(id, started)
-  return started
+}
+
+let followed: ChatService | null = null
+function followChats(chat: ChatService): void {
+  if (followed === chat) return
+  followed = chat
+  chat.subscribe(syncChats)
+}
+
+/**
+ * Chat statuses feed the sessions' own, so dots, badges and keep awake see chats like terminals; the conversation id and
+ * first message are kept too. Without the chat plugin chats go dormant, and wake once it is back and they show.
+ */
+export function syncChats(): void {
+  const chat = findService('chat')
+  const next = state.sessions.map((session): Session => {
+    if (session.view !== 'chat') return session
+    if (!chat) return session.status === 'dormant' ? session : { ...session, status: 'dormant' }
+    const status = session.status === 'dormant' ? 'dormant' : connecting.has(session.id) ? 'running' : chat.status(session.id)
+    const agentSessionId = chat.agentSessionId(session.id) ?? session.agentSessionId
+    const title = (isDefaultChatTitle(session.title) && chat.title(session.id)) || session.title
+    const same = status === session.status && agentSessionId === session.agentSessionId && title === session.title
+    return same ? session : { ...session, status, agentSessionId, title }
+  })
+  if (next.some((session, index) => session !== state.sessions[index])) update({ sessions: next })
 }
 
 let restored = false
@@ -516,12 +599,18 @@ async function restoreSessions(): Promise<void> {
   const savedTasks = loadTasks()
   const live = await bridge.invoke<LiveTerminal[]>('list')
   for (const terminal of live) {
-    const meta = parseMeta(terminal.meta)
+    const meta = parseMetaText(terminal.meta)
     if (meta) await openSession(terminal.id, meta, terminal.output, terminal.exitCode, { cols: terminal.cols, rows: terminal.rows })
   }
   const eager = live.length === 0 && savedTasks ? shownPanes(savedTasks.tasks, savedTasks.selected, getCurrentWorkspaceId()) : []
-  for (const { id, ...meta } of saved.sessions) {
+  for (const { id, ...savedMeta } of saved.sessions) {
     if (findSession(id)) continue
+    const meta = openable(savedMeta)
+    // Chats connect once shown, from their pane
+    if (meta.view === 'chat') {
+      openChat(id, meta)
+      continue
+    }
     const dormant = !eager.includes(id)
     if (!dormant) await spawnSession(meta, resumeCommand(meta), id)
     await openSession(id, meta, '', null, SPAWN_SIZE, dormant)
@@ -549,7 +638,8 @@ function store(key: string, json: string): void {
 
 subscribe(() => {
   if (!restored) return
-  const sessions = state.sessions.filter((session) => session.status !== 'exited').map((session) => ({ id: session.id, ...metaOf(session) }))
+  // A chat that lost its agent keeps its tab: it resumes with Retry or on the next launch
+  const sessions = state.sessions.filter((session) => session.view === 'chat' || session.status !== 'exited').map((session) => ({ id: session.id, ...metaOf(session) }))
   const saved: Saved = { sessions, layout: [] }
   store(SAVED_KEY, JSON.stringify(saved))
   store(TASKS_KEY, JSON.stringify({ tasks: state.tasks, selected: state.selected }))
@@ -566,7 +656,7 @@ void restoreSessions().catch(() => {
 
 /** Open the xterm lazily: it needs a mounted element to measure fonts */
 export function attachSession(id: string, container: HTMLElement): void {
-  const session = findSession(id)
+  const session = findTerminal(id)
   if (!session) return
   // Sessions started before this setting existed keep their old cursor until they are shown again
   session.terminal.options.cursorStyle = 'bar'
@@ -581,14 +671,16 @@ export function attachSession(id: string, container: HTMLElement): void {
 }
 
 export function fitSession(id: string): void {
-  const session = findSession(id)
+  const session = findTerminal(id)
   if (!session?.opened || !session.element.isConnected) return
   session.fit.fit()
   bridge.send('resize', id, session.terminal.cols, session.terminal.rows)
 }
 
 export function focusSession(id: string): void {
-  findSession(id)?.terminal.focus()
+  const session = findSession(id)
+  if (session?.view === 'chat') document.querySelector<HTMLElement>(`[data-session-id="${id}"] textarea`)?.focus()
+  else session?.terminal.focus()
 }
 
 const setHistory = (history: ClosedSession[]): void => {
@@ -601,8 +693,15 @@ const setHistory = (history: ClosedSession[]): void => {
 export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
-  if (session.status !== 'dormant') bridge.send('kill', id)
-  session.terminal.dispose()
+  // A dormant chat may still have an agent from before a reload
+  if (session.view === 'chat') {
+    const chat = findService('chat')
+    chat?.stop(id)
+    chat?.forget(id)
+  } else {
+    if (session.status !== 'dormant') bridge.send('kill', id)
+    session.terminal.dispose()
+  }
   const taskId = taskOf(state.tasks, id)?.id
   update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), tasks: removeSession(state.tasks, id), zoomed: state.zoomed === id ? null : state.zoomed })
   setHistory([{ id, ...metaOf(session), taskId, endedAt: Date.now() }, ...state.history])
@@ -614,13 +713,23 @@ export function closeTab(taskId: string, tabId: string): void {
 }
 
 export const forgetClosedSession = (id: string): void => setHistory(state.history.filter((entry) => entry.id !== id))
+/** Hides a closed chat from History */
+export const archiveClosedSession = (id: string): void => setHistory(state.history.map((entry) => (entry.id === id ? { ...entry, archived: true } : entry)))
 export const clearClosedSessions = (ids: string[]): void => setHistory(state.history.filter((entry) => !ids.includes(entry.id)))
 
 /** Starts a closed session again in its folder, resuming the agent conversation, as a new tab of its task, and shows it */
 export async function restoreClosedSession(entry: ClosedSession): Promise<string> {
-  const { id: _closedId, endedAt: _endedAt, taskId, ...meta } = entry
-  const id = await spawnSession(meta, resumeCommand(meta))
-  await openSession(id, meta, '', null)
+  const { id: _closedId, endedAt: _endedAt, taskId, archived: _archived, ...closed } = entry
+  const meta = openable(closed)
+  let id: string
+  if (meta.view === 'chat') {
+    id = crypto.randomUUID()
+    openChat(id, meta)
+    void wakeSession(id)
+  } else {
+    id = await spawnSession(meta, resumeCommand(meta))
+    await openSession(id, meta, '', null)
+  }
   placeSession(id, taskId)
   forgetClosedSession(entry.id)
   return id
@@ -635,6 +744,8 @@ const STARTUP_TIMEOUT_MS = 20_000
  * ponytail: output-silence heuristic, switch to Claude Code's SessionStart hook if pastes land too early
  */
 export function whenReady(id: string): Promise<void> {
+  // A chat takes drafts at any time
+  if (findSession(id)?.view === 'chat') return Promise.resolve()
   const startedAt = Date.now()
   return new Promise((resolve) => {
     const check = (): void => {
@@ -647,7 +758,12 @@ export function whenReady(id: string): Promise<void> {
   })
 }
 
+/** A chat gets the text as its draft, which the user sends; `submit` is for terminals */
 export function sendText(id: string, text: string, submit: boolean): void {
+  if (findSession(id)?.view === 'chat') {
+    findService('chat')?.draft(id, text)
+    return revealSession(id)
+  }
   const write = (): void => {
     bridge.send('write', id, `\x1b[200~${text}\x1b[201~`)
     if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
@@ -660,11 +776,12 @@ export function sendText(id: string, text: string, submit: boolean): void {
   revealSession(id)
 }
 
-export const terminalSelection = (id: string): string => findSession(id)?.terminal.getSelection() ?? ''
+export const terminalSelection = (id: string): string => findTerminal(id)?.terminal.getSelection() ?? ''
 
 /** xterm wraps pasted text in bracketed-paste markers when the program asked for them */
 export async function pasteClipboard(id: string): Promise<void> {
-  findSession(id)?.terminal.paste(await navigator.clipboard.readText())
+  const session = findTerminal(id)
+  if (session) session.terminal.paste(await navigator.clipboard.readText())
 }
 
 const shownTab = () => {
@@ -682,7 +799,8 @@ export function activePane(): Session | undefined {
 export function focusShown(): void {
   setTimeout(() => {
     const id = shownTab()?.focus
-    if (id && findSession(id)?.opened) focusSession(id)
+    const session = findSession(id ?? '')
+    if (id && session && (session.view === 'chat' || session.opened)) focusSession(id)
     else document.querySelector<HTMLElement>('[data-terminal-empty] [data-zone-focus]')?.focus()
   }, 50)
 }
@@ -727,5 +845,41 @@ export function toggleZoom(): void {
   setTimeout(() => focusSession(session.id))
 }
 
-export const selectAllTerminal = (id: string): void => findSession(id)?.terminal.selectAll()
-export const clearTerminal = (id: string): void => findSession(id)?.terminal.clear()
+export const selectAllTerminal = (id: string): void => findTerminal(id)?.terminal.selectAll()
+export const clearTerminal = (id: string): void => findTerminal(id)?.terminal.clear()
+
+/** The view a session can switch to: a chat to the terminal command its connection gives, an agent terminal with a known conversation to a chat */
+export function otherView(session: Session): SessionView | null {
+  const chat = findService('chat')
+  if (!chat) return null
+  if (session.view === 'chat') return chat.terminalCommand(session.id) ? 'terminal' : null
+  return session.agentSessionId && getAgent(session.kind)?.chat ? 'chat' : null
+}
+
+/** Ends the session and opens the same conversation in the other view, in the same tab slot; only one view runs at a time */
+export async function switchView(id: string): Promise<void> {
+  const session = findSession(id)
+  const chat = findService('chat')
+  if (!session || !chat || !otherView(session)) return
+  let next: string
+  if (session.view === 'chat') {
+    const command = chat.terminalCommand(id) ?? undefined
+    const meta: SessionMeta = { ...metaOf(session), view: 'terminal' }
+    // The chat keeps running if the terminal fails to start
+    next = await spawnSession(meta, command)
+    await openSession(next, meta, '', null)
+    chat.stop(id)
+  } else {
+    if (session.status !== 'dormant') bridge.send('kill', id)
+    session.terminal.dispose()
+    next = crypto.randomUUID()
+    openChat(next, { ...metaOf(session), view: 'chat' })
+  }
+  update({
+    sessions: state.sessions.filter((candidate) => candidate.id !== id),
+    tasks: remapTasks(state.tasks, (pane) => (pane === id ? next : pane)),
+    zoomed: state.zoomed === id ? next : state.zoomed
+  })
+  void wakeSession(next)
+  setTimeout(() => focusSession(next))
+}

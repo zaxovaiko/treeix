@@ -5,14 +5,17 @@ import { actionKeys } from '@treeix/shared/keymap'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
-import { agentOr, getAgents, useAgents } from '@treeix/app/agents'
+import { agentOr, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
-import { ListToggle, usePanels } from '@treeix/sdk'
+import { ListToggle, useHost, usePanels } from '@treeix/sdk'
+import { errorMessage } from '@treeix/app/ui'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, aggregateStatus, type Task, type TerminalTab, tabPanes } from './tasks'
 import { StatusMark } from './taskUi'
+import { newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
+  archiveClosedSession,
   attachSession,
   clearTerminal,
   closeTab,
@@ -23,6 +26,7 @@ import {
   focusShown,
   forgetClosedSession,
   killSession,
+  otherView,
   pasteClipboard,
   placePane,
   restoreClosedSession,
@@ -30,10 +34,13 @@ import {
   setActiveTab,
   setTabFocus,
   splitPane,
+  switchView,
   terminalSelection,
   type Session,
   type SessionKind,
-  useTerminals
+  type SessionView,
+  useTerminals,
+  wakeSession
 } from './terminals'
 
 const SESSION_MIME = 'application/x-treeix-session'
@@ -43,7 +50,21 @@ const draggingSession = (event: React.DragEvent): boolean => event.dataTransfer.
 const draggedSessions = (event: React.DragEvent): string[] => event.dataTransfer.getData(SESSION_MIME).split(' ').filter(Boolean)
 
 /** Starts a session as a new tab of the task and focuses it */
-export const openTab = (cwd: string, kind: SessionKind, taskId?: string): void => void createSession(cwd, kind, undefined, taskId).then((id) => setTimeout(() => focusSession(id)))
+export const openTab = (cwd: string, kind: SessionKind, taskId?: string, view: SessionView = 'terminal'): void =>
+  void createSession(cwd, kind, undefined, taskId, view).then((id) => setTimeout(() => focusSession(id)))
+
+/** Each agent in its default view, then below the other view of agents that chat; terminals only while the chat plugin is off */
+function useNewTabEntries(): { main: NewTabEntry[]; other: NewTabEntry[] } {
+  const chat = useService('chat')
+  const { agentViews } = useSettings()
+  const entries = newTabEntries(useAgents(), chat ? agentViews : {})
+  return { main: entries.filter((entry) => !entry.secondary), other: chat ? entries.filter((entry) => entry.secondary) : [] }
+}
+
+/** "Claude · chat" beside a chat's title */
+const ChatBadge = ({ kind }: { kind: SessionKind }): React.JSX.Element => (
+  <span className="shrink-0 rounded bg-foreground/5 px-1 text-[10.5px] leading-4 text-muted-foreground">{agentOr(kind).label} · chat</span>
+)
 
 const restore = (entry: ClosedSession): void => void restoreClosedSession(entry).then((id) => setTimeout(() => focusSession(id)))
 
@@ -61,10 +82,20 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
           >
             <KindBadge kind={entry.kind} />
             <span className="min-w-0 truncate">{entry.title}</span>
+            {entry.view === 'chat' && <ChatBadge kind={entry.kind} />}
             <span className="min-w-0 truncate text-[10.5px] text-muted-foreground">{worktreeLabel(repos, entry.worktreePath)}</span>
             <span className="flex-1" />
             <span className="shrink-0 text-[10.5px] text-muted-foreground">{timeAgo(new Date(entry.endedAt).toISOString())}</span>
           </button>
+          {entry.view === 'chat' && (
+            <button
+              title="Hide from history"
+              onClick={() => archiveClosedSession(entry.id)}
+              className="h-6 shrink-0 rounded px-1.5 text-[10.5px] text-muted-foreground opacity-0 group-hover/closed:opacity-100 hover:text-foreground focus-visible:opacity-100"
+            >
+              Archive
+            </button>
+          )}
           <button
             title="Remove from history"
             aria-label="Remove from history"
@@ -80,8 +111,13 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
 }
 
 /** Actions of a session, in its pane header, tab and terminal menus */
-const sessionEntries = (session: Session, task: Task | null): MenuEntry[] => [
-  { label: `New ${agentOr(session.kind).label} tab here`, run: () => openTab(session.worktreePath, session.kind, task?.id) },
+const sessionEntries = (session: Session, task: Task | null, flash: (message: string) => void): MenuEntry[] => [
+  {
+    label: `New ${agentOr(session.kind).label} ${session.view === 'chat' ? 'chat' : 'tab'} here`,
+    run: () => openTab(session.worktreePath, session.kind, task?.id, session.view)
+  },
+  otherView(session) === 'chat' && { label: 'Open as chat', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
+  otherView(session) === 'terminal' && { label: 'Open in terminal', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
   null,
   { label: 'Copy working directory', run: () => copyText(session.worktreePath) },
   { label: 'Reveal in Finder', run: () => window.api.revealInFinder(session.worktreePath) },
@@ -156,6 +192,7 @@ function TerminalPane({
   repos: Repo[] | null
   horizontal: boolean
 }): React.JSX.Element {
+  const host = useHost()
   const hostRef = useRef<HTMLDivElement>(null)
   const [dropEdge, setDropEdge] = useState<DropEdge | null>(null)
   const edgeOf = (event: React.DragEvent): DropEdge => {
@@ -164,15 +201,21 @@ function TerminalPane({
   }
   // The plans plugin, when enabled, links Claude sessions to the plan they wrote
   const plans = useService('plans')
+  const chat = useService('chat')
+  const planName = session.view === 'terminal' ? session.planName : null
 
   useEffect(() => {
     const host = hostRef.current
-    if (!host) return
+    if (!host || session.view !== 'terminal') return
     attachSession(session.id, host)
     const observer = new ResizeObserver(() => fitSession(session.id))
     observer.observe(host)
     return () => observer.disconnect()
   }, [session.id])
+  // A dormant chat connects once shown, and once the chat plugin has loaded
+  useEffect(() => {
+    if (session.view === 'chat' && chat) void wakeSession(session.id)
+  }, [session.id, chat])
 
   return (
     <div
@@ -184,7 +227,8 @@ function TerminalPane({
         if (event.target === event.currentTarget) focusSession(session.id)
         else setTabFocus(session.id)
       }}
-      onMouseDown={() => focusSession(session.id)}
+      // A chat takes clicks itself: its feed has text to select and buttons
+      onMouseDown={() => session.view === 'terminal' && focusSession(session.id)}
       onDragOver={(event) => {
         if (!draggingSession(event)) return
         event.preventDefault()
@@ -212,15 +256,16 @@ function TerminalPane({
         <div
           draggable
           onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, session.id)}
-          onContextMenu={(event) => openMenu(event, sessionEntries(session, task))}
+          onContextMenu={(event) => openMenu(event, sessionEntries(session, task, host.flash))}
           className={`flex h-7 shrink-0 cursor-grab items-center gap-2 border-b border-border bg-card px-2 active:cursor-grabbing ${active ? 'text-foreground' : 'text-foreground/60'}`}
         >
           <Icon name="grip" className="-mx-1 size-3 shrink-0 text-muted-foreground/50" />
           <KindBadge kind={session.kind} />
           <span className={`min-w-0 truncate text-xs ${active ? 'font-medium' : ''}`}>{session.title}</span>
+          {session.view === 'chat' && <ChatBadge kind={session.kind} />}
           {task?.worktreePath !== session.worktreePath && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>}
           <span className="flex-1" />
-          {plans && (session.kind === 'claude' || session.planName) && <plans.PlanButton startedAt={session.startedAt} name={session.planName} />}
+          {plans && session.view === 'terminal' && (session.kind === 'claude' || planName) && <plans.PlanButton startedAt={session.startedAt} name={planName} />}
           {number <= 9 && (
             <span data-key-hint="" title={`Focus with ⌥${number}`} className={`shrink-0 rounded px-1 text-[10.5px] leading-4 tabular-nums ${active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground/60'}`}>
               ⌥{number}
@@ -237,22 +282,28 @@ function TerminalPane({
           </button>
         </div>
       )}
-      <div
-        ref={hostRef}
-        // The active pane shows by the others dimming, no frame
-        className={`min-h-0 flex-1 ${active || !framed ? '' : 'opacity-75'}`}
-        onContextMenu={(event) =>
-          openMenu(event, [
-            { label: 'Copy', enabled: terminalSelection(session.id) !== '', accelerator: 'CmdOrCtrl+C', run: () => copyText(terminalSelection(session.id)) },
-            { label: 'Paste', accelerator: 'CmdOrCtrl+V', run: () => void pasteClipboard(session.id) },
-            { label: 'Select all', run: () => selectAllTerminal(session.id) },
-            null,
-            { label: 'Clear scrollback', run: () => clearTerminal(session.id) },
-            null,
-            ...sessionEntries(session, task)
-          ])
-        }
-      />
+      {session.view === 'chat' ? (
+        <div className={`flex min-h-0 flex-1 flex-col ${active || !framed ? '' : 'opacity-75'}`}>
+          {chat ? <chat.View chatId={session.id} /> : <p className="m-auto p-4 text-xs text-muted-foreground">Turn on the Chat plugin in Settings to open this chat</p>}
+        </div>
+      ) : (
+        <div
+          ref={hostRef}
+          // The active pane shows by the others dimming, no frame
+          className={`min-h-0 flex-1 ${active || !framed ? '' : 'opacity-75'}`}
+          onContextMenu={(event) =>
+            openMenu(event, [
+              { label: 'Copy', enabled: terminalSelection(session.id) !== '', accelerator: 'CmdOrCtrl+C', run: () => copyText(terminalSelection(session.id)) },
+              { label: 'Paste', accelerator: 'CmdOrCtrl+V', run: () => void pasteClipboard(session.id) },
+              { label: 'Select all', run: () => selectAllTerminal(session.id) },
+              null,
+              { label: 'Clear scrollback', run: () => clearTerminal(session.id) },
+              null,
+              ...sessionEntries(session, task, host.flash)
+            ])
+          }
+        />
+      )}
     </div>
   )
 }
@@ -260,6 +311,7 @@ function TerminalPane({
 const stripButton = 'grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'
 
 function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: TerminalTab; index: number; count: number; sessions: Session[] }): React.JSX.Element | null {
+  const host = useHost()
   const panes = tabPanes(tab)
   const shown = sessions.find((session) => session.id === tab.focus) ?? sessions.find((session) => session.id === panes[0])
   if (!shown) return null
@@ -272,7 +324,7 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
     <div
       draggable
       onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, panes.join(' '))}
-      onContextMenu={(event) => openMenu(event, sessionEntries(shown, task))}
+      onContextMenu={(event) => openMenu(event, sessionEntries(shown, task, host.flash))}
       onDragOver={(event) => {
         if (!draggingSession(event)) return
         event.preventDefault()
@@ -302,6 +354,7 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
       >
         <KindBadge kind={shown.kind} />
         <span className="min-w-0 truncate">{shown.title}</span>
+        {shown.view === 'chat' && <ChatBadge kind={shown.kind} />}
         {panes.length > 1 && (
           <span title={`${panes.length} panes`} className="flex shrink-0 items-center gap-0.5 text-[10.5px] text-muted-foreground tabular-nums">
             <Icon name="splitRight" className="size-3" />
@@ -326,7 +379,13 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
 /** Tabs of the task with new tab and split buttons; on the Terminal page also the list and inspector toggles. `sessions` are the task's */
 function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | null; label: string; cwd: string; sessions: Session[]; page: boolean; onHide?: () => void }): React.JSX.Element {
   const panels = usePanels()
-  const newTab = (kind: SessionKind): void => openTab(task?.worktreePath ?? cwd, kind, task?.id)
+  const newTab = (kind: SessionKind, view: SessionView): void => openTab(task?.worktreePath ?? cwd, kind, task?.id, view)
+  const { main, other } = useNewTabEntries()
+  const menuEntry = (entry: NewTabEntry): MenuEntry => ({
+    label: entry.label,
+    accelerator: entry.agent === 'shell' && entry.view === 'terminal' ? 'CmdOrCtrl+T' : undefined,
+    run: () => newTab(entry.agent, entry.view)
+  })
   const plans = useService('plans')
   const activeTab = task ? activeTabOf(task) : undefined
   // A lone pane has no header, so its plan shows here
@@ -352,13 +411,13 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
       <button
         title="New tab: Shell (⌘T) or an agent"
         aria-label="New tab"
-        onClick={(event) => openMenu(event, getAgents().map((agent) => ({ label: agent.label, accelerator: agent.id === 'shell' ? 'CmdOrCtrl+T' : undefined, run: () => newTab(agent.id) })))}
+        onClick={(event) => openMenu(event, [...main.map(menuEntry), null, ...other.map(menuEntry)])}
         className={stripButton}
       >
         <Icon name="plus" className="size-3.5" />
       </button>
       <span className="min-w-2 flex-1" />
-      {plans && lone && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
+      {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
       <button title="Split right (⌘D)" aria-label="Split right" onClick={() => void splitPane('right', cwd)} className={stripButton}>
         <Icon name="splitRight" className="size-3.5" />
       </button>
@@ -381,7 +440,7 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
 
 /** A task with no terminals: start one, or bring back a closed one */
 function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; label: string; cwd: string; history: ClosedSession[]; repos: Repo[] | null }): React.JSX.Element {
-  const agents = useAgents()
+  const { main } = useNewTabEntries()
   return (
     <div data-terminal-empty className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-y-auto bg-background p-4 text-center">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground/5 text-muted-foreground">
@@ -391,11 +450,11 @@ function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; la
         No terminals in <span className="text-foreground">{label}</span>
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        {agents.map(({ id: kind, label: kindLabel }, index) => (
+        {main.map(({ agent: kind, label: kindLabel, view }, index) => (
           <button
             key={kind}
             data-zone-focus={index === 0 ? '' : undefined}
-            onClick={() => openTab(task?.worktreePath ?? cwd, kind, task?.id)}
+            onClick={() => openTab(task?.worktreePath ?? cwd, kind, task?.id, view)}
             className="flex h-8 items-center gap-2 rounded-md bg-foreground/5 px-3 text-xs text-foreground hover:bg-accent"
           >
             <KindBadge kind={kind} />

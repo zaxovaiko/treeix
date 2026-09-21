@@ -29,6 +29,8 @@ Shared code that several plugins need is a library package instead of a plugin: 
 
 The `browser` plugin is the one plugin with a page-side part. Its pages run in `<webview>` elements, which the host hardens in `will-attach-webview` (`src/main/webviewPolicy.ts`): a separate `persist:browser` session, a sandbox, and `packages/plugins/browser/inject/preload.ts` as the only preload, built by electron-vite as `out/preload/browserInject.js`. The pages live in one fixed layer drawn over the Browser tab or panel, so moving between them doesn't reload anything. Main attaches the Chrome DevTools Protocol to each page for the console and network strip, and the inject script reports web vitals and design mode selections back with `sendToHost`.
 
+The `chat` plugin gives agents a chat view next to their terminals. It talks to agents only through the `ChatAdapter` contract in `@treeix/sdk`: an adapter connects to an agent's command and turns what it says into `ChatEvent`s. Any plugin can contribute adapters with `MainPlugin.chatAdapters`; the chat plugin ships the Agent Client Protocol adapter, which covers Claude, Codex and Gemini through their ACP commands. Agents opt in with `Agent.chat` in the registry, run through the user's login shell like terminal sessions, and keep their own transcripts; chat sessions live in the terminal plugin's groups and tabs with `view: 'chat'`.
+
 ## Imports
 
 | Alias | Points at |

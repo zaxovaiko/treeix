@@ -70,3 +70,18 @@ async function check(tool: Tool): Promise<ToolStatus> {
 }
 
 export const checkTools = (tools: Tool[]): Promise<ToolStatus[]> => Promise.all(tools.map(check))
+
+/** A bare command word, or a path built only from such words; rejects spaces and shell metacharacters */
+export const isSafeCommandName = (name: string): boolean => /^\/?[A-Za-z0-9._+-]+(\/[A-Za-z0-9._+-]+)*$/.test(name)
+
+/** Whether a command's first word resolves on the user's login shell PATH; never runs the command itself */
+export async function commandExists(name: string): Promise<boolean> {
+  if (!isSafeCommandName(name)) return false
+  try {
+    // The name reaches the shell as $1, never interpolated into the command string, so it can't inject
+    await exec(process.env.SHELL ?? '/bin/zsh', ['-lc', 'command -v -- "$1"', '_', name], { timeout: TIMEOUT_MS, env: withoutAgentVariables(process.env) })
+    return true
+  } catch {
+    return false
+  }
+}

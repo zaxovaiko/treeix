@@ -30,3 +30,28 @@ test('fontStack quotes family names but not system font keywords', async () => {
   expect(fontStack(' Geist "Mono" ', 'monospace')).toBe('"Geist Mono", monospace')
   expect(fontStack('ui-monospace', 'monospace')).toBe('ui-monospace, monospace')
 })
+
+test('parseCustomAgents keeps chat only when adapter and command are both strings', async () => {
+  const { parseCustomAgents } = await import('./settings')
+  const base = { id: 'aider', label: 'Aider', mark: 'A', color: '#fff', command: 'aider', agent: true }
+  expect(parseCustomAgents([base])[0]?.chat).toBeUndefined()
+  expect(parseCustomAgents([{ ...base, chat: { adapter: 'acp', command: 'aider --acp' } }])[0]?.chat).toEqual({ adapter: 'acp', command: 'aider --acp' })
+  expect(parseCustomAgents([{ ...base, chat: 'acp' }])[0]?.chat).toBeUndefined()
+  expect(parseCustomAgents([{ ...base, chat: { adapter: 'acp' } }])[0]?.chat).toBeUndefined()
+  expect(parseCustomAgents([{ ...base, chat: { command: 'aider --acp' } }])[0]?.chat).toBeUndefined()
+})
+
+test('parseAgentViews drops garbage and keeps only chat/terminal values', async () => {
+  const { parseAgentViews } = await import('./settings')
+  expect(parseAgentViews(null)).toEqual({})
+  expect(parseAgentViews('nonsense')).toEqual({})
+  expect(parseAgentViews({ claude: 'chat', codex: 'terminal', shell: 'loud', gemini: 3 })).toEqual({ claude: 'chat', codex: 'terminal' })
+})
+
+test('parseChatThinking falls back to collapsed for unknown values and keeps expanded/hidden', async () => {
+  const { parseChatThinking } = await import('./settings')
+  expect(parseChatThinking(undefined)).toBe('collapsed')
+  expect(parseChatThinking('loud')).toBe('collapsed')
+  expect(parseChatThinking('expanded')).toBe('expanded')
+  expect(parseChatThinking('hidden')).toBe('hidden')
+})
