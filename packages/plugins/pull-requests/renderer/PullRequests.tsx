@@ -2,7 +2,7 @@ import { type DiffLineAnnotation, PatchDiff, Virtualizer } from '@pierre/diffs/r
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { LineRange } from '@treeix/shared/comments'
 import type { FilePatch, Repo } from '@treeix/shared/types'
-import { type ConflictResult, type MergeMethod, type PullRequest, type PullRequestComment, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewThread, type ThreadComment } from '../shared/types'
+import { type ConflictResult, type MergeMethod, type PullRequest, type PullRequestComment, type Person, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewThread, type ThreadComment } from '../shared/types'
 import { allFolders, ChangedFileList, folderPaths } from '@treeix/app/ChangedFiles'
 import { groupOpen } from '@treeix/app/settings'
 import { api, imageResolver, prSettings } from './api'
@@ -123,6 +123,7 @@ const FILES_HINTS: KeyHint[] = [
   ['[ ]', 'switch']
 ]
 const INSPECTOR_HINTS: KeyHint[] = [
+  ['⇧A', 'assign'],
   ['w', 'worktree'],
   ['o', 'open'],
   ['y', 'copy link']
@@ -610,6 +611,20 @@ function ReviewerRow({ reviewer, pr, onRequested, onError }: { reviewer: Reviewe
   )
 }
 
+function AssigneeRow({ person, onRemove }: { person: Person; onRemove: () => void }): React.JSX.Element {
+  return (
+    <div className="flex h-7 min-w-0 items-center gap-2 px-3 text-xs">
+      <UserAvatar name={person.login} url={person.avatarUrl} size="size-4" />
+      <span title={person.login} className="min-w-0 flex-1 truncate">
+        {person.login}
+      </span>
+      <button onClick={onRemove} title={`Unassign ${person.login}`} className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+        <Icon name="close" className="size-3" />
+      </button>
+    </div>
+  )
+}
+
 function ActionRow({ icon, label, keys, onClick }: { icon: IconName; label: string; keys: string; onClick: () => void }): React.JSX.Element {
   return (
     <button onClick={onClick} className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-xs text-foreground/85 hover:bg-accent">
@@ -907,7 +922,7 @@ export function PullRequestDetailView({
   /** Last file under the pointer, which symbol navigation resolves against in the all-files scroll */
   const [pointerPath, setPointerPath] = useScopedState<string | null>(pr.url, null)
   const [viewed, setViewed] = useScopedState<Set<string>>(pr.url, new Set())
-  const [picker, setPicker] = useScopedState<'files' | 'review' | 'merge' | null>(pr.url, null)
+  const [picker, setPicker] = useScopedState<'files' | 'review' | 'merge' | 'assign' | null>(pr.url, null)
   const [fullFile, setFullFile] = useScopedState<string | null>(pr.url, null)
   const [addedFiles, setAddedFiles] = useScopedState<Set<string>>(pr.url, new Set())
   const [addedThreads, setAddedThreads] = useScopedState<Set<string>>(pr.url, new Set())
@@ -1233,6 +1248,35 @@ export function PullRequestDetailView({
       }
     )
   }
+  // Assignment shows straight away; the reload after it brings the provider's view back (GitLab Free keeps one assignee)
+  const [assigneesNow, setAssigneesNow] = useScopedState<Person[] | null>(pr.url, null)
+  useEffect(() => setAssigneesNow(null), [detail])
+  const assignees = assigneesNow ?? detail?.assignees ?? []
+  const [candidates, setCandidates] = useScopedState<Person[] | null>(pr.url, null)
+  const openAssign = (): void => {
+    setPicker('assign')
+    if (!candidates)
+      api.assignableUsers(pr).then(setCandidates, (failure: unknown) => {
+        setPicker(null)
+        setError(`People not loaded: ${errorMessage(failure)}`)
+      })
+  }
+  const setAssigned = (person: Person, assigned: boolean): void => {
+    setAssigneesNow(assigned ? [...assignees, person] : assignees.filter((entry) => entry.login !== person.login))
+    api.setAssigned(pr, person.login, assigned).then(load, (failure: unknown) => {
+      setAssigneesNow(null)
+      setError(`${person.login} not ${assigned ? 'assigned' : 'unassigned'}: ${errorMessage(failure)}`)
+    })
+  }
+  const [closing, setClosing] = useScopedState(pr.url, false)
+  const close = (): void => {
+    if (closing || !window.confirm(`Close ${prefix(pr)}${pr.number} without merging?`)) return
+    setClosing(true)
+    api.close(pr).then(
+      () => void refreshPullRequests(host.scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined),
+      (failure: unknown) => setError(`Not closed: ${errorMessage(failure)}`)
+    ).finally(() => setClosing(false))
+  }
   const showReviewers = (): void => {
     if (!panels.inspector) panels.toggle('inspector')
     focusZone('inspector')
@@ -1303,6 +1347,20 @@ export function PullRequestDetailView({
         { id: 'changes', group: `Review ${title}`, label: 'Request changes', detail: 'Asks for a reason and blocks the merge', icon: 'alert', run: () => setReason('') }
       ]
     }
+    if (picker === 'assign') {
+      const assigned = new Set(assignees.map((person) => person.login))
+      const people = [...assignees, ...(candidates ?? []).filter((person) => !assigned.has(person.login))]
+      // You first, as assigning yourself is the usual case
+      people.sort((a, b) => Number(b.login === detail?.viewer) - Number(a.login === detail?.viewer))
+      return people.map((person) => ({
+        id: person.login,
+        group: `Assign ${title}`,
+        label: person.login === detail?.viewer ? `${person.login} (you)` : person.login,
+        detail: assigned.has(person.login) ? 'Assigned, unassigns' : undefined,
+        icon: assigned.has(person.login) ? 'check' : 'user',
+        run: () => setAssigned(person, !assigned.has(person.login))
+      }))
+    }
     const group = `Merge ${title} into ${pr.targetBranch}`
     const methods = [method, ...(Object.keys(MERGE_METHODS) as MergeMethod[]).filter((candidate) => candidate !== method)]
     return [
@@ -1368,7 +1426,9 @@ export function PullRequestDetailView({
       ...(!own && { review: () => setPicker('review') }),
       merge: () => (mergeBlocked ? host.flash(mergeBlocked) : setPicker('merge')),
       // Anyone with write access can mark a draft ready; only your own go back to draft
-      ...((isDraft || own) && { ready: () => setDraftState(!isDraft) })
+      ...((isDraft || own) && { ready: () => setDraftState(!isDraft) }),
+      assign: openAssign,
+      close
     }),
     ...(canFoldFolders && zone === 'main' && { fold: foldFolders }),
     worktree,
@@ -1834,13 +1894,20 @@ export function PullRequestDetailView({
           <ReviewerRow key={reviewer.login} reviewer={reviewer} pr={pr} onRequested={load} onError={setError} />
         ))}
         {detail && detail.reviewers.length === 0 && <p className="px-3 text-xs text-muted-foreground">No reviewers</p>}
+        <SectionLabel>Assignees</SectionLabel>
+        {assignees.map((person) => (
+          <AssigneeRow key={person.login} person={person} onRemove={() => setAssigned(person, false)} />
+        ))}
+        {detail && assignees.length === 0 && <p className="px-3 text-xs text-muted-foreground">No one assigned</p>}
         <SectionLabel>Actions</SectionLabel>
         <div className="px-1.5">
           <ActionRow icon="branch" label={local ? 'Open worktree' : `Create worktree for ${pr.sourceBranch}`} keys="w" onClick={worktree} />
           <ActionRow icon="comment" label={`Comment on ${providerName(pr)}`} keys="c" onClick={comment} />
           <ActionRow icon="external" label={`Open on ${providerName(pr)}`} keys="o" onClick={openInBrowser} />
           <ActionRow icon="copy" label="Copy link" keys="y" onClick={copyLink} />
+          {pr.state === 'open' && <ActionRow icon="user" label="Assign people" keys="⇧A" onClick={openAssign} />}
           {pr.state === 'open' && own && <ActionRow icon={isDraft ? 'check' : 'pencil'} label={isDraft ? 'Mark ready for review' : 'Convert to draft'} keys="⇧R" onClick={() => setDraftState(!isDraft)} />}
+          {pr.state === 'open' && <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />}
         </div>
       </div>
       {renderComments && (
@@ -1876,7 +1943,7 @@ export function PullRequestDetailView({
       />
       {picker && (
         <Picker
-          placeholder={picker === 'files' ? 'Go to file: type or paste a path' : undefined}
+          placeholder={picker === 'files' ? 'Go to file: type or paste a path' : picker === 'assign' && !candidates ? 'Loading people…' : undefined}
           onClose={() => setPicker(null)}
           commands={pickerCommands()}
         />

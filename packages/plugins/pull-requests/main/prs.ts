@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ConflictResult, ImageResult, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
+import type { ConflictResult, ImageResult, Person, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
 
@@ -391,6 +391,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
         reviewRequests(first: 30) { nodes { requestedReviewer { ... on User { login avatarUrl } } } }
         latestReviews(first: 30) { nodes { author { login avatarUrl } state } }
         viewerLatestReview { state }
+        assignees(first: 30) { nodes { login avatarUrl } }
       } }
     }`
     const [filePatches, view, reviewComments, issueComments, extra] = await Promise.all([
@@ -408,6 +409,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
       // ponytail: first 100 files only, paginate when PRs get bigger
       viewedFiles: extra === null ? null : githubViewedFiles(extra),
       reviewers: githubReviewers(extra),
+      assignees: list(object(object(object(object(object(extra).data).repository).pullRequest).assignees).nodes).map((user) => ({ login: text(user.login), avatarUrl: text(user.avatarUrl) || null })),
       myReview: githubMyReview(extra),
       viewer: text(object(object(object(extra).data).viewer).login) || null
     }
@@ -427,11 +429,14 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
     threads: gitlabThreads(list(discussions)),
     viewedFiles: null,
     reviewers: gitlabReviewers(request, approvals),
+    assignees: list(object(request).assignees).map(gitlabPerson),
     // GitLab tells only whether you approved; a change request shows as your reviewer state, not here
     myReview: object(approvals).user_has_approved === true ? 'approved' : null,
     viewer
   }
 }
+
+const gitlabPerson = (user: Json): Person => ({ login: text(user.username), avatarUrl: text(user.avatar_url) || null })
 
 /** GitLab lists assigned reviewers and, separately, who approved */
 export function gitlabReviewers(request: unknown, approvals: unknown): Reviewer[] {
@@ -689,6 +694,54 @@ export async function requestReview(pullRequest: PullRequest, login: string): Pr
   }
   // GitLab has no re-request endpoint; the quick action in a note does it, as the web UI's button does
   await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `/request_review @${login}` })
+}
+
+/** People who can be assigned; ponytail: first 100, search the provider if projects outgrow it */
+export async function assignableUsers(pullRequest: PullRequest): Promise<Person[]> {
+  const { repoPath } = pullRequest
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  try {
+    if (remote.provider === 'github') {
+      const users = await runJson('gh', ['api', '--hostname', remote.host, `repos/${remote.slug}/assignees?per_page=100`], repoPath)
+      return list(users).map((user) => ({ login: text(user.login), avatarUrl: text(user.avatar_url) || null }))
+    }
+    // Inherited group members can be assigned too; `members` alone lists only the project's own
+    const users = await runJson('glab', ['api', 'projects/:id/members/all?per_page=100&state=active'], repoPath)
+    return list(users).map(gitlabPerson)
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
+  }
+}
+
+export async function setAssigned(pullRequest: PullRequest, login: string, assigned: boolean): Promise<void> {
+  const { repoPath, number } = pullRequest
+  if (!/^[\w.-]+$/.test(login)) throw new Error(`Invalid user name: ${login}`)
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  try {
+    if (remote.provider === 'github') {
+      await runWithBody('gh', ['api', '--hostname', remote.host, '-X', assigned ? 'POST' : 'DELETE', `repos/${remote.slug}/issues/${number}/assignees`], repoPath, { assignees: [login] })
+      return
+    }
+    // The quick action takes a username, the REST update wants the full list of user ids
+    await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `/${assigned ? 'assign' : 'unassign'} @${login}` })
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
+  }
+}
+
+/** Closes without merging; the branch stays */
+export async function closePullRequest(pullRequest: PullRequest): Promise<void> {
+  const { repoPath, number } = pullRequest
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  try {
+    if (remote.provider === 'github') await run('gh', ['pr', 'close', String(number), '-R', `${remote.host}/${remote.slug}`], repoPath)
+    else await run('glab', ['mr', 'close', String(number)], repoPath)
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
+  }
 }
 
 /** `git merge-tree --name-only` output: the tree id, then each conflicted path (once per stage), then a blank line */

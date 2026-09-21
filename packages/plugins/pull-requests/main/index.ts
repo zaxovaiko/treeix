@@ -1,6 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
-import { commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
+import { assignableUsers, closePullRequest, setAssigned, commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
 
 const plugin: MainPlugin = {
   tools: [
@@ -25,6 +25,9 @@ const plugin: MainPlugin = {
     )
     context.handle('setDraft', (_, pullRequest: PullRequest, draft: boolean) => setDraft(pullRequest, draft === true))
     context.handle('requestReview', (_, pullRequest: PullRequest, login: string) => requestReview(pullRequest, login))
+    context.handle('assignable', (_, pullRequest: PullRequest) => assignableUsers(pullRequest))
+    context.handle('setAssigned', (_, pullRequest: PullRequest, login: string, assigned: boolean) => setAssigned(pullRequest, String(login), assigned === true))
+    context.handle('close', (_, pullRequest: PullRequest) => closePullRequest(pullRequest))
     context.handle('comment', (_, pullRequest: PullRequest, comment: PullRequestComment) => commentOnPullRequest(pullRequest, comment))
     context.handle('react', (_, pullRequest: PullRequest, commentId: string, reaction: Reaction) => reactToPullRequestComment(pullRequest, commentId, reaction))
   }

@@ -17,6 +17,8 @@ export type Verb =
   | 'review'
   | 'merge'
   | 'ready'
+  | 'assign'
+  | 'close'
   | 'worktree'
   | 'open'
   | 'copy'
@@ -40,6 +42,8 @@ const VERBS: { verb: Verb; code: string; shift?: boolean; label: string; icon: I
   { verb: 'review', code: 'KeyR', label: 'Review: approve or request changes', icon: 'eye' },
   { verb: 'merge', code: 'KeyM', label: 'Merge, squash or rebase', icon: 'pullRequest' },
   { verb: 'ready', code: 'KeyR', shift: true, label: 'Mark a draft ready for review, or convert back to draft', icon: 'check' },
+  { verb: 'assign', code: 'KeyA', shift: true, label: 'Assign or unassign people', icon: 'user' },
+  { verb: 'close', code: 'KeyC', shift: true, label: 'Close without merging', icon: 'close' },
   { verb: 'worktree', code: 'KeyW', label: 'Open the worktree for the branch, or create it', icon: 'branch' },
   { verb: 'open', code: 'KeyO', label: 'Open in the browser', icon: 'external' },
   { verb: 'copy', code: 'KeyY', label: 'Copy link', icon: 'copy' },

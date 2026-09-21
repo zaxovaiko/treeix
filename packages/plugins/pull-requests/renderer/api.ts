@@ -1,6 +1,6 @@
 import { createBridge, definePluginSettings } from '@treeix/sdk'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ConflictResult, ImageResult, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread, ReviewVerdict, MergeMethod } from '../shared/types'
+import type { ConflictResult, ImageResult, Person, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread, ReviewVerdict, MergeMethod } from '../shared/types'
 
 const bridge = createBridge('pull-requests')
 
@@ -16,6 +16,9 @@ export const api = {
   submitReview: (pullRequest: PullRequest, verdict: ReviewVerdict, body: string) => bridge.invoke<void>('submitReview', pullRequest, verdict, body),
   setDraft: (pullRequest: PullRequest, draft: boolean) => bridge.invoke<void>('setDraft', pullRequest, draft),
   requestReview: (pullRequest: PullRequest, login: string) => bridge.invoke<void>('requestReview', pullRequest, login),
+  assignableUsers: (pullRequest: PullRequest) => bridge.invoke<Person[]>('assignable', pullRequest),
+  setAssigned: (pullRequest: PullRequest, login: string, assigned: boolean) => bridge.invoke<void>('setAssigned', pullRequest, login, assigned),
+  close: (pullRequest: PullRequest) => bridge.invoke<void>('close', pullRequest),
   commentOnPullRequest: (pullRequest: PullRequest, comment: PullRequestComment) => bridge.invoke<void>('comment', pullRequest, comment),
   reactToPullRequestComment: (pullRequest: PullRequest, commentId: string, reaction: Reaction) => bridge.invoke<void>('react', pullRequest, commentId, reaction),
   conflictingFiles: (pullRequest: PullRequest) => bridge.invoke<ConflictResult>('conflicts', pullRequest),
