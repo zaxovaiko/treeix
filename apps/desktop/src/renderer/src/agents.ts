@@ -36,7 +36,7 @@ export const BUILTIN_AGENTS = {
     // A session closed before its first message has no transcript, and --resume would fail on it
     resumeCommand: `if ls ~/.claude/projects/*/{id}.jsonl >/dev/null 2>&1; then ${CLAUDE} --resume {id}; else ${CLAUDE} --session-id {id}; fi`,
     agent: true,
-    chat: { adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp' }
+    chat: { adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp@0.79.0' }
   },
   // ponytail: Codex can't be given an id up front, so relaunch resumes its latest conversation; read ~/.codex/sessions if two Codex sessions clash
   codex: {
@@ -48,7 +48,7 @@ export const BUILTIN_AGENTS = {
     promptFlag: '',
     resumeCommand: 'codex resume --last',
     agent: true,
-    chat: { adapter: 'acp', command: 'npx -y @zed-industries/codex-acp' }
+    chat: { adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' }
   },
   gemini: {
     id: 'gemini',

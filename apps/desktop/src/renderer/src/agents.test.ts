@@ -9,8 +9,8 @@ const setAgents = async (customAgents: unknown[]): Promise<void> => {
 }
 
 test('presets carry ACP chat commands and Gemini is built in', () => {
-  expect(BUILTIN_AGENTS.claude.chat).toEqual({ adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp' })
-  expect(BUILTIN_AGENTS.codex.chat).toEqual({ adapter: 'acp', command: 'npx -y @zed-industries/codex-acp' })
+  expect(BUILTIN_AGENTS.claude.chat).toEqual({ adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp@0.79.0' })
+  expect(BUILTIN_AGENTS.codex.chat).toEqual({ adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' })
   expect(BUILTIN_AGENTS.gemini.chat).toEqual({ adapter: 'acp', command: 'gemini --experimental-acp' })
   expect('chat' in BUILTIN_AGENTS.shell).toBe(false)
 })
