@@ -5,6 +5,7 @@ import { DesignPopover } from './DesignPopover'
 import { addVital } from './entries'
 import './entries'
 import { onPageMessage, PageLayer } from './pages'
+import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
 import { getBrowser, openTab, selectTab, updateBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
@@ -102,6 +103,7 @@ const plugin: RendererPlugin = {
   },
   commands: () => [{ id: 'browser:new', group: 'Actions', label: 'New browser tab', icon: 'globe', shortcut: '⌘T', run: () => (openUrl('about:blank'), setTimeout(() => runBrowserAction('focusAddress'), 50)) }],
   shortcuts: SHORTCUTS,
+  Settings: BrowserSettings,
   services: {
     browser: { open: openUrl, handles: () => browserSettings.get().openLinks }
   }

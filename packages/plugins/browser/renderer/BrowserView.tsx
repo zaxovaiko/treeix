@@ -5,10 +5,12 @@ import { createBridge, useHost } from '@treeix/sdk'
 import { usePersisted } from '@treeix/app/ui'
 import { toUrl } from './address'
 import { getDesign, pageOf, setDesign, useDesign, useSlot } from './pages'
+import { importLabel } from './SettingsPage'
 import { browserSettings } from './settings'
 import { Strip } from './Strip'
 import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
+import type { ImportInfo } from '../shared/types'
 
 const bridge = createBridge('browser')
 
@@ -40,6 +42,22 @@ export function runBrowserAction(action: BrowserAction): void {
 }
 
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
+
+function ProfileBadge(): React.JSX.Element | null {
+  const host = useHost()
+  const [info, setInfo] = useState<ImportInfo>(null)
+  useEffect(() => void bridge.invoke<ImportInfo>('importInfo').then(setInfo), [])
+  if (!info) return null
+  return (
+    <button
+      title={`Cookies from ${importLabel(info)}. Import again in Settings`}
+      onClick={host.openSettings}
+      className="h-5 shrink-0 rounded bg-emerald-400/12 px-1.5 text-[10.5px] text-emerald-400"
+    >
+      {info.browser}
+    </button>
+  )
+}
 
 function DevtoolsDock({ guestId }: { guestId: number }): React.JSX.Element {
   const ref = useRef<WebviewTag | null>(null)
@@ -145,6 +163,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           }}
           className="h-6 min-w-0 flex-1 rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
         />
+        {place === 'tab' && <ProfileBadge />}
         <button
           aria-label="Design mode"
           title="Design mode: click an element to comment on it (⌘⇧C)"
