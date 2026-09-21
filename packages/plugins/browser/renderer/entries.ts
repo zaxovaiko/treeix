@@ -37,6 +37,10 @@ export function clearVitals(guestId: number): void {
   notify()
 }
 
+export function dropEntries(guestId: number): void {
+  if (pages.delete(guestId)) notify()
+}
+
 const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener)
   return () => listeners.delete(listener)

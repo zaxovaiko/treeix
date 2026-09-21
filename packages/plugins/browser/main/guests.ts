@@ -2,7 +2,7 @@ import type { WebContents } from 'electron'
 import { saveAttachment } from '@treeix/host/attachments'
 import type { MainContext } from '@treeix/sdk/main'
 import type { Attachment } from '@treeix/shared/comments'
-import { ENTRY_LIMIT, applyNetworkEvent, consoleFromApi, consoleFromException, keepLast } from './entries'
+import { ENTRY_LIMIT, applyNetworkEvent, consoleFromApi, consoleFromException, consoleFromLog, keepLast } from './entries'
 import { browserAction, forwardsToApp } from '../shared/keys'
 import type { ConsoleEntry, EntryBatch, NetworkEntry } from '../shared/types'
 
@@ -55,41 +55,47 @@ export function watchGuest(guest: WebContents, context: MainContext): void {
 function capture(guest: WebContents, context: MainContext): void {
   const host = guest.hostWebContents
   if (!host) return
+  // Read once: a closed page's id throws, and its debugger detach still queues a flush
+  const guestId = guest.id
   const requests = new Map<string, NetworkEntry>()
-  let pending: EntryBatch = { guestId: guest.id, reset: false, console: [], network: [] }
+  let pending: EntryBatch = { guestId, reset: false, console: [], network: [] }
   let timer: NodeJS.Timeout | null = null
   let origin = ''
   const flush = (): void => {
     timer = null
-    if (!host.isDestroyed()) context.send(host, 'entries', pending)
-    pending = { guestId: guest.id, reset: false, console: [], network: [] }
+    if (!host.isDestroyed() && !guest.isDestroyed()) context.send(host, 'entries', pending)
+    pending = { guestId, reset: false, console: [], network: [] }
   }
   const queue = (change: (batch: EntryBatch) => EntryBatch): void => {
+    if (guest.isDestroyed()) return
     pending = change(pending)
     timer ??= setTimeout(flush, BATCH_MS)
   }
   const onMessage = (_: unknown, method: string, params: unknown): void => {
-    const logged: ConsoleEntry | null = method === 'Runtime.consoleAPICalled' ? consoleFromApi(params) : method === 'Runtime.exceptionThrown' ? consoleFromException(params) : null
+    const logged: ConsoleEntry | null =
+      method === 'Runtime.consoleAPICalled' ? consoleFromApi(params) : method === 'Runtime.exceptionThrown' ? consoleFromException(params) : method === 'Log.entryAdded' ? consoleFromLog(params) : null
     if (logged) return queue((batch) => ({ ...batch, console: keepLast(batch.console, logged) }))
     if (!method.startsWith('Network.')) return
     const request = applyNetworkEvent(requests, method, params)
     if (request) queue((batch) => ({ ...batch, network: keepLast(batch.network.filter((entry) => entry.id !== request.id), request) }))
     if (requests.size > ENTRY_LIMIT) requests.delete(requests.keys().next().value as string)
   }
-  try {
-    guest.debugger.attach('1.3')
-  } catch {
-    return
+  const attach = (): void => {
+    try {
+      guest.debugger.attach('1.3')
+      for (const domain of ['Runtime', 'Log', 'Network']) void guest.debugger.sendCommand(`${domain}.enable`).catch(() => undefined)
+    } catch {
+      // DevTools' own protocol client can hold the page; capture resumes on a later load
+    }
   }
   guest.debugger.on('message', onMessage)
-  for (const domain of ['Runtime', 'Log', 'Network']) void guest.debugger.sendCommand(`${domain}.enable`).catch(() => undefined)
   // Another site starts a fresh list; staying on one origin keeps it, like DevTools with preserve log off per site
   guest.on('did-navigate', (_, url) => {
     const next = new URL(url).origin
     if (next === origin) return
     origin = next
     requests.clear()
-    queue(() => ({ guestId: guest.id, reset: true, console: [], network: [] }))
+    queue(() => ({ guestId, reset: true, console: [], network: [] }))
   })
   guest.debugger.on('detach', () =>
     queue((batch) => ({
@@ -98,15 +104,9 @@ function capture(guest: WebContents, context: MainContext): void {
     }))
   )
   guest.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !guest.debugger.isAttached()) {
-      try {
-        guest.debugger.attach('1.3')
-        for (const domain of ['Runtime', 'Log', 'Network']) void guest.debugger.sendCommand(`${domain}.enable`).catch(() => undefined)
-      } catch {
-        // DevTools' own protocol client can hold the page; capture resumes on a later load
-      }
-    }
+    if (details.isMainFrame && !guest.isDestroyed() && !guest.debugger.isAttached()) attach()
   })
+  attach()
 }
 
 export async function responseBody(guest: WebContents, requestId: string): Promise<string | null> {

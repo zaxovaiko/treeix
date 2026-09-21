@@ -12,8 +12,12 @@ const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
 const stringMap = (value: unknown): Record<string, string> =>
   Object.fromEntries(Object.entries(record(value)).flatMap(([key, entry]) => (typeof entry === 'string' ? [[key, entry]] : [])))
 
-const LEVELS: Record<string, ConsoleEntry['level']> = { error: 'error', assert: 'error', warning: 'warning', info: 'info', debug: 'debug' }
-const fileOf = (url: string): string => url.split(/[?#]/)[0].split('/').at(-1) ?? url
+const LEVELS: Record<string, ConsoleEntry['level']> = { error: 'error', assert: 'error', warning: 'warning', info: 'info', debug: 'debug', verbose: 'debug' }
+// A root URL like http://host/ has no file name, so its host stands in
+const fileOf = (url: string): string => {
+  const parts = url.split(/[?#]/)[0].split('/')
+  return parts.at(-1) || parts[2] || url
+}
 
 let counter = 0
 const nextId = (): string => `e${++counter}`
@@ -48,6 +52,22 @@ export function consoleFromException(params: unknown): ConsoleEntry | null {
     source: url ? `${fileOf(url)}:${(number(details.lineNumber) ?? 0) + 1}` : '',
     stack: description,
     time: number(record(params).timestamp) ?? Date.now()
+  }
+}
+
+/** Chromium's own messages, like CSP violations and mixed content warnings */
+export function consoleFromLog(params: unknown): ConsoleEntry | null {
+  const entry = record(record(params).entry)
+  if (typeof entry.level !== 'string' || typeof entry.text !== 'string') return null
+  const url = text(entry.url)
+  return {
+    kind: 'console',
+    id: nextId(),
+    level: LEVELS[entry.level] ?? 'log',
+    text: entry.text,
+    source: url ? `${fileOf(url)}:${(number(entry.lineNumber) ?? 0) + 1}` : '',
+    stack: frames(entry.stackTrace).stack,
+    time: number(entry.timestamp) ?? Date.now()
   }
 }
 

@@ -19,16 +19,18 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
   const [all, setAll] = useState(false)
   const { console: logs, network, vitals } = useEntries(tab.guestId)
   const worktree = host.selectedWorktree ?? host.defaultCwd
-  const ticked = (id: string): boolean => host.comments.some((comment) => comment.id === id)
+  const { guestId } = tab
+  const ticked = (entry: ConsoleEntry | NetworkEntry | Vital): boolean => guestId !== null && host.comments.some((comment) => comment.id === entryCommentId(entry, guestId))
   const toggle = async (entry: ConsoleEntry | NetworkEntry | Vital): Promise<void> => {
-    const id = entryCommentId(entry)
+    if (guestId === null) return
+    const id = entryCommentId(entry, guestId)
     const existing = host.comments.find((comment) => comment.id === id)
     if (existing) return host.deleteComment(existing)
-    if (entry.kind === 'console') host.addComment(consoleComment(entry, tab.url, worktree))
-    else if (entry.kind === 'vital') host.addComment(vitalComment(entry, tab.url, worktree))
+    if (entry.kind === 'console') host.addComment(consoleComment(entry, guestId, tab.url, worktree))
+    else if (entry.kind === 'vital') host.addComment(vitalComment(entry, guestId, tab.url, worktree))
     else {
-      const body = tab.guestId === null ? null : await bridge.invoke<string | null>('responseBody', tab.guestId, entry.id).catch(() => null)
-      host.addComment(networkComment(entry, body, tab.url, worktree))
+      const body = await bridge.invoke<string | null>('responseBody', guestId, entry.id).catch(() => null)
+      host.addComment(networkComment(entry, guestId, body, tab.url, worktree))
     }
   }
   const shownLogs = all ? logs : logs.filter((entry) => entry.level === 'error' || entry.level === 'warning')
@@ -83,7 +85,7 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
             .reverse()
             .map(({ entry, cells, bad, warn }) => (
               <label key={entry.id} className="grid cursor-pointer grid-cols-[16px_56px_minmax(0,1fr)_72px_56px] items-center gap-2 border-t border-border px-2 py-1 font-mono text-[11px] hover:bg-accent/50">
-                <input type="checkbox" checked={ticked(entryCommentId(entry))} onChange={() => void toggle(entry)} />
+                <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
                 <span className={tone(bad, warn)}>{cells[0]}</span>
                 <span className="truncate" title={cells[1]}>
                   {cells[1]}

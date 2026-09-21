@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { WebviewTag } from 'electron'
 import { createBridge } from '@treeix/sdk'
-import { clearVitals } from './entries'
+import { clearVitals, dropEntries } from './entries'
 import { type BrowserTab, patchTab, updateBrowser, useBrowser } from './tabs'
 import type { ElementSelection } from '../shared/types'
 
@@ -19,13 +19,14 @@ const subscribeSlots = (listener: () => void): (() => void) => {
 export function useSlot(): { ref: (element: HTMLDivElement | null) => void; shown: boolean } {
   const own = useRef<HTMLDivElement | null>(null)
   const shown = useSyncExternalStore(subscribeSlots, () => own.current !== null && slots.at(-1) === own.current)
-  const ref = (element: HTMLDivElement | null): void => {
+  // Stable, so React calls it only on mount and unmount and the newest mounted slot stays last
+  const ref = useCallback((element: HTMLDivElement | null): void => {
     if (own.current === element) return
     if (own.current) slots.splice(slots.indexOf(own.current), 1)
     own.current = element
     if (element) slots.push(element)
     notifySlots()
-  }
+  }, [])
   return { ref, shown }
 }
 
@@ -47,7 +48,12 @@ const sameRect = (a: DOMRect | null, b: DOMRect | null): boolean =>
 export function PageLayer({ children }: { children?: React.ReactNode }): React.JSX.Element {
   const { tabs, activeId } = useBrowser()
   const [rect, setRect] = useState<DOMRect | null>(null)
+  const hasSlot = useSyncExternalStore(subscribeSlots, () => slots.length > 0)
   useEffect(() => {
+    if (!hasSlot) {
+      setRect(null)
+      return
+    }
     // ponytail: polls the slot's rect every frame, since a ResizeObserver misses moves; an observer on the dock if this shows up in a profile
     let frame = 0
     const tick = (): void => {
@@ -57,7 +63,7 @@ export function PageLayer({ children }: { children?: React.ReactNode }): React.J
     }
     tick()
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [hasSlot])
   const box = rect ?? new DOMRect(0, 0, 0, 0)
   return (
     <div
@@ -80,6 +86,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
     const view = ref.current
     if (!view) return
     views.set(tab.id, view)
+    let guestId: number | null = null
     const patch = (change: Partial<BrowserTab>): void => updateBrowser((state) => patchTab(state, tab.id, change))
     const history = (): Partial<BrowserTab> => ({ canGoBack: view.canGoBack(), canGoForward: view.canGoForward() })
     const handlers: [string, (event: Event & Record<string, unknown>) => void][] = [
@@ -104,7 +111,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
       [
         'dom-ready',
         () => {
-          const guestId = view.getWebContentsId()
+          guestId = view.getWebContentsId()
           patch({ guestId })
           void bridge.invoke('attach', guestId)
           view.send('design', design.on)
@@ -115,6 +122,8 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
     return () => {
       for (const [name, handler] of handlers) view.removeEventListener(name, handler as EventListener)
       views.delete(tab.id)
+      // Unmounting means the tab closed, so its console and network lists go with it
+      if (guestId !== null) dropEntries(guestId)
     }
   }, [tab.id])
   return (
