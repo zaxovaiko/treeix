@@ -24,3 +24,11 @@ test('forwardsToApp keeps editing keys in the page and sends the rest to the app
   expect(forwardsToApp(key('KeyL'))).toBe(false)
   expect(forwardsToApp(key('KeyK', { meta: false }))).toBe(false)
 })
+
+test('forwardsToApp leaves native menu keys alone, so the menu still gets them', () => {
+  for (const code of ['KeyQ', 'KeyH', 'KeyM', 'Equal', 'Minus', 'Digit0']) expect(forwardsToApp(key(code))).toBe(false)
+  expect(forwardsToApp(key('KeyH', { alt: true }))).toBe(false)
+  expect(forwardsToApp(key('Equal', { shift: true }))).toBe(false)
+  expect(forwardsToApp(key('KeyR', { shift: true }))).toBe(false)
+  expect(forwardsToApp(key('KeyF', { control: true }))).toBe(false)
+})

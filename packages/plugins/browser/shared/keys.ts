@@ -23,5 +23,9 @@ export function browserAction({ code, meta, shift, alt, control }: KeyInput): Br
 /** ⌘ keys the page keeps: editing, undo and redo, find */
 const PAGE_KEYS = new Set(['KeyA', 'KeyC', 'KeyV', 'KeyX', 'KeyZ', 'KeyF', 'KeyG'])
 
+/** Native menu roles: quit, hide, minimize, full screen, zoom, force reload. They only work if the key reaches the menu untouched */
+const MENU_KEYS = new Set(['KeyQ', 'KeyH', 'KeyM', '⌃KeyF', 'Equal', '⇧Equal', 'Minus', 'Digit0', '⇧KeyR'])
+const isMenuKey = ({ code, shift, control }: KeyInput): boolean => MENU_KEYS.has(`${control ? '⌃' : ''}${shift ? '⇧' : ''}${code}`)
+
 /** Any other ⌘ key is the app's, e.g. ⌘K for the palette, so a focused page doesn't swallow it */
-export const forwardsToApp = (key: KeyInput): boolean => key.meta && !browserAction(key) && !(PAGE_KEYS.has(key.code) && !key.alt)
+export const forwardsToApp = (key: KeyInput): boolean => key.meta && !browserAction(key) && !isMenuKey(key) && !(PAGE_KEYS.has(key.code) && !key.alt)
