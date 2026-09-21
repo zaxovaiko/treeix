@@ -64,6 +64,10 @@ function restore(window: BrowserWindow): void {
   if (normalBounds) window.setBounds(normalBounds)
 }
 
+/** Focus went to a window on another display, so the hotkey window is not in its way and stays up */
+const clickedOtherDisplay = (window: BrowserWindow): boolean =>
+  screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id !== screen.getDisplayMatching(window.getBounds()).id
+
 function dismiss(window: BrowserWindow): void {
   // Hiding the app hands focus back to whatever was in front before
   if (process.platform === 'darwin') app.hide()
@@ -88,7 +92,7 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
   if (!watched.has(window)) {
     watched.add(window)
     window.on('blur', () => {
-      if (summoned && hideOnBlur && !window.webContents.isDevToolsFocused()) dismiss(window)
+      if (summoned && hideOnBlur && !window.webContents.isDevToolsFocused() && !clickedOtherDisplay(window)) dismiss(window)
     })
     // Activation finishes asynchronously; options set before it can be ignored until the next activation, leaving the Dock up
     app.on('did-become-active', () => {
