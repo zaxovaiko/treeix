@@ -1,6 +1,16 @@
-import { webContents } from 'electron'
+import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { session, webContents } from 'electron'
+import { BROWSER_PARTITION } from '@treeix/host/webviewPolicy'
 import type { MainPlugin } from '@treeix/sdk/main'
+import type { ImportInfo } from '../shared/types'
+import { importCookies } from './cookies/importer'
+import { listProfiles, profileSource } from './cookies/profiles'
 import { captureElement, responseBody, watchGuest } from './guests'
+
+const isImportInfo = (value: unknown): value is ImportInfo =>
+  value === null ||
+  (typeof value === 'object' && 'browser' in value && typeof value.browser === 'string' && 'profile' in value && typeof value.profile === 'string' && 'at' in value && typeof value.at === 'number')
 
 const plugin: MainPlugin = {
   activate: (context) => {
@@ -35,6 +45,34 @@ const plugin: MainPlugin = {
     context.handle('closeDevtools', (event, guestId: number) => {
       const guest = webContents.fromId(guestId)
       if (guest && guest.hostWebContents === event.sender && guest.isDevToolsOpened()) guest.closeDevTools()
+    })
+
+    const infoPath = (): string => join(context.dataPath, 'import.json')
+    // The App Store sandbox can't read other apps' files or Keychain items
+    context.handle('canImport', () => !process.mas)
+    context.handle('profiles', () => (process.mas ? [] : listProfiles()))
+    context.handle('import', async (_, key: string) => {
+      const source = await profileSource(key)
+      const result = await importCookies(key, session.fromPartition(BROWSER_PARTITION))
+      if (!result.error && source) {
+        const info: ImportInfo = { browser: source.browser, profile: source.name, at: Date.now() }
+        await writeFile(infoPath(), JSON.stringify(info))
+      }
+      return result
+    })
+    context.handle('importInfo', async (): Promise<ImportInfo> => {
+      try {
+        const info: unknown = JSON.parse(await readFile(infoPath(), 'utf8'))
+        return isImportInfo(info) ? info : null
+      } catch {
+        return null
+      }
+    })
+    context.handle('clearData', async () => {
+      const browser = session.fromPartition(BROWSER_PARTITION)
+      await browser.clearStorageData()
+      await browser.clearCache()
+      await writeFile(infoPath(), 'null')
     })
   }
 }
