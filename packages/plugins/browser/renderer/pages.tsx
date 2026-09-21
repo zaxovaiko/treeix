@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { WebviewTag } from 'electron'
 import { createBridge } from '@treeix/sdk'
+import { clearVitals } from './entries'
 import { type BrowserTab, patchTab, updateBrowser, useBrowser } from './tabs'
 
 const bridge = createBridge('browser')
@@ -83,7 +84,13 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
     const handlers: [string, (event: Event & Record<string, unknown>) => void][] = [
       ['did-start-loading', () => patch({ loading: true, crashed: false })],
       ['did-stop-loading', () => patch({ loading: false, ...history() })],
-      ['did-navigate', (event) => patch({ url: String(event.url), ...history() })],
+      [
+        'did-navigate',
+        (event) => {
+          patch({ url: String(event.url), ...history() })
+          if (tab.guestId) clearVitals(view.getWebContentsId())
+        }
+      ],
       ['did-navigate-in-page', (event) => event.isMainFrame !== false && patch({ url: String(event.url), ...history() })],
       ['page-title-updated', (event) => patch({ title: String(event.title) })],
       ['page-favicon-updated', (event) => patch({ favicon: Array.isArray(event.favicons) ? String(event.favicons[0] ?? '') || null : null })],

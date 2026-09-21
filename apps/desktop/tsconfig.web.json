@@ -7,6 +7,7 @@
     "../../packages/sdk/src/**/*",
     "../../packages/plugins/*/renderer/**/*",
     "../../packages/plugins/*/shared/**/*",
+    "../../packages/plugins/*/inject/**/*",
     "../../packages/atlassian/renderer/**/*",
     "../../packages/atlassian/shared.ts"
   ],

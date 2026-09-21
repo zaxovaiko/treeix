@@ -1,11 +1,15 @@
 import { useEffect } from 'react'
 import { createBridge, type HostApi, PageLayout, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { BrowserView, runBrowserAction } from './BrowserView'
+import { addVital } from './entries'
 import './entries'
-import { PageLayer } from './pages'
+import { onPageMessage, PageLayer } from './pages'
 import { browserSettings } from './settings'
 import { getBrowser, openTab, selectTab, updateBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
+import type { Vital } from '../shared/types'
+
+const VITAL_NAMES: Vital['name'][] = ['LCP', 'INP', 'CLS', 'Long task']
 
 const TAB_ID = 'browser'
 const bridge = createBridge('browser')
@@ -37,6 +41,19 @@ function Root(): React.JSX.Element {
   const current = useHost()
   host = current
   useEffect(() => bridge.on('open', (url) => typeof url === 'string' && openUrl(url)), [])
+  useEffect(
+    () =>
+      onPageMessage((tabId, channel, args) => {
+        const tab = getBrowser().tabs.find((candidate) => candidate.id === tabId)
+        if (channel !== 'vital' || !tab?.guestId) return
+        const vital = args[0] as Partial<Vital> | undefined
+        if (!vital || typeof vital.value !== 'number' || typeof vital.name !== 'string') return
+        const name = VITAL_NAMES.find((candidate) => candidate === vital.name)
+        if (!name) return
+        addVital(tab.guestId, { kind: 'vital', id: `${name}-${vital.time ?? 0}`, name, value: vital.value, element: String(vital.element ?? ''), time: Number(vital.time ?? 0) })
+      }),
+    []
+  )
   useEffect(
     () =>
       bridge.on('action', (guestId, action) => {
