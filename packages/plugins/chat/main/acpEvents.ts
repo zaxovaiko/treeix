@@ -129,6 +129,15 @@ export function fromSessionUpdate(update: unknown): ChatEvent[] {
   return []
 }
 
+/** A select option's values, either flat or grouped (`SessionConfigSelectOption[] | SessionConfigSelectGroup[]`) */
+function selectValues(value: unknown): ChatOption['values'] {
+  return list(value).flatMap((entry) => {
+    const item = record(entry)
+    if (Array.isArray(item.options)) return selectValues(item.options)
+    return typeof item.value === 'string' ? [{ value: item.value, name: text(item.name), description: nullableText(item.description) }] : []
+  })
+}
+
 /** Config options (select only) or legacy session modes, both surfaced as `ChatOption`s */
 export function optionsFrom(response: unknown): ChatOption[] {
   const value = record(response)
@@ -137,10 +146,7 @@ export function optionsFrom(response: unknown): ChatOption[] {
     return configOptions.flatMap((entry) => {
       const option = record(entry)
       if (option.type !== 'select') return []
-      const values = list(option.options).map((v) => {
-        const item = record(v)
-        return { value: text(item.value), name: text(item.name), description: nullableText(item.description) }
-      })
+      const values = selectValues(option.options)
       return [{ id: text(option.id), name: text(option.name), category: option.category === 'model' ? 'model' : option.category === 'mode' ? 'mode' : 'other', currentValue: text(option.currentValue), values }]
     })
   }
@@ -157,6 +163,9 @@ export function optionsFrom(response: unknown): ChatOption[] {
   return []
 }
 
+const PERMISSION_KINDS = new Set(['allow_once', 'allow_always', 'reject_once', 'reject_always'])
+const permissionKind = (value: unknown): PermissionOption['kind'] | null => (typeof value === 'string' && PERMISSION_KINDS.has(value) ? (value as PermissionOption['kind']) : null)
+
 /** Maps a `session/request_permission` request's params to a `permission` chat event */
 export function fromPermissionRequest(requestId: string, params: unknown): ChatEvent | null {
   const value = record(params)
@@ -166,7 +175,8 @@ export function fromPermissionRequest(requestId: string, params: unknown): ChatE
   const toolCallId = nullableText(toolCall.toolCallId) ?? nullableText(subjectToolCall.toolCallId)
   const options = list(value.options).flatMap((entry): PermissionOption[] => {
     const option = record(entry)
-    return typeof option.optionId === 'string' ? [{ id: option.optionId, name: text(option.name), kind: text(option.kind) as PermissionOption['kind'] }] : []
+    const kind = permissionKind(option.kind)
+    return typeof option.optionId === 'string' && kind ? [{ id: option.optionId, name: text(option.name), kind }] : []
   })
   if (!title && !toolCallId && !options.length) return null
   return { type: 'permission', requestId, title, toolCallId, options }

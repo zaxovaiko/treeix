@@ -46,6 +46,38 @@ test('config options and legacy modes both become options', () => {
   ])
 })
 
+test('config options flatten grouped select values and skip entries without a value', () => {
+  expect(
+    optionsFrom({
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          category: 'model',
+          type: 'select',
+          currentValue: 'opus',
+          options: [
+            { group: 'g1', name: 'Anthropic', options: [{ value: 'opus', name: 'Opus' }, { value: 'sonnet', name: 'Sonnet' }] },
+            { group: 'g2', name: 'Other', options: [{ name: 'No value' }] }
+          ]
+        }
+      ]
+    })
+  ).toEqual([{ id: 'model', name: 'Model', category: 'model', currentValue: 'opus', values: [{ value: 'opus', name: 'Opus', description: null }, { value: 'sonnet', name: 'Sonnet', description: null }] }])
+})
+
+test('permission requests drop options with an unknown kind', () => {
+  expect(
+    fromPermissionRequest('r3', {
+      toolCall: { toolCallId: 't1', title: 'Run bun test' },
+      options: [
+        { optionId: 'a', name: 'Allow once', kind: 'allow_once' },
+        { optionId: 'x', name: 'Mystery', kind: 'something_else' }
+      ]
+    })
+  ).toEqual({ type: 'permission', requestId: 'r3', title: 'Run bun test', toolCallId: 't1', options: [{ id: 'a', name: 'Allow once', kind: 'allow_once' }] })
+})
+
 test('permission requests keep option order and the tool call link', () => {
   expect(
     fromPermissionRequest('r1', {
