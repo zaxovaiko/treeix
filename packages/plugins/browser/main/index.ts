@@ -17,6 +17,25 @@ const plugin: MainPlugin = {
       const guest = webContents.fromId(guestId)
       return guest && guest.hostWebContents === event.sender ? captureElement(guest, rect, viewport) : null
     })
+    // A dock id shows DevTools in the renderer's dock webview; without one they open in their own window, or close
+    context.handle('devtools', (event, guestId: number, dockId: number | null) => {
+      const guest = webContents.fromId(guestId)
+      if (!guest || guest.hostWebContents !== event.sender) return
+      if (dockId === null) {
+        if (guest.isDevToolsOpened()) guest.closeDevTools()
+        else guest.openDevTools({ mode: 'detach' })
+        return
+      }
+      const dock = webContents.fromId(dockId)
+      if (!dock || dock.hostWebContents !== event.sender) return
+      if (guest.isDevToolsOpened()) guest.closeDevTools()
+      guest.setDevToolsWebContents(dock)
+      guest.openDevTools()
+    })
+    context.handle('closeDevtools', (event, guestId: number) => {
+      const guest = webContents.fromId(guestId)
+      if (guest && guest.hostWebContents === event.sender && guest.isDevToolsOpened()) guest.closeDevTools()
+    })
   }
 }
 

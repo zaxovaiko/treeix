@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import type { WebviewTag } from 'electron'
 import { Icon } from '@treeix/app/Icon'
-import { useHost } from '@treeix/sdk'
+import { createBridge, useHost } from '@treeix/sdk'
+import { usePersisted } from '@treeix/app/ui'
 import { toUrl } from './address'
 import { getDesign, pageOf, setDesign, useDesign, useSlot } from './pages'
 import { browserSettings } from './settings'
@@ -8,7 +10,10 @@ import { Strip } from './Strip'
 import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 
+const bridge = createBridge('browser')
+
 let focusAddress = (): void => undefined
+let toggleDevtools = (): void => undefined
 
 export function navigate(input: string): void {
   const url = toUrl(input, browserSettings.get().searchEngine)
@@ -31,10 +36,28 @@ export function runBrowserAction(action: BrowserAction): void {
   else if (action === 'forward') page?.goForward()
   else if (action === 'reload') page?.reload()
   else if (action === 'designMode') setDesign(!getDesign().on)
-  // devtools: filled in by Task 9
+  else if (action === 'devtools') toggleDevtools()
 }
 
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
+
+function DevtoolsDock({ guestId }: { guestId: number }): React.JSX.Element {
+  const ref = useRef<WebviewTag | null>(null)
+  useEffect(() => {
+    const dock = ref.current
+    if (!dock) return
+    const ready = (): void => {
+      dock.removeEventListener('dom-ready', ready)
+      void bridge.invoke('devtools', guestId, dock.getWebContentsId())
+    }
+    dock.addEventListener('dom-ready', ready)
+    return () => {
+      dock.removeEventListener('dom-ready', ready)
+      void bridge.invoke('closeDevtools', guestId)
+    }
+  }, [guestId])
+  return <webview ref={ref} src="about:blank" style={{ height: 280, borderTop: '1px solid var(--border)' }} />
+}
 
 export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.Element {
   const host = useHost()
@@ -44,6 +67,8 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const { ref, shown } = useSlot()
   const input = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<string | null>(null)
+  const [devtools, setDevtools] = usePersisted<'docked' | 'window'>('browser.devtools', 'docked')
+  const [dockOpen, setDockOpen] = useState(false)
   useEffect(() => {
     if (!getBrowser().tabs.length) updateBrowser((state) => openTab(state, 'about:blank'))
   }, [])
@@ -53,7 +78,16 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
       input.current?.focus()
       input.current?.select()
     }
-  }, [shown])
+    toggleDevtools = () => {
+      const current = activeTab()
+      if (!current?.guestId) return
+      if (devtools === 'window') void bridge.invoke('devtools', current.guestId, null)
+      else {
+        if (dockOpen) void bridge.invoke('closeDevtools', current.guestId)
+        setDockOpen((open) => !open)
+      }
+    }
+  }, [shown, devtools, dockOpen])
   const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
   return (
     <div data-browser className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -120,6 +154,21 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         >
           <Icon name="pointer" className="size-3.5" />
         </button>
+        <button
+          aria-label="Developer tools"
+          title="Developer tools (⌥⌘I)"
+          aria-pressed={dockOpen}
+          className={`${toolButton} ${dockOpen ? 'bg-primary/15 text-primary' : ''}`}
+          onClick={() => runBrowserAction('devtools')}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            const next = devtools === 'docked' ? 'window' : 'docked'
+            setDevtools(next)
+            host.flash(next === 'window' ? 'DevTools open in a window' : 'DevTools dock under the page')
+          }}
+        >
+          <Icon name="code" className="size-3.5" />
+        </button>
         {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
       </div>
       <div ref={ref} className="relative min-h-0 flex-1">
@@ -138,6 +187,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         )}
       </div>
       {tab && place === 'tab' && <Strip tab={tab} />}
+      {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock guestId={tab.guestId} />}
     </div>
   )
 }
