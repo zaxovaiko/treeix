@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import { useHost } from '@treeix/sdk'
 import { toUrl } from './address'
-import { pageOf, useSlot } from './pages'
+import { getDesign, pageOf, setDesign, useDesign, useSlot } from './pages'
 import { browserSettings } from './settings'
 import { Strip } from './Strip'
 import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
@@ -30,7 +30,8 @@ export function runBrowserAction(action: BrowserAction): void {
   else if (action === 'back') page?.goBack()
   else if (action === 'forward') page?.goForward()
   else if (action === 'reload') page?.reload()
-  // devtools and designMode: filled in by Tasks 8 and 9
+  else if (action === 'designMode') setDesign(!getDesign().on)
+  // devtools: filled in by Task 9
 }
 
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
@@ -39,6 +40,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const host = useHost()
   const { tabs, activeId } = useBrowser()
   const tab = tabs.find((candidate) => candidate.id === activeId)
+  const designOn = useDesign().on
   const { ref, shown } = useSlot()
   const input = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<string | null>(null)
@@ -109,6 +111,15 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           }}
           className="h-6 min-w-0 flex-1 rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
         />
+        <button
+          aria-label="Design mode"
+          title="Design mode: click an element to comment on it (⌘⇧C)"
+          aria-pressed={designOn}
+          className={`${toolButton} ${designOn ? 'bg-primary/15 text-primary' : ''}`}
+          onClick={() => runBrowserAction('designMode')}
+        >
+          <Icon name="pointer" className="size-3.5" />
+        </button>
         {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
       </div>
       <div ref={ref} className="relative min-h-0 flex-1">

@@ -3,6 +3,7 @@ import type { WebviewTag } from 'electron'
 import { createBridge } from '@treeix/sdk'
 import { clearVitals } from './entries'
 import { type BrowserTab, patchTab, updateBrowser, useBrowser } from './tabs'
+import type { ElementSelection } from '../shared/types'
 
 const bridge = createBridge('browser')
 
@@ -106,6 +107,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
           const guestId = view.getWebContentsId()
           patch({ guestId })
           void bridge.invoke('attach', guestId)
+          view.send('design', design.on)
         }
       ]
     ]
@@ -125,3 +127,38 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
     />
   )
 }
+
+type Design = { on: boolean; selection: { tabId: string; value: ElementSelection } | null }
+let design: Design = { on: false, selection: null }
+const designListeners = new Set<() => void>()
+const setDesignState = (next: Design): void => {
+  design = next
+  designListeners.forEach((listener) => listener())
+}
+export const useDesign = (): Design =>
+  useSyncExternalStore(
+    (listener) => {
+      designListeners.add(listener)
+      return () => designListeners.delete(listener)
+    },
+    () => design
+  )
+export const getDesign = (): Design => design
+
+/** Design mode applies to every open page, so switching tabs keeps it */
+export function setDesign(on: boolean): void {
+  views.forEach((view) => view.send('design', on))
+  setDesignState({ on, selection: on ? design.selection : null })
+}
+
+function isSelection(value: unknown): value is ElementSelection {
+  const candidate = value as Partial<ElementSelection> | null
+  return !!candidate && typeof candidate.selector === 'string' && typeof candidate.html === 'string' && typeof candidate.url === 'string' && typeof candidate.rect?.x === 'number' && typeof candidate.viewport?.width === 'number'
+}
+
+onPageMessage((tabId, channel, args) => {
+  if (channel === 'design-exit') setDesign(false)
+  if (channel === 'selection' && isSelection(args[0])) setDesignState({ ...design, selection: { tabId, value: args[0] } })
+})
+
+export const clearSelection = (): void => setDesignState({ ...design, selection: null })

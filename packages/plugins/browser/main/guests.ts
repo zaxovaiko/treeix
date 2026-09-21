@@ -1,5 +1,7 @@
 import type { WebContents } from 'electron'
+import { saveAttachment } from '@treeix/host/attachments'
 import type { MainContext } from '@treeix/sdk/main'
+import type { Attachment } from '@treeix/shared/comments'
 import { ENTRY_LIMIT, applyNetworkEvent, consoleFromApi, consoleFromException, keepLast } from './entries'
 import { browserAction, forwardsToApp } from '../shared/keys'
 import type { ConsoleEntry, EntryBatch, NetworkEntry } from '../shared/types'
@@ -7,6 +9,20 @@ import type { ConsoleEntry, EntryBatch, NetworkEntry } from '../shared/types'
 const watched = new WeakSet<WebContents>()
 const BATCH_MS = 250
 const BODY_LIMIT = 32 * 1024
+const MARGIN = 16
+
+/** The element with a margin, clamped to the visible page, saved where agents can read it */
+export async function captureElement(guest: WebContents, rect: { x: number; y: number; width: number; height: number }, viewport: { width: number; height: number }): Promise<Attachment | null> {
+  const x = Math.max(0, Math.floor(rect.x - MARGIN))
+  const y = Math.max(0, Math.floor(rect.y - MARGIN))
+  const width = Math.min(viewport.width - x, Math.ceil(rect.width + MARGIN * 2))
+  const height = Math.min(viewport.height - y, Math.ceil(rect.height + MARGIN * 2))
+  if (width <= 0 || height <= 0) return null
+  const image = await guest.capturePage({ x, y, width, height })
+  if (image.isEmpty()) return null
+  const path = await saveAttachment('element.png', image.toPNG())
+  return { path, name: 'element.png', thumbnail: image.resize({ width: Math.min(240, width) }).toDataURL() }
+}
 
 /** Wires a page once, however often its renderer reports it ready */
 export function watchGuest(guest: WebContents, context: MainContext): void {

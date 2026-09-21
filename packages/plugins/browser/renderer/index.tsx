@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { createBridge, type HostApi, PageLayout, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { BrowserView, runBrowserAction } from './BrowserView'
+import { DesignPopover } from './DesignPopover'
 import { addVital } from './entries'
 import './entries'
 import { onPageMessage, PageLayer } from './pages'
@@ -72,7 +73,11 @@ function Root(): React.JSX.Element {
       }),
     []
   )
-  return <PageLayer />
+  return (
+    <PageLayer>
+      <DesignPopover />
+    </PageLayer>
+  )
 }
 
 function BrowserPage(): React.JSX.Element {

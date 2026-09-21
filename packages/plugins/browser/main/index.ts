@@ -1,6 +1,6 @@
 import { webContents } from 'electron'
 import type { MainPlugin } from '@treeix/sdk/main'
-import { responseBody, watchGuest } from './guests'
+import { captureElement, responseBody, watchGuest } from './guests'
 
 const plugin: MainPlugin = {
   activate: (context) => {
@@ -12,6 +12,10 @@ const plugin: MainPlugin = {
     context.handle('responseBody', (event, guestId: number, requestId: string) => {
       const guest = webContents.fromId(guestId)
       return guest && guest.hostWebContents === event.sender ? responseBody(guest, requestId) : null
+    })
+    context.handle('capture', (event, guestId: number, rect: { x: number; y: number; width: number; height: number }, viewport: { width: number; height: number }) => {
+      const guest = webContents.fromId(guestId)
+      return guest && guest.hostWebContents === event.sender ? captureElement(guest, rect, viewport) : null
     })
   }
 }
