@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createBridge, useHost } from '@treeix/sdk'
-import { usePersisted } from '@treeix/app/ui'
+import { Icon } from '@treeix/app/Icon'
+import { IconButton, usePersisted } from '@treeix/app/ui'
 import type { ConsoleEntry, NetworkEntry, Vital } from '../shared/types'
 import { consoleComment, entryCommentId, networkComment, vitalComment } from './comments'
 import { useEntries } from './entries'
@@ -68,14 +69,16 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
         {paneButton('network', 'Network')}
         {paneButton('performance', 'Performance')}
         <span className="flex-1" />
-        {pane !== 'performance' && open && (
-          <button onClick={() => setAll(!all)} className="px-2.5 text-[11px] text-muted-foreground hover:text-foreground">
-            {all ? 'Only problems' : 'Show all'}
-          </button>
-        )}
-        <button aria-label={open ? 'Hide' : 'Show'} onClick={() => setOpen(!open)} className="px-2.5 text-[11px] text-muted-foreground hover:text-foreground">
-          {open ? 'Hide' : 'Show'}
-        </button>
+        <span className="flex items-center gap-0.5">
+          {pane !== 'performance' && open && (
+            <IconButton label={all ? 'Only problems' : 'Show all'} active={all} onClick={() => setAll(!all)}>
+              <Icon name="list" className="size-3.5" />
+            </IconButton>
+          )}
+          <IconButton label={open ? 'Hide' : 'Show'} onClick={() => setOpen(!open)}>
+            <Icon name="chevron" className={`size-3.5 ${open ? 'rotate-90' : '-rotate-90'}`} />
+          </IconButton>
+        </span>
       </div>
       {open && (
         <div className="h-36 overflow-y-auto">
