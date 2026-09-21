@@ -6,6 +6,7 @@
     "id": "chat",
     "name": "Chat",
     "description": "Chat view for Claude, Codex, Gemini and any agent with a chat command, next to their terminals.",
-    "enabledByDefault": true
+    "enabledByDefault": true,
+    "requires": ["terminal"]
   }
 }

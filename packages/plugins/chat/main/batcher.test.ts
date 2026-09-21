@@ -35,3 +35,23 @@ describe('createBatcher', () => {
     expect(flush).not.toHaveBeenCalled()
   })
 })
+
+describe('createBatcher flush', () => {
+  test('sends what is queued at once and cancels the pending timer', async () => {
+    const flush = mock((_items: number[]) => undefined)
+    const batcher = createBatcher(flush, 10)
+    batcher.push(1)
+    batcher.push(2)
+    batcher.flush()
+    expect(flush).toHaveBeenCalledTimes(1)
+    expect(flush).toHaveBeenCalledWith([1, 2])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(flush).toHaveBeenCalledTimes(1)
+  })
+
+  test('does nothing when nothing is queued', () => {
+    const flush = mock((_items: number[]) => undefined)
+    createBatcher(flush, 10).flush()
+    expect(flush).not.toHaveBeenCalled()
+  })
+})

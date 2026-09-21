@@ -167,7 +167,7 @@ export function optionsFrom(response: unknown): ChatOption[] {
 const PERMISSION_KINDS = new Set(['allow_once', 'allow_always', 'reject_once', 'reject_always'])
 const permissionKind = (value: unknown): PermissionOption['kind'] | null => (typeof value === 'string' && PERMISSION_KINDS.has(value) ? (value as PermissionOption['kind']) : null)
 
-/** Maps a `session/request_permission` request's params to a `permission` chat event */
+/** Maps a `session/request_permission` request's params to a `permission` chat event; null when it has no option to pick, so it is answered as cancelled */
 export function fromPermissionRequest(requestId: string, params: unknown): ChatEvent | null {
   const value = record(params)
   const subjectToolCall = record(record(value.subject).toolCall)
@@ -179,7 +179,7 @@ export function fromPermissionRequest(requestId: string, params: unknown): ChatE
     const kind = permissionKind(option.kind)
     return typeof option.optionId === 'string' && kind ? [{ id: option.optionId, name: text(option.name), kind }] : []
   })
-  if (!title && !toolCallId && !options.length) return null
+  if (!options.length) return null
   return { type: 'permission', requestId, title, toolCallId, options }
 }
 

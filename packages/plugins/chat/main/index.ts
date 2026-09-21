@@ -12,6 +12,7 @@ const plugin: MainPlugin = {
   activate: (context) => {
     const connections = new Map<string, Entry>()
     const generations = createGenerationGuard<string>()
+    let disposed = false
 
     const owned = (event: IpcMainInvokeEvent | IpcMainEvent, chatId: string): Entry | null => {
       if (typeof chatId !== 'string') return null
@@ -42,6 +43,11 @@ const plugin: MainPlugin = {
         connection.close()
         throw new Error('Superseded by a newer start')
       }
+      // The plugin or the window went away while connecting: nobody could reach this agent
+      if (disposed || owner.isDestroyed()) {
+        connection.close()
+        throw new Error('The chat was closed while connecting')
+      }
 
       const batcher = createBatcher<ChatEvent>((batch) => context.send(owner, 'events', chatId, batch))
       const disposers: (() => void)[] = []
@@ -54,10 +60,17 @@ const plugin: MainPlugin = {
         }
       }
       disposers.push(() => batcher.dispose())
+      const onDestroyed = (): void => drop(chatId, entry)
+      owner.once('destroyed', onDestroyed)
+      disposers.push(() => owner.off('destroyed', onDestroyed))
+      // In the map before subscribing: a replayed backlog can hold the disconnect, which has to drop this entry
+      connections.set(chatId, entry)
+
       disposers.push(
         connection.onEvent((chatEvent) => {
           // A 'disconnected' event means the agent's process or connection ended; 'error' events are ordinary turn failures and just flow through
           if (chatEvent.type === 'disconnected') {
+            batcher.flush()
             context.send(owner, 'closed', chatId, chatEvent.message)
             drop(chatId, entry)
             return
@@ -65,10 +78,7 @@ const plugin: MainPlugin = {
           batcher.push(chatEvent)
         })
       )
-      const onDestroyed = (): void => drop(chatId, entry)
-      owner.once('destroyed', onDestroyed)
-      disposers.push(() => owner.off('destroyed', onDestroyed))
-      connections.set(chatId, entry)
+      if (connections.get(chatId) !== entry) throw new Error('The agent stopped while connecting')
 
       return { agentSessionId: connection.sessionId, capabilities: connection.capabilities, terminalCommand: connection.terminalCommand ?? null }
     })
@@ -92,13 +102,13 @@ const plugin: MainPlugin = {
       await entry.connection.setOption(id, value)
     })
 
-    context.handle('list', async (event, chatId: string, cwd: string) => {
-      const entry = owned(event, chatId)
-      if (!entry?.connection.list) return []
-      return entry.connection.list(cwd)
+    // A reloaded window starts with no chats: its old agents are unreachable, and a resume would replay into a doubled feed
+    context.on('stopAll', (event) => {
+      for (const [chatId, entry] of connections) if (entry.owner === event.sender) drop(chatId, entry)
     })
 
     context.onDispose(() => {
+      disposed = true
       for (const entry of connections.values()) entry.dispose()
       connections.clear()
     })

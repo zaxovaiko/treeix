@@ -106,3 +106,8 @@ test('prompt blocks', () => {
     { type: 'image', mimeType: 'image/png', data: 'AAAA' }
   ])
 })
+
+test('a permission request with no option to pick maps to null', () => {
+  expect(fromPermissionRequest('r4', { toolCall: { toolCallId: 't1', title: 'Run bun test' }, options: [{ optionId: 'x', name: 'Mystery', kind: 'something_else' }] })).toBeNull()
+  expect(fromPermissionRequest('r5', { title: 'Run bun test', options: [] })).toBeNull()
+})
