@@ -4,6 +4,7 @@ import { type Attachment, formatComments, type LineRange, rangeLabel, type Revie
 import { focusZone, KeyHintLabel, Keys } from '@treeix/sdk'
 import { copyText, openMenu } from './contextMenu'
 import { FileIcon, Icon } from './Icon'
+import { inlineByDefault } from './toolStatus'
 import { LazyMarkdown as Markdown } from './LazyMarkdown'
 import { EmptyState, errorMessage } from './ui'
 
@@ -127,6 +128,24 @@ export function Attachments({
 }
 
 const cardClass = 'mx-3 my-2 rounded-lg border border-border bg-card font-sans text-[13px] text-foreground shadow-sm'
+
+/** A reference sends its own text when nothing on this machine could fetch it; this is the manual override */
+function InlineToggle({ comment, onChange }: { comment: ReviewComment; onChange: (comment: ReviewComment) => void }): React.JSX.Element {
+  const on = comment.inline ?? inlineByDefault(comment.tool)
+  const why = comment.tool && inlineByDefault(comment.tool) ? `${comment.tool} is not installed, so nothing could read it` : `${comment.tool ?? 'The agent'} can read it`
+  return (
+    <button
+      title={`${on ? 'Sending' : 'Not sending'} the full text. ${why}.`}
+      onClick={(event) => {
+        event.stopPropagation()
+        onChange({ ...comment, inline: !on })
+      }}
+      className={`rounded px-1.5 text-[10.5px] ${on ? 'bg-foreground/[.08] text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+      Full text
+    </button>
+  )
+}
 
 export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onDelete: () => void }): React.JSX.Element {
   return (
@@ -326,13 +345,15 @@ export function CommentsPanel({
   footer,
   onClear,
   onOpen,
-  onDelete
+  onDelete,
+  onUpdate
 }: {
   comments: ReviewComment[]
   footer: React.ReactNode
   onClear: () => void
   onOpen: (comment: ReviewComment) => void
   onDelete: (comment: ReviewComment) => void
+  onUpdate: (comment: ReviewComment) => void
 }): React.JSX.Element {
   const filePaths = [...new Set(comments.map((comment) => comment.filePath))]
   return (
@@ -385,6 +406,7 @@ export function CommentsPanel({
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : 'General'}</span>
                     <span className="flex-1" />
+                    {comment.body && <InlineToggle comment={comment} onChange={onUpdate} />}
                     <button
                       title="Delete comment"
                       onClick={(event) => {

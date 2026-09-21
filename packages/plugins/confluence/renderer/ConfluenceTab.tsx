@@ -261,8 +261,10 @@ export function ConfluenceTab(): React.JSX.Element {
       filePath: `Confluence: ${shownPage.title}`,
       range: { start: 0, end: 0 },
       code: '',
-      // Only the reference: the agent reads the page itself
+      // The reference alone keeps the prompt short; the page text rides along for machines without acli
       text: `Confluence "${shownPage.title}" ${shownPage.url}`,
+      body: shownPage.body,
+      tool: 'acli',
       kind: 'reference'
     })
     host.flash(`Added ${shownPage.title} to comments on ${baseName(worktreePath)}`)

@@ -28,6 +28,12 @@ export type ReviewComment = {
    * `reference`: a pointer the agent follows itself, like a Jira ticket link; sent as-is, not as review feedback.
    */
   kind?: 'file' | 'reference'
+  /** A reference's own text, e.g. the ticket description, for agents that cannot fetch it themselves */
+  body?: string
+  /** The command line tool that could fetch this reference; when it is missing the body goes in the prompt */
+  tool?: string
+  /** Set from the drawer to override what the tool check decided */
+  inline?: boolean
   attachments?: Attachment[]
   /** Workspace the comment was made in; older comments have none and belong to whichever workspace holds their checkout */
   workspaceId?: string
@@ -107,7 +113,9 @@ export function formatComments(comments: ReviewComment[]): string {
  * the code in `where`, so they aren't mistaken for comments on a ticket or a branch.
  */
 export function commentsPrompt(comments: ReviewComment[], where: string | null): string {
-  const references = comments.filter((comment) => comment.kind === 'reference').map((comment) => comment.text.trim())
+  const references = comments
+    .filter((comment) => comment.kind === 'reference')
+    .map((comment) => (comment.inline && comment.body ? `${comment.text.trim()}\n\n${comment.body.trim()}` : comment.text.trim()))
   const notes = comments.filter((comment) => comment.kind !== 'reference')
   const feedback = notes.length ? [`Feedback on the code${where ? ` in ${where}` : ''}. Address each note:\n\n${formatComments(notes)}`] : []
   return `${[...references, ...feedback].join('\n\n')}\n`
@@ -134,6 +142,9 @@ export function isReviewComment(value: unknown): value is ReviewComment {
     typeof range.start === 'number' &&
     typeof range.end === 'number' &&
     (candidate.kind === undefined || candidate.kind === 'file' || candidate.kind === 'reference') &&
+    (candidate.body === undefined || typeof candidate.body === 'string') &&
+    (candidate.tool === undefined || typeof candidate.tool === 'string') &&
+    (candidate.inline === undefined || typeof candidate.inline === 'boolean') &&
     (candidate.workspaceId === undefined || typeof candidate.workspaceId === 'string') &&
     (candidate.attachments === undefined || (Array.isArray(candidate.attachments) && candidate.attachments.every(isAttachment)))
   )

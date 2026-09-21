@@ -37,6 +37,7 @@ import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
+import { inlineByDefault, refreshToolStatus } from './toolStatus'
 import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
 import { WORKTREE_ACTIONS } from './actions'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
@@ -784,6 +785,7 @@ function App(): React.JSX.Element {
   // A preload from before this menu item (dev window not reloaded yet) has no listener
   useEffect(() => window.api.onOpenSettings?.(() => openSettingsRef.current()), [])
   useEffect(() => window.api.onRunAction?.((id) => runAction(id)), [])
+  useEffect(() => void refreshToolStatus(), [])
   // The native menu is rebuilt from whatever is runnable now, so a plugin loading or a key rebound updates it
   useEffect(() => {
     // A plugin toggle drops and re-registers every runner in one tick; without this the menu bar rebuilds once per call and flashes
@@ -1018,7 +1020,9 @@ function App(): React.JSX.Element {
   const commentCount = `${worktreeComments.length} comment${worktreeComments.length === 1 ? '' : 's'}`
 
   const commentsPrompt = (): string => {
-    return promptForComments(worktreeComments, worktree ? `${branchLabel(worktree)} (${worktree.path})` : null)
+    // A reference inlines its own text when the drawer says so, else when nothing on this machine could fetch it
+    const resolved = worktreeComments.map((comment) => ({ ...comment, inline: comment.inline ?? inlineByDefault(comment.tool) }))
+    return promptForComments(resolved, worktree ? `${branchLabel(worktree)} (${worktree.path})` : null)
   }
 
   const clearComments = (): void => {
@@ -1069,6 +1073,7 @@ function App(): React.JSX.Element {
         }}
         onOpen={(comment) => open(comment.filePath)}
         onDelete={deleteComment}
+        onUpdate={(next) => setComments(comments.map((comment) => (comment.id === next.id ? next : comment)))}
       />
     )
   }

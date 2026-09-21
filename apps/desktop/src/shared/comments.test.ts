@@ -55,3 +55,12 @@ test('commentsPrompt sends references as-is and code notes as feedback on the co
   expect(both).toBe('Jira BF-627 https://x/browse/BF-627\n\nFeedback on the code in main (/r). Address each note:\n\n1. src/a.ts:3\nrename x\n')
   expect(both).not.toContain('```')
 })
+
+test('a reference carries its own text only when nothing else can fetch it', () => {
+  const base = { worktreePath: '/w', range: { start: 0, end: 0 }, code: '', kind: 'reference' as const }
+  const ticket: ReviewComment = { ...base, id: 'a', filePath: 'BF-1', text: 'Jira BF-1 https://x/BF-1', body: 'Translations are missing on the invoice.', tool: 'acli' }
+  expect(commentsPrompt([ticket], null)).toBe('Jira BF-1 https://x/BF-1\n')
+  expect(commentsPrompt([{ ...ticket, inline: true }], null)).toBe('Jira BF-1 https://x/BF-1\n\nTranslations are missing on the invoice.\n')
+  // The link stays in front of the body, so an agent that can fetch more still knows where to look
+  expect(commentsPrompt([{ ...ticket, inline: true }], null).startsWith('Jira BF-1 https://x/BF-1')).toBe(true)
+})

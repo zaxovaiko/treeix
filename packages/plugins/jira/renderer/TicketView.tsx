@@ -158,8 +158,11 @@ export function useTicket(
         filePath,
         range: { start: 0, end: 0 },
         code: '',
-        // Only the reference: the agent reads the ticket itself, so the prompt stays short and up to date
+        // The reference alone keeps the prompt short and never goes stale; the description rides along for
+        // agents on a machine without acli, which is what decides the default in the comments drawer
         text: `Jira ${item.key}${item.url ? ` ${item.url}` : ''}`,
+        body: [item.summary, detail?.description].filter(Boolean).join('\n\n'),
+        tool: 'acli',
         kind: 'reference'
       })
       host.flash(`Added ${item.key} to comments on ${baseName(worktreePath)}`)
