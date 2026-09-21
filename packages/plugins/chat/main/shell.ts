@@ -8,8 +8,6 @@ export function spawnInShell(command: string, cwd: string, env: Record<string, s
   return spawn(shell, ['-lc', command], { cwd, env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
 }
 
-const running = (child: ChildProcessWithoutNullStreams) => child.exitCode === null && child.signalCode === null
-
 function signalGroup(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals) {
   if (child.pid === undefined) return
   try {
@@ -19,11 +17,9 @@ function signalGroup(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signa
   }
 }
 
-/** Ends stdin, then SIGTERMs the shell's process group and SIGKILLs it if it outlives the grace period */
+/** Ends stdin, SIGTERMs the shell's process group, then SIGKILLs whatever of it outlives the grace period */
 export function killGroup(child: ChildProcessWithoutNullStreams) {
   child.stdin.end()
   signalGroup(child, 'SIGTERM')
-  setTimeout(() => {
-    if (running(child)) signalGroup(child, 'SIGKILL')
-  }, KILL_GRACE_MS).unref()
+  setTimeout(() => signalGroup(child, 'SIGKILL'), KILL_GRACE_MS).unref()
 }

@@ -13,7 +13,7 @@ function fakeAgent() {
   let cancelArrived = () => undefined as void
   const cancelled = new Promise<void>((resolve) => (cancelArrived = resolve))
 
-  new AgentSideConnection(
+  const agentSide = new AgentSideConnection(
     (connection) => ({
       initialize: () => ({ protocolVersion: PROTOCOL_VERSION, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } }),
       newSession: () => ({
@@ -26,6 +26,11 @@ function fakeAgent() {
           ]
         }
       }),
+      loadSession: async ({ sessionId }) => {
+        for (let index = 0; index <= 5000; index++) await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: String(index) } } })
+        await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: 'code' } })
+        return { modes: { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }] } }
+      },
       authenticate: () => undefined,
       prompt: async ({ sessionId }) => {
         await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } } })
@@ -57,7 +62,7 @@ function fakeAgent() {
   // Aborting the pipe drops the agent's side, as when its process dies
   const disconnect = new AbortController()
   const fromAgent = toClient.readable.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), { signal: disconnect.signal })
-  return { clientStream: ndJsonStream(toAgent.writable, fromAgent), agent, disconnect: () => disconnect.abort() }
+  return { clientStream: ndJsonStream(toAgent.writable, fromAgent), agent, agentSide, disconnect: () => disconnect.abort() }
 }
 
 test('a turn streams events, asks permission and ends', async () => {
@@ -133,4 +138,27 @@ test('read slicing takes a 1-based line and a line limit', () => {
   expect(sliceLines(content, 2, null)).toBe('two\nthree\nfour')
   expect(sliceLines(content, 2, 2)).toBe('two\nthree')
   expect(sliceLines(content, null, 1)).toBe('one')
+})
+
+test('a long replay keeps its newest events and the options', async () => {
+  const { clientStream } = fakeAgent()
+  const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: 's0', close: () => undefined })
+  const events: ChatEvent[] = []
+  connection.onEvent((event) => events.push(event))
+  expect(connection.sessionId).toBe('s0')
+  expect(events).toHaveLength(5001)
+  expect(events[0]).toMatchObject({ type: 'options', options: [{ id: 'mode', currentValue: 'ask' }] })
+  expect(events[1]).toEqual({ type: 'message_chunk', role: 'user', content: { type: 'text', text: '1' } })
+  expect(events.at(-1)).toEqual({ type: 'message_chunk', role: 'user', content: { type: 'text', text: '5000' } })
+})
+
+test('writes create new files and overwrite existing ones inside the folder', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'acp-write-')))
+  const { clientStream, agentSide } = fakeAgent()
+  await connectOverStream(clientStream, { cwd: root, resume: null, close: () => undefined })
+  const path = join(root, 'n.txt')
+  await agentSide.writeTextFile({ sessionId: 's1', path, content: 'one\ntwo' })
+  await agentSide.writeTextFile({ sessionId: 's1', path, content: 'three\nfour' })
+  expect(await agentSide.readTextFile({ sessionId: 's1', path, line: 2, limit: 1 })).toEqual({ content: 'four' })
+  await expect(agentSide.writeTextFile({ sessionId: 's1', path: join(root, '..', 'out.txt'), content: 'x' })).rejects.toBeDefined()
 })

@@ -10,14 +10,14 @@ const STDERR_LIMIT = 4096
 const BACKLOG_LIMIT = 5000
 const CONNECT_TIMEOUT_MS = 30_000
 
-const missing = (error: unknown) => error instanceof Error && 'code' in error && error.code === 'ENOENT'
+const hasCode = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code
 
 /** Where a write to `target` lands: the file's real path, or, for a new file, its real folder plus its name */
 async function realWriteTarget(target: string): Promise<string> {
   try {
     return await realpath(target)
   } catch (error) {
-    if (!missing(error)) throw error
+    if (!hasCode(error, 'ENOENT')) throw error
   }
   // A dangling symlink would be followed by the write to wherever it points
   const link = await lstat(target).catch(() => null)
@@ -50,13 +50,15 @@ type ConnectOptions = { cwd: string; resume: string | null; close: () => void; s
 
 export async function connectOverStream(stream: Stream, { cwd, resume, close, stderrTail = () => '' }: ConnectOptions): Promise<ChatConnection> {
   const listeners = new Set<(event: ChatEvent) => void>()
-  // Events before the first listener (options, a loaded session's replay) wait for it
+  // Events before the first listener (a loaded session's replay) wait for it, newest kept; options are state and sent on subscribe
   let backlog: ChatEvent[] | null = []
   const emit = (event: ChatEvent) => {
     if (event.type === 'options') options = event.options
-    if (backlog) {
-      if (backlog.length < BACKLOG_LIMIT) backlog.push(event)
-    } else for (const listener of listeners) listener(event)
+    if (!backlog) for (const listener of listeners) listener(event)
+    else if (event.type !== 'options') {
+      backlog.push(event)
+      if (backlog.length > BACKLOG_LIMIT) backlog.shift()
+    }
   }
 
   let options: ChatOption[] = []
@@ -94,7 +96,11 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
       }),
     readTextFile: async ({ path, line, limit }) => ({ content: sliceLines(await readFile(await confinedPath(path, cwd, 'read'), 'utf8'), line, limit) }),
     writeTextFile: async ({ path, content }) => {
-      await writeFile(await confinedPath(path, cwd, 'write'), content, 'utf8')
+      // New files open exclusively, so a symlink planted after the check is not followed; an existing file is checked again
+      await writeFile(await confinedPath(path, cwd, 'write'), content, { encoding: 'utf8', flag: 'wx' }).catch(async (error: unknown) => {
+        if (!hasCode(error, 'EEXIST')) throw error
+        await writeFile(await confinedPath(path, cwd, 'write'), content, 'utf8')
+      })
       return {}
     }
   }
@@ -129,7 +135,10 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
       listeners.add(listener)
       const queued = backlog
       backlog = null
-      for (const event of queued ?? []) listener(event)
+      if (queued) {
+        listener({ type: 'options', options })
+        for (const event of queued) listener(event)
+      }
       return () => listeners.delete(listener)
     },
     prompt: async (content) => {
