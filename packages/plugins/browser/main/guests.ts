@@ -1,8 +1,12 @@
 import type { WebContents } from 'electron'
 import type { MainContext } from '@treeix/sdk/main'
+import { ENTRY_LIMIT, applyNetworkEvent, consoleFromApi, consoleFromException, keepLast } from './entries'
 import { browserAction, forwardsToApp } from '../shared/keys'
+import type { ConsoleEntry, EntryBatch, NetworkEntry } from '../shared/types'
 
 const watched = new WeakSet<WebContents>()
+const BATCH_MS = 250
+const BODY_LIMIT = 32 * 1024
 
 /** Wires a page once, however often its renderer reports it ready */
 export function watchGuest(guest: WebContents, context: MainContext): void {
@@ -27,4 +31,73 @@ export function watchGuest(guest: WebContents, context: MainContext): void {
       context.send(host, 'key', key, input.key)
     }
   })
+  capture(guest, context)
+}
+
+function capture(guest: WebContents, context: MainContext): void {
+  const host = guest.hostWebContents
+  if (!host) return
+  const requests = new Map<string, NetworkEntry>()
+  let pending: EntryBatch = { guestId: guest.id, reset: false, console: [], network: [] }
+  let timer: NodeJS.Timeout | null = null
+  let origin = ''
+  const flush = (): void => {
+    timer = null
+    if (!host.isDestroyed()) context.send(host, 'entries', pending)
+    pending = { guestId: guest.id, reset: false, console: [], network: [] }
+  }
+  const queue = (change: (batch: EntryBatch) => EntryBatch): void => {
+    pending = change(pending)
+    timer ??= setTimeout(flush, BATCH_MS)
+  }
+  const onMessage = (_: unknown, method: string, params: unknown): void => {
+    const logged: ConsoleEntry | null = method === 'Runtime.consoleAPICalled' ? consoleFromApi(params) : method === 'Runtime.exceptionThrown' ? consoleFromException(params) : null
+    if (logged) return queue((batch) => ({ ...batch, console: keepLast(batch.console, logged) }))
+    if (!method.startsWith('Network.')) return
+    const request = applyNetworkEvent(requests, method, params)
+    if (request) queue((batch) => ({ ...batch, network: keepLast(batch.network.filter((entry) => entry.id !== request.id), request) }))
+    if (requests.size > ENTRY_LIMIT) requests.delete(requests.keys().next().value as string)
+  }
+  try {
+    guest.debugger.attach('1.3')
+  } catch {
+    return
+  }
+  guest.debugger.on('message', onMessage)
+  for (const domain of ['Runtime', 'Log', 'Network']) void guest.debugger.sendCommand(`${domain}.enable`).catch(() => undefined)
+  // Another site starts a fresh list; staying on one origin keeps it, like DevTools with preserve log off per site
+  guest.on('did-navigate', (_, url) => {
+    const next = new URL(url).origin
+    if (next === origin) return
+    origin = next
+    requests.clear()
+    queue(() => ({ guestId: guest.id, reset: true, console: [], network: [] }))
+  })
+  guest.debugger.on('detach', () =>
+    queue((batch) => ({
+      ...batch,
+      console: keepLast(batch.console, { kind: 'console', id: `detach${Date.now()}`, level: 'warning', text: 'Capture stopped; it resumes on the next page load', source: '', stack: '', time: Date.now() })
+    }))
+  )
+  guest.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !guest.debugger.isAttached()) {
+      try {
+        guest.debugger.attach('1.3')
+        for (const domain of ['Runtime', 'Log', 'Network']) void guest.debugger.sendCommand(`${domain}.enable`).catch(() => undefined)
+      } catch {
+        // DevTools' own protocol client can hold the page; capture resumes on a later load
+      }
+    }
+  })
+}
+
+export async function responseBody(guest: WebContents, requestId: string): Promise<string | null> {
+  try {
+    const result = (await guest.debugger.sendCommand('Network.getResponseBody', { requestId })) as { body?: unknown; base64Encoded?: unknown }
+    if (typeof result.body !== 'string') return null
+    const body = result.base64Encoded === true ? `(binary, ${Math.round((result.body.length * 3) / 4)} bytes)` : result.body
+    return body.length > BODY_LIMIT ? `${body.slice(0, BODY_LIMIT)}\n(cut at 32 KB)` : body
+  } catch {
+    return null
+  }
 }

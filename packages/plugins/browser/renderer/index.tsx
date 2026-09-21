@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { createBridge, type HostApi, PageLayout, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { BrowserView, runBrowserAction } from './BrowserView'
+import './entries'
 import { PageLayer } from './pages'
 import { browserSettings } from './settings'
 import { getBrowser, openTab, selectTab, updateBrowser } from './tabs'

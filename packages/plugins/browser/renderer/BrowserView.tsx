@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@treeix/app/Icon'
+import { useHost } from '@treeix/sdk'
 import { toUrl } from './address'
 import { pageOf, useSlot } from './pages'
 import { browserSettings } from './settings'
+import { Strip } from './Strip'
 import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 
@@ -34,6 +36,7 @@ export function runBrowserAction(action: BrowserAction): void {
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
 
 export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.Element {
+  const host = useHost()
   const { tabs, activeId } = useBrowser()
   const tab = tabs.find((candidate) => candidate.id === activeId)
   const { ref, shown } = useSlot()
@@ -106,6 +109,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           }}
           className="h-6 min-w-0 flex-1 rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
         />
+        {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
       </div>
       <div ref={ref} className="relative min-h-0 flex-1">
         {!shown && (
@@ -122,6 +126,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           </div>
         )}
       </div>
+      {tab && place === 'tab' && <Strip tab={tab} />}
     </div>
   )
 }
