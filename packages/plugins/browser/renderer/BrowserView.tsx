@@ -100,7 +100,7 @@ function ProfileBadge(): React.JSX.Element | null {
   return (
     <button
       title={`Cookies from ${importLabel(info)}. Import again in Settings`}
-      onClick={host.openSettings}
+      onClick={() => host.openSettings('plugin:browser')}
       className="h-5 shrink-0 rounded bg-emerald-400/12 px-1.5 text-[10.5px] text-emerald-400"
     >
       {info.browser}

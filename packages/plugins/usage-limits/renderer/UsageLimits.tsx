@@ -9,7 +9,7 @@ export type UsageLabel = (typeof USAGE_LABEL_IDS)[number]
 
 export const usageSettings = definePluginSettings('usage-limits', (stored) => ({
   /** Title bar label for Claude and Codex usage limits */
-  usageLabel: USAGE_LABEL_IDS.find((id) => id === stored.usageLabel) ?? ('reset' as UsageLabel)
+  usageLabel: USAGE_LABEL_IDS.find((id) => id === stored.usageLabel) ?? ('percent' as UsageLabel)
 }))
 
 const bridge = createBridge('usage-limits')
@@ -119,7 +119,7 @@ export function UsageLimits(): React.JSX.Element | null {
 
   return (
     <button
-      onClick={onOpenSettings}
+      onClick={() => onOpenSettings('plugin:usage-limits')}
       title={`${agents.map(([, name, agentLimits]) => describe(name, agentLimits)).join('\n\n')}\n\nClick to change this label`}
       className="flex h-6 shrink-0 items-center gap-3 rounded-md px-2 text-[11.5px] hover:bg-accent [-webkit-app-region:no-drag]"
     >

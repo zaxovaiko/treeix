@@ -176,7 +176,8 @@ export type HostApi = {
   closeTab: (key: string) => void
   openWorktree: (path: string) => void
   createWorktree: (repoPath: string, branch: string, base?: string, session?: SessionKind | null) => Promise<void>
-  openSettings: () => void
+  /** Opens Settings, on `page` when given: `plugin:<id>` for a plugin's own page, else the page left open last */
+  openSettings: (page?: string) => void
   flash: (message: string) => void
   comments: ReviewComment[]
   addComment: (comment: ReviewComment) => void

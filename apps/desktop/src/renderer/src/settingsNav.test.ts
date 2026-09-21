@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { navRows, openablePage } from './settingsNav'
+import { navRows, openablePage, isPageId, onSettingsPage, showSettingsPage, takeRequestedPage } from './settingsNav'
 import type { LoadedPlugin, PluginEntry } from './plugins'
 
 const entry = (id: string, name: string): PluginEntry => ({ manifest: { id, name, description: '', enabledByDefault: true }, load: null })
@@ -35,4 +35,18 @@ test('a remembered page falls back to the plugin list once its plugin is switche
   expect(openablePage('plugin:keep-awake', on)).toBe('plugin:keep-awake')
   expect(openablePage('plugin:keep-awake', off)).toBe('Plugins')
   expect(openablePage('Appearance', off)).toBe('Appearance')
+})
+
+test('showSettingsPage waits for a closed Settings and goes straight to an open one', () => {
+  showSettingsPage('plugin:usage-limits')
+  expect(takeRequestedPage()).toBe('plugin:usage-limits')
+  expect(takeRequestedPage()).toBeNull()
+  const seen: string[] = []
+  const stop = onSettingsPage((page) => seen.push(page))
+  showSettingsPage('Terminal')
+  stop()
+  expect(seen).toEqual(['Terminal'])
+  expect(takeRequestedPage()).toBeNull()
+  expect(isPageId('plugin:browser')).toBe(true)
+  expect(isPageId('Nope')).toBe(false)
 })

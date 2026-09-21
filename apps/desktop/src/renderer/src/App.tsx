@@ -33,6 +33,7 @@ import { FileIcon, Icon } from './Icon'
 import { findService, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKey } from './Shell'
+import { isPageId, showSettingsPage } from './settingsNav'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
@@ -220,7 +221,9 @@ function App(): React.JSX.Element {
     localStorage.setItem(workspaceKey('app.place'), JSON.stringify(place))
   }, [appTab, selected, viewer])
   const tabBeforeSettings = useRef('worktrees')
-  const openSettings = (): void => {
+  const openSettings = (page?: unknown): void => {
+    // Menu and button handlers may pass their event, so only a page id counts
+    if (typeof page === 'string' && isPageId(page)) showSettingsPage(page)
     if (appTab !== 'settings') tabBeforeSettings.current = appTab
     setAppTab('settings')
   }
@@ -1232,7 +1235,7 @@ function App(): React.JSX.Element {
       closeTab: (key) => latest.current.closeTab(key),
       openWorktree: (path) => latest.current.openWorktree(path),
       createWorktree: (repoPath, branch, base, session) => latest.current.createWorktree(repoPath, branch, base, session),
-      openSettings: () => latest.current.openSettings(),
+      openSettings: (page) => latest.current.openSettings(page),
       flash: (message) => latest.current.flash(message),
       comments,
       addComment: (comment) => latest.current.setComments((current) => [...current, comment]),
