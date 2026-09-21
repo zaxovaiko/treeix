@@ -17,6 +17,8 @@ export type Agent = {
   resumeCommand?: string
   /** false only for the shell, which is a terminal rather than an agent */
   agent: boolean
+  /** Chat through an adapter; agents without it are terminal only */
+  chat?: { adapter: string; command: string }
 }
 
 /** The usage-limits plugin fills the variable with its status line bridge; the terminal plugin's main module defaults it to `{}` */
@@ -33,10 +35,31 @@ export const BUILTIN_AGENTS = {
     sessionIdFlag: '--session-id',
     // A session closed before its first message has no transcript, and --resume would fail on it
     resumeCommand: `if ls ~/.claude/projects/*/{id}.jsonl >/dev/null 2>&1; then ${CLAUDE} --resume {id}; else ${CLAUDE} --session-id {id}; fi`,
-    agent: true
+    agent: true,
+    chat: { adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp' }
   },
   // ponytail: Codex can't be given an id up front, so relaunch resumes its latest conversation; read ~/.codex/sessions if two Codex sessions clash
-  codex: { id: 'codex', label: 'Codex', mark: '◎', color: 'var(--color-foreground)', command: 'codex', promptFlag: '', resumeCommand: 'codex resume --last', agent: true },
+  codex: {
+    id: 'codex',
+    label: 'Codex',
+    mark: '◎',
+    color: 'var(--color-foreground)',
+    command: 'codex',
+    promptFlag: '',
+    resumeCommand: 'codex resume --last',
+    agent: true,
+    chat: { adapter: 'acp', command: 'npx -y @zed-industries/codex-acp' }
+  },
+  gemini: {
+    id: 'gemini',
+    label: 'Gemini',
+    mark: '✦',
+    color: '#4f8cf7',
+    command: 'gemini',
+    promptFlag: '-i',
+    agent: true,
+    chat: { adapter: 'acp', command: 'gemini --experimental-acp' }
+  },
   shell: { id: 'shell', label: 'Shell', mark: '$', color: '#34d399', command: null, agent: false }
 } as const satisfies Record<string, Agent>
 
@@ -57,6 +80,10 @@ export const getAgent = (id: string): Agent | undefined => getAgents().find((age
 export const agentOr = (id: string): Agent => getAgent(id) ?? { id, label: id, mark: '●', color: 'var(--color-muted-foreground)', command: null, agent: false }
 
 export const isAgent = (id: string): boolean => getAgent(id)?.agent ?? false
+
+/** How an agent opens by default: the user's choice when it has a chat command, else the terminal */
+export const viewFor = (agent: Agent, views: Record<string, 'chat' | 'terminal'>): 'chat' | 'terminal' =>
+  agent.chat && views[agent.id] === 'chat' ? 'chat' : 'terminal'
 
 export const useAgents = (): Agent[] => useSyncExternalStore(subscribeSettings, getAgents)
 

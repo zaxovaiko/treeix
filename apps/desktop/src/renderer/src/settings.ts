@@ -10,6 +10,10 @@ export type Settings = {
   plugins: Record<string, boolean>
   /** Agents the user added or redefined, merged over the built-in table by id */
   customAgents: Agent[]
+  /** Default view per agent id; absent means terminal */
+  agentViews: Record<string, 'chat' | 'terminal'>
+  /** How a chat session shows an agent's thinking blocks */
+  chatThinking: 'collapsed' | 'expanded' | 'hidden'
   /** Background syntax highlighting workers; applied on next launch */
   highlightWorkers: number
   /** 'system' follows the macOS appearance: Neutral when dark, Light when light */
@@ -84,6 +88,11 @@ function parseKeymap(value: unknown): Settings['keymap'] {
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, Shortcut | null] => entry[1] === null || isShortcut(entry[1])))
 }
 
+function parseAgentViews(value: unknown): Settings['agentViews'] {
+  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, 'chat' | 'terminal'] => entry[1] === 'chat' || entry[1] === 'terminal'))
+}
+
 function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
   const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   const pick = (target: DigitTarget): DigitModifier => {
@@ -143,7 +152,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -162,6 +171,8 @@ export function parseCustomAgents(value: unknown): Agent[] {
     const text = (key: string): string | undefined => (typeof candidate[key] === 'string' ? (candidate[key] as string) : undefined)
     const id = text('id')
     if (!id) return []
+    const chatCandidate = typeof candidate.chat === 'object' && candidate.chat !== null ? (candidate.chat as Record<string, unknown>) : undefined
+    const chat = typeof chatCandidate?.adapter === 'string' && typeof chatCandidate.command === 'string' ? { adapter: chatCandidate.adapter, command: chatCandidate.command } : undefined
     return [
       {
         id,
@@ -172,7 +183,8 @@ export function parseCustomAgents(value: unknown): Agent[] {
         promptFlag: text('promptFlag'),
         sessionIdFlag: text('sessionIdFlag'),
         resumeCommand: text('resumeCommand'),
-        agent: candidate.agent !== false
+        agent: candidate.agent !== false,
+        ...(chat ? { chat } : {})
       }
     ]
   })
@@ -188,6 +200,8 @@ function load(): Settings {
     return {
       plugins: parsePluginChoices(candidate),
       customAgents: parseCustomAgents(candidate.customAgents),
+      agentViews: parseAgentViews(candidate.agentViews),
+      chatThinking: candidate.chatThinking === 'expanded' || candidate.chatThinking === 'hidden' ? candidate.chatThinking : DEFAULTS.chatThinking,
       theme: candidate.theme === 'system' || isThemeId(candidate.theme) ? candidate.theme : DEFAULTS.theme,
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
