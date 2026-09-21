@@ -14,8 +14,8 @@ const awakeSettings = definePluginSettings('keep-awake', (stored) => ({
   keepAwakeLidClosed: stored.keepAwakeLidClosed === true
 }))
 
-/** Whether the Mac is currently kept awake, for the title bar */
-const status = definePluginSettings('keep-awake-status', () => ({ awake: false }))
+/** Whether the Mac is currently kept awake, and with the lid closed, for the title bar */
+const status = definePluginSettings('keep-awake-status', () => ({ awake: false, lidClosed: false }))
 
 // Keep the Mac awake while any agent works; stay awake through short pauses so the password prompt doesn't repeat
 // Waiting for your answer doesn't count: the Mac shouldn't stay up in a bag for a question nobody sees
@@ -40,7 +40,7 @@ function KeepAwake(): null {
   }, [agentsWorking])
 
   useEffect(() => {
-    status.update({ awake: keepAwake && keepAwakeLidClosed })
+    status.update({ awake: keepAwake, lidClosed: keepAwake && keepAwakeLidClosed })
     bridge.invoke<boolean>('set', keepAwake, keepAwakeLidClosed).then((ok) => {
       if (ok || !keepAwake) return
       // Cancelled prompt: don't ask again until agents stop and start again
@@ -52,11 +52,16 @@ function KeepAwake(): null {
   return null
 }
 
-function Indicator(): React.JSX.Element | null {
-  const { awake } = status.use()
-  if (!awake) return null
+/** Always there while the plugin is on, so it's clear the Mac will stay up once an agent starts */
+function Indicator(): React.JSX.Element {
+  const { awake, lidClosed } = status.use()
+  const title = lidClosed
+    ? 'Agents are working: the Mac stays awake with the lid closed'
+    : awake
+      ? 'Agents are working: the Mac stays awake'
+      : 'Keep awake is on: the Mac stays awake while an agent works'
   return (
-    <span title="Agents are working: the Mac stays awake with the lid closed" className="flex items-center gap-1 px-1.5 text-[11px] text-amber-400">
+    <span title={title} className={`flex items-center gap-1 px-1.5 text-[11px] ${lidClosed ? 'text-amber-400' : awake ? 'text-foreground' : 'text-muted-foreground/60'}`}>
       <Icon name="power" className="size-3.5" />
     </span>
   )
