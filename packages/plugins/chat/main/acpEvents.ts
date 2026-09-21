@@ -1,3 +1,4 @@
+import type { ContentBlock } from '@agentclientprotocol/sdk'
 import type { ChatContent, ChatEvent, ChatOption, PermissionOption, PlanEntry, ToolCall, ToolOutput } from '@treeix/sdk/main'
 
 // ACP messages come over JSON-RPC from the agent's process, so every field is read defensively
@@ -183,6 +184,6 @@ export function fromPermissionRequest(requestId: string, params: unknown): ChatE
 }
 
 /** Maps chat prompt content to ACP `ContentBlock`s for `session/prompt` */
-export function toPromptBlocks(content: ChatContent[]): unknown[] {
+export function toPromptBlocks(content: ChatContent[]): ContentBlock[] {
   return content.map((item) => (item.type === 'text' ? { type: 'text', text: item.text } : { type: 'image', mimeType: item.mimeType, data: item.data }))
 }
