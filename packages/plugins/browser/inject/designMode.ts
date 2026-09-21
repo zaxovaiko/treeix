@@ -47,8 +47,11 @@ const onClick = (event: MouseEvent): void => {
   hovered = target
   draw(target)
   const rect = target.getBoundingClientRect()
+  const steps = stepsOf(target)
+  // body/html climb out of stepsOf's range and produce no steps; their tag alone is already a usable selector
+  const selector = steps.length ? selectorFor(steps, unique) : target.tagName.toLowerCase()
   ipcRenderer.sendToHost('selection', {
-    selector: selectorFor(stepsOf(target), unique),
+    selector,
     tag: target.tagName.toLowerCase(),
     text: (target.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 200),
     html: target.outerHTML.slice(0, 1024),

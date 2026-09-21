@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createBridge, useHost } from '@treeix/sdk'
 import type { Attachment } from '@treeix/shared/comments'
 import { elementComment } from './comments'
 import { clearSelection, useDesign } from './pages'
-import { getBrowser } from './tabs'
+import { useBrowser } from './tabs'
 
 const bridge = createBridge('browser')
 const WIDTH = 260
@@ -12,11 +12,17 @@ const WIDTH = 260
 export function DesignPopover(): React.JSX.Element | null {
   const host = useHost()
   const { selection } = useDesign()
+  const { activeId, tabs } = useBrowser()
   const [note, setNote] = useState('')
   const [error, setError] = useState(false)
-  if (!selection) return null
+  const stale = !!selection && selection.tabId !== activeId
+  // A tab switch or close leaves the selection behind; drop it so it doesn't reappear over the wrong page
+  useEffect(() => {
+    if (stale) clearSelection()
+  }, [stale])
+  if (!selection || stale) return null
   const { value, tabId } = selection
-  const tab = getBrowser().tabs.find((candidate) => candidate.id === tabId)
+  const tab = tabs.find((candidate) => candidate.id === tabId)
   const below = value.rect.y + value.rect.height + 8
   const top = below + 120 > value.viewport.height ? Math.max(8, value.rect.y - 128) : below
   const left = Math.max(8, Math.min(value.rect.x, value.viewport.width - WIDTH - 8))
