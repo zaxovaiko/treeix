@@ -65,3 +65,9 @@ test('drops ports outside every session and survives a parent cycle', () => {
   ])
   expect(attributePorts(new Map([['a', 500]]), parents, [{ pid: 10, port: 80 }])).toEqual([])
 })
+
+test('the shell itself listening counts, a pid ps no longer lists does not', () => {
+  const shells = new Map([['a', 500]])
+  expect(attributePorts(shells, parseParents(PS), [{ pid: 500, port: 9000 }])).toEqual([{ sessionId: 'a', port: 9000 }])
+  expect(attributePorts(shells, parseParents(PS), [{ pid: 4242, port: 9001 }])).toEqual([])
+})

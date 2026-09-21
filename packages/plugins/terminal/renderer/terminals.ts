@@ -153,8 +153,13 @@ function setPorts(next: SessionPort[]): void {
   notify()
 }
 
+let polling = false
+
 async function pollPorts(): Promise<void> {
+  if (polling || document.hidden) return
+  polling = true
   const found = await bridge.invoke<{ sessionId: string; port: number }[]>('ports').catch(() => null)
+  polling = false
   if (found && portsTimer) setPorts(found.map(({ sessionId, port }) => ({ sessionId, port, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
 }
 

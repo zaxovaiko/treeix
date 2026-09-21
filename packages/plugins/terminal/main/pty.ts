@@ -95,8 +95,9 @@ export function terminalCwd(id: string): Promise<string | null> {
   })
 }
 
+/** stdout even when the command exits non-zero with output: lsof does when some files can't be read */
 const run = (file: string, args: string[]): Promise<string> =>
-  new Promise((resolve, reject) => execFile(file, args, (error, stdout) => (error ? reject(error) : resolve(stdout))))
+  new Promise((resolve, reject) => execFile(file, args, (error, stdout) => (error && !stdout ? reject(error) : resolve(stdout))))
 
 /** TCP ports listened on by a live session's shell or anything it started */
 export async function listeningPorts(): Promise<SessionPortEntry[]> {
@@ -104,7 +105,7 @@ export async function listeningPorts(): Promise<SessionPortEntry[]> {
   for (const [id, entry] of sessions) if (entry.pty) shells.set(id, entry.pty.pid)
   if (!shells.size) return []
   try {
-    const [ps, lsof] = await Promise.all([run('/bin/ps', ['-A', '-o', 'pid=,ppid=']), run('/usr/sbin/lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])])
+    const [ps, lsof] = await Promise.all([run('/bin/ps', ['-A', '-o', 'pid=,ppid=']), run('/usr/sbin/lsof', ['-w', '-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])])
     return attributePorts(shells, parseParents(ps), parseListeners(lsof))
   } catch {
     // lsof exits 1 when nothing listens
