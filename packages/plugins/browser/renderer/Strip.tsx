@@ -55,7 +55,7 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
   const paneButton = (id: Pane, label: string, badge?: number): React.JSX.Element => (
     <button
       onClick={() => (setPane(id), setOpen(true))}
-      className={`flex h-7 items-center gap-1.5 border-b-2 px-2.5 text-xs ${pane === id && open ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+      className={`flex h-9 items-center gap-1.5 border-b-2 px-3 text-xs ${pane === id && open ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
     >
       {label}
       {!!badge && <span className="rounded bg-red-400/15 px-1 text-[10.5px] text-red-400 tabular-nums">{badge}</span>}
@@ -63,28 +63,28 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
   )
   return (
     <div className="shrink-0 border-t border-border">
-      <div className="flex items-center">
+      <div className="flex items-center px-2">
         {paneButton('console', 'Console', errors)}
         {paneButton('network', 'Network')}
         {paneButton('performance', 'Performance')}
         <span className="flex-1" />
         {pane !== 'performance' && open && (
-          <button onClick={() => setAll(!all)} className="px-2 text-[11px] text-muted-foreground hover:text-foreground">
+          <button onClick={() => setAll(!all)} className="px-2.5 text-[11px] text-muted-foreground hover:text-foreground">
             {all ? 'Only problems' : 'Show all'}
           </button>
         )}
-        <button aria-label={open ? 'Hide' : 'Show'} onClick={() => setOpen(!open)} className="px-2 text-[11px] text-muted-foreground hover:text-foreground">
+        <button aria-label={open ? 'Hide' : 'Show'} onClick={() => setOpen(!open)} className="px-2.5 text-[11px] text-muted-foreground hover:text-foreground">
           {open ? 'Hide' : 'Show'}
         </button>
       </div>
       {open && (
         <div className="h-36 overflow-y-auto">
-          {rows.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
+          {rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
           {rows
             .slice()
             .reverse()
             .map(({ entry, cells, bad, warn }) => (
-              <label key={entry.id} className="grid cursor-pointer grid-cols-[16px_56px_minmax(0,1fr)_72px_56px] items-center gap-2 border-t border-border px-2 py-1 font-mono text-[11px] hover:bg-accent/50">
+              <label key={entry.id} className="grid cursor-pointer grid-cols-[16px_56px_minmax(0,1fr)_72px_56px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50">
                 <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
                 <span className={tone(bad, warn)}>{cells[0]}</span>
                 <span className="truncate" title={cells[1]}>
