@@ -1,7 +1,10 @@
 import { AgentSideConnection, ndJsonStream, PROTOCOL_VERSION, type RequestPermissionOutcome } from '@agentclientprotocol/sdk'
 import type { ChatEvent } from '@treeix/sdk/main'
 import { expect, test } from 'bun:test'
-import { connectOverStream } from './acpAdapter'
+import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { confinedPath, connectOverStream, sliceLines } from './acpAdapter'
 
 function fakeAgent() {
   const toAgent = new TransformStream<Uint8Array, Uint8Array>()
@@ -51,7 +54,10 @@ function fakeAgent() {
     ndJsonStream(toClient.writable, toAgent.readable)
   )
 
-  return { clientStream: ndJsonStream(toAgent.writable, toClient.readable), agent }
+  // Aborting the pipe drops the agent's side, as when its process dies
+  const disconnect = new AbortController()
+  const fromAgent = toClient.readable.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), { signal: disconnect.signal })
+  return { clientStream: ndJsonStream(toAgent.writable, fromAgent), agent, disconnect: () => disconnect.abort() }
 }
 
 test('a turn streams events, asks permission and ends', async () => {
@@ -86,4 +92,45 @@ test('cancel settles a waiting permission as cancelled', async () => {
   expect(agent.outcome).toEqual({ outcome: 'cancelled' })
   expect(events.map((event) => event.type)).toEqual(['options', 'turn_start', 'message_chunk', 'permission', 'permission_settled', 'turn_end'])
   expect(events.at(-1)).toEqual({ type: 'turn_end', stopReason: 'cancelled' })
+})
+
+test('a dropped agent settles a waiting permission and reports it', async () => {
+  const { clientStream, disconnect } = fakeAgent()
+  const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: null, close: () => undefined, stderrTail: () => 'crashed\n' })
+  const events: ChatEvent[] = []
+  connection.onEvent((event) => {
+    events.push(event)
+    if (event.type === 'permission') disconnect()
+  })
+  await connection.prompt([{ type: 'text', text: 'Hi' }])
+  expect(events.map((event) => event.type)).toContain('permission_settled')
+  expect(events).toContainEqual({ type: 'error', message: 'The agent stopped: crashed' })
+})
+
+test('file access stays inside the session folder', async () => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'acp-fs-')))
+  const root = join(base, 'x')
+  await mkdir(root)
+  await mkdir(join(base, 'xy'))
+  await writeFile(join(root, 'a.txt'), 'a')
+  await writeFile(join(base, 'secret.txt'), 's')
+  await symlink(join(base, 'secret.txt'), join(root, 'link.txt'))
+  await symlink(join(base, 'nowhere.txt'), join(root, 'dangling.txt'))
+
+  expect(await confinedPath(join(root, 'a.txt'), root, 'read')).toBe(join(root, 'a.txt'))
+  expect(await confinedPath(join(root, 'new.txt'), root, 'write')).toBe(join(root, 'new.txt'))
+  await expect(confinedPath(join(root, '..', 'secret.txt'), root, 'read')).rejects.toThrow('Outside the session folder')
+  await expect(confinedPath(join(base, 'xy', 'b.txt'), root, 'write')).rejects.toThrow('Outside the session folder')
+  await expect(confinedPath(join(root, 'link.txt'), root, 'read')).rejects.toThrow('Outside the session folder')
+  await expect(confinedPath(join(root, 'link.txt'), root, 'write')).rejects.toThrow('Outside the session folder')
+  await expect(confinedPath(join(root, 'dangling.txt'), root, 'write')).rejects.toThrow('Outside the session folder')
+  await expect(confinedPath('a.txt', root, 'read')).rejects.toThrow('Path must be absolute')
+})
+
+test('read slicing takes a 1-based line and a line limit', () => {
+  const content = 'one\ntwo\nthree\nfour'
+  expect(sliceLines(content, null, null)).toBe(content)
+  expect(sliceLines(content, 2, null)).toBe('two\nthree\nfour')
+  expect(sliceLines(content, 2, 2)).toBe('two\nthree')
+  expect(sliceLines(content, null, 1)).toBe('one')
 })

@@ -1,30 +1,62 @@
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, type Client, type RequestPermissionResponse, type Stream } from '@agentclientprotocol/sdk'
 import type { ChatAdapter, ChatConnection, ChatEvent, ChatOption } from '@treeix/sdk/main'
-import { readFile, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { resolve, sep } from 'node:path'
+import { lstat, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { Writable } from 'node:stream'
 import { fromPermissionRequest, fromSessionUpdate, optionsFrom, toPromptBlocks } from './acpEvents'
-import { spawnInShell } from './shell'
+import { killGroup, spawnInShell } from './shell'
 
 const STDERR_LIMIT = 4096
+const BACKLOG_LIMIT = 5000
+const CONNECT_TIMEOUT_MS = 30_000
 
-/** The agent may only touch files inside the session's folder or the user's home */
-function allowedPath(path: string, cwd: string): string {
-  const target = resolve(path)
-  const inside = (root: string) => target === root || target.startsWith(root.endsWith(sep) ? root : root + sep)
-  if (!inside(resolve(cwd)) && !inside(homedir())) throw new Error('Outside the session folder')
-  return target
+const missing = (error: unknown) => error instanceof Error && 'code' in error && error.code === 'ENOENT'
+
+/** Where a write to `target` lands: the file's real path, or, for a new file, its real folder plus its name */
+async function realWriteTarget(target: string): Promise<string> {
+  try {
+    return await realpath(target)
+  } catch (error) {
+    if (!missing(error)) throw error
+  }
+  // A dangling symlink would be followed by the write to wherever it points
+  const link = await lstat(target).catch(() => null)
+  if (link) throw new Error('Outside the session folder')
+  return join(await realpath(dirname(target)), basename(target))
 }
 
-export async function connectOverStream(stream: Stream, { cwd, resume, close }: { cwd: string; resume: string | null; close: () => void }): Promise<ChatConnection> {
+/** The agent may only touch files inside the session's folder, symlinks resolved */
+export async function confinedPath(path: string, root: string, mode: 'read' | 'write'): Promise<string> {
+  if (!isAbsolute(path)) throw new Error('Path must be absolute')
+  const realRoot = await realpath(root)
+  const target = resolve(path)
+  const real = mode === 'read' ? await realpath(target) : await realWriteTarget(target)
+  const prefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep
+  if (real !== realRoot && !real.startsWith(prefix)) throw new Error('Outside the session folder')
+  return real
+}
+
+/** ACP `fs/read_text_file` slicing: `line` is 1-based, `limit` counts lines */
+export function sliceLines(content: string, line: number | null | undefined, limit: number | null | undefined): string {
+  if (line == null && limit == null) return content
+  const start = Math.max((line ?? 1) - 1, 0)
+  return content
+    .split('\n')
+    .slice(start, limit == null ? undefined : start + limit)
+    .join('\n')
+}
+
+type ConnectOptions = { cwd: string; resume: string | null; close: () => void; stderrTail?: () => string }
+
+export async function connectOverStream(stream: Stream, { cwd, resume, close, stderrTail = () => '' }: ConnectOptions): Promise<ChatConnection> {
   const listeners = new Set<(event: ChatEvent) => void>()
   // Events before the first listener (options, a loaded session's replay) wait for it
   let backlog: ChatEvent[] | null = []
   const emit = (event: ChatEvent) => {
     if (event.type === 'options') options = event.options
-    if (backlog) backlog.push(event)
-    else for (const listener of listeners) listener(event)
+    if (backlog) {
+      if (backlog.length < BACKLOG_LIMIT) backlog.push(event)
+    } else for (const listener of listeners) listener(event)
   }
 
   let options: ChatOption[] = []
@@ -60,20 +92,22 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close }: 
         pending.set(requestId, respond)
         emit(event)
       }),
-    readTextFile: async ({ path, line, limit }) => {
-      const content = await readFile(allowedPath(path, cwd), 'utf8')
-      if (line == null && limit == null) return { content }
-      const start = Math.max((line ?? 1) - 1, 0)
-      const lines = content.split('\n')
-      return { content: lines.slice(start, limit == null ? undefined : start + limit).join('\n') }
-    },
+    readTextFile: async ({ path, line, limit }) => ({ content: sliceLines(await readFile(await confinedPath(path, cwd, 'read'), 'utf8'), line, limit) }),
     writeTextFile: async ({ path, content }) => {
-      await writeFile(allowedPath(path, cwd), content, 'utf8')
+      await writeFile(await confinedPath(path, cwd, 'write'), content, 'utf8')
       return {}
     }
   }
 
   const connection = new ClientSideConnection(() => client, stream)
+  let closing = false
+  // The agent went away: no permission card may keep waiting on it
+  connection.signal.addEventListener('abort', () => {
+    settleAll()
+    if (closing) return
+    const tail = stderrTail().trim()
+    emit({ type: 'error', message: tail ? `The agent stopped: ${tail}` : 'The agent stopped' })
+  })
   const { agentCapabilities } = await connection.initialize({
     protocolVersion: PROTOCOL_VERSION,
     clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
@@ -132,6 +166,8 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close }: 
         }
       : undefined,
     close: () => {
+      closing = true
+      backlog = null
       settleAll()
       close()
     }
@@ -147,29 +183,42 @@ export const acpAdapter: ChatAdapter = {
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-STDERR_LIMIT)
     })
+    const withTail = (message: string) => new Error(`${message}: ${stderr.trim() || 'no output'}`)
+    let timer: ReturnType<typeof setTimeout> | undefined
     const failed = new Promise<never>((_, reject) => {
-      child.once('error', reject)
-      child.once('exit', () => reject(new Error(`${command} exited: ${stderr.trim() || 'no output'}`)))
+      child.on('error', reject)
+      child.once('exit', () => reject(withTail(`${command} exited`)))
+      timer = setTimeout(() => reject(withTail(`${command} did not answer in ${CONNECT_TIMEOUT_MS / 1000}s`)), CONNECT_TIMEOUT_MS)
     })
     failed.catch(() => undefined)
 
     // Built by hand: Readable.toWeb's Node stream type does not match the DOM ReadableStream the SDK takes
+    let done = false
     const fromAgent = new ReadableStream<Uint8Array>({
       start: (controller) => {
-        child.stdout.on('data', (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)))
+        child.stdout.on('data', (chunk: Buffer) => {
+          if (!done) controller.enqueue(new Uint8Array(chunk))
+        })
         // On 'close', after 'exit', so an early exit reports stderr rather than a closed connection
-        child.once('close', () => controller.close())
+        child.once('close', () => {
+          if (done) return
+          done = true
+          controller.close()
+        })
       },
       cancel: () => {
-        child.kill()
+        done = true
+        killGroup(child)
       }
     })
     const stream = ndJsonStream(Writable.toWeb(child.stdin), fromAgent)
     try {
-      return await Promise.race([connectOverStream(stream, { cwd, resume, close: () => child.kill() }), failed])
+      return await Promise.race([connectOverStream(stream, { cwd, resume, close: () => killGroup(child), stderrTail: () => stderr }), failed])
     } catch (error) {
-      child.kill()
+      killGroup(child)
       throw error
+    } finally {
+      clearTimeout(timer)
     }
   }
 }
