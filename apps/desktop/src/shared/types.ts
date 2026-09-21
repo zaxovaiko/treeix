@@ -117,6 +117,8 @@ export type Api = {
   /** Rejects with git's message when the pattern is not a valid regex */
   searchText: (worktreePaths: string[], query: string, options: SearchOptions) => Promise<SearchResult>
   checkTools: () => Promise<ToolStatus[]>
+  /** Whether a command's first word is on the user's login shell PATH */
+  commandExists: (name: string) => Promise<boolean>
   plugins: {
     /** Tells the main process which plugins are enabled, activating or disposing their main modules */
     setEnabled: (ids: string[]) => Promise<void>

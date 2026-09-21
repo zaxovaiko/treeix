@@ -70,3 +70,9 @@ async function check(tool: Tool): Promise<ToolStatus> {
 }
 
 export const checkTools = (tools: Tool[]): Promise<ToolStatus[]> => Promise.all(tools.map(check))
+
+/** Whether a command's first word resolves on the user's login shell PATH; never runs the command itself */
+export async function commandExists(name: string): Promise<boolean> {
+  const { failed } = await inLoginShell(`command -v ${name}`)
+  return !failed
+}
