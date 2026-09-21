@@ -1,6 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { TerminalOptions } from '../shared/types'
-import { createTerminal, killAllTerminals, killTerminal, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
+import { createTerminal, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
 
 const plugin: MainPlugin = {
   tools: [
@@ -18,6 +18,7 @@ const plugin: MainPlugin = {
     context.on('kill', (_, id: string) => killTerminal(id))
     context.handle('list', (event) => listTerminals(event.sender))
     context.handle('cwd', (_, id: string) => terminalCwd(id))
+    context.handle('ports', () => listeningPorts())
     context.onDispose(killAllTerminals)
   }
 }

@@ -5,6 +5,7 @@ import { type IPty, spawn } from 'node-pty'
 import type { LiveTerminal, TerminalOptions } from '../shared/types'
 import { withoutAgentVariables } from '@treeix/host/env'
 import { coalesceOutput } from './coalesce'
+import { attributePorts, parseListeners, parseParents, type SessionPortEntry } from './ports'
 
 // Enough for a reloaded window to redraw the screen and recent scrollback
 const MAX_BUFFERED_CHARS = 256_000
@@ -92,6 +93,23 @@ export function terminalCwd(id: string): Promise<string | null> {
       resolve(error ? null : (stdout.split('\n').find((line) => line.startsWith('n'))?.slice(1) ?? null))
     })
   })
+}
+
+const run = (file: string, args: string[]): Promise<string> =>
+  new Promise((resolve, reject) => execFile(file, args, (error, stdout) => (error ? reject(error) : resolve(stdout))))
+
+/** TCP ports listened on by a live session's shell or anything it started */
+export async function listeningPorts(): Promise<SessionPortEntry[]> {
+  const shells = new Map<string, number>()
+  for (const [id, entry] of sessions) if (entry.pty) shells.set(id, entry.pty.pid)
+  if (!shells.size) return []
+  try {
+    const [ps, lsof] = await Promise.all([run('/bin/ps', ['-A', '-o', 'pid=,ppid=']), run('/usr/sbin/lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])])
+    return attributePorts(shells, parseParents(ps), parseListeners(lsof))
+  } catch {
+    // lsof exits 1 when nothing listens
+    return []
+  }
 }
 
 export const writeTerminal = (id: string, data: string): void => sessions.get(id)?.pty?.write(data)
