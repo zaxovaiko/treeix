@@ -47,6 +47,8 @@ import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, readSt
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
+/** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
+const DEFAULT_TAB = 'terminal'
 /** Where Worktrees sits among the plugin tabs */
 const WORKTREES_ORDER = 30
 
@@ -58,7 +60,7 @@ function readPlace(workspaceId: string): SavedPlace {
   const record = typeof stored === 'object' && stored !== null ? (stored as Record<string, unknown>) : {}
   const viewer = typeof record.viewer === 'object' && record.viewer !== null ? (record.viewer as Record<string, unknown>) : null
   return {
-    appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : 'worktrees',
+    appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : DEFAULT_TAB,
     selected: typeof record.selected === 'string' ? record.selected : null,
     viewer: viewer && typeof viewer.path === 'string' ? { path: viewer.path, line: typeof viewer.line === 'number' ? viewer.line : null } : null
   }
@@ -456,7 +458,7 @@ function App(): React.JSX.Element {
 
   // A tab whose plugin was switched off, or a saved tab from a plugin that no longer exists
   useEffect(() => {
-    if (pluginsReady && !tabExists(appTab)) setAppTab('worktrees')
+    if (pluginsReady && !tabExists(appTab)) setAppTab(tabExists(DEFAULT_TAB) ? DEFAULT_TAB : 'worktrees')
   })
 
   /** Each workspace remembers its selected worktree and open tabs */
@@ -476,7 +478,7 @@ function App(): React.JSX.Element {
     }
     setSelected(nextSelected)
     setDocTabs(view?.docTabs ?? [])
-    setAppTab(view?.appTab ?? (isRestorableTab(appTab) ? appTab : 'worktrees'))
+    setAppTab(view?.appTab ?? DEFAULT_TAB)
     setCurrentWorkspace(id)
   }
 
