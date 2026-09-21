@@ -15,7 +15,7 @@ const tone = (bad: boolean, warn = false): string => (bad ? 'text-red-400' : war
 
 export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
   const host = useHost()
-  const [open, setOpen] = usePersisted<boolean>('browser.strip', true)
+  const [open, setOpen] = usePersisted<boolean>('browser.strip', false)
   const [pane, setPane] = usePersisted<Pane>('browser.stripPane', 'console')
   const [all, setAll] = useState(false)
   const { console: logs, network, vitals } = useEntries(tab.guestId)

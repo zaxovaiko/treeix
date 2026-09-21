@@ -8,6 +8,7 @@ import { getDesign, pageOf, setDesign, useDesign, useSlot } from './pages'
 import { importLabel } from './SettingsPage'
 import { browserSettings } from './settings'
 import { Strip } from './Strip'
+import { type Suggestion, SuggestionRow, Suggestions, sectionLabel, useRunning, useSuggestions } from './Suggestions'
 import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 import type { ImportInfo } from '../shared/types'
@@ -41,10 +42,26 @@ export function runBrowserAction(action: BrowserAction): void {
   else if (action === 'devtools') toggleDevtools()
 }
 
+const EMPTY_PAGE_ROWS = 6
+
+function EmptyPageSection({ title, items }: { title: string; items: Suggestion[] }): React.JSX.Element | null {
+  if (!items.length) return null
+  return (
+    <div>
+      <div className={sectionLabel}>{title}</div>
+      {items.slice(0, EMPTY_PAGE_ROWS).map((item) => (
+        <SuggestionRow key={item.url} item={item} active={false} onOpen={navigate} />
+      ))}
+    </div>
+  )
+}
+
 /** A blank tab: what the browser is for and how to start */
 function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  const running = useRunning()
+  const { saved } = browserSettings.use()
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-4 overflow-y-auto px-6 text-center">
       <div className="flex h-16 w-22 flex-col rounded-xl text-muted-foreground ring-[1.5px] ring-foreground/15">
         <div className="flex gap-1 px-2 pt-2">
           <span className="size-1.5 rounded-full bg-foreground/25" />
@@ -59,6 +76,12 @@ function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
         <div className="text-sm font-medium text-foreground">Open a page</div>
         <div className="mt-1 max-w-64 text-xs text-muted-foreground">A dev server, a pull request preview or any site. Links you ⌘-click in a terminal open here too.</div>
       </div>
+      {(running.length > 0 || saved.length > 0) && (
+        <div className="w-full max-w-80 text-left">
+          <EmptyPageSection title="Running now" items={running} />
+          <EmptyPageSection title="Saved" items={saved.map(({ name, url }) => ({ url, label: name, detail: url.replace(/^https?:\/\//, '') }))} />
+        </div>
+      )}
       <button onClick={onOpen} className="flex h-7 items-center gap-2 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
         Type an address
         <kbd className="rounded bg-muted px-1 font-sans text-[10.5px]">⌘L</kbd>
@@ -113,6 +136,16 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const [draft, setDraft] = useState<string | null>(null)
   const [devtools, setDevtools] = usePersisted<'docked' | 'window'>('browser.devtools', 'docked')
   const [dockOpen, setDockOpen] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [highlighted, setHighlighted] = useState(-1)
+  const sections = useSuggestions(draft ?? '')
+  const rows = sections.flatMap((section) => section.items)
+  const running = useRunning()
+  const openAddress = (text: string): void => {
+    navigate(text)
+    setDraft(null)
+    input.current?.blur()
+  }
   useEffect(() => {
     if (!getBrowser().tabs.length) updateBrowser((state) => openTab(state, 'about:blank'))
   }, [])
@@ -143,7 +176,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
             className={`group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs ${candidate.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'}`}
           >
             {candidate.favicon ? <img src={candidate.favicon} alt="" className="size-3.5" /> : <Icon name="globe" className="size-3.5" />}
-            <span className="min-w-0 flex-1 truncate">{candidate.title || candidate.url.replace(/^https?:\/\//, '') || 'New tab'}</span>
+            <span className="min-w-0 flex-1 truncate">{candidate.url === 'about:blank' ? 'New tab' : candidate.title || candidate.url.replace(/^https?:\/\//, '')}</span>
             <button
               aria-label="Close tab"
               onMouseDown={(event) => event.stopPropagation()}
@@ -168,28 +201,52 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         <button aria-label="Reload" title="Reload (⌘R)" className={toolButton} onClick={() => runBrowserAction('reload')}>
           <Icon name={tab?.loading ? 'loader' : 'refresh'} className={`size-3.5 ${tab?.loading ? 'animate-spin' : ''}`} />
         </button>
-        <input
-          ref={input}
-          value={address}
-          placeholder="Search or type an address"
-          spellCheck={false}
-          onChange={(event) => setDraft(event.target.value)}
-          onFocus={(event) => event.target.select()}
-          onBlur={() => setDraft(null)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              navigate(address)
+        <div className="relative min-w-0 flex-1">
+          <input
+            ref={input}
+            value={address}
+            placeholder="Search or type an address"
+            spellCheck={false}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              setHighlighted(-1)
+            }}
+            onFocus={(event) => {
+              event.target.select()
+              setSuggesting(true)
+              setHighlighted(-1)
+            }}
+            onBlur={() => {
               setDraft(null)
-              event.currentTarget.blur()
-            }
-            if (event.key === 'Escape') {
-              setDraft(null)
-              event.currentTarget.blur()
-            }
-          }}
-          className="h-6 min-w-0 flex-1 rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
-        />
+              setSuggesting(false)
+            }}
+            onKeyDown={(event) => {
+              if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && rows.length) {
+                event.preventDefault()
+                setHighlighted((index) => (event.key === 'ArrowDown' ? Math.min(rows.length - 1, index + 1) : Math.max(-1, index - 1)))
+              }
+              if (event.key === 'Enter') openAddress(rows[highlighted]?.url ?? address)
+              if (event.key === 'Escape') {
+                setDraft(null)
+                event.currentTarget.blur()
+              }
+            }}
+            className="h-6 w-full rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
+          />
+          {suggesting && rows.length > 0 && <Suggestions sections={sections} highlighted={highlighted} onOpen={openAddress} onHighlight={setHighlighted} />}
+        </div>
         {place === 'tab' && <ProfileBadge />}
+        {running.length > 0 && (
+          <button
+            aria-label="Servers started by your sessions"
+            title="Servers started by your sessions"
+            onClick={() => input.current?.focus()}
+            className="flex h-6 shrink-0 items-center gap-1.5 rounded px-1.5 text-[11px] text-muted-foreground tabular-nums hover:bg-accent hover:text-foreground"
+          >
+            <span className="size-1.5 rounded-full bg-emerald-400" />
+            {running.length}
+          </button>
+        )}
         <button
           aria-label="Design mode"
           title="Design mode: click an element to comment on it (⌘⇧C)"
