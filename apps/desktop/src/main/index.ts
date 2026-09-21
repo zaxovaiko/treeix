@@ -13,6 +13,7 @@ import { hover, navigate, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { checkTools } from './tools'
 import { setupUpdates } from './updates'
+import { hardenWebview } from './webviewPolicy'
 
 app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_VERSION__, version: '', copyright: 'Apache 2.0' })
 
@@ -36,10 +37,12 @@ function createWindow(): void {
     visualEffectState: 'active',
     // macOS otherwise spends the first click on an inactive window just focusing it, so the palette button needed two
     acceptFirstMouse: true,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false, webviewTag: true }
   })
   window.on('ready-to-show', () => window.show())
   enableTextMenu(window.webContents)
+  // The built-in browser's pages: our isolation and preload whatever the renderer asked for
+  window.webContents.on('will-attach-webview', (_, prefs) => hardenWebview(prefs, join(__dirname, '../preload/browserInject.js')))
   buildMenu(window, [])
   // ⌘W closes the focused terminal pane when there is one; the page decides and closes the window otherwise
   window.webContents.on('before-input-event', (event, input) => {

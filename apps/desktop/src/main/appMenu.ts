@@ -1,4 +1,4 @@
-import { type BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
+import { type BrowserWindow, Menu, type MenuItemConstructorOptions, type WebContents, webContents } from 'electron'
 import { MENU_SECTIONS } from '../shared/menu'
 import { toggleHotkeyWindow } from './hotkeyWindow'
 
@@ -6,6 +6,12 @@ import { toggleHotkeyWindow } from './hotkeyWindow'
 export type MenuAction = { id: string; label: string; section: string; accelerator?: string }
 
 const isMac = process.platform === 'darwin'
+
+/** A page of the built-in browser holding keyboard focus, which ⌘R and ⌥⌘I should act on instead of the app */
+const focusedPage = (): WebContents | undefined => {
+  const focused = webContents.getFocusedWebContents()
+  return focused?.getType() === 'webview' ? focused : undefined
+}
 
 /**
  * The menu bar, built from the actions the renderer says it can run. Electron's stock roles stay for the
@@ -46,9 +52,9 @@ export function buildMenu(window: BrowserWindow, actions: MenuAction[]): void {
     { role: 'zoomIn' },
     { role: 'zoomOut' },
     { type: 'separator' },
-    { role: 'reload' },
-    { role: 'forceReload' },
-    { role: 'toggleDevTools' }
+    { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => (focusedPage() ?? window.webContents).reload() },
+    { label: 'Force Reload', accelerator: 'Shift+CmdOrCtrl+R', click: () => (focusedPage() ?? window.webContents).reloadIgnoringCache() },
+    { label: 'Toggle Developer Tools', accelerator: 'Alt+CmdOrCtrl+I', click: () => (focusedPage() ?? window.webContents).toggleDevTools() },
   ]
   // The panels menu is the app's own View, so the stock view commands join it rather than starting a second one
   const withExtras = fromActions.map((menu) => (menu.label === 'View' ? { ...menu, submenu: [...(menu.submenu as MenuItemConstructorOptions[]), ...viewExtras] } : menu))

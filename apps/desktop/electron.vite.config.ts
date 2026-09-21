@@ -21,7 +21,19 @@ const define = { __APP_VERSION__: JSON.stringify(version) }
 
 export default defineConfig({
   main: { define, resolve: { alias } },
-  preload: { define, resolve: { alias } },
+  preload: {
+    define,
+    resolve: { alias },
+    // The browser's pages get their own sandboxed preload, which the webview policy points at
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          browserInject: resolve(root, 'packages/plugins/browser/inject/preload.ts')
+        }
+      }
+    }
+  },
   // The diff highlighter worker lazy-loads grammars, which needs code-splitting ES workers
   renderer: {
     define,

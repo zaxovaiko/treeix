@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-browser",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "browser",
+    "name": "Browser",
+    "description": "Chromium browser tab and panel with DevTools, element comments, console and network capture, and cookie import.",
+    "enabledByDefault": true
+  }
+}
