@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import type { WebviewTag } from 'electron'
 import { createBridge } from '@treeix/sdk'
 import { clearVitals, dropEntries } from './entries'
+import { recordTitle, recordVisit } from './recent'
 import { type BrowserTab, patchTab, updateBrowser, useBrowser } from './tabs'
 import type { ElementSelection } from '../shared/types'
 import { pickWinner } from './slot-winner'
@@ -110,6 +111,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
         'did-navigate',
         (event) => {
           patch({ url: String(event.url), ...history() })
+          recordVisit(String(event.url))
           try {
             clearVitals(view.getWebContentsId())
           } catch {
@@ -118,7 +120,13 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
         }
       ],
       ['did-navigate-in-page', (event) => event.isMainFrame !== false && patch({ url: String(event.url), ...history() })],
-      ['page-title-updated', (event) => patch({ title: String(event.title) })],
+      [
+        'page-title-updated',
+        (event) => {
+          patch({ title: String(event.title) })
+          recordTitle(view.getURL(), String(event.title))
+        }
+      ],
       ['page-favicon-updated', (event) => patch({ favicon: Array.isArray(event.favicons) ? String(event.favicons[0] ?? '') || null : null })],
       ['render-process-gone', () => patch({ crashed: true, loading: false })],
       ['ipc-message', (event) => messageListeners.forEach((listener) => listener(tab.id, String(event.channel), Array.isArray(event.args) ? event.args : []))],
