@@ -110,6 +110,8 @@ export interface Services {
   sessions: SessionsService
   /** Provided by the pull requests plugin */
   pullRequests: PullRequestsService
+  /** The built-in browser: `handles` says whether a link should open there, per the user's setting */
+  browser: { open: (url: string) => void; handles: (url: string) => boolean }
 }
 
 export type PullRequestsService = {
