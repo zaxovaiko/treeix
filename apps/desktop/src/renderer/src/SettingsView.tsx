@@ -810,11 +810,8 @@ const CHAT_INSTALL_HINTS: Record<string, string> = {
   gemini: 'npm i -g @google/gemini-cli'
 }
 
-/** npx resolves the adapter package itself, so the tool to look for on PATH is npx, not the package name */
-const chatCommandTool = (command: string): string => {
-  const first = command.trim().split(/\s+/)[0] ?? command
-  return first === 'npx' ? 'npx' : first
-}
+/** The binary a chat command needs on PATH: its first word, e.g. `npx` for an npx-run adapter */
+const chatCommandTool = (command: string): string => command.trim().split(/\s+/)[0] ?? command
 
 function ChatAvailability({ agentId, command }: { agentId: string; command: string }): React.JSX.Element | null {
   const [available, setAvailable] = useState<boolean | null>(null)

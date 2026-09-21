@@ -84,7 +84,7 @@ app.whenReady().then(() => {
   ipcMain.handle('searchText', (_, worktreePaths: string[], query: string, options: SearchOptions) => searchText(worktreePaths, query, options))
   ipcMain.handle('hover', (_, worktreePath: string, target: SymbolTarget) => hover(worktreePath, target))
   ipcMain.handle('checkTools', () => checkTools(enabledTools()))
-  ipcMain.handle('commandExists', (_, name: string) => commandExists(name))
+  ipcMain.handle('commandExists', (_, name: unknown) => (typeof name === 'string' ? commandExists(name) : false))
   ipcMain.handle('plugins:setEnabled', (_, ids: string[]) => setEnabledPlugins(ids, app.getPath('userData')))
   ipcMain.handle('configureHotkey', (event, options: HotkeyOptions) => {
     const window = BrowserWindow.fromWebContents(event.sender)
