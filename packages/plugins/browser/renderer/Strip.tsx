@@ -55,7 +55,7 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
   const paneButton = (id: Pane, label: string, badge?: number): React.JSX.Element => (
     <button
       onClick={() => (setPane(id), setOpen(true))}
-      className={`flex h-9 items-center gap-1.5 border-b-2 px-3 text-xs ${pane === id && open ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+      className={`flex h-8 items-center gap-1.5 border-b-2 px-2 text-xs ${pane === id && open ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
     >
       {label}
       {!!badge && <span className="rounded bg-red-400/15 px-1 text-[10.5px] text-red-400 tabular-nums">{badge}</span>}

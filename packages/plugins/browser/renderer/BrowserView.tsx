@@ -45,8 +45,15 @@ export function runBrowserAction(action: BrowserAction): void {
 function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="flex size-20 items-center justify-center rounded-3xl bg-gradient-to-b from-primary/20 to-primary/5 text-primary ring-1 ring-primary/20">
-        <Icon name="globe" className="size-10" />
+      <div className="flex h-16 w-22 flex-col rounded-xl text-muted-foreground ring-[1.5px] ring-foreground/15">
+        <div className="flex gap-1 px-2 pt-2">
+          <span className="size-1.5 rounded-full bg-foreground/25" />
+          <span className="size-1.5 rounded-full bg-foreground/25" />
+          <span className="size-1.5 rounded-full bg-foreground/25" />
+        </div>
+        <div className="flex flex-1 items-center justify-center pb-1">
+          <Icon name="globe" className="size-6" />
+        </div>
       </div>
       <div>
         <div className="text-sm font-medium text-foreground">Open a page</div>
