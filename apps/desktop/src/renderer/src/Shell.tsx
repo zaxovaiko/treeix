@@ -7,7 +7,7 @@ import { usePlugins } from './plugins'
 import { DIGIT_MODIFIERS, useSettings } from './settings'
 
 /** G then a letter goes to a page, by tab id; pages of plugins that are off are skipped */
-export const LEADER_PAGES: Record<string, string> = { t: 'terminal', p: 'prs', w: 'worktrees', j: 'tasks', c: 'confluence', s: 'settings' }
+export const LEADER_PAGES: Record<string, string> = { t: 'terminal', p: 'prs', w: 'worktrees', j: 'tasks', c: 'confluence', e: 'env', s: 'settings' }
 export const leaderOf = (page: string): string | undefined => Object.keys(LEADER_PAGES).find((letter) => LEADER_PAGES[letter] === page)
 
 /** Keys that aren't single actions: digit rows, the leader's letters, the focus model and what plugins list */
@@ -19,7 +19,7 @@ export function useKeyExtras(): ShortcutInfo[] {
   return [
     ...digits('tabs', 'Title bar page by position, 9 is the last'),
     ...digits('workspaces', 'Workspace by rail order'),
-    { keys: 'G then a letter', label: 'Pages: T terminal, P pull requests, W worktrees, J tasks, C Confluence, S settings, H closed sessions, A agent comments', section: 'Go to' },
+    { keys: 'G then a letter', label: 'Pages: T terminal, P pull requests, W worktrees, J tasks, C Confluence, E env, S settings, H closed sessions, A agent comments', section: 'Go to' },
     { keys: 'j k ⏎ esc', label: 'Move in a list, open, step back: the focus model, fixed', section: 'Focus' },
     ...loaded.flatMap(({ plugin }) => plugin.shortcuts ?? [])
   ]

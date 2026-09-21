@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-env",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "env",
+    "name": "Env",
+    "description": "An Env tab with every .env file across the workspace's repositories and worktrees: which variables are secret, public or exposed to the browser, what is missing or differs from main, and inline editing.",
+    "enabledByDefault": true
+  }
+}

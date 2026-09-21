@@ -185,7 +185,8 @@ export function CommentDraft({
   onSave,
   onCancel,
   alternative,
-  persistent = false
+  persistent = false,
+  initialText = ''
 }: {
   label: string
   placeholder?: string
@@ -197,8 +198,10 @@ export function CommentDraft({
   alternative?: { label: string; onSave: (text: string) => void }
   /** Always on screen: no autofocus, Esc and Cancel only clear it while it has focus, and it empties after saving */
   persistent?: boolean
+  /** A suggested note to edit, e.g. what to ask an agent to fix */
+  initialText?: string
 }): React.JSX.Element {
-  const [text, setText] = useState('')
+  const [text, setText] = useState(initialText)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
