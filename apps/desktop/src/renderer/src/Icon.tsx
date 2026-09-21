@@ -63,6 +63,12 @@ const paths = {
       <path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12" />
     </>
   ),
+  coffee: (
+    <>
+      <path d="M10 2v2M14 2v2M6 2v2" />
+      <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
+    </>
+  ),
   power: (
     <>
       <path d="M12 2v10" />

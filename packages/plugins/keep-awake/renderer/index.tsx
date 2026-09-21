@@ -62,7 +62,7 @@ function Indicator(): React.JSX.Element {
       : 'Keep awake is on: the Mac stays awake while an agent works'
   return (
     <span title={title} className={`flex items-center gap-1 px-1.5 text-[11px] ${lidClosed ? 'text-amber-400' : awake ? 'text-foreground' : 'text-muted-foreground/60'}`}>
-      <Icon name="power" className="size-3.5" />
+      <Icon name="coffee" className="size-3.5" />
     </span>
   )
 }
