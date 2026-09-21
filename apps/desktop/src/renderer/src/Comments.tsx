@@ -162,7 +162,7 @@ export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onD
     >
       <Icon name="comment" className="mt-0.5 size-3.5 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] text-muted-foreground">{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : 'General'}</div>
+        <div className="text-[11px] text-muted-foreground">{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}</div>
         <Markdown>{comment.text}</Markdown>
         <Attachments attachments={comment.attachments ?? []} />
       </div>
@@ -404,9 +404,9 @@ export function CommentsPanel({
                   className="group/item mb-1 cursor-pointer rounded-md border border-transparent px-2 py-1.5 hover:border-border hover:bg-accent"
                 >
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : 'General'}</span>
+                    <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}</span>
                     <span className="flex-1" />
-                    {comment.body && <InlineToggle comment={comment} onChange={onUpdate} />}
+                    {comment.body && comment.kind !== 'browser' && <InlineToggle comment={comment} onChange={onUpdate} />}
                     <button
                       title="Delete comment"
                       onClick={(event) => {

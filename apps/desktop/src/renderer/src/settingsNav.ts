@@ -17,6 +17,7 @@ export const SECTIONS: [SectionId, IconName][] = [
 
 const PLUGIN_PREFIX = 'plugin:'
 export const pluginPage = (id: string): PageId => `${PLUGIN_PREFIX}${id}`
+export const isPageId = (value: string): value is PageId => value.startsWith(PLUGIN_PREFIX) || SECTIONS.some(([id]) => id === value)
 export const pluginOf = (page: PageId): string | null => (page.startsWith(PLUGIN_PREFIX) ? page.slice(PLUGIN_PREFIX.length) : null)
 
 export type NavRow = { page: PageId; label: string; icon: IconName; child: boolean }
@@ -35,3 +36,23 @@ export function navRows(plugins: PluginEntry[], loaded: LoadedPlugin[]): NavRow[
 
 /** A plugin page is the only page that can go missing, when its plugin is switched off while Settings remembers it */
 export const openablePage = (page: PageId, rows: NavRow[]): PageId => (rows.some((row) => row.page === page) ? page : 'Plugins')
+
+let requestedPage: PageId | null = null
+const pageListeners = new Set<(page: PageId) => void>()
+
+/** Asks Settings for a page: the open view switches to it, a closed one opens on it */
+export function showSettingsPage(page: PageId): void {
+  requestedPage = pageListeners.size ? null : page
+  pageListeners.forEach((listener) => listener(page))
+}
+
+export function takeRequestedPage(): PageId | null {
+  const page = requestedPage
+  requestedPage = null
+  return page
+}
+
+export function onSettingsPage(listener: (page: PageId) => void): () => void {
+  pageListeners.add(listener)
+  return () => pageListeners.delete(listener)
+}

@@ -11,7 +11,7 @@ import { type Theme, THEMES, type ThemeId } from './themes'
 import { EmptyState, Popup } from './ui'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
-import { navRows, openablePage, type PageId, pluginOf, type SectionId } from './settingsNav'
+import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
 import { copyText } from './contextMenu'
 import { useKeyExtras, useShortcuts } from './Shell'
 import { checkForUpdates, updateSummary, useUpdates } from './updates'
@@ -906,7 +906,7 @@ export function revealSetting(entry: SettingEntry): void {
 let lastSection: PageId = 'General'
 
 export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const [section, setSectionState] = useState<PageId>(lastSection)
+  const [section, setSectionState] = useState<PageId>(() => takeRequestedPage() ?? lastSection)
   const [query, setQuery] = useState('')
   const [reveal, setReveal] = useState<SettingEntry | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -921,6 +921,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
     setSectionState(next)
     setQuery('')
   }
+  useEffect(() => onSettingsPage(setSection), [])
   const sectionIndex = nav.findIndex((row) => row.page === page)
   const rows = (): HTMLElement[] => [...(mainRef.current?.querySelectorAll<HTMLElement>('[data-setting]') ?? [])]
   const focusRow = (row: HTMLElement | undefined): void => {

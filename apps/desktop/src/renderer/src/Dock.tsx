@@ -51,7 +51,10 @@ function loadLayout(): Layout {
   }
 }
 
-/** Panels that appeared since the layout was saved go to their default side; ones from disabled plugins keep their place for later */
+/**
+ * Panels that appeared since the layout was saved go to their default side, closed until asked for, so a newly
+ * enabled plugin doesn't open itself on every page; ones from disabled plugins keep their place for later
+ */
 function withPanels(layout: Layout, panelIds: PanelId[]): Layout {
   const missing = panelIds.filter((id) => !SIDES.some((side) => layout.docks[side].includes(id)))
   if (missing.length === 0) return layout
@@ -60,7 +63,7 @@ function withPanels(layout: Layout, panelIds: PanelId[]): Layout {
     const side = DEFAULT_SIDE[id] ?? 'right'
     docks[side] = [...docks[side], id]
   }
-  return { ...layout, docks }
+  return { ...layout, docks, hidden: [...layout.hidden, ...missing.filter((id) => !layout.hidden.includes(id))] }
 }
 
 export function useLayout(panelIds: PanelId[]): {

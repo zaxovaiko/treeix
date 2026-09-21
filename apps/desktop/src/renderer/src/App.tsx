@@ -33,6 +33,7 @@ import { FileIcon, Icon } from './Icon'
 import { findService, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKey } from './Shell'
+import { isPageId, showSettingsPage } from './settingsNav'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
@@ -51,6 +52,13 @@ const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.inc
 const DEFAULT_TAB = 'terminal'
 /** Where Worktrees sits among the plugin tabs */
 const WORKTREES_ORDER = 30
+
+/** A browser comment's page, in the built-in browser when it's enabled */
+function openPage(url: string): void {
+  const browser = findService('browser')
+  if (browser) browser.open(url)
+  else window.open(url)
+}
 
 const isTerminalFocused = (): boolean => document.activeElement?.closest('[data-session-id]') != null
 type SavedPlace = { appTab: string; selected: string | null; viewer: { path: string; line: number | null } | null }
@@ -215,7 +223,9 @@ function App(): React.JSX.Element {
     localStorage.setItem(workspaceKey('app.place'), JSON.stringify(place))
   }, [appTab, selected, viewer])
   const tabBeforeSettings = useRef('worktrees')
-  const openSettings = (): void => {
+  const openSettings = (page?: unknown): void => {
+    // Menu and button handlers may pass their event, so only a page id counts
+    if (typeof page === 'string' && isPageId(page)) showSettingsPage(page)
     if (appTab !== 'settings') tabBeforeSettings.current = appTab
     setAppTab('settings')
   }
@@ -255,8 +265,9 @@ function App(): React.JSX.Element {
     setFolder: setScopeFolder,
     setFocus: setScopeFocus
   }
-  // New sessions start in the selected worktree, else the focused project, folder filter or the folder holding the workspace projects
-  const defaultCwd = selected ?? (scope.focus || scope.folder || commonFolder(workspace?.repoPaths ?? []) || window.api.home)
+  // New sessions start in the selected worktree, else the focused project, folder filter, the workspace's chosen project or the folder holding its projects
+  const terminalPath = workspace?.terminalPath && workspace.repoPaths.includes(workspace.terminalPath) ? workspace.terminalPath : ''
+  const defaultCwd = selected ?? (scope.focus || scope.folder || terminalPath || commonFolder(workspace?.repoPaths ?? []) || window.api.home)
 
   const inCurrentWorkspace = (session: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(session, workspace, repos, workspaces)
   const sessions = allSessions.filter(inCurrentWorkspace)
@@ -1073,7 +1084,7 @@ function App(): React.JSX.Element {
             setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
           }
         }}
-        onOpen={(comment) => open(comment.filePath)}
+        onOpen={(comment) => (comment.kind === 'browser' ? openPage(comment.filePath) : open(comment.filePath))}
         onDelete={deleteComment}
         onUpdate={(next) => setComments(comments.map((comment) => (comment.id === next.id ? next : comment)))}
       />
@@ -1186,7 +1197,8 @@ function App(): React.JSX.Element {
 
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
-  const showRail = shell.rail && !shell.zen
+  // One workspace needs no switcher; New workspace stays in the palette and the Go menu
+  const showRail = shell.rail && !shell.zen && workspaces.length >= 2
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1225,7 +1237,7 @@ function App(): React.JSX.Element {
       closeTab: (key) => latest.current.closeTab(key),
       openWorktree: (path) => latest.current.openWorktree(path),
       createWorktree: (repoPath, branch, base, session) => latest.current.createWorktree(repoPath, branch, base, session),
-      openSettings: () => latest.current.openSettings(),
+      openSettings: (page) => latest.current.openSettings(page),
       flash: (message) => latest.current.flash(message),
       comments,
       addComment: (comment) => latest.current.setComments((current) => [...current, comment]),
@@ -1720,7 +1732,7 @@ function App(): React.JSX.Element {
           className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
         >
           <Icon name="comment" />
-          <span className="tabular-nums">{comments.length}</span>
+          {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
           <Kbd hint>{actionKeys('app.comments')}</Kbd>
         </button>
         <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
@@ -1777,6 +1789,7 @@ function App(): React.JSX.Element {
           renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
           onOpen={(comment) => {
             if (comment.kind === 'reference') return
+            if (comment.kind === 'browser') return openPage(comment.filePath)
             const line = comment.range.start > 0 ? comment.range.start : null
             if (comment.kind === 'file') return openLocation(comment.worktreePath, comment.filePath, line)
             setAppTab('worktrees')

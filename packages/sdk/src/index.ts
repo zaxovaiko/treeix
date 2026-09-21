@@ -85,11 +85,16 @@ export type SessionSummary = {
   startedAt: number
 }
 
+/** A TCP port a session's process listens on, e.g. a dev server */
+export type SessionPort = { sessionId: string; port: number; url: string }
+
 /** Agent and terminal sessions, provided by the terminal plugin */
 export type SessionsService = {
   subscribe: (listener: () => void) => () => void
   /** Same array until something changes, as React's useSyncExternalStore needs */
   getSessions: () => SessionSummary[]
+  /** Ports live sessions listen on, sorted by port; same array until they change */
+  getPorts: () => SessionPort[]
   /** Resolves with the session id once its process started */
   start: (cwd: string, kind: SessionKind, promptArgument?: string) => Promise<string>
   /** Resolves once the agent is ready for input */
@@ -110,6 +115,8 @@ export interface Services {
   sessions: SessionsService
   /** Provided by the pull requests plugin */
   pullRequests: PullRequestsService
+  /** The built-in browser: `handles` says whether a link should open there, per the user's setting */
+  browser: { open: (url: string) => void; handles: (url: string) => boolean }
 }
 
 export type PullRequestsService = {
@@ -169,7 +176,8 @@ export type HostApi = {
   closeTab: (key: string) => void
   openWorktree: (path: string) => void
   createWorktree: (repoPath: string, branch: string, base?: string, session?: SessionKind | null) => Promise<void>
-  openSettings: () => void
+  /** Opens Settings, on `page` when given: `plugin:<id>` for a plugin's own page, else the page left open last */
+  openSettings: (page?: string) => void
   flash: (message: string) => void
   comments: ReviewComment[]
   addComment: (comment: ReviewComment) => void

@@ -27,6 +27,8 @@ A plugin is a folder in `packages/plugins/<id>` with a `package.json` holding a 
 
 Shared code that several plugins need is a library package instead of a plugin: `packages/atlassian` holds the `acli` runner, the Atlassian Document Format converter, the encrypted API token and attachment downloads for both `jira` and `confluence`.
 
+The `browser` plugin is the one plugin with a page-side part. Its pages run in `<webview>` elements, which the host hardens in `will-attach-webview` (`src/main/webviewPolicy.ts`): a separate `persist:browser` session, a sandbox, and `packages/plugins/browser/inject/preload.ts` as the only preload, built by electron-vite as `out/preload/browserInject.js`. The pages live in one fixed layer drawn over the Browser tab or panel, so moving between them doesn't reload anything. Main attaches the Chrome DevTools Protocol to each page for the console and network strip, and the inject script reports web vitals and design mode selections back with `sendToHost`.
+
 ## Imports
 
 | Alias | Points at |
