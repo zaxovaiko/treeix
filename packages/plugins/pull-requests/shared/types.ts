@@ -33,7 +33,12 @@ export type PullRequest = {
  * `requested`: your review is (re-)requested. `approved`/`changes`/`commented`: your latest review.
  * `newCommits` counts commits pushed after that review, which bring the PR back to your attention.
  */
-export type ReviewStatus = { state: 'yours' | 'requested' | 'approved' | 'changes' | 'commented' | 'unreviewed'; newCommits: number }
+export type ReviewStatus = {
+  state: 'yours' | 'requested' | 'approved' | 'changes' | 'commented' | 'unreviewed'
+  newCommits: number
+  /** Someone other than you has changes requested in their latest review */
+  changesRequested?: boolean
+}
 
 export const REACTIONS = ['+1', '-1', 'laugh', 'hooray', 'confused', 'heart', 'rocket', 'eyes'] as const
 export type Reaction = (typeof REACTIONS)[number]

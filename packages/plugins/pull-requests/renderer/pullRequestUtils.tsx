@@ -94,9 +94,21 @@ const REVIEW_MARKS: Record<Exclude<ReviewStatus['state'], 'unreviewed'>, { label
   yours: { label: 'Yours', className: 'bg-foreground/5 text-muted-foreground' }
 }
 
-/** Your review state, or a new-commits pill when the author pushed after your review */
+/** Your review state, or a new-commits pill when the author pushed after your review, plus another reviewer's request for changes */
 export function ReviewMark({ review }: { review?: ReviewStatus | null }): React.JSX.Element | null {
   if (!review) return null
+  // On your own PR the request replaces "Yours"; on a PR you asked changes of, yours already says it
+  const othersAskChanges = !!review.changesRequested && review.state !== 'changes'
+  const own = review.state === 'yours' && othersAskChanges ? null : <OwnReviewMark review={review} />
+  return (
+    <>
+      {own}
+      {othersAskChanges && <Mark state="changes" title="A reviewer asked for changes" />}
+    </>
+  )
+}
+
+function OwnReviewMark({ review }: { review: ReviewStatus }): React.JSX.Element | null {
   if (review.newCommits > 0) {
     return (
       <span
@@ -108,10 +120,13 @@ export function ReviewMark({ review }: { review?: ReviewStatus | null }): React.
       </span>
     )
   }
-  if (review.state === 'unreviewed') return null
-  const mark = REVIEW_MARKS[review.state]
+  return review.state === 'unreviewed' ? null : <Mark state={review.state} />
+}
+
+function Mark({ state, title }: { state: keyof typeof REVIEW_MARKS; title?: string }): React.JSX.Element {
+  const mark = REVIEW_MARKS[state]
   return (
-    <span className={`flex shrink-0 items-center gap-1 rounded px-1.5 text-[10.5px] font-medium whitespace-nowrap ${mark.className}`}>
+    <span title={title} className={`flex shrink-0 items-center gap-1 rounded px-1.5 text-[10.5px] font-medium whitespace-nowrap ${mark.className}`}>
       {mark.icon && <Icon name={mark.icon} className="size-2.5" />}
       {mark.label}
     </span>

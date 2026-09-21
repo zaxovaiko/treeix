@@ -106,6 +106,7 @@ test('githubReviewStatuses tells reviewed, requested and own PRs apart', () => {
           pr(3, 'ann', [], [['me', 'APPROVED', 'b'], ['bob', 'CHANGES_REQUESTED', 'b']], ['a', 'b']),
           pr(4, 'ann', [], [['me', 'CHANGES_REQUESTED', 'a']], ['a', 'b', 'c']),
           pr(5, 'ann', [], [], ['a']),
+          pr(6, 'me', [], [['ann', 'APPROVED', 'a'], ['bob', 'CHANGES_REQUESTED', 'a']], ['a', 'b']),
           {}
         ]
       }
@@ -114,9 +115,10 @@ test('githubReviewStatuses tells reviewed, requested and own PRs apart', () => {
   expect(Object.fromEntries(statuses)).toEqual({
     1: { state: 'yours', newCommits: 0 },
     2: { state: 'requested', newCommits: 0 },
-    3: { state: 'approved', newCommits: 0 },
+    3: { state: 'approved', newCommits: 0, changesRequested: true },
     4: { state: 'changes', newCommits: 2 },
-    5: { state: 'unreviewed', newCommits: 0 }
+    5: { state: 'unreviewed', newCommits: 0 },
+    6: { state: 'yours', newCommits: 0, changesRequested: true }
   })
 })
 

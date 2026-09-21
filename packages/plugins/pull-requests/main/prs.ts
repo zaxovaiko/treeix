@@ -154,7 +154,10 @@ export function githubReviewStatuses(raw: unknown): Map<number, ReviewStatus> {
     const requested = list(object(pr.reviewRequests).nodes).some((node) => text(object(node.requestedReviewer).login) === viewer)
     const state: ReviewStatus['state'] =
       text(object(pr.author).login) === viewer ? 'yours' : requested ? 'requested' : mine ? (REVIEW_STATES[text(mine.state)] ?? 'commented') : 'unreviewed'
-    statuses.set(number, { state, newCommits: state === 'yours' ? 0 : newCommits })
+    const changesRequested = list(object(pr.latestReviews).nodes).some(
+      (review) => text(review.state) === 'CHANGES_REQUESTED' && text(object(review.author).login) !== viewer
+    )
+    statuses.set(number, { state, newCommits: state === 'yours' ? 0 : newCommits, ...(changesRequested && { changesRequested }) })
   }
   return statuses
 }
