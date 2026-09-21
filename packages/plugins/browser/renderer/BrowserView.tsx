@@ -61,7 +61,7 @@ function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   const running = useRunning()
   const { saved } = browserSettings.use()
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 overflow-y-auto px-6 text-center">
+    <div className="flex h-full flex-col items-center justify-center-safe gap-4 overflow-y-auto px-6 text-center">
       <div className="flex h-16 w-22 flex-col rounded-xl text-muted-foreground ring-[1.5px] ring-foreground/15">
         <div className="flex gap-1 px-2 pt-2">
           <span className="size-1.5 rounded-full bg-foreground/25" />
@@ -140,6 +140,9 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const [highlighted, setHighlighted] = useState(-1)
   const sections = useSuggestions(draft ?? '')
   const rows = sections.flatMap((section) => section.items)
+  const rowUrls = rows.map((row) => row.url).join('\n')
+  // A poll can reorder rows; Enter must not open a row other than the one highlighted
+  useEffect(() => setHighlighted(-1), [rowUrls])
   const running = useRunning()
   const openAddress = (text: string): void => {
     navigate(text)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createBridge, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { BrowserView, runBrowserAction } from './BrowserView'
@@ -47,7 +47,9 @@ const NOTICES_SHOWN = 3
 const SETTLE_MS = 5000
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0'])
 
-type Notice = { key: string; url: string; label: string; detail: string }
+type Notice = { id: number; key: string; url: string; label: string; detail: string }
+
+let nextNoticeId = 0
 
 const portKey = ({ sessionId, port }: SessionPort): string => `${sessionId}:${port}`
 
@@ -64,44 +66,47 @@ function showsPort(port: number): boolean {
 
 /** "localhost:5173 is up" cards for ports sessions start listening on */
 function ServerNotices(): React.JSX.Element | null {
-  const current = useHost()
+  const service = useHost().service('sessions')
   const [notices, setNotices] = useState<Notice[]>([])
-  const dismiss = (key: string): void => setNotices((list) => list.filter((notice) => notice.key !== key))
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
+  const dismiss = (id: number): void => setNotices((list) => list.filter((notice) => notice.id !== id))
+  // One timer per card on screen: cards closed, replaced or pushed out take theirs along
   useEffect(() => {
-    const service = current.service('sessions')
+    const shown = new Set(notices.map((notice) => notice.id))
+    for (const [id, timer] of timers.current) {
+      if (shown.has(id)) continue
+      clearTimeout(timer)
+      timers.current.delete(id)
+    }
+    for (const { id } of notices) if (!timers.current.has(id)) timers.current.set(id, setTimeout(() => dismiss(id), NOTICE_MS))
+  }, [notices])
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
+  // Again when the terminal plugin is turned on later; the host object itself changes on every render
+  useEffect(() => {
     if (!service) return
     const settleUntil = Date.now() + SETTLE_MS
     let known = new Set(service.getPorts().map(portKey))
-    const timers = new Set<ReturnType<typeof setTimeout>>()
-    const unsubscribe = service.subscribe(() => {
+    return service.subscribe(() => {
       const ports = service.getPorts()
       const fresh = ports.filter((port) => !known.has(portKey(port)))
-      known = new Set(ports.map(portKey))
-      if (Date.now() < settleUntil || !browserSettings.get().notifyPorts) return
-      const added = fresh
+      const live = new Set(ports.map(portKey))
+      known = live
+      const notify = Date.now() >= settleUntil && browserSettings.get().notifyPorts
+      const added = (notify ? fresh : [])
         .filter((port) => !showsPort(port.port))
-        .map((port) => ({ key: portKey(port), url: port.url, label: `localhost:${port.port}`, detail: sessionDetail(service.getSessions(), host?.repos ?? null, port.sessionId) }))
-      if (!added.length) return
-      setNotices((list) => [...list.filter((notice) => !added.some((item) => item.key === notice.key)), ...added].slice(-NOTICES_SHOWN))
-      for (const { key } of added) {
-        const timer = setTimeout(() => {
-          timers.delete(timer)
-          dismiss(key)
-        }, NOTICE_MS)
-        timers.add(timer)
-      }
+        .map((port) => ({ id: nextNoticeId++, key: portKey(port), url: port.url, label: `localhost:${port.port}`, detail: sessionDetail(service.getSessions(), host?.repos ?? null, port.sessionId) }))
+      setNotices((list) => {
+        // Stopped servers take their card with them
+        const kept = list.filter((notice) => live.has(notice.key) && !added.some((item) => item.key === notice.key))
+        return kept.length === list.length && !added.length ? list : [...kept, ...added].slice(-NOTICES_SHOWN)
+      })
     })
-    return () => {
-      unsubscribe()
-      timers.forEach(clearTimeout)
-    }
-    // Once: the host object changes on every render, and resubscribing would restart the settle window
-  }, [])
+  }, [service])
   if (!notices.length) return null
   return (
     <div className="fixed right-4 bottom-4 z-40 flex w-72 flex-col gap-2">
       {notices.map((notice) => (
-        <div key={notice.key} role="status" className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
+        <div key={notice.id} role="status" className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
           <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs text-foreground">
@@ -112,13 +117,13 @@ function ServerNotices(): React.JSX.Element | null {
           <button
             onClick={() => {
               openUrl(notice.url)
-              dismiss(notice.key)
+              dismiss(notice.id)
             }}
             className="h-6 shrink-0 rounded-md border border-border px-2 text-xs hover:bg-accent"
           >
             Open
           </button>
-          <button aria-label="Dismiss" onClick={() => dismiss(notice.key)} className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button aria-label="Dismiss" onClick={() => dismiss(notice.id)} className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
             <Icon name="close" className="size-3" />
           </button>
         </div>

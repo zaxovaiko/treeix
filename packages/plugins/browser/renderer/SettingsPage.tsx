@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { createBridge } from '@treeix/sdk'
 import { Card, Row, Segmented, Switch } from '@treeix/app/settingsUi'
 import type { BrowserProfile, ImportInfo, ImportResult } from '../shared/types'
-import { type SearchEngine, toUrl } from './address'
+import { type SearchEngine, searchUrl, toUrl } from './address'
+import { clearRecent } from './recent'
 import { browserSettings } from './settings'
 
 const bridge = createBridge('browser')
@@ -15,10 +16,12 @@ function SavedAddresses(): React.JSX.Element {
   const { saved, searchEngine } = browserSettings.use()
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const add = (): void => {
-    if (!url.trim()) return setError(true)
     const address = toUrl(url, searchEngine)
+    // Words become a search, which isn't an address
+    if (!url.trim() || !/^(https?:\/\/|about:)/i.test(address) || address.startsWith(searchUrl(searchEngine))) return setError('Enter an address')
+    if (saved.some((entry) => entry.url === address)) return setError('Already saved')
     browserSettings.update({ saved: [...saved, { name: name.trim() || address.replace(/^https?:\/\//, ''), url: address }] })
     setName('')
     setUrl('')
@@ -46,15 +49,15 @@ function SavedAddresses(): React.JSX.Element {
               value={url}
               placeholder="URL"
               aria-label="URL"
-              aria-invalid={error}
+              aria-invalid={error !== null}
               spellCheck={false}
               onChange={(event) => {
                 setUrl(event.target.value)
-                setError(false)
+                setError(null)
               }}
               className={`${field} w-56 font-mono ${error ? 'ring-red-400' : ''}`}
             />
-            {error && <span className="mt-1 text-[11px] text-red-400">Enter an address</span>}
+            {error && <span className="mt-1 text-[11px] text-red-400">{error}</span>}
           </div>
           <button type="submit" className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent">
             Add
@@ -130,6 +133,7 @@ export function BrowserSettings(): React.JSX.Element {
             className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent"
             onClick={() =>
               void bridge.invoke('clearData').then(() => {
+                clearRecent()
                 setInfo(null)
                 setResult('Browsing data cleared')
               })

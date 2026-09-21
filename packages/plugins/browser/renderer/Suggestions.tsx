@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { type SessionPort, type SessionSummary, useHost } from '@treeix/sdk'
 import type { Repo } from '@treeix/shared/types'
 import { worktreeLabel } from '@treeix/app/sessionUi'
@@ -55,8 +55,13 @@ export function useSuggestions(query: string): SuggestionSection[] {
 
 /** A row that opens its address on click; `onMouseDown` keeps the address bar's focus until then */
 export function SuggestionRow({ item, active, onOpen, onHover }: { item: Suggestion; active: boolean; onOpen: (url: string) => void; onHover?: () => void }): React.JSX.Element {
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [active])
   return (
     <button
+      ref={ref}
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => onOpen(item.url)}
       onMouseMove={onHover}
@@ -74,7 +79,8 @@ export const sectionLabel = 'px-2 pt-2 pb-1 text-[11px] font-semibold tracking-w
 export function Suggestions({ sections, highlighted, onOpen, onHighlight }: { sections: SuggestionSection[]; highlighted: number; onOpen: (url: string) => void; onHighlight: (index: number) => void }): React.JSX.Element {
   let index = 0
   return (
-    <div className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg">
+    // Clicks on labels and the scrollbar must not blur the address bar, which closes this
+    <div onMouseDown={(event) => event.preventDefault()} className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg">
       {sections.map((section) => (
         <div key={section.title}>
           <div className={sectionLabel}>{section.title}</div>

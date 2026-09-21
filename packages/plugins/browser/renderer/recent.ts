@@ -42,6 +42,8 @@ export const recordTitle = (url: string, title: string): void => {
   if (getRecent().some((entry) => entry.url === url && entry.title !== title)) change(withTitle(getRecent(), url, title))
 }
 
+export const clearRecent = (): void => change([])
+
 export const useRecent = (): RecentPage[] =>
   useSyncExternalStore((listener) => {
     listeners.add(listener)

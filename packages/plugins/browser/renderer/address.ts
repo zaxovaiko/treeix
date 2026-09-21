@@ -8,6 +8,8 @@ const SEARCH: Record<SearchEngine, string> = {
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?([/?#]|$)/i
 
+export const searchUrl = (engine: SearchEngine): string => SEARCH[engine]
+
 /** What the address bar loads: a URL as typed, a host completed with a scheme, anything else searched */
 export function toUrl(input: string, engine: SearchEngine): string {
   const text = input.trim()
