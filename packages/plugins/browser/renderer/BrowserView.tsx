@@ -41,6 +41,25 @@ export function runBrowserAction(action: BrowserAction): void {
   else if (action === 'devtools') toggleDevtools()
 }
 
+/** A blank tab: what the browser is for and how to start */
+function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="flex size-20 items-center justify-center rounded-3xl bg-gradient-to-b from-primary/20 to-primary/5 text-primary ring-1 ring-primary/20">
+        <Icon name="globe" className="size-10" />
+      </div>
+      <div>
+        <div className="text-sm font-medium text-foreground">Open a page</div>
+        <div className="mt-1 max-w-64 text-xs text-muted-foreground">A dev server, a pull request preview or any site. Links you ⌘-click in a terminal open here too.</div>
+      </div>
+      <button onClick={onOpen} className="flex h-7 items-center gap-2 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+        Type an address
+        <kbd className="rounded bg-muted px-1 font-sans text-[10.5px]">⌘L</kbd>
+      </button>
+    </div>
+  )
+}
+
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
 
 function ProfileBadge(): React.JSX.Element | null {
@@ -82,7 +101,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const { tabs, activeId } = useBrowser()
   const tab = tabs.find((candidate) => candidate.id === activeId)
   const designOn = useDesign().on
-  const { ref, shown } = useSlot()
+  const { ref, shown, elsewhere } = useSlot()
   const input = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<string | null>(null)
   const [devtools, setDevtools] = usePersisted<'docked' | 'window'>('browser.devtools', 'docked')
@@ -108,7 +127,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   }, [shown, devtools, dockOpen])
   const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
   return (
-    <div data-browser className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <div data-browser className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
       <div className="flex h-8 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-1">
         {tabs.map((candidate) => (
           <div
@@ -191,11 +210,12 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
       </div>
       <div ref={ref} className="relative min-h-0 flex-1">
-        {!shown && (
+        {elsewhere && (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
             {place === 'tab' ? 'Showing in the Browser panel' : 'Showing in the Browser tab'}
           </div>
         )}
+        {shown && (!tab || tab.url === 'about:blank') && <EmptyPage onOpen={() => runBrowserAction('focusAddress')} />}
         {shown && tab?.crashed && (
           <div className="relative z-20 flex h-full flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
             This page crashed

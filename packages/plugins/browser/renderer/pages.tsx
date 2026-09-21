@@ -20,9 +20,11 @@ const subscribeSlots = (listener: () => void): (() => void) => {
 
 let winner: HTMLDivElement | null = null
 
-export function useSlot(): { ref: (element: HTMLDivElement | null) => void; shown: boolean } {
+export function useSlot(): { ref: (element: HTMLDivElement | null) => void; shown: boolean; elsewhere: boolean } {
   const own = useRef<HTMLDivElement | null>(null)
   const shown = useSyncExternalStore(subscribeSlots, () => own.current !== null && winner === own.current)
+  // Only another slot on screen counts; with none, this one simply has no page yet
+  const elsewhere = useSyncExternalStore(subscribeSlots, () => winner !== null && winner !== own.current)
   // Stable, so React calls it only on mount and unmount and the newest mounted slot stays last
   const ref = useCallback((element: HTMLDivElement | null): void => {
     if (own.current === element) return
@@ -34,7 +36,7 @@ export function useSlot(): { ref: (element: HTMLDivElement | null) => void; show
     if (element) slots.push(element)
     notifySlots()
   }, [])
-  return { ref, shown }
+  return { ref, shown, elsewhere }
 }
 
 export const slotRect = (): DOMRect | null => winner?.getBoundingClientRect() ?? null
@@ -144,7 +146,8 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
       src={src}
       // A page's popups become tabs in main; the attribute only lets window.open reach that handler
       allowpopups
-      style={{ position: 'absolute', inset: 0, visibility: active ? 'visible' : 'hidden' }}
+      // A blank tab stays hidden so the view's empty state shows through
+      style={{ position: 'absolute', inset: 0, visibility: active && tab.url !== 'about:blank' ? 'visible' : 'hidden' }}
     />
   )
 }
