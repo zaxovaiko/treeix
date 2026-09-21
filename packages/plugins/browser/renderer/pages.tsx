@@ -88,7 +88,11 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
         'did-navigate',
         (event) => {
           patch({ url: String(event.url), ...history() })
-          if (tab.guestId) clearVitals(view.getWebContentsId())
+          try {
+            clearVitals(view.getWebContentsId())
+          } catch {
+            // Not attached yet: the page's first navigation, before dom-ready
+          }
         }
       ],
       ['did-navigate-in-page', (event) => event.isMainFrame !== false && patch({ url: String(event.url), ...history() })],
