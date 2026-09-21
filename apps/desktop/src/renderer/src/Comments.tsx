@@ -406,7 +406,7 @@ export function CommentsPanel({
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}</span>
                     <span className="flex-1" />
-                    {comment.body && <InlineToggle comment={comment} onChange={onUpdate} />}
+                    {comment.body && comment.kind !== 'browser' && <InlineToggle comment={comment} onChange={onUpdate} />}
                     <button
                       title="Delete comment"
                       onClick={(event) => {

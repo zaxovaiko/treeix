@@ -50,6 +50,13 @@ const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.inc
 /** Where Worktrees sits among the plugin tabs */
 const WORKTREES_ORDER = 30
 
+/** A browser comment's page, in the built-in browser when it's enabled */
+function openPage(url: string): void {
+  const browser = findService('browser')
+  if (browser) browser.open(url)
+  else window.open(url)
+}
+
 const isTerminalFocused = (): boolean => document.activeElement?.closest('[data-session-id]') != null
 type SavedPlace = { appTab: string; selected: string | null; viewer: { path: string; line: number | null } | null }
 /** Where a workspace was left: its tab, worktree and open file */
@@ -1071,7 +1078,7 @@ function App(): React.JSX.Element {
             setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
           }
         }}
-        onOpen={(comment) => (comment.kind === 'browser' ? window.open(comment.filePath) : open(comment.filePath))}
+        onOpen={(comment) => (comment.kind === 'browser' ? openPage(comment.filePath) : open(comment.filePath))}
         onDelete={deleteComment}
         onUpdate={(next) => setComments(comments.map((comment) => (comment.id === next.id ? next : comment)))}
       />
@@ -1775,7 +1782,7 @@ function App(): React.JSX.Element {
           renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
           onOpen={(comment) => {
             if (comment.kind === 'reference') return
-            if (comment.kind === 'browser') return void window.open(comment.filePath)
+            if (comment.kind === 'browser') return openPage(comment.filePath)
             const line = comment.range.start > 0 ? comment.range.start : null
             if (comment.kind === 'file') return openLocation(comment.worktreePath, comment.filePath, line)
             setAppTab('worktrees')

@@ -3,7 +3,6 @@ import { createBridge, type HostApi, PageLayout, type RendererPlugin, type Short
 import { BrowserView, runBrowserAction } from './BrowserView'
 import { DesignPopover } from './DesignPopover'
 import { addVital } from './entries'
-import './entries'
 import { onPageMessage, PageLayer } from './pages'
 import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'

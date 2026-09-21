@@ -17,5 +17,3 @@ export function toUrl(input: string, engine: SearchEngine): string {
   if (!/\s/.test(text) && /^[^/?#\s]+\.[a-z]{2,}(:\d+)?([/?#]|$)/i.test(text)) return `https://${text}`
   return SEARCH[engine] + encodeURIComponent(text)
 }
-
-export const isLocalUrl = (url: string): boolean => LOCAL_HOST.test(url.replace(/^https?:\/\//i, ''))
