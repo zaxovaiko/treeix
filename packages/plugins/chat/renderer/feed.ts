@@ -108,13 +108,15 @@ export function reduce(feed: Feed, event: ChatEvent, now: number): Feed {
   }
 }
 
+const lines = (text: string): string[] => (text === '' ? [] : text.replace(/\n$/, '').split('\n'))
+
 /** Lines only in the new text and only in the old one, counted as multisets; close enough for a card's +/- */
 export function diffCounts(oldText: string | null, newText: string): { added: number; removed: number } {
   const remaining = new Map<string, number>()
-  const oldLines = oldText === null ? [] : oldText.split('\n')
+  const oldLines = lines(oldText ?? '')
   for (const line of oldLines) remaining.set(line, (remaining.get(line) ?? 0) + 1)
   let added = 0
-  for (const line of newText.split('\n')) {
+  for (const line of lines(newText)) {
     const count = remaining.get(line) ?? 0
     if (count > 0) remaining.set(line, count - 1)
     else added++

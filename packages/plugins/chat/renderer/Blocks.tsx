@@ -1,5 +1,5 @@
 import { MultiFileDiff } from '@pierre/diffs/react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { PermissionOption, ToolCall, ToolOutput } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
@@ -100,11 +100,20 @@ function Location({ cwd, path, line }: { cwd: string; path: string; line: number
   )
 }
 
+/** FNV-1a, so a cache key changes with the text without holding it */
+const hash = (text: string): string => {
+  let value = 0x811c9dc5
+  for (let index = 0; index < text.length; index++) value = Math.imul(value ^ text.charCodeAt(index), 0x01000193)
+  return (value >>> 0).toString(36)
+}
+
 function DiffView({ callId, diff }: { callId: string; diff: Diff }): React.JSX.Element {
+  const oldKey = useMemo(() => hash(diff.oldText ?? ''), [diff.oldText])
+  const newKey = useMemo(() => hash(diff.newText), [diff.newText])
   return (
     <MultiFileDiff
-      oldFile={{ name: diff.path, contents: diff.oldText ?? '', cacheKey: `chat:${callId}:${diff.path}:old` }}
-      newFile={{ name: diff.path, contents: diff.newText, cacheKey: `chat:${callId}:${diff.path}:new:${diff.newText.length}` }}
+      oldFile={{ name: diff.path, contents: diff.oldText ?? '', cacheKey: `chat:${callId}:${diff.path}:old:${oldKey}` }}
+      newFile={{ name: diff.path, contents: diff.newText, cacheKey: `chat:${callId}:${diff.path}:new:${newKey}` }}
       className="block"
       style={diffBackground()}
       options={{ ...codeThemeOptions(), diffStyle: 'unified' }}

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { ChatCapabilities, ChatContent, ChatEvent, ChatService, SessionStatus } from '@treeix/sdk'
 import type { StartOptions, StartResult } from '../shared/types'
+import { errorMessage } from '@treeix/app/ui'
 import { emptyFeed, type Feed, reduce } from './feed'
 
 export type ChatStartOptions = Parameters<ChatService['start']>[1]
@@ -42,17 +43,31 @@ export function statusOf(state: ChatState): SessionStatus {
 
 export const isBusy = (state: ChatState): boolean => state.sending || state.feed.running
 
-/** Agents don't echo live prompts, so the user's message goes into the feed here */
-export function withUserMessage(feed: Feed, content: ChatContent[], now: number): Feed {
-  return content.reduce((next, item) => reduce(next, { type: 'message_chunk', role: 'user', content: item }, now), feed)
+/** Agents don't echo live prompts, so the user's message goes into the feed here, always as its own block */
+export function withUserMessage(feed: Feed, content: ChatContent[]): Feed {
+  const text = content.map((item) => (item.type === 'text' ? item.text : '')).join('')
+  const images = content.flatMap((item) => (item.type === 'image' ? [{ mimeType: item.mimeType, data: item.data }] : []))
+  return { ...feed, blocks: [...feed.blocks, { type: 'text', role: 'user', text, images }] }
 }
 
-/** What the prompt that just resolved leaves behind: the next queued message to send, if still connected */
+const beginTurn = (state: ChatState, content: ChatContent[]): ChatState => ({ ...state, sending: true, feed: withUserMessage(state.feed, content) })
+
+/** What the prompt that just resolved leaves behind: the next queued message already started, so the chat never looks idle in between */
 export function afterPrompt(state: ChatState): { state: ChatState; next: ChatContent[] | null } {
   const [next, ...rest] = state.queue
   if (!next || !state.connected) return { state: { ...state, sending: false }, next: null }
-  return { state: { ...state, sending: false, queue: rest }, next }
+  return { state: beginTurn({ ...state, queue: rest }, next), next }
 }
+
+/** Stopping puts queued texts back into the draft, oldest first, so nothing typed is lost */
+export function restoreQueue(state: ChatState): ChatState {
+  if (state.queue.length === 0) return state
+  const texts = state.queue.map((content) => content.flatMap((item) => (item.type === 'text' ? [item.text] : [])).join(''))
+  return { ...state, queue: [], draft: [...texts, state.draft].filter(Boolean).join('\n\n') }
+}
+
+const isChatEvents = (value: unknown): value is ChatEvent[] =>
+  Array.isArray(value) && value.every((item: unknown) => typeof item === 'object' && item !== null && 'type' in item && typeof item.type === 'string')
 
 type Bridge = {
   invoke: <T>(channel: string, ...args: unknown[]) => Promise<T>
@@ -83,16 +98,13 @@ function update(chatId: string, change: (state: ChatState) => ChatState): void {
   listeners.forEach((listener) => listener())
 }
 
-const message = (reason: unknown): string =>
-  String(reason instanceof Error ? reason.message : reason).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-
 /** Attaches to the main module's events; call once when the plugin loads */
 export function listen(chatBridge: Bridge): void {
   bridge = chatBridge
   chatBridge.on('events', (chatId, events) => {
-    if (typeof chatId !== 'string' || !Array.isArray(events)) return
+    if (typeof chatId !== 'string' || !isChatEvents(events)) return
     const now = Date.now()
-    update(chatId, (state) => ({ ...state, feed: (events as ChatEvent[]).reduce((feed, event) => reduce(feed, event, now), state.feed) }))
+    update(chatId, (state) => ({ ...state, feed: events.reduce((feed, event) => reduce(feed, event, now), state.feed) }))
   })
   chatBridge.on('closed', (chatId, reason) => {
     if (typeof chatId !== 'string') return
@@ -101,7 +113,10 @@ export function listen(chatBridge: Bridge): void {
   })
 }
 
-export async function start(chatId: string, options: ChatStartOptions): Promise<string> {
+export const start = (chatId: string, options: ChatStartOptions): Promise<string> => connect(chatId, options, false)
+
+/** `fresh` empties the feed once connected, for a resumed session the agent replays */
+async function connect(chatId: string, options: ChatStartOptions, fresh: boolean): Promise<string> {
   if (!bridge) throw new Error('Chat is not loaded')
   update(chatId, (state) => ({ ...state, options, error: null }))
   try {
@@ -109,6 +124,7 @@ export async function start(chatId: string, options: ChatStartOptions): Promise<
     const result = await bridge.invoke<StartResult>('start', chatId, startOptions)
     update(chatId, (state) => ({
       ...state,
+      feed: fresh ? emptyFeed : state.feed,
       connected: true,
       capabilities: result.capabilities,
       terminalCommand: result.terminalCommand,
@@ -116,7 +132,7 @@ export async function start(chatId: string, options: ChatStartOptions): Promise<
     }))
     return result.agentSessionId
   } catch (reason) {
-    update(chatId, (state) => ({ ...state, connected: false, error: message(reason) }))
+    update(chatId, (state) => ({ ...state, connected: false, error: errorMessage(reason) }))
     throw reason
   }
 }
@@ -124,9 +140,7 @@ export async function start(chatId: string, options: ChatStartOptions): Promise<
 /** Starts again with the same agent, continuing the session it had; agents that load sessions replay it into a fresh feed */
 export function retry(chatId: string): void {
   const { options, agentSessionId, capabilities } = getChat(chatId)
-  if (!options) return
-  if (capabilities?.load) update(chatId, (state) => ({ ...state, feed: emptyFeed }))
-  void start(chatId, { ...options, resume: agentSessionId ?? options.resume }).catch(() => undefined)
+  if (options) void connect(chatId, { ...options, resume: agentSessionId ?? options.resume }, capabilities?.load === true).catch(() => undefined)
 }
 
 export function stop(chatId: string): void {
@@ -134,23 +148,24 @@ export function stop(chatId: string): void {
   update(chatId, (state) => ({ ...state, connected: false, sending: false, queue: [], feed: { ...state.feed, running: false, waiting: false } }))
 }
 
-function run(chatId: string, content: ChatContent[]): void {
+/** Sends a prompt whose turn `beginTurn` already started */
+function prompt(chatId: string, content: ChatContent[]): void {
   if (!bridge) return
-  update(chatId, (state) => ({ ...state, sending: true, feed: withUserMessage(state.feed, content, Date.now()) }))
   bridge
     .invoke('prompt', chatId, content)
-    .catch((reason: unknown) => update(chatId, (state) => ({ ...state, feed: reduce(state.feed, { type: 'error', message: message(reason) }, Date.now()) })))
+    .catch((reason: unknown) => update(chatId, (state) => ({ ...state, feed: reduce(state.feed, { type: 'error', message: errorMessage(reason) }, Date.now()) })))
     .finally(() => {
       const { state, next } = afterPrompt(getChat(chatId))
       update(chatId, () => state)
-      if (next) run(chatId, next)
+      if (next) prompt(chatId, next)
     })
 }
 
 /** Sends now, or queues behind the running turn */
 export function send(chatId: string, content: ChatContent[]): void {
-  if (isBusy(getChat(chatId))) update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
-  else run(chatId, content)
+  if (isBusy(getChat(chatId))) return update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
+  update(chatId, (state) => beginTurn(state, content))
+  prompt(chatId, content)
 }
 
 export const unqueue = (chatId: string, index: number): void =>
@@ -158,7 +173,10 @@ export const unqueue = (chatId: string, index: number): void =>
 
 export const setDraft = (chatId: string, draft: string): void => update(chatId, (state) => (state.draft === draft ? state : { ...state, draft }))
 
-export const cancel = (chatId: string): void => bridge?.send('cancel', chatId)
+export function cancel(chatId: string): void {
+  bridge?.send('cancel', chatId)
+  update(chatId, restoreQueue)
+}
 
 export const answer = (chatId: string, requestId: string, optionId: string | null): void => bridge?.send('answer', chatId, requestId, optionId)
 

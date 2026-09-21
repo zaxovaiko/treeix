@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ChatContent, ChatImage, ChatOption } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
-import { errorMessage } from '@treeix/app/ui'
+import { errorMessage, Popup } from '@treeix/app/ui'
 import { completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning } from './composer'
 import { cancel, isBusy, send, setDraft, setOption, unqueue, useChat, whenIdle } from './store'
 
@@ -30,10 +30,69 @@ const readImage = (file: File): Promise<ChatImage> =>
 
 type PendingSwitch = { option: ChatOption; value: string; tokens: number | null }
 
+/** A session option (mode, model) as a button opening the app's menu; j/k or arrows move, ⏎ picks, esc closes */
+function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (value: string) => void }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const anchor = useRef<HTMLDivElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const current = option.values.find((value) => value.value === option.currentValue)
+  const close = (): void => {
+    setOpen(false)
+    anchor.current?.querySelector('button')?.focus()
+  }
+  useEffect(() => {
+    if (open) (menu.current?.querySelector<HTMLElement>('[data-current]') ?? menu.current?.querySelector('button'))?.focus()
+  }, [open])
+  const onKey = (event: React.KeyboardEvent): void => {
+    event.stopPropagation()
+    const items = [...(menu.current?.querySelectorAll<HTMLElement>('button') ?? [])]
+    const at = document.activeElement instanceof HTMLElement ? items.indexOf(document.activeElement) : -1
+    const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
+    if (step) {
+      event.preventDefault()
+      items[(at + step + items.length) % items.length]?.focus()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      close()
+    }
+  }
+  return (
+    <div ref={anchor} className="flex min-w-0">
+      <button
+        title={option.name}
+        onClick={() => (open ? close() : setOpen(true))}
+        className="flex h-6 max-w-40 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <span className="truncate">{current?.name ?? option.currentValue}</span>
+        <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground/65" />
+      </button>
+      {open && (
+        <Popup ref={menu} anchor={anchor} onDismiss={close} onKeyDown={onKey} className="max-h-72 w-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground">
+          {option.values.map((value) => (
+            <button
+              key={value.value}
+              data-current={value.value === option.currentValue ? '' : undefined}
+              title={value.description ?? undefined}
+              onClick={() => {
+                close()
+                if (value.value !== option.currentValue) onChoose(value.value)
+              }}
+              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent focus:bg-accent focus:outline-none"
+            >
+              <Icon name="check" className={`size-3 shrink-0 ${value.value === option.currentValue ? '' : 'opacity-0'}`} />
+              <span className="truncate">{value.name}</span>
+            </button>
+          ))}
+        </Popup>
+      )}
+    </div>
+  )
+}
+
 const preview = (content: ChatContent[]): string =>
   content.map((item) => (item.type === 'text' ? item.text : '[image]')).join(' ')
 
-export function Composer({ chatId, cwd }: { chatId: string; cwd: string }): React.JSX.Element {
+export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string; onSent: () => void }): React.JSX.Element {
   const host = useHost()
   const chat = useChat(chatId)
   const { feed, draft } = chat
@@ -69,17 +128,22 @@ export function Composer({ chatId, cwd }: { chatId: string; cwd: string }): Reac
     const firstProblem = candidates.map(imageProblem).find((text) => text !== null)
     setProblem(firstProblem ?? null)
     const valid = candidates.filter((file) => imageProblem(file) === null)
-    const read = await Promise.all(valid.map(readImage))
-    setImages((current) => [...current, ...read])
+    try {
+      const read = await Promise.all(valid.map(readImage))
+      setImages((current) => [...current, ...read])
+    } catch (reason) {
+      setProblem(`Could not read the image: ${errorMessage(reason)}`)
+    }
   }
 
   const submit = (): void => {
     const text = draft.trim()
-    if (!text && images.length === 0) return
+    if (!chat.connected || (!text && images.length === 0)) return
     send(chatId, [...images, ...(text ? [{ type: 'text' as const, text }] : [])])
     setDraft(chatId, '')
     setImages([])
     setProblem(null)
+    onSent()
   }
 
   const accept = (index: number): void => {
@@ -225,6 +289,7 @@ export function Composer({ chatId, cwd }: { chatId: string; cwd: string }): Reac
           ref={input}
           autoFocus
           rows={1}
+          aria-expanded={items.length > 0}
           value={draft}
           placeholder="Message the agent"
           onChange={(event) => {
@@ -236,7 +301,7 @@ export function Composer({ chatId, cwd }: { chatId: string; cwd: string }): Reac
           onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
           onPaste={(event) => {
-            if (event.clipboardData.files.length === 0) return
+            if (![...event.clipboardData.files].some((file) => file.type.startsWith('image/'))) return
             event.preventDefault()
             void addImages(event.clipboardData.files)
           }}
@@ -262,20 +327,7 @@ export function Composer({ chatId, cwd }: { chatId: string; cwd: string }): Reac
             </>
           )}
           {feed.options.map((option) => (
-            <select
-              key={option.id}
-              title={option.name}
-              aria-label={option.name}
-              value={option.currentValue}
-              onChange={(event) => choose(option, event.target.value)}
-              className="h-6 max-w-40 rounded-md bg-transparent px-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              {option.values.map((value) => (
-                <option key={value.value} value={value.value} title={value.description ?? undefined}>
-                  {value.name}
-                </option>
-              ))}
-            </select>
+            <OptionPicker key={option.id} option={option} onChoose={(value) => choose(option, value)} />
           ))}
           <span className="flex-1" />
           {feed.usage && (
@@ -291,8 +343,12 @@ export function Composer({ chatId, cwd }: { chatId: string; cwd: string }): Reac
               Stop
             </button>
           ) : (
-            <button onClick={submit} disabled={!draft.trim() && images.length === 0} className="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-40">
-              Send
+            <button
+              onClick={submit}
+              disabled={!chat.connected || (!draft.trim() && images.length === 0)}
+              className="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-40"
+            >
+              {chat.connected || chat.error ? 'Send' : 'Connecting…'}
             </button>
           )}
         </div>

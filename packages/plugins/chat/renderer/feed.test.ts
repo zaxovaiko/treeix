@@ -73,6 +73,8 @@ test('diff counts lines only on one side', () => {
   expect(diffCounts(null, 'a\nb')).toEqual({ added: 2, removed: 0 })
   expect(diffCounts('a\nb\nc', 'a\nx\nc\nd')).toEqual({ added: 2, removed: 1 })
   expect(diffCounts('a\na', 'a')).toEqual({ added: 0, removed: 1 })
+  expect(diffCounts(null, 'a\n')).toEqual({ added: 1, removed: 0 })
+  expect(diffCounts('', 'a')).toEqual({ added: 1, removed: 0 })
 })
 
 test('a file inside the folder opens relative to it, one outside from its own folder', () => {

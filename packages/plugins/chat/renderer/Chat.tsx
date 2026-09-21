@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage } from '@treeix/app/ui'
@@ -16,13 +16,31 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
   const chat = useChat(chatId)
   const { feed } = chat
   const cwd = chat.options?.cwd ?? host.defaultCwd
+  const root = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
   const atBottom = useRef(true)
 
-  useLayoutEffect(() => {
+  const toBottom = (): void => {
     const element = scroller.current
-    if (element && atBottom.current) element.scrollTop = element.scrollHeight
+    if (element) element.scrollTop = element.scrollHeight
+  }
+  useLayoutEffect(() => {
+    if (atBottom.current) toBottom()
   }, [feed])
+  // Diffs and markdown settle after rendering; follow their growth while at the bottom
+  useEffect(() => {
+    const element = content.current
+    if (!element) return
+    const observer = new ResizeObserver(() => atBottom.current && toBottom())
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  const reply = (requestId: string, optionId: string): void => {
+    answer(chatId, requestId, optionId)
+    root.current?.querySelector('textarea')?.focus()
+  }
 
   const newest = feed.blocks.map(pendingOf).findLast((permission) => permission !== null) ?? null
 
@@ -38,12 +56,15 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
         }
 
   const onKeyDownCapture = (event: React.KeyboardEvent): void => {
-    if (!newest) return
+    // Keys from portaled menus (option pickers) reach here through React but are not the chat's
+    if (!newest || !(event.target instanceof Node && root.current?.contains(event.target))) return
+    // Esc with the completion list open closes the list
+    if (event.key === 'Escape' && event.target instanceof HTMLElement && event.target.getAttribute('aria-expanded') === 'true') return
     const option = event.key === 'Enter' && event.metaKey ? firstAllow(newest.options) : event.key === 'Escape' ? firstReject(newest.options) : undefined
     if (!option) return
     event.preventDefault()
     event.stopPropagation()
-    answer(chatId, newest.requestId, option.id)
+    reply(newest.requestId, option.id)
   }
 
   const onKeyDown = (event: React.KeyboardEvent): void => {
@@ -64,21 +85,21 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
           <ToolCard key={block.call.id} call={block.call} cwd={cwd}>
             {permission && (
               <div className="border-t border-border p-2">
-                <PermissionCard permission={permission} newest={permission === newest} onAnswer={(optionId) => answer(chatId, permission.requestId, optionId)} />
+                <PermissionCard permission={permission} newest={permission === newest} onAnswer={(optionId) => reply(permission.requestId, optionId)} />
               </div>
             )}
           </ToolCard>
         )
       }
       case 'permission':
-        return <PermissionCard key={block.permission.requestId} permission={block.permission} newest={block.permission === newest} onAnswer={(optionId) => answer(chatId, block.permission.requestId, optionId)} />
+        return <PermissionCard key={block.permission.requestId} permission={block.permission} newest={block.permission === newest} onAnswer={(optionId) => reply(block.permission.requestId, optionId)} />
       case 'error':
         return <ErrorBlock key={index} message={block.message} onOpenTerminal={openInTerminal} />
     }
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background" onKeyDownCapture={onKeyDownCapture} onKeyDown={onKeyDown}>
+    <div ref={root} tabIndex={-1} className="flex h-full min-h-0 flex-col bg-background outline-none" onKeyDownCapture={onKeyDownCapture} onKeyDown={onKeyDown}>
       <div
         ref={scroller}
         onScroll={(event) => {
@@ -87,7 +108,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
         }}
         className="min-h-0 flex-1 overflow-y-auto"
       >
-        <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">{feed.blocks.map(renderBlock)}</div>
+        <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">{feed.blocks.map(renderBlock)}</div>
       </div>
       <div className="mx-auto w-full max-w-3xl">
         {chat.error && (
@@ -121,7 +142,14 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
             ))}
           </ul>
         )}
-        <Composer chatId={chatId} cwd={cwd} />
+        <Composer
+          chatId={chatId}
+          cwd={cwd}
+          onSent={() => {
+            atBottom.current = true
+            requestAnimationFrame(toBottom)
+          }}
+        />
       </div>
     </div>
   )
