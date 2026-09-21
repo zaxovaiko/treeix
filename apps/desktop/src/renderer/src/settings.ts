@@ -88,10 +88,12 @@ function parseKeymap(value: unknown): Settings['keymap'] {
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, Shortcut | null] => entry[1] === null || isShortcut(entry[1])))
 }
 
-function parseAgentViews(value: unknown): Settings['agentViews'] {
+export function parseAgentViews(value: unknown): Settings['agentViews'] {
   const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, 'chat' | 'terminal'] => entry[1] === 'chat' || entry[1] === 'terminal'))
 }
+
+export const parseChatThinking = (value: unknown): Settings['chatThinking'] => (value === 'expanded' || value === 'hidden' ? value : 'collapsed')
 
 function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
   const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
@@ -201,7 +203,7 @@ function load(): Settings {
       plugins: parsePluginChoices(candidate),
       customAgents: parseCustomAgents(candidate.customAgents),
       agentViews: parseAgentViews(candidate.agentViews),
-      chatThinking: candidate.chatThinking === 'expanded' || candidate.chatThinking === 'hidden' ? candidate.chatThinking : DEFAULTS.chatThinking,
+      chatThinking: parseChatThinking(candidate.chatThinking),
       theme: candidate.theme === 'system' || isThemeId(candidate.theme) ? candidate.theme : DEFAULTS.theme,
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
