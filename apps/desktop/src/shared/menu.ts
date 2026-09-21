@@ -4,7 +4,8 @@
  */
 export const MENU_SECTIONS: [section: string, label: string][] = [
   ['Go to', 'Go'],
-  ['Panels', 'View']
+  ['Panels', 'View'],
+  ['Terminal', 'Terminal']
 ]
 
 /**

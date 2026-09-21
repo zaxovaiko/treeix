@@ -7,6 +7,7 @@ import {
   isTyping,
   onShellCommand,
   PageLayout,
+  registerActionRunner,
   type RendererPlugin,
   type SessionKind,
   type SessionSummary,
@@ -272,6 +273,12 @@ function showTerminals(host: HostApi): void {
   else host.setActiveTab(TAB_ID)
 }
 
+/** The newest closed session of this workspace, like a browser's reopen closed tab */
+function reopenClosed(host: HostApi): void {
+  const last = scope.history[0]
+  if (last) void restoreClosedSession(last).then((id) => reveal(host, id))
+}
+
 function reveal(host: HostApi, id: string): void {
   revealSession(id)
   showTerminals(host)
@@ -314,6 +321,9 @@ function Root(): React.JSX.Element | null {
     if (current.task && getTerminals().selected[currentId] !== current.task.id) selectTask(current.task.id)
   }, [current.task?.id, currentId])
   useEffect(() => onShellCommand('closedSessions', () => dialogs.update({ sessions: 'closed' })), [])
+  const hostRef = useRef(host)
+  hostRef.current = host
+  useEffect(() => registerActionRunner('terminal.reopenClosed', () => reopenClosed(hostRef.current)), [])
   return (
     <>
       {switcher && (
@@ -347,6 +357,13 @@ defineActions([
   { id: 'terminal.paneRight', label: 'Focus the pane to the right', section: 'Terminal', keys: key('ArrowRight', { meta: true, alt: true }) },
   { id: 'terminal.paneUp', label: 'Focus the pane above', section: 'Terminal', keys: key('ArrowUp', { meta: true, alt: true }) },
   { id: 'terminal.paneDown', label: 'Focus the pane below', section: 'Terminal', keys: key('ArrowDown', { meta: true, alt: true }) },
+  {
+    id: 'terminal.reopenClosed',
+    label: 'Reopen the last closed session, resuming its agent conversation',
+    menuLabel: 'Reopen Closed Session',
+    section: 'Terminal',
+    keys: key('KeyZ', { meta: true, alt: true })
+  },
   { id: 'terminal.zoomPane', label: 'Maximize the focused pane, or restore it', section: 'Terminal', keys: key('Enter', { meta: true, alt: true }) },
   { id: 'terminal.inspector', label: 'Inspector with files, alias of ⌘⌥B', section: 'Terminal', page: TAB_ID, keys: key('KeyP', { meta: true }) },
   { id: 'terminal.renameGroup', label: 'Rename the group on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('F2') },
@@ -372,7 +389,8 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.nextGroup': () => stepTask(host, 1),
     'terminal.newGroup': () => startTask(host),
     'terminal.newTab': () => newTab(host, 'shell'),
-    'terminal.newTabAlt': () => newTab(host, 'shell')
+    'terminal.newTabAlt': () => newTab(host, 'shell'),
+    'terminal.reopenClosed': () => reopenClosed(host)
   }
   const anywhereId = actionForEvent(event, Object.keys(anywhere))
   if (anywhereId) {
