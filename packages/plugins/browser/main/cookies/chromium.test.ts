@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { createCipheriv, createHash } from 'node:crypto'
-import { chromiumCookie, chromiumKey, decryptChromiumValue } from './chromium'
+import { chromiumCookie, chromiumKey, decryptChromiumValue, metaVersion } from './chromium'
 
 const key = chromiumKey('test-password')
 const encrypt = (plain: Buffer): Uint8Array => {
@@ -24,4 +24,12 @@ test('chromiumCookie maps rows and skips session and expired cookies', () => {
   expect(chromiumCookie({ ...row, host_key: 'app.example.com', is_secure: 0, samesite: -1 }, 'v', now)).toMatchObject({ url: 'http://app.example.com/', domain: undefined, secure: false, sameSite: 'unspecified' })
   expect(chromiumCookie({ ...row, has_expires: 0 }, 'v', now)).toBeNull()
   expect(chromiumCookie({ ...row, expires_utc: (now - 1 + 11644473600) * 1_000_000 }, 'v', now)).toBeNull()
+})
+
+test('metaVersion reads the meta table version whether stored as text or integer', () => {
+  expect(metaVersion('24')).toBe(24)
+  expect(metaVersion(24)).toBe(24)
+  expect(metaVersion(24n)).toBe(24)
+  expect(metaVersion('abc')).toBe(0)
+  expect(metaVersion(undefined)).toBe(0)
 })

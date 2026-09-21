@@ -16,7 +16,8 @@ export function firefoxCookie(row: FirefoxRow, nowSeconds: number): CookiesSetDe
     path: row.path,
     secure,
     httpOnly: row.isHttpOnly === 1,
-    sameSite: SAME_SITE[row.sameSite] ?? 'unspecified',
+    // Firefox stores 0 both for SameSite=None and for no attribute; Chromium rejects None without Secure
+    sameSite: row.sameSite === 0 && !secure ? 'unspecified' : (SAME_SITE[row.sameSite] ?? 'unspecified'),
     expirationDate
   }
 }

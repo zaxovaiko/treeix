@@ -24,6 +24,12 @@ export function decryptChromiumValue(encrypted: Uint8Array, key: Buffer, dbVersi
   }
 }
 
+/** Chromium stores meta values as text; older databases may hold integers */
+export function metaVersion(value: unknown): number {
+  const version = typeof value === 'string' ? Number.parseInt(value, 10) : typeof value === 'number' || typeof value === 'bigint' ? Number(value) : 0
+  return Number.isFinite(version) ? version : 0
+}
+
 /** Chromium and Firefox share these codes; anything else leaves the browser's default */
 export const SAME_SITE: Record<number, CookiesSetDetails['sameSite']> = { 0: 'no_restriction', 1: 'lax', 2: 'strict' }
 

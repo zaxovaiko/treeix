@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { promisify } from 'node:util'
 import type { CookiesSetDetails, Session } from 'electron'
 import type { ImportResult } from '../../shared/types'
-import { type ChromiumRow, chromiumCookie, chromiumKey, decryptChromiumValue } from './chromium'
+import { type ChromiumRow, chromiumCookie, chromiumKey, decryptChromiumValue, metaVersion } from './chromium'
 import { type FirefoxRow, firefoxCookie } from './firefox'
 import { isBlocked, profileSource } from './profiles'
 
@@ -68,7 +68,7 @@ function readFirefox(db: DatabaseSync, now: number): (CookiesSetDetails | null)[
 
 function readChromium(db: DatabaseSync, password: string, now: number): (CookiesSetDetails | null)[] {
   const key = chromiumKey(password)
-  const version = int(db.prepare("SELECT value FROM meta WHERE key = 'version'").get()?.value)
+  const version = metaVersion(db.prepare("SELECT value FROM meta WHERE key = 'version'").get()?.value)
   const query = db.prepare('SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, samesite, has_expires FROM cookies')
   // expires_utc is microseconds since 1601, past Number.MAX_SAFE_INTEGER
   query.setReadBigInts(true)
@@ -83,9 +83,10 @@ export async function importCookies(key: string, target: Session): Promise<Impor
   const source = await profileSource(key)
   if (!source) return { imported: 0, skipped: 0, error: 'That browser profile is gone' }
   // The browser keeps its database locked while running, so read a copy
-  const folder = await mkdtemp(join(tmpdir(), 'treeix-cookies-'))
-  const copy = join(folder, 'cookies.sqlite')
+  let folder: string | null = null
   try {
+    folder = await mkdtemp(join(tmpdir(), 'treeix-cookies-'))
+    const copy = join(folder, 'cookies.sqlite')
     await copyFile(source.cookiesPath, copy)
     // Firefox keeps recent writes in the write-ahead log; the copy is ours, so SQLite may open it writable to read the log
     await copyFile(`${source.cookiesPath}-wal`, `${copy}-wal`).catch(() => undefined)
@@ -110,6 +111,6 @@ export async function importCookies(key: string, target: Session): Promise<Impor
       error: isBlocked(error) ? `macOS blocked access to ${source.browser}. Allow Treeix under System Settings > Privacy & Security, then import again` : `Couldn't read ${source.browser}'s cookies`
     }
   } finally {
-    await rm(folder, { recursive: true, force: true })
+    if (folder) await rm(folder, { recursive: true, force: true })
   }
 }
