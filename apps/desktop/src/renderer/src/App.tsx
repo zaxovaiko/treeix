@@ -1071,7 +1071,7 @@ function App(): React.JSX.Element {
             setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
           }
         }}
-        onOpen={(comment) => open(comment.filePath)}
+        onOpen={(comment) => (comment.kind === 'browser' ? window.open(comment.filePath) : open(comment.filePath))}
         onDelete={deleteComment}
         onUpdate={(next) => setComments(comments.map((comment) => (comment.id === next.id ? next : comment)))}
       />
@@ -1775,6 +1775,7 @@ function App(): React.JSX.Element {
           renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
           onOpen={(comment) => {
             if (comment.kind === 'reference') return
+            if (comment.kind === 'browser') return void window.open(comment.filePath)
             const line = comment.range.start > 0 ? comment.range.start : null
             if (comment.kind === 'file') return openLocation(comment.worktreePath, comment.filePath, line)
             setAppTab('worktrees')

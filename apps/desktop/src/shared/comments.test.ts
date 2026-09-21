@@ -1,6 +1,25 @@
 import { expect, test } from 'bun:test'
 import { commentsPrompt, extractFileLines, extractLines, formatComments, isReviewComment, rangeLabel, type ReviewComment } from './comments'
 
+const base = { worktreePath: '/repo', range: { start: 0, end: 0 }, code: '' }
+
+test('commentsPrompt groups browser items per page, after references and before code notes', () => {
+  const comments: ReviewComment[] = [
+    { ...base, id: '1', filePath: 'src/a.ts', range: { start: 3, end: 3 }, text: 'Rename this' },
+    { ...base, id: '2', filePath: 'http://localhost:3000/pricing', text: 'Price shows NaN', body: 'Selector: .price', kind: 'browser', attachments: [{ path: '/att/el.png', name: 'el.png' }] },
+    { ...base, id: '3', filePath: 'Jira', text: 'Jira BF-1', kind: 'reference' }
+  ]
+  expect(commentsPrompt(comments, 'feat/x')).toBe(
+    'Jira BF-1\n\n' +
+      'Notes on http://localhost:3000/pricing in the built-in browser:\n\n1. Price shows NaN\nSelector: .price\nAttached files:\n- /att/el.png\n\n' +
+      'Feedback on the code in feat/x. Address each note:\n\n1. src/a.ts:3\nRename this\n'
+  )
+})
+
+test('isReviewComment accepts browser items', () => {
+  expect(isReviewComment({ ...base, id: '2', filePath: 'http://x', text: 'n', kind: 'browser' })).toBe(true)
+})
+
 const patch = `diff --git a/a.ts b/a.ts
 --- a/a.ts
 +++ b/a.ts
