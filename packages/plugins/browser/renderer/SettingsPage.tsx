@@ -2,15 +2,71 @@ import { useEffect, useState } from 'react'
 import { createBridge } from '@treeix/sdk'
 import { Card, Row, Segmented, Switch } from '@treeix/app/settingsUi'
 import type { BrowserProfile, ImportInfo, ImportResult } from '../shared/types'
-import type { SearchEngine } from './address'
+import { type SearchEngine, toUrl } from './address'
 import { browserSettings } from './settings'
 
 const bridge = createBridge('browser')
 
 export const importLabel = (info: ImportInfo): string => (info ? `${info.browser}, ${new Date(info.at).toLocaleDateString()}` : 'None')
 
+const field = 'h-6 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border outline-none focus:ring-primary'
+
+function SavedAddresses(): React.JSX.Element {
+  const { saved, searchEngine } = browserSettings.use()
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState(false)
+  const add = (): void => {
+    if (!url.trim()) return setError(true)
+    const address = toUrl(url, searchEngine)
+    browserSettings.update({ saved: [...saved, { name: name.trim() || address.replace(/^https?:\/\//, ''), url: address }] })
+    setName('')
+    setUrl('')
+  }
+  return (
+    <Card title="Saved addresses">
+      {saved.map((entry, index) => (
+        <Row key={`${index}:${entry.url}`} label={entry.name} description={entry.url}>
+          <button className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent" onClick={() => browserSettings.update({ saved: saved.filter((_, at) => at !== index) })}>
+            Remove
+          </button>
+        </Row>
+      ))}
+      <Row label="Add an address" description="Suggested in the address bar and on a new tab, e.g. a staging site">
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            add()
+          }}
+        >
+          <input value={name} placeholder="Name" aria-label="Name" onChange={(event) => setName(event.target.value)} className={`${field} w-32`} />
+          <div className="flex flex-col">
+            <input
+              value={url}
+              placeholder="URL"
+              aria-label="URL"
+              aria-invalid={error}
+              spellCheck={false}
+              onChange={(event) => {
+                setUrl(event.target.value)
+                setError(false)
+              }}
+              className={`${field} w-56 font-mono ${error ? 'ring-red-400' : ''}`}
+            />
+            {error && <span className="mt-1 text-[11px] text-red-400">Enter an address</span>}
+          </div>
+          <button type="submit" className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent">
+            Add
+          </button>
+        </form>
+      </Row>
+    </Card>
+  )
+}
+
 export function BrowserSettings(): React.JSX.Element {
-  const { openLinks, searchEngine } = browserSettings.use()
+  const { openLinks, searchEngine, notifyPorts } = browserSettings.use()
   const [canImport, setCanImport] = useState(false)
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
   const [chosen, setChosen] = useState('')
@@ -66,6 +122,9 @@ export function BrowserSettings(): React.JSX.Element {
             onChange={(engine) => browserSettings.update({ searchEngine: engine })}
           />
         </Row>
+        <Row label="Tell me when a session starts a server" description="A card with an Open button when a terminal or agent session starts listening on a new port">
+          <Switch checked={notifyPorts} label="Tell me when a session starts a server" onChange={() => browserSettings.update({ notifyPorts: !notifyPorts })} />
+        </Row>
         <Row label="Clear browsing data" description="Signs you out of every site in the built-in browser and empties its cache">
           <button
             className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent"
@@ -80,6 +139,7 @@ export function BrowserSettings(): React.JSX.Element {
           </button>
         </Row>
       </Card>
+      <SavedAddresses />
       {canImport && (
         <Card title="Cookies">
           <Row
