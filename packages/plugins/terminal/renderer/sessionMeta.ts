@@ -26,6 +26,11 @@ export function parseMeta(value: unknown): SessionMeta | null {
   return { ...(value as SessionMeta), view: candidate.view === 'chat' ? 'chat' : 'terminal' }
 }
 
+export const NEW_CHAT_TITLE = 'New chat'
+
+/** A chat still titled "New chat" or "New chat 2" takes its first message as its title */
+export const isDefaultChatTitle = (title: string): boolean => new RegExp(`^${NEW_CHAT_TITLE}( \\d+)?$`).test(title)
+
 export const unarchived = <T extends { archived?: boolean }>(entries: T[]): T[] => entries.filter((entry) => !entry.archived)
 
 export type NewTabEntry = { agent: string; view: SessionView; label: string; secondary: boolean }

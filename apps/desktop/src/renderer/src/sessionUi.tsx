@@ -29,7 +29,8 @@ export function KindBadge({ kind }: { kind: SessionKind }): React.JSX.Element {
 
 export function StatusDot({ session, withLabel = false }: { session: Pick<SessionSummary, 'status' | 'exitCode'>; withLabel?: boolean }): React.JSX.Element {
   const { label, color } = STATUS_STYLE[session.status]
-  const text = session.status === 'exited' ? `exit ${session.exitCode ?? ''}` : label
+  // Chats have no exit code; theirs is a lost connection
+  const text = session.status !== 'exited' ? label : session.exitCode === null ? 'disconnected' : `exit ${session.exitCode}`
   return (
     <span style={{ color }} className="flex shrink-0 items-center gap-1.5 text-[11px]" title={text}>
       <span

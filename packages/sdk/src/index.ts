@@ -133,6 +133,10 @@ export type ChatService = {
   /** Puts text into the composer, e.g. review comments sent to the session */
   draft: (chatId: string, text: string) => void
   terminalCommand: (chatId: string) => string | null
+  /** The agent's conversation id once connected; it can change when a reconnect starts a new conversation */
+  agentSessionId: (chatId: string) => string | null
+  /** The first message, shortened, for the tab */
+  title: (chatId: string) => string | null
   subscribe: (listener: () => void) => () => void
 }
 

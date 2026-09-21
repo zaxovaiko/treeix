@@ -6,9 +6,10 @@ import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { agentOr, useAgents } from '@treeix/app/agents'
-import { getSettings, useSettings } from '@treeix/app/settings'
+import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
-import { ListToggle, usePanels } from '@treeix/sdk'
+import { ListToggle, useHost, usePanels } from '@treeix/sdk'
+import { errorMessage } from '@treeix/app/ui'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, aggregateStatus, type Task, type TerminalTab, tabPanes } from './tasks'
 import { StatusMark } from './taskUi'
@@ -55,7 +56,8 @@ export const openTab = (cwd: string, kind: SessionKind, taskId?: string, view: S
 /** Each agent in its default view, then below the other view of agents that chat; terminals only while the chat plugin is off */
 function useNewTabEntries(): { main: NewTabEntry[]; other: NewTabEntry[] } {
   const chat = useService('chat')
-  const entries = newTabEntries(useAgents(), chat ? getSettings().agentViews : {})
+  const { agentViews } = useSettings()
+  const entries = newTabEntries(useAgents(), chat ? agentViews : {})
   return { main: entries.filter((entry) => !entry.secondary), other: chat ? entries.filter((entry) => entry.secondary) : [] }
 }
 
@@ -109,13 +111,13 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
 }
 
 /** Actions of a session, in its pane header, tab and terminal menus */
-const sessionEntries = (session: Session, task: Task | null): MenuEntry[] => [
+const sessionEntries = (session: Session, task: Task | null, flash: (message: string) => void): MenuEntry[] => [
   {
     label: `New ${agentOr(session.kind).label} ${session.view === 'chat' ? 'chat' : 'tab'} here`,
     run: () => openTab(session.worktreePath, session.kind, task?.id, session.view)
   },
-  otherView(session) === 'chat' && { label: 'Open as chat', run: () => void switchView(session.id) },
-  otherView(session) === 'terminal' && { label: 'Open in terminal', run: () => void switchView(session.id) },
+  otherView(session) === 'chat' && { label: 'Open as chat', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
+  otherView(session) === 'terminal' && { label: 'Open in terminal', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
   null,
   { label: 'Copy working directory', run: () => copyText(session.worktreePath) },
   { label: 'Reveal in Finder', run: () => window.api.revealInFinder(session.worktreePath) },
@@ -190,6 +192,7 @@ function TerminalPane({
   repos: Repo[] | null
   horizontal: boolean
 }): React.JSX.Element {
+  const host = useHost()
   const hostRef = useRef<HTMLDivElement>(null)
   const [dropEdge, setDropEdge] = useState<DropEdge | null>(null)
   const edgeOf = (event: React.DragEvent): DropEdge => {
@@ -253,7 +256,7 @@ function TerminalPane({
         <div
           draggable
           onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, session.id)}
-          onContextMenu={(event) => openMenu(event, sessionEntries(session, task))}
+          onContextMenu={(event) => openMenu(event, sessionEntries(session, task, host.flash))}
           className={`flex h-7 shrink-0 cursor-grab items-center gap-2 border-b border-border bg-card px-2 active:cursor-grabbing ${active ? 'text-foreground' : 'text-foreground/60'}`}
         >
           <Icon name="grip" className="-mx-1 size-3 shrink-0 text-muted-foreground/50" />
@@ -296,7 +299,7 @@ function TerminalPane({
               null,
               { label: 'Clear scrollback', run: () => clearTerminal(session.id) },
               null,
-              ...sessionEntries(session, task)
+              ...sessionEntries(session, task, host.flash)
             ])
           }
         />
@@ -308,6 +311,7 @@ function TerminalPane({
 const stripButton = 'grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'
 
 function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: TerminalTab; index: number; count: number; sessions: Session[] }): React.JSX.Element | null {
+  const host = useHost()
   const panes = tabPanes(tab)
   const shown = sessions.find((session) => session.id === tab.focus) ?? sessions.find((session) => session.id === panes[0])
   if (!shown) return null
@@ -320,7 +324,7 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
     <div
       draggable
       onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, panes.join(' '))}
-      onContextMenu={(event) => openMenu(event, sessionEntries(shown, task))}
+      onContextMenu={(event) => openMenu(event, sessionEntries(shown, task, host.flash))}
       onDragOver={(event) => {
         if (!draggingSession(event)) return
         event.preventDefault()

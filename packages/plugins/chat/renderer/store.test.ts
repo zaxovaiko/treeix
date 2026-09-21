@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { emptyFeed } from './feed'
 import type { StartResult } from '../shared/types'
-import { afterPrompt, cancel, emptyChat, getChat, listen, send, setDraft, start, statusOf, subscribe, whenIdle, withUserMessage } from './store'
+import { afterPrompt, cancel, emptyChat, getChat, listen, send, setDraft, shortTitle, start, statusOf, subscribe, titleOf, whenIdle, withUserMessage } from './store'
 
 test('status: waiting beats running beats connected', () => {
   expect(statusOf(emptyChat)).toBe('exited')
@@ -101,4 +101,19 @@ test('event payloads that are not chat events are ignored', () => {
   expect(getChat('events-chat').feed).toBe(emptyFeed)
   handlers.get('events')?.('events-chat', [{ type: 'turn_start' }])
   expect(getChat('events-chat').feed.running).toBe(true)
+})
+
+test('shortTitle takes the first line and shortens it with an ellipsis', () => {
+  expect(shortTitle('  Fix the login bug\nwith details  ')).toBe('Fix the login bug')
+  expect(shortTitle('   \n')).toBeNull()
+  const long = shortTitle('a'.repeat(60))
+  expect(long?.length).toBe(40)
+  expect(long?.endsWith('…')).toBe(true)
+})
+
+test('titleOf is the first user message with text', () => {
+  const withImage = withUserMessage(emptyFeed, [{ type: 'image', mimeType: 'image/png', data: '' }])
+  const feed = withUserMessage(withUserMessage(withImage, [{ type: 'text', text: 'Hello there' }]), [{ type: 'text', text: 'Later' }])
+  expect(titleOf({ ...emptyChat, feed })).toBe('Hello there')
+  expect(titleOf(emptyChat)).toBeNull()
 })

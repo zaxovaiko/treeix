@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { BUILTIN_AGENTS } from '@treeix/app/agents'
-import { newTabEntries, parseMeta, unarchived } from './sessionMeta'
+import { isDefaultChatTitle, newTabEntries, parseMeta, unarchived } from './sessionMeta'
 
 const saved = { worktreePath: '/repo', kind: 'claude', title: 'Claude', startedAt: 1, workspaceId: 'w', agentSessionId: 'abc' }
 
@@ -28,4 +28,11 @@ test('newTabEntries lists each agent in its default view, then the other view wh
     { agent: 'claude', view: 'chat', label: 'Claude', secondary: false },
     { agent: 'claude', view: 'terminal', label: 'Claude in terminal', secondary: true }
   ])
+})
+
+test('isDefaultChatTitle matches only the titles new chats get', () => {
+  expect(isDefaultChatTitle('New chat')).toBe(true)
+  expect(isDefaultChatTitle('New chat 3')).toBe(true)
+  expect(isDefaultChatTitle('New chat about auth')).toBe(false)
+  expect(isDefaultChatTitle('Fix the login bug')).toBe(false)
 })

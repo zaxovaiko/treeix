@@ -41,6 +41,24 @@ export function statusOf(state: ChatState): SessionStatus {
   return 'exited'
 }
 
+const TITLE_CHARS = 40
+
+/** First line of a message, shortened for a tab title; null when it has no text */
+export function shortTitle(text: string): string | null {
+  const line = text.trim().split('\n')[0].trim()
+  if (!line) return null
+  return line.length > TITLE_CHARS ? `${line.slice(0, TITLE_CHARS - 1).trimEnd()}…` : line
+}
+
+/** The chat's title: its first message with text */
+export function titleOf(state: ChatState): string | null {
+  for (const block of state.feed.blocks) {
+    const title = block.type === 'text' && block.role === 'user' ? shortTitle(block.text) : null
+    if (title) return title
+  }
+  return null
+}
+
 export const isBusy = (state: ChatState): boolean => state.sending || state.feed.running
 
 /** Agents don't echo live prompts, so the user's message goes into the feed here, always as its own block */

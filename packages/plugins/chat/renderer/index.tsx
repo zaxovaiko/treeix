@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { type ChatService, createBridge, type RendererPlugin } from '@treeix/sdk'
 import { agentOr } from '@treeix/app/agents'
 import { Chat } from './Chat'
-import { chatIds, getChat, listen, setDraft, start, statusOf, stop, subscribe } from './store'
+import { chatIds, getChat, listen, setDraft, start, statusOf, stop, subscribe, titleOf } from './store'
 
 listen(createBridge('chat'))
 
@@ -13,6 +13,8 @@ const service: ChatService = {
   status: (chatId) => statusOf(getChat(chatId)),
   draft: setDraft,
   terminalCommand: (chatId) => getChat(chatId).terminalCommand,
+  agentSessionId: (chatId) => getChat(chatId).agentSessionId,
+  title: (chatId) => titleOf(getChat(chatId)),
   subscribe
 }
 

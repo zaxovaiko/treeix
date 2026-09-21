@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
-import { errorMessage } from '@treeix/app/ui'
 import { ErrorBlock, firstAllow, firstReject, PermissionCard, TextBlock, ThoughtBlock, ToolCard } from './Blocks'
 import { Composer } from './ChatComposer'
 import type { Block, PendingPermission } from './feed'
-import { answer, cancel, isBusy, retry, stop, useChat } from './store'
+import { answer, cancel, isBusy, retry, useChat } from './store'
 
 const STICK_PX = 40
 
@@ -44,16 +43,6 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
 
   const newest = feed.blocks.map(pendingOf).findLast((permission) => permission !== null) ?? null
 
-  const openInTerminal =
-    chat.terminalCommand === null
-      ? null
-      : (): void => {
-          const sessions = host.service('sessions')
-          const command = chat.terminalCommand
-          if (!sessions || command === null) return
-          stop(chatId)
-          sessions.runCommand(cwd, command).then(sessions.reveal, (reason: unknown) => host.flash(errorMessage(reason)))
-        }
 
   const onKeyDownCapture = (event: React.KeyboardEvent): void => {
     // Keys from portaled menus (option pickers) reach here through React but are not the chat's
@@ -94,7 +83,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
       case 'permission':
         return <PermissionCard key={block.permission.requestId} permission={block.permission} newest={block.permission === newest} onAnswer={(optionId) => reply(block.permission.requestId, optionId)} />
       case 'error':
-        return <ErrorBlock key={index} message={block.message} onOpenTerminal={openInTerminal} />
+        return <ErrorBlock key={index} message={block.message} />
     }
   }
 
@@ -120,11 +109,6 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
             {chat.options && (
               <button onClick={() => retry(chatId)} className="shrink-0 text-foreground hover:underline">
                 Retry
-              </button>
-            )}
-            {openInTerminal && (
-              <button onClick={openInTerminal} className="shrink-0 text-foreground hover:underline">
-                Open in terminal
               </button>
             )}
           </div>

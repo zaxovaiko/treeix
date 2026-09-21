@@ -12,7 +12,7 @@ import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, remo
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { LiveTerminal } from '../shared/types'
-import { parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
+import { isDefaultChatTitle, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 
 export { type SessionKind, type SessionStatus, type SessionView }
 
@@ -412,7 +412,7 @@ const metaOf = ({ worktreePath, kind, title, startedAt, workspaceId, agentSessio
 function newMeta(worktreePath: string, kind: SessionKind, view: SessionView): SessionMeta {
   const same = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind && session.view === view).length
   const agent = agentOr(kind)
-  const title = view === 'chat' ? 'New chat' : agent.label
+  const title = view === 'chat' ? NEW_CHAT_TITLE : agent.label
   // Chats learn their conversation id from the agent once connected
   const agentSessionId = view === 'terminal' && agent.sessionIdFlag ? crypto.randomUUID() : null
   return { worktreePath, kind, title: `${title}${same ? ` ${same + 1}` : ''}`, startedAt: Date.now(), workspaceId: getCurrentWorkspaceId(), agentSessionId, view }
@@ -570,14 +570,20 @@ function followChats(chat: ChatService): void {
   chat.subscribe(syncChats)
 }
 
-/** Chat statuses feed the sessions' own, so dots, badges and keep awake see chats like terminals */
-function syncChats(): void {
+/**
+ * Chat statuses feed the sessions' own, so dots, badges and keep awake see chats like terminals; the conversation id and
+ * first message are kept too. Without the chat plugin chats go dormant, and wake once it is back and they show.
+ */
+export function syncChats(): void {
   const chat = findService('chat')
-  if (!chat) return
   const next = state.sessions.map((session): Session => {
-    if (session.view !== 'chat' || session.status === 'dormant') return session
-    const status = connecting.has(session.id) ? 'running' : chat.status(session.id)
-    return status === session.status ? session : { ...session, status }
+    if (session.view !== 'chat') return session
+    if (!chat) return session.status === 'dormant' ? session : { ...session, status: 'dormant' }
+    const status = session.status === 'dormant' ? 'dormant' : connecting.has(session.id) ? 'running' : chat.status(session.id)
+    const agentSessionId = chat.agentSessionId(session.id) ?? session.agentSessionId
+    const title = (isDefaultChatTitle(session.title) && chat.title(session.id)) || session.title
+    const same = status === session.status && agentSessionId === session.agentSessionId && title === session.title
+    return same ? session : { ...session, status, agentSessionId, title }
   })
   if (next.some((session, index) => session !== state.sessions[index])) update({ sessions: next })
 }
@@ -687,9 +693,9 @@ const setHistory = (history: ClosedSession[]): void => {
 export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
-  if (session.view === 'chat') {
-    if (session.status !== 'dormant') findService('chat')?.stop(id)
-  } else {
+  // A dormant chat may still have an agent from before a reload
+  if (session.view === 'chat') findService('chat')?.stop(id)
+  else {
     if (session.status !== 'dormant') bridge.send('kill', id)
     session.terminal.dispose()
   }
@@ -855,10 +861,11 @@ export async function switchView(id: string): Promise<void> {
   let next: string
   if (session.view === 'chat') {
     const command = chat.terminalCommand(id) ?? undefined
-    chat.stop(id)
     const meta: SessionMeta = { ...metaOf(session), view: 'terminal' }
+    // The chat keeps running if the terminal fails to start
     next = await spawnSession(meta, command)
     await openSession(next, meta, '', null)
+    chat.stop(id)
   } else {
     if (session.status !== 'dormant') bridge.send('kill', id)
     session.terminal.dispose()

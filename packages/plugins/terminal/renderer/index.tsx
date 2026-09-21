@@ -20,6 +20,7 @@ import { getAgents } from '@treeix/app/agents'
 import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
+import { useService } from '@treeix/app/plugins'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
 import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
 import { digitPressed } from '@treeix/app/settings'
@@ -57,6 +58,7 @@ import {
   setWebLinkHandler,
   splitPane,
   subscribeTerminals,
+  syncChats,
   toggleZoom,
   useTerminals,
   whenReady
@@ -322,6 +324,9 @@ function Root(): React.JSX.Element | null {
   scope = current
   const { currentId } = useWorkspaces()
   useFileLinks()
+  // Chats go dormant while the chat plugin is off
+  const chat = useService('chat')
+  useEffect(syncChats, [chat])
   // Keys and new terminals act on the task on screen, so the store knows which that is
   useEffect(() => {
     if (current.task && getTerminals().selected[currentId] !== current.task.id) selectTask(current.task.id)
@@ -515,7 +520,14 @@ const plugin: RendererPlugin = {
     ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),
     ...scope.sessions.map((session) => {
       const task = taskOf(scope.tasks, session.id)
-      return { id: `session-open:${session.id}`, group: 'Sessions', label: session.title, detail: task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, session.worktreePath), icon: 'terminal' as const, run: () => reveal(host, session.id) }
+      return {
+        id: `session-open:${session.id}`,
+        group: 'Sessions',
+        label: session.title,
+        detail: task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, session.worktreePath),
+        icon: session.view === 'chat' ? ('comment' as const) : ('terminal' as const),
+        run: () => reveal(host, session.id)
+      }
     })
   ],
   shortcuts: SHORTCUTS,
