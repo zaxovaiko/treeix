@@ -78,6 +78,8 @@ export type SessionStatus = 'running' | 'input' | 'idle' | 'exited' | 'dormant'
 export type SessionSummary = {
   id: string
   kind: SessionKind
+  /** A chat is drawn by the chat plugin and takes text as a draft */
+  view: 'terminal' | 'chat'
   title: string
   status: SessionStatus
   exitCode: number | null

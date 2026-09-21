@@ -30,6 +30,7 @@ import { SessionsDialog } from './SessionsDialog'
 import { startRename, TaskList } from './TaskList'
 import { openTab, TaskTerminals } from './TerminalPanel'
 import { resolvePath } from './fileLinks'
+import { unarchived } from './sessionMeta'
 import { type Task, taskOf, uniqueName } from './tasks'
 import { switchTask, taskLabel } from './taskUi'
 import {
@@ -49,6 +50,7 @@ import {
   revealSession,
   selectTask,
   type Session,
+  type SessionView,
   sendText,
   setActiveTab,
   setFileLinkHandler,
@@ -84,7 +86,7 @@ function sessionSummaries(): SessionSummary[] {
   if (summaries.from !== sessions) {
     summaries = {
       from: sessions,
-      list: sessions.map(({ id, kind, title, status, exitCode, worktreePath, workspaceId, startedAt }) => ({ id, kind, title, status, exitCode, worktreePath, workspaceId, startedAt }))
+      list: sessions.map(({ id, kind, view, title, status, exitCode, worktreePath, workspaceId, startedAt }) => ({ id, kind, view, title, status, exitCode, worktreePath, workspaceId, startedAt }))
     }
   }
   return summaries.list
@@ -101,7 +103,7 @@ function useTaskScope(): TaskScope {
   const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
   const tasks = state.tasks.filter(include)
   const task = tasks.find((candidate) => candidate.id === state.selected[currentId]) ?? tasks[0] ?? null
-  return { tasks, task, sessions: state.sessions.filter(include), history: state.history.filter(include) }
+  return { tasks, task, sessions: state.sessions.filter(include), history: unarchived(state.history).filter(include) }
 }
 
 /** The latest scope, for keys handled outside React; kept by Root, which is always mounted */
@@ -290,8 +292,8 @@ function reveal(host: HostApi, id: string): void {
 }
 
 /** A new tab of the task on screen, focused */
-function newTab(host: HostApi, kind: SessionKind): void {
-  openTab(scope.task?.worktreePath ?? host.defaultCwd, kind, scope.task?.id)
+function newTab(host: HostApi, kind: SessionKind, view: SessionView = 'terminal'): void {
+  openTab(scope.task?.worktreePath ?? host.defaultCwd, kind, scope.task?.id, view)
   showTerminals(host)
 }
 
@@ -500,6 +502,14 @@ const plugin: RendererPlugin = {
       icon: 'terminal' as const,
       shortcut: agent.id === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
       run: () => newTab(host, agent.id)
+    })),
+    ...(host.service('chat') ? getAgents().filter((agent) => agent.chat) : []).map((agent) => ({
+      id: `chat:${agent.id}`,
+      group: 'Actions',
+      label: `New ${agent.label} chat`,
+      detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
+      icon: 'comment' as const,
+      run: () => newTab(host, agent.id, 'chat')
     })),
     // @ in the palette searches these
     ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),
