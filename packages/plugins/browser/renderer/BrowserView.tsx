@@ -187,7 +187,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         )}
       </div>
       {tab && place === 'tab' && <Strip tab={tab} />}
-      {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock guestId={tab.guestId} />}
+      {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock key={tab.guestId} guestId={tab.guestId} />}
     </div>
   )
 }
