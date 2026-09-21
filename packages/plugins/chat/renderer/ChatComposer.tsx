@@ -4,21 +4,7 @@ import { useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning } from './composer'
-import { cancel, isBusy, send, setDraft, setOption, unqueue, useChat, whenIdle } from './store'
-
-/** Worktree files for "@" completion, listed once per chat */
-const fileLists = new Map<string, Promise<string[]>>()
-const filesFor = (chatId: string, cwd: string): Promise<string[]> => {
-  let files = fileLists.get(chatId)
-  if (!files) {
-    files = window.api.listFiles(cwd).then(
-      (listing) => listing.files,
-      () => []
-    )
-    fileLists.set(chatId, files)
-  }
-  return files
-}
+import { cancel, filesFor, isBusy, send, setDraft, setOption, unqueue, useChat, whenIdle } from './store'
 
 const readImage = (file: File): Promise<ChatImage> =>
   new Promise((resolve, reject) => {
@@ -138,7 +124,8 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
 
   const submit = (): void => {
     const text = draft.trim()
-    if (!chat.connected || (!text && images.length === 0)) return
+    // A chat that lost its agent reconnects on send; one still connecting waits
+    if ((!chat.connected && !chat.error) || (!text && images.length === 0)) return
     send(chatId, [...images, ...(text ? [{ type: 'text' as const, text }] : [])])
     setDraft(chatId, '')
     setImages([])
@@ -345,7 +332,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
           ) : (
             <button
               onClick={submit}
-              disabled={!chat.connected || (!draft.trim() && images.length === 0)}
+              disabled={(!chat.connected && !chat.error) || (!draft.trim() && images.length === 0)}
               className="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-40"
             >
               {chat.connected || chat.error ? 'Send' : 'Connecting…'}

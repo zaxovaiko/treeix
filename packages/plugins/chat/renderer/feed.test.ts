@@ -82,3 +82,15 @@ test('a file inside the folder opens relative to it, one outside from its own fo
   expect(fileTarget('/repo', '/etc/hosts')).toEqual({ root: '/etc', path: 'hosts' })
   expect(fileTarget('/repo', 'src/a.ts')).toEqual({ root: '/repo', path: 'src/a.ts' })
 })
+
+test('a repeated tool call replaces its card instead of adding one, keeping its permission', () => {
+  const call = { id: 't1', title: 'Run bun test', kind: 'execute' as const, status: 'pending' as const, output: [], locations: [], rawInput: {} }
+  const events = [
+    { type: 'tool_call', call },
+    { type: 'permission', requestId: 'r1', title: 'Run bun test', toolCallId: 't1', options: [{ id: 'a', name: 'Allow', kind: 'allow_once' }] },
+    { type: 'tool_call', call: { ...call, status: 'in_progress' } }
+  ] satisfies ChatEvent[]
+  const feed = events.reduce((current, event) => reduce(current, event, 0), emptyFeed)
+  expect(feed.blocks).toHaveLength(1)
+  expect(feed.blocks[0]).toMatchObject({ type: 'tool', call: { id: 't1', status: 'in_progress' }, permission: { requestId: 'r1' } })
+})

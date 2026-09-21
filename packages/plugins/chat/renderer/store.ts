@@ -99,6 +99,20 @@ let bridge: Bridge | null = null
 
 export const getChat = (chatId: string): ChatState => chats.get(chatId) ?? emptyChat
 
+/** Worktree files for "@" completion, listed once per chat */
+const fileLists = new Map<string, Promise<string[]>>()
+export function filesFor(chatId: string, cwd: string): Promise<string[]> {
+  let files = fileLists.get(chatId)
+  if (!files) {
+    files = window.api.listFiles(cwd).then(
+      (listing) => listing.files,
+      () => []
+    )
+    fileLists.set(chatId, files)
+  }
+  return files
+}
+
 export function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
@@ -119,27 +133,41 @@ function update(chatId: string, change: (state: ChatState) => ChatState): void {
 /** Attaches to the main module's events; call once when the plugin loads */
 export function listen(chatBridge: Bridge): void {
   bridge = chatBridge
+  // Agents from before a reload are unreachable now; chats that resume start their own
+  chatBridge.send('stopAll')
   chatBridge.on('events', (chatId, events) => {
     if (typeof chatId !== 'string' || !isChatEvents(events)) return
     const now = Date.now()
     update(chatId, (state) => ({ ...state, feed: events.reduce((feed, event) => reduce(feed, event, now), state.feed) }))
+    replayed(chatId)
   })
   chatBridge.on('closed', (chatId, reason) => {
     if (typeof chatId !== 'string') return
     const text = typeof reason === 'string' ? reason : 'The agent disconnected'
     update(chatId, (state) => ({ ...state, connected: false, sending: false, error: 'Disconnected', feed: reduce(state.feed, { type: 'disconnected', message: text }, Date.now()) }))
+    replayed(chatId)
   })
 }
 
 export const start = (chatId: string, options: ChatStartOptions): Promise<string> => connect(chatId, options, false)
 
-/** `fresh` empties the feed once connected, for a resumed session the agent replays */
+/** Resolves a fresh connect waiting for its first batch of events, which holds the replay (options always come first) */
+const replayWaits = new Map<string, () => void>()
+function replayed(chatId: string): void {
+  replayWaits.get(chatId)?.()
+  replayWaits.delete(chatId)
+}
+
+/** `fresh` empties the feed once connected, for a resumed session the agent replays, and resolves once the replay is in */
 async function connect(chatId: string, options: ChatStartOptions, fresh: boolean): Promise<string> {
   if (!bridge) throw new Error('Chat is not loaded')
   update(chatId, (state) => ({ ...state, options, error: null }))
   try {
     const startOptions: StartOptions = { adapter: options.adapter, command: options.command, cwd: options.cwd, resume: options.resume }
     const result = await bridge.invoke<StartResult>('start', chatId, startOptions)
+    // An older connect still waiting gives way to this one
+    replayed(chatId)
+    const replay = fresh ? new Promise<void>((resolve) => replayWaits.set(chatId, resolve)) : null
     update(chatId, (state) => ({
       ...state,
       feed: fresh ? emptyFeed : state.feed,
@@ -148,6 +176,7 @@ async function connect(chatId: string, options: ChatStartOptions, fresh: boolean
       terminalCommand: result.terminalCommand,
       agentSessionId: result.agentSessionId
     }))
+    await replay
     return result.agentSessionId
   } catch (reason) {
     update(chatId, (state) => ({ ...state, connected: false, error: errorMessage(reason) }))
@@ -156,10 +185,13 @@ async function connect(chatId: string, options: ChatStartOptions, fresh: boolean
 }
 
 /** Starts again with the same agent, continuing the session it had; agents that load sessions replay it into a fresh feed */
-export function retry(chatId: string): void {
+function reconnect(chatId: string): Promise<string> {
   const { options, agentSessionId, capabilities } = getChat(chatId)
-  if (options) void connect(chatId, { ...options, resume: agentSessionId ?? options.resume }, capabilities?.load === true).catch(() => undefined)
+  if (!options) return Promise.reject(new Error('Nothing to reconnect'))
+  return connect(chatId, { ...options, resume: agentSessionId ?? options.resume }, capabilities?.load === true)
 }
+
+export const retry = (chatId: string): void => void reconnect(chatId).catch(() => undefined)
 
 export function stop(chatId: string): void {
   bridge?.send('stop', chatId)
@@ -179,9 +211,23 @@ function prompt(chatId: string, content: ChatContent[]): void {
     })
 }
 
-/** Sends now, or queues behind the running turn */
+/** Sends now, queues behind the running turn, or, for a chat that lost its agent, reconnects and then sends */
 export function send(chatId: string, content: ChatContent[]): void {
-  if (isBusy(getChat(chatId))) return update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
+  const chat = getChat(chatId)
+  if (!chat.connected) {
+    if (!chat.error || !chat.options) return
+    update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
+    reconnect(chatId).then(
+      () => {
+        const { state, next } = afterPrompt(getChat(chatId))
+        update(chatId, () => state)
+        if (next) prompt(chatId, next)
+      },
+      () => update(chatId, restoreQueue)
+    )
+    return
+  }
+  if (isBusy(chat)) return update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
   update(chatId, (state) => beginTurn(state, content))
   prompt(chatId, content)
 }
@@ -190,6 +236,17 @@ export const unqueue = (chatId: string, index: number): void =>
   update(chatId, (state) => ({ ...state, queue: state.queue.filter((_, at) => at !== index) }))
 
 export const setDraft = (chatId: string, draft: string): void => update(chatId, (state) => (state.draft === draft ? state : { ...state, draft }))
+
+/** Adds text below what is already typed, a blank line between */
+export const appendDraft = (chatId: string, text: string): void =>
+  update(chatId, (state) => ({ ...state, draft: state.draft.trim() ? `${state.draft.trimEnd()}\n\n${text}` : text }))
+
+/** Drops a closed chat's state and file list */
+export function forget(chatId: string): void {
+  fileLists.delete(chatId)
+  if (!chats.delete(chatId)) return
+  listeners.forEach((listener) => listener())
+}
 
 export function cancel(chatId: string): void {
   bridge?.send('cancel', chatId)

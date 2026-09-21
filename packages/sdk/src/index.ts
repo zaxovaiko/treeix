@@ -130,8 +130,10 @@ export type ChatService = {
   start: (chatId: string, options: { agent: string; adapter: string; command: string; cwd: string; resume: string | null }) => Promise<string>
   stop: (chatId: string) => void
   status: (chatId: string) => SessionStatus
-  /** Puts text into the composer, e.g. review comments sent to the session */
+  /** Adds text to the composer below what is typed, e.g. review comments sent to the session */
   draft: (chatId: string, text: string) => void
+  /** Drops a closed chat's state */
+  forget: (chatId: string) => void
   terminalCommand: (chatId: string) => string | null
   /** The agent's conversation id once connected; it can change when a reconnect starts a new conversation */
   agentSessionId: (chatId: string) => string | null

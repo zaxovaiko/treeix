@@ -61,6 +61,9 @@ export function reduce(feed: Feed, event: ChatEvent, now: number): Feed {
       return { ...feed, blocks: [...feed.blocks, { type: 'thought', text: event.text, startedAt: now, endedAt: null }] }
     }
     case 'tool_call': {
+      // Agents may resend a call with the same id: it replaces the card, keeping a permission waiting on it
+      const index = feed.blocks.findIndex((block) => block.type === 'tool' && block.call.id === event.call.id)
+      if (index !== -1) return { ...feed, blocks: feed.blocks.map((block, at) => (at === index && block.type === 'tool' ? { ...block, call: event.call } : block)) }
       const blocks = closeThought(feed.blocks, now)
       return { ...feed, blocks: [...blocks, { type: 'tool', call: event.call, permission: null }] }
     }

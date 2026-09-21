@@ -694,8 +694,11 @@ export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
   // A dormant chat may still have an agent from before a reload
-  if (session.view === 'chat') findService('chat')?.stop(id)
-  else {
+  if (session.view === 'chat') {
+    const chat = findService('chat')
+    chat?.stop(id)
+    chat?.forget(id)
+  } else {
     if (session.status !== 'dormant') bridge.send('kill', id)
     session.terminal.dispose()
   }

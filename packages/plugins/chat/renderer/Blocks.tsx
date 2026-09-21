@@ -13,6 +13,9 @@ type Diff = Extract<ToolOutput, { type: 'diff' }>
 
 const COLLAPSED_LINES = 10
 
+/** Agent text can name any image URL, and loading it would leak to that server; remote ones show as their URL, data: images inline */
+const inlineOnly = (src: string): Promise<string> | null => (src.startsWith('data:') ? null : Promise.reject(new Error(src)))
+
 const texts = (call: ToolCall): string =>
   call.output
     .map((output) => (output.type === 'text' ? output.text : ''))
@@ -43,7 +46,7 @@ export function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }
   }
   return (
     <div className="text-sm select-text">
-      <LazyMarkdown>{block.text}</LazyMarkdown>
+      <LazyMarkdown resolveImage={inlineOnly}>{block.text}</LazyMarkdown>
     </div>
   )
 }
@@ -74,7 +77,7 @@ function StatusIcon({ status }: { status: ToolCall['status'] }): React.JSX.Eleme
 function openFile(host: ReturnType<typeof useHost>, cwd: string, path: string, line: number | null): void {
   const target = fileTarget(cwd, path)
   host.openTab({
-    key: `chat-file:${path}`,
+    key: `chat-file:${target.root}:${target.path}`,
     title: baseName(path),
     icon: <FileIcon path={path} />,
     parent: 'terminal',
