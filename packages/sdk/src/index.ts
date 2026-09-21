@@ -17,6 +17,7 @@ export type PluginManifest = {
 export type { Command, IconName }
 
 export * from './layout'
+export type * from './chat'
 /** Makes a plugin's action runnable from the native menu; the action needs a `Go to` or `Panels` section to show there */
 export { registerActionRunner } from '@treeix/app/actionRunners'
 import type { ShortcutInfo } from './layout'
