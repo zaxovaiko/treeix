@@ -42,7 +42,7 @@ const chromiumRow = (row: SqlRow): ChromiumRow => ({
 
 /** macOS asks the user once whether Treeix may read this item; the password stays in the importer */
 async function keychainPassword(service: string): Promise<string> {
-  const { stdout } = await run('security', ['find-generic-password', '-w', '-s', service])
+  const { stdout } = await run('/usr/bin/security', ['find-generic-password', '-w', '-s', service])
   return stdout.trim()
 }
 
@@ -62,7 +62,8 @@ async function setAll(target: Session, cookies: (CookiesSetDetails | null)[]): P
 }
 
 function readFirefox(db: DatabaseSync, now: number): (CookiesSetDetails | null)[] {
-  const rows = db.prepare('SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies').all()
+  // Container tabs keep their own cookies under the same names; only the default ones are imported
+  const rows = db.prepare("SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies WHERE originAttributes = ''").all()
   return rows.map((row) => firefoxCookie(firefoxRow(row), now))
 }
 

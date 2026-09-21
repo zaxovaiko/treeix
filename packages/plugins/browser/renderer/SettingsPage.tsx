@@ -30,21 +30,24 @@ export function BrowserSettings(): React.JSX.Element {
   }, [canImport])
   const chosenProfile = profiles.find((profile) => profile.key === chosen)
   const runImport = async (): Promise<void> => {
-    if (chosenProfile?.blocked) {
-      setBusy(true)
-      const list = await bridge.invoke<BrowserProfile[]>('profiles')
-      setBusy(false)
-      setProfiles(list)
-      const unblocked = list.find((profile) => !profile.blocked && profile.browser === chosenProfile.browser)
-      if (unblocked) setChosen(unblocked.key)
-      return
-    }
     setBusy(true)
-    setResult(null)
-    const outcome = await bridge.invoke<ImportResult>('import', chosen)
-    setBusy(false)
-    setResult(outcome.error ?? `Imported ${outcome.imported.toLocaleString()} cookies${outcome.skipped ? `, skipped ${outcome.skipped.toLocaleString()}` : ''}`)
-    setInfo(await bridge.invoke<ImportInfo>('importInfo'))
+    try {
+      if (chosenProfile?.blocked) {
+        const list = await bridge.invoke<BrowserProfile[]>('profiles')
+        setProfiles(list)
+        const unblocked = list.find((profile) => !profile.blocked && profile.browser === chosenProfile.browser)
+        if (unblocked) setChosen(unblocked.key)
+        return
+      }
+      setResult(null)
+      const outcome = await bridge.invoke<ImportResult>('import', chosen)
+      setResult(outcome.error ?? `Imported ${outcome.imported.toLocaleString()} cookies${outcome.skipped ? `, skipped ${outcome.skipped.toLocaleString()}` : ''}`)
+      setInfo(await bridge.invoke<ImportInfo>('importInfo'))
+    } catch {
+      setResult('Import failed. Try again')
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <>
