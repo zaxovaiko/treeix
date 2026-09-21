@@ -4,10 +4,12 @@ import { createBridge } from '@treeix/sdk'
 import { clearVitals, dropEntries } from './entries'
 import { type BrowserTab, patchTab, updateBrowser, useBrowser } from './tabs'
 import type { ElementSelection } from '../shared/types'
+import { pickWinner } from './slot-winner'
 
 const bridge = createBridge('browser')
 
-// Slots are where a page may show: the Browser tab and the Browser panel. The newest mounted one wins
+// Slots are where a page may show: the Browser tab and the Browser panel. The newest mounted slot
+// that is actually visible wins (a collapsed or hidden dock mounts at zero size and must not win)
 const slots: HTMLDivElement[] = []
 const slotListeners = new Set<() => void>()
 const notifySlots = (): void => slotListeners.forEach((listener) => listener())
@@ -16,13 +18,18 @@ const subscribeSlots = (listener: () => void): (() => void) => {
   return () => slotListeners.delete(listener)
 }
 
+let winner: HTMLDivElement | null = null
+
 export function useSlot(): { ref: (element: HTMLDivElement | null) => void; shown: boolean } {
   const own = useRef<HTMLDivElement | null>(null)
-  const shown = useSyncExternalStore(subscribeSlots, () => own.current !== null && slots.at(-1) === own.current)
+  const shown = useSyncExternalStore(subscribeSlots, () => own.current !== null && winner === own.current)
   // Stable, so React calls it only on mount and unmount and the newest mounted slot stays last
   const ref = useCallback((element: HTMLDivElement | null): void => {
     if (own.current === element) return
-    if (own.current) slots.splice(slots.indexOf(own.current), 1)
+    if (own.current) {
+      slots.splice(slots.indexOf(own.current), 1)
+      if (winner === own.current) winner = null
+    }
     own.current = element
     if (element) slots.push(element)
     notifySlots()
@@ -30,7 +37,7 @@ export function useSlot(): { ref: (element: HTMLDivElement | null) => void; show
   return { ref, shown }
 }
 
-export const slotRect = (): DOMRect | null => slots.at(-1)?.getBoundingClientRect() ?? null
+export const slotRect = (): DOMRect | null => winner?.getBoundingClientRect() ?? null
 
 const views = new Map<string, WebviewTag>()
 export const pageOf = (tabId: string): WebviewTag | undefined => views.get(tabId)
@@ -57,6 +64,11 @@ export function PageLayer({ children }: { children?: React.ReactNode }): React.J
     // ponytail: polls the slot's rect every frame, since a ResizeObserver misses moves; an observer on the dock if this shows up in a profile
     let frame = 0
     const tick = (): void => {
+      const nextWinner = pickWinner(slots)
+      if (nextWinner !== winner) {
+        winner = nextWinner
+        notifySlots()
+      }
       const next = slotRect()
       setRect((current) => (sameRect(current, next) ? current : next))
       frame = requestAnimationFrame(tick)
