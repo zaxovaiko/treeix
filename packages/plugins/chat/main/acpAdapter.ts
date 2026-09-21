@@ -112,7 +112,7 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
     settleAll()
     if (closing) return
     const tail = stderrTail().trim()
-    emit({ type: 'error', message: tail ? `The agent stopped: ${tail}` : 'The agent stopped' })
+    emit({ type: 'disconnected', message: tail ? `The agent stopped: ${tail}` : 'The agent stopped' })
   })
   const { agentCapabilities } = await connection.initialize({
     protocolVersion: PROTOCOL_VERSION,

@@ -3,6 +3,7 @@ import type { ChatConnection, ChatContent, ChatEvent, MainPlugin } from '@treeix
 import type { StartOptions, StartResult } from '../shared/types'
 import { acpAdapter } from './acpAdapter'
 import { createBatcher } from './batcher'
+import { createGenerationGuard } from './generations'
 
 type Entry = { connection: ChatConnection; owner: WebContents; dispose: () => void }
 
@@ -10,6 +11,7 @@ const plugin: MainPlugin = {
   chatAdapters: [acpAdapter],
   activate: (context) => {
     const connections = new Map<string, Entry>()
+    const generations = createGenerationGuard<string>()
 
     const owned = (event: IpcMainInvokeEvent | IpcMainEvent, chatId: string): Entry | null => {
       if (typeof chatId !== 'string') return null
@@ -31,8 +33,15 @@ const plugin: MainPlugin = {
       const adapter = context.chatAdapter(options.adapter)
       if (!adapter) throw new Error(`No ${options.adapter} adapter`)
 
+      const token = generations.begin(chatId)
       const owner = event.sender
       const connection = await adapter.connect({ cwd: options.cwd, command: options.command, env: await context.sessionEnv(), resume: options.resume })
+
+      // A newer start for this chat id arrived while connecting: let it own the map, this connection has nowhere to go
+      if (!generations.isCurrent(chatId, token)) {
+        connection.close()
+        throw new Error('Superseded by a newer start')
+      }
 
       const batcher = createBatcher<ChatEvent>((batch) => context.send(owner, 'events', chatId, batch))
       const disposers: (() => void)[] = []
@@ -45,14 +54,15 @@ const plugin: MainPlugin = {
         }
       }
       disposers.push(() => batcher.dispose())
-      // The agent process died: the abort handler in the adapter is the only source of an unprompted 'error' outside a turn
       disposers.push(
         connection.onEvent((chatEvent) => {
-          batcher.push(chatEvent)
-          if (chatEvent.type === 'error') {
+          // A 'disconnected' event means the agent's process or connection ended; 'error' events are ordinary turn failures and just flow through
+          if (chatEvent.type === 'disconnected') {
             context.send(owner, 'closed', chatId, chatEvent.message)
             drop(chatId, entry)
+            return
           }
+          batcher.push(chatEvent)
         })
       )
       const onDestroyed = (): void => drop(chatId, entry)

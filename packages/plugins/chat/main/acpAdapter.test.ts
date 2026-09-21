@@ -109,7 +109,7 @@ test('a dropped agent settles a waiting permission and reports it', async () => 
   })
   await connection.prompt([{ type: 'text', text: 'Hi' }])
   expect(events.map((event) => event.type)).toContain('permission_settled')
-  expect(events).toContainEqual({ type: 'error', message: 'The agent stopped: crashed' })
+  expect(events).toContainEqual({ type: 'disconnected', message: 'The agent stopped: crashed' })
 })
 
 test('file access stays inside the session folder', async () => {

@@ -43,6 +43,8 @@ export type ChatEvent =
   | { type: 'turn_start' }
   | { type: 'turn_end'; stopReason: StopReason }
   | { type: 'error'; message: string }
+  /** The agent's process or connection ended; the session can be resumed with a new start */
+  | { type: 'disconnected'; message: string }
 
 export type ChatCapabilities = { images: boolean; load: boolean; list: boolean }
 
