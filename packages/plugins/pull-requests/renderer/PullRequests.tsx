@@ -1200,7 +1200,7 @@ export function PullRequestDetailView({
   // Goes to a changed file, like VS Code's quick open
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (!matchesAction(event, 'prs.findFile') || !detail) return
+      if (host.keyboardPage !== 'prs' || !matchesAction(event, 'prs.findFile') || !detail) return
       event.preventDefault()
       setView('files')
       setPicker('files')

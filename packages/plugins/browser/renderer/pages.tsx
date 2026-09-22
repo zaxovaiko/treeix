@@ -74,10 +74,16 @@ export function PageLayer({ children }: { children?: React.ReactNode }): React.J
       }
       const next = slotRect()
       setRect((current) => (sameRect(current, next) ? current : next))
-      frame = requestAnimationFrame(tick)
+      // A Browser page kept mounted off screen has slots of zero size; polling those costs a frame for nothing
+      frame = slots.some((slot) => slot.checkVisibility()) ? requestAnimationFrame(tick) : 0
     }
+    const wake = new ResizeObserver(() => frame || tick())
+    slots.forEach((slot) => wake.observe(slot))
     tick()
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      wake.disconnect()
+      cancelAnimationFrame(frame)
+    }
   }, [hasSlot])
   const box = rect ?? new DOMRect(0, 0, 0, 0)
   return (

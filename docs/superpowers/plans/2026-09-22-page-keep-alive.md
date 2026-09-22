@@ -19,7 +19,7 @@ Both numbers come from the real app driven over CDP, with the user's own reposit
 | Packaged (`bun run --cwd apps/desktop build`) | 0 ms blocked | 0 ms | 0 ms | 0 ms |
 | Dev (`bun run dev`) | 764-833 ms blocked per visit, worst single task 262 ms | ~130 ms | ~70 ms | 0 ms |
 
-After keep-alive (dev, same machine and data): first visit to Pull requests ~360 ms, every later switch 156-182 ms in one task, in both directions; idle stays at 0. The remaining cost is `jsxDEV` building the shell's own elements, which the packaged build does not pay.
+After keep-alive (dev, same machine and data): every switch costs 180-215 ms in one task, in both directions, instead of 764-833 ms for Pull requests; idle stays at 0, and the packaged build still shows 0. What is left is `jsxDEV` building the shell's own elements on each render, not the pages, which the packaged build does not pay.
 
 Profile of one Pull requests switch in dev: `jsxDEV` 194 ms, garbage collection 137 ms, `react-markdown` parsing ~100 ms, the rest smaller. That is the cost of building the page again, which keep-alive removes in both builds.
 

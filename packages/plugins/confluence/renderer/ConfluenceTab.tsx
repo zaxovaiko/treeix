@@ -316,9 +316,12 @@ export function ConfluenceTab(): React.JSX.Element {
     run?.()
     return run !== undefined
   }
+  // The page keeps this listener while it sits off screen, so it only acts when the keys are its own
+  const ownsKeys = useRef(false)
+  ownsKeys.current = host.keyboardPage === 'confluence'
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
-      if (isPageKey(event) && onKey.current(event)) event.preventDefault()
+      if (ownsKeys.current && isPageKey(event) && onKey.current(event)) event.preventDefault()
     }
     window.addEventListener('keydown', listener)
     return () => window.removeEventListener('keydown', listener)

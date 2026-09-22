@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { IconName } from '@treeix/app/Icon'
-import { type Command, isPageKey } from '@treeix/sdk'
+import { type Command, isPageKey, useHost } from '@treeix/sdk'
 import { actionForEvent, actionKeys, defineActions, key } from '@treeix/shared/keymap'
 
 export type Verb =
@@ -80,11 +80,14 @@ export function pullRequestCommands(): Command[] {
 export function usePullRequestKeys(handlers: Handlers): void {
   const latest = useRef(handlers)
   latest.current = handlers
+  // The page keeps this listener while it sits off screen, so it only acts when the keys are its own
+  const mine = useRef(false)
+  mine.current = useHost().keyboardPage === PAGE
   useEffect(() => {
     const get = (): Handlers => latest.current
     sources.add(get)
     const onKey = (event: KeyboardEvent): void => {
-      if (!isPageKey(event)) return
+      if (!mine.current || !isPageKey(event)) return
       const id = actionForEvent(event, VERBS.map(({ verb }) => idOf(verb)))
       const verb = VERBS.find((entry) => idOf(entry.verb) === id)?.verb
       const run = verb && latest.current[verb]

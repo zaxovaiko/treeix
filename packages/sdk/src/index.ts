@@ -193,6 +193,8 @@ export type HostApi = {
   defaultCwd: string
   diffStyle: 'split' | 'unified'
   activeTab: string
+  /** The page bare keys belong to: the tab on screen, or the split pane while it holds the keyboard. A page kept mounted off screen keeps its key listeners, so every page checks this before acting on one */
+  keyboardPage: string
   /** What per-page panels are remembered for: the active tab, or a document tab's parent */
   activePage: string
   setActiveTab: (id: string) => void

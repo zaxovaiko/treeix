@@ -237,9 +237,12 @@ export function JiraTasks(): React.JSX.Element {
     const run = id ? (listKeys[id] ?? ticketKeys[id]) : undefined
     return run !== undefined && run() !== false
   }
+  // The page keeps this listener while it sits off screen, so it only acts when the keys are its own
+  const ownsKeys = useRef(false)
+  ownsKeys.current = host.keyboardPage === 'tasks'
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {
-      if (isPageKey(event) && onKey.current(event)) event.preventDefault()
+      if (ownsKeys.current && isPageKey(event) && onKey.current(event)) event.preventDefault()
     }
     window.addEventListener('keydown', listener)
     return () => window.removeEventListener('keydown', listener)
