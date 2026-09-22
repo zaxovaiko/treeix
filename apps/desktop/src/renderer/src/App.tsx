@@ -1303,6 +1303,34 @@ function App(): React.JSX.Element {
   const keptIds = keptTabs.map((tab) => tab.id).join()
   // A kept page reads its own panels and widths; `activeTab` still names the page the user is looking at
   const pageHosts = useMemo(() => new Map(keptTabs.map((tab): [string, HostApi] => [tab.id, { ...host, activePage: tab.id }])), [host, keptIds])
+  /**
+   * A page kept off screen is handed back the very element it was last rendered with. React sees the same element and
+   * skips the whole subtree, so the pages behind the one on screen cost nothing until the user comes back to them.
+   */
+  const frozenPages = useRef(new Map<string, { element: React.JSX.Element; onScreen: boolean }>())
+  const renderKeptPage = (tab: (typeof keptTabs)[number], onScreen: boolean): React.JSX.Element => {
+    const frozen = frozenPages.current.get(tab.id)
+    if (!onScreen && frozen && !frozen.onScreen) return frozen.element
+    const page = tab.panels?.length ? (
+      <TabDock placement={settings.bottomPanel} withDock={withDock} active={onScreen}>
+        <tab.render />
+      </TabDock>
+    ) : (
+      <tab.render />
+    )
+    const element = (
+      // `hidden` takes the page out of layout and out of the zones, and keeps its state and its DOM alive
+      <div key={tab.id} hidden={!onScreen} className={onScreen ? 'flex min-h-0 min-w-0 flex-1 flex-col' : undefined}>
+        <HostContext.Provider value={pageHosts.get(tab.id) ?? host}>
+          <ErrorBoundary label={tab.label} resetKey={`${workspaceId}:${tab.id}`}>
+            {page}
+          </ErrorBoundary>
+        </HostContext.Provider>
+      </div>
+    )
+    frozenPages.current.set(tab.id, { element, onScreen })
+    return element
+  }
 
   const commands: Command[] = [
     { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: actionKeys('wt.rescan') || undefined, run: rescan },
@@ -1817,26 +1845,7 @@ function App(): React.JSX.Element {
       {appTab === 'worktrees' && worktreeView}
       <Suspense fallback={<div className="flex-1" />}>
       {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
-      {keptTabs.map((tab) => {
-        const onScreen = tab.id === appTab
-        const page = tab.panels?.length ? (
-          <TabDock placement={settings.bottomPanel} withDock={withDock} active={onScreen}>
-            <tab.render />
-          </TabDock>
-        ) : (
-          <tab.render />
-        )
-        return (
-          // `hidden` takes the page out of layout and out of the zones, and keeps its state and its DOM alive
-          <div key={tab.id} hidden={!onScreen} className={onScreen ? 'flex min-h-0 min-w-0 flex-1 flex-col' : undefined}>
-            <HostContext.Provider value={pageHosts.get(tab.id) ?? host}>
-              <ErrorBoundary label={tab.label} resetKey={`${workspaceId}:${tab.id}`}>
-                {page}
-              </ErrorBoundary>
-            </HostContext.Provider>
-          </div>
-        )
-      })}
+      {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab))}
       {openDocTab && (
         <TabDock placement={settings.bottomPanel} withDock={withDock}>
           {openDocTab.content}
