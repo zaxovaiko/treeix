@@ -50,16 +50,6 @@ export const BUILTIN_AGENTS = {
     agent: true,
     chat: { adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' }
   },
-  gemini: {
-    id: 'gemini',
-    label: 'Gemini',
-    mark: '✦',
-    color: '#4f8cf7',
-    command: 'gemini',
-    promptFlag: '-i',
-    agent: true,
-    chat: { adapter: 'acp', command: 'gemini --experimental-acp' }
-  },
   shell: { id: 'shell', label: 'Shell', mark: '$', color: '#34d399', command: null, agent: false }
 } as const satisfies Record<string, Agent>
 

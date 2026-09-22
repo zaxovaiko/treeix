@@ -8,10 +8,9 @@ const setAgents = async (customAgents: unknown[]): Promise<void> => {
   updateSettings({ customAgents: parseCustomAgents(customAgents) })
 }
 
-test('presets carry ACP chat commands and Gemini is built in', () => {
+test('presets carry ACP chat commands', () => {
   expect(BUILTIN_AGENTS.claude.chat).toEqual({ adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp@0.79.0' })
   expect(BUILTIN_AGENTS.codex.chat).toEqual({ adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' })
-  expect(BUILTIN_AGENTS.gemini.chat).toEqual({ adapter: 'acp', command: 'gemini --experimental-acp' })
   expect('chat' in BUILTIN_AGENTS.shell).toBe(false)
 })
 
@@ -46,7 +45,7 @@ test('a custom agent gets its prompt behind the flag it declares', async () => {
   const resumable = { id: 'resumable', label: 'Resumable', mark: 'R', color: '#fff', command: 'resumable', resumeCommand: 'resumable --resume {id}', agent: true }
   await setAgents([aider, resumable])
   const { getAgents, getAgent, isAgent, startCommand, resumeCommandFor } = await import('./agents')
-  expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'gemini', 'shell', 'aider', 'resumable'])
+  expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'aider', 'resumable'])
   expect(startCommand(getAgent('aider')!, "'add a test'")).toBe("aider --message 'add a test'")
   expect(resumeCommandFor(getAgent('aider')!, 'abc')).toBe('aider')
   expect(resumeCommandFor(getAgent('resumable')!, 'abc')).toBe('resumable --resume abc')
@@ -58,14 +57,14 @@ test('a custom agent gets its prompt behind the flag it declares', async () => {
 test('a custom agent replaces the built-in it shares an id with', async () => {
   await setAgents([{ id: 'claude', label: 'Claude', mark: '✳', color: '#fff', command: '/opt/claude', agent: true }])
   const { getAgents, getAgent } = await import('./agents')
-  expect(getAgents()).toHaveLength(4)
+  expect(getAgents()).toHaveLength(3)
   expect(getAgent('claude')?.command).toBe('/opt/claude')
 })
 
 test('a malformed stored agent is dropped and missing fields get defaults', async () => {
   await setAgents([null, 'aider', { label: 'No id' }, { id: 'bare' }])
   const { getAgents, getAgent } = await import('./agents')
-  expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'gemini', 'shell', 'bare'])
+  expect(getAgents().map((entry) => entry.id)).toEqual(['claude', 'codex', 'shell', 'bare'])
   expect(getAgent('bare')).toMatchObject({ label: 'bare', mark: '●', command: null, agent: true })
 })
 

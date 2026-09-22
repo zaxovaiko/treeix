@@ -806,8 +806,7 @@ const AGENT_FIELDS: { key: AgentField; label: string; placeholder: string }[] = 
 /** How to install the adapter behind a built-in agent's chat command, shown once it's not found on PATH */
 const CHAT_INSTALL_HINTS: Record<string, string> = {
   claude: 'npm i -g @agentclientprotocol/claude-agent-acp',
-  codex: 'npm i -g @zed-industries/codex-acp',
-  gemini: 'npm i -g @google/gemini-cli'
+  codex: 'npm i -g @zed-industries/codex-acp'
 }
 
 /** The binary a chat command needs on PATH: its first word, e.g. `npx` for an npx-run adapter */

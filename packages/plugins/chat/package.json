@@ -5,7 +5,7 @@
   "treeix": {
     "id": "chat",
     "name": "Chat",
-    "description": "Chat view for Claude, Codex, Gemini and any agent with a chat command, next to their terminals.",
+    "description": "Chat view for Claude, Codex and any agent with a chat command, next to their terminals.",
     "enabledByDefault": true,
     "requires": ["terminal"]
   }
