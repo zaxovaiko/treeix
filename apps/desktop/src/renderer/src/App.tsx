@@ -13,6 +13,7 @@ import {
 } from '../../shared/comments'
 import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
 import { getAgents, isAgent } from './agents'
+import { keptPages } from './keepAlive'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
 import { HistoryDialog } from './HistoryDialog'
 import type { Branch, CodeLocation, FilePatch, SearchMatch, Repo, Worktree, WorktreeFiles } from '../../shared/types'
@@ -221,6 +222,9 @@ function App(): React.JSX.Element {
   const { diffStyle } = settings
   const setDiffStyle = (style: 'split' | 'unified'): void => updateSettings({ diffStyle: style })
   const [appTab, setAppTab] = useState(SAVED_PLACE.appTab)
+  /** Plugin pages seen in this workspace; they stay mounted so coming back to one is instant */
+  const [visitedTabs, setVisitedTabs] = useState<string[]>([])
+  useEffect(() => setVisitedTabs((list) => (list.includes(appTab) ? list : [...list, appTab])), [appTab])
   /** A second page shown beside the active one; never the active page itself */
   const [splitTab, setSplitTab] = usePersisted<string | null>('app.split', null)
   const [splitWidth, setSplitWidth] = usePersisted<number>('app.splitWidth', 560)
@@ -268,6 +272,8 @@ function App(): React.JSX.Element {
   const allSessions = useSessions()
   const workspacesState = useWorkspaces()
   const { workspaces, currentId: workspaceId } = workspacesState
+  // Each workspace keeps its own pages: the kept list starts empty when the workspace changes
+  useEffect(() => setVisitedTabs([]), [workspaceId])
   const browseRoot = browsedFolders[workspaceId] || null
   const setBrowsedFolder = (path: string | null): void => {
     const next = { ...browsedFolders, [workspaceId]: path ?? '' }
@@ -1292,6 +1298,10 @@ function App(): React.JSX.Element {
   )
   // The split page sees itself as the active page, so its layout keeps its own panels and widths
   const splitHost = useMemo((): HostApi => ({ ...host, activeTab: splitPage?.id ?? '', activePage: splitPage?.id ?? '' }), [host, splitPage?.id])
+  const keptTabs = keptPages(pluginTabs, visitedTabs, appTab)
+  const keptIds = keptTabs.map((tab) => tab.id).join()
+  // A kept page reads its own panels and widths; `activeTab` still names the page the user is looking at
+  const pageHosts = useMemo(() => new Map(keptTabs.map((tab): [string, HostApi] => [tab.id, { ...host, activePage: tab.id }])), [host, keptIds])
 
   const commands: Command[] = [
     { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: actionKeys('wt.rescan') || undefined, run: rescan },
@@ -1806,14 +1816,26 @@ function App(): React.JSX.Element {
       {appTab === 'worktrees' && worktreeView}
       <Suspense fallback={<div className="flex-1" />}>
       {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
-      {activePluginTab &&
-        (activePluginTab.panels?.length ? (
-          <TabDock placement={settings.bottomPanel} withDock={withDock}>
-            <activePluginTab.render />
+      {keptTabs.map((tab) => {
+        const onScreen = tab.id === appTab
+        const page = tab.panels?.length ? (
+          <TabDock placement={settings.bottomPanel} withDock={withDock} active={onScreen}>
+            <tab.render />
           </TabDock>
         ) : (
-          <activePluginTab.render />
-        ))}
+          <tab.render />
+        )
+        return (
+          // `hidden` takes the page out of layout and out of the zones, and keeps its state and its DOM alive
+          <div key={tab.id} hidden={!onScreen} className={onScreen ? 'flex min-h-0 min-w-0 flex-1 flex-col' : undefined}>
+            <HostContext.Provider value={pageHosts.get(tab.id) ?? host}>
+              <ErrorBoundary label={tab.label} resetKey={`${workspaceId}:${tab.id}`}>
+                {page}
+              </ErrorBoundary>
+            </HostContext.Provider>
+          </div>
+        )
+      })}
       {openDocTab && (
         <TabDock placement={settings.bottomPanel} withDock={withDock}>
           {openDocTab.content}
