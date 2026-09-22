@@ -46,7 +46,6 @@ export function ResizeHandle({
 }): React.JSX.Element {
   const startDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     const handle = event.currentTarget
-    const vertical = edge === 'top'
     const start = vertical ? event.clientY : event.clientX
     const direction = edge === 'right' ? 1 : -1
     handle.setPointerCapture(event.pointerId)
@@ -58,15 +57,25 @@ export function ResizeHandle({
       handle.onpointermove = null
     }
   }
-  const position = { right: 'inset-y-0 -right-1 w-2 cursor-col-resize', left: 'inset-y-0 -left-1 w-2 cursor-col-resize', top: 'inset-x-0 -top-1 h-2 cursor-row-resize' }
+  const vertical = edge === 'top'
+  const position = { right: 'inset-y-0 -right-1.5 w-3 cursor-col-resize', left: 'inset-y-0 -left-1.5 w-3 cursor-col-resize', top: 'inset-x-0 -top-1.5 h-3 cursor-row-resize' }
   return (
     <div onPointerDown={startDrag} className={`group absolute z-20 ${position[edge]} [-webkit-app-region:no-drag]`}>
-      <div
-        className={`bg-transparent group-hover:bg-foreground/20 group-active:bg-foreground/30 ${
-          edge === 'top' ? 'my-auto h-px w-full translate-y-[3px]' : 'mx-auto h-full w-px'
-        }`}
-      />
+      <ResizeGrip across={vertical} />
     </div>
+  )
+}
+
+/** The pill on a resizable edge's middle, inside a `group` hit area; `across` lays it flat for an edge dragged up and down */
+export function ResizeGrip({ across }: { across: boolean }): React.JSX.Element {
+  return (
+    <span
+      className={`pointer-events-none absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground group-active:text-foreground ${
+        across ? 'h-2.5 w-8' : 'h-8 w-2.5'
+      }`}
+    >
+      <Icon name="grip" className={`size-2.5 ${across ? 'rotate-90' : ''}`} />
+    </span>
   )
 }
 
