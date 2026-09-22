@@ -1,7 +1,7 @@
 {
   "name": "treeix",
   "productName": "Treeix",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "The AI coding workspace: review AI agent changes across git worktrees, pull requests and terminal sessions in one place",
   "author": "zaxovaiko",
   "private": true,
