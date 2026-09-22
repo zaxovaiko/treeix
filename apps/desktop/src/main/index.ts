@@ -77,6 +77,11 @@ app.whenReady().then(() => {
     return window !== null && (window.isFullScreen() || isSummoned())
   })
   ipcMain.handle('listDirectory', (_, root: string, folder: string) => listDirectory(root, folder))
+  // ⌘= ⌘+ ⌘- ⌘0: the window's own zoom, like a browser's. The native menu's roles only bind some of these keys
+  ipcMain.on('zoom', (event, step: number) => {
+    const level = step === 0 ? 0 : Math.max(-3, Math.min(6, event.sender.getZoomLevel() + Math.sign(step) * 0.5))
+    event.sender.setZoomLevel(level)
+  })
   ipcMain.handle('pickFolder', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     const options = { properties: ['openDirectory' as const] }

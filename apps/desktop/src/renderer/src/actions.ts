@@ -65,6 +65,9 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'composer.save', label: 'Save the comment or message being written', section: 'Comments', keys: key('Enter', { meta: true }) },
   { id: 'composer.saveAlternative', label: 'Save it the second way, e.g. as an agent comment', section: 'Comments', keys: key('Enter', { meta: true, shift: true }) },
 
+  { id: 'app.zoomIn', label: 'Zoom the window in', menuLabel: 'Zoom In', section: 'General', keys: key('Equal', { meta: true }) },
+  { id: 'app.zoomOut', label: 'Zoom the window out', menuLabel: 'Zoom Out', section: 'General', keys: key('Minus', { meta: true }) },
+  { id: 'app.zoomReset', label: 'Zoom the window back to normal', menuLabel: 'Actual Size', section: 'General', keys: key('Digit0', { meta: true }) },
   { id: 'app.fontBigger', label: 'Bigger font in the focused terminal, else the editor', section: 'General', keys: key('Equal', { meta: true, alt: true }) },
   { id: 'app.fontSmaller', label: 'Smaller font', section: 'General', keys: key('Minus', { meta: true, alt: true }) },
   { id: 'app.fontDefault', label: 'Default font size', section: 'General', keys: key('Digit0', { meta: true, alt: true }) }

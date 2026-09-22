@@ -142,6 +142,8 @@ export type Api = {
   /** Blurs the desktop behind the window's see-through backgrounds, or turns that off */
   /** `background` is the opaque theme color, used when not translucent */
   setTranslucent: (translucent: boolean, background: string, appearance: 'dark' | 'light' | 'system') => void
+  /** Window zoom: 1 in, -1 out, 0 back to normal */
+  zoom: (step: number) => void
   /** Resolves with an error message when the shortcut cannot be registered */
   configureHotkey: (options: HotkeyOptions) => Promise<string | null>
   /** Fires with true while the window has no title bar buttons: full screen or the hotkey window */

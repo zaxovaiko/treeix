@@ -9,6 +9,7 @@ const api: Api = {
   diff: (worktreePath) => ipcRenderer.invoke('diff', worktreePath),
   listFiles: (worktreePath) => ipcRenderer.invoke('listFiles', worktreePath),
   listDirectory: (root, folder) => ipcRenderer.invoke('listDirectory', root, folder),
+  zoom: (step: number) => ipcRenderer.send('zoom', step),
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),
   navigate: (worktreePath, kind, target) => ipcRenderer.invoke('navigate', worktreePath, kind, target),

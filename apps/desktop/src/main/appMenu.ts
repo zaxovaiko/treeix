@@ -45,12 +45,15 @@ export function buildMenu(window: BrowserWindow, actions: MenuAction[]): void {
       { label: 'Toggle Hotkey Window', click: () => toggleHotkeyWindow(window) }
     ]
   }
+  // The zoom keys run the app's own actions rather than Electron's roles, whose accelerators miss ⌘= and ⌘+
+  const zoom = (id: string, label: string, accelerator: string, visible = true): MenuItemConstructorOptions => ({ label, accelerator, visible, click: run(id) })
   const viewExtras: MenuItemConstructorOptions[] = [
     { type: 'separator' },
     { role: 'togglefullscreen' },
-    { role: 'resetZoom' },
-    { role: 'zoomIn' },
-    { role: 'zoomOut' },
+    zoom('app.zoomReset', 'Actual Size', 'CmdOrCtrl+0'),
+    zoom('app.zoomIn', 'Zoom In', 'CmdOrCtrl+='),
+    zoom('app.zoomIn', 'Zoom In', 'Shift+CmdOrCtrl+=', false),
+    zoom('app.zoomOut', 'Zoom Out', 'CmdOrCtrl+-'),
     { type: 'separator' },
     { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => (focusedPage() ?? window.webContents).reload() },
     { label: 'Force Reload', accelerator: 'Shift+CmdOrCtrl+R', click: () => (focusedPage() ?? window.webContents).reloadIgnoringCache() },
