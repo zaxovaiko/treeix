@@ -160,10 +160,13 @@ function Placeholder({ children }: { children: React.ReactNode }): React.JSX.Ele
 function TabDock({
   placement,
   withDock,
+  active = true,
   children
 }: {
   placement: Settings['bottomPanel']
   withDock: (content: React.ReactNode, frames: boolean) => React.ReactNode
+  /** False for a page kept mounted off screen: the dock belongs to the page the user is looking at */
+  active?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   const [claims, setClaims] = useState(0)
@@ -174,6 +177,7 @@ function TabDock({
     setClaims((count) => count + 1)
     return () => setClaims((count) => count - 1)
   }, [])
+  if (!active) return <>{children}</>
   if (placement === 'full') return <>{withDock(children, true)}</>
   return <>{withDock(<DockSlot.Provider value={claim}>{children}</DockSlot.Provider>, settled && claims === 0)}</>
 }
@@ -217,6 +221,11 @@ function App(): React.JSX.Element {
   const { diffStyle } = settings
   const setDiffStyle = (style: 'split' | 'unified'): void => updateSettings({ diffStyle: style })
   const [appTab, setAppTab] = useState(SAVED_PLACE.appTab)
+  /** A second page shown beside the active one; never the active page itself */
+  const [splitTab, setSplitTab] = usePersisted<string | null>('app.split', null)
+  const [splitWidth, setSplitWidth] = usePersisted<number>('app.splitWidth', 560)
+  /** Which side of the split has the keyboard, so only that side's header reads as active */
+  const [splitFocused, setSplitFocused] = useState(false)
   // Reopen where the app was left: tab, worktree and file
   useEffect(() => {
     const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
@@ -235,6 +244,15 @@ function App(): React.JSX.Element {
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
   /** The title bar row: Worktrees sits among the plugin tabs, all in `order` */
   const tabs = [{ id: 'worktrees', label: 'Worktrees', icon: 'branch' as const, order: WORKTREES_ORDER }, ...pluginTabs].sort((a, b) => a.order - b.order)
+  // Settings and document tabs stay single; a split page whose plugin was turned off just closes
+  const splitPage = splitTab !== appTab && !shell.zen ? tabs.find((tab) => tab.id === splitTab) : undefined
+  const splitPluginTab = pluginTabs.find((tab) => tab.id === splitPage?.id)
+  const pageTabMenu = (event: React.MouseEvent, tab: { id: string }): void =>
+    openMenu(event, [
+      tab.id === splitPage?.id
+        ? { label: 'Close split', run: () => setSplitTab(null) }
+        : { label: 'Open in split', enabled: tab.id !== appTab, run: () => setSplitTab(tab.id) }
+    ])
   const pluginPanels = plugins.flatMap(({ plugin }) => plugin.panels ?? [])
   const panelInfo = (id: PanelId): PanelInfo | undefined => pluginPanels.find((panel) => panel.id === id)
   const panelIds = pluginPanels.map((panel) => panel.id)
@@ -446,6 +464,8 @@ function App(): React.JSX.Element {
 
   /** Shows a page with the keyboard in it: its list, or the terminal on the Terminal page */
   const goPage = (tab: string): void => {
+    // The page in the split trades places with the active one
+    if (tab === splitTab) setSplitTab(tabs.some((candidate) => candidate.id === appTab) ? appTab : null)
     if (tab === 'settings') openSettings()
     else setAppTab(tab)
     focusZone(tab === 'terminal' || !(shell.pages[tab]?.list ?? true) ? 'main' : 'list')
@@ -828,6 +848,9 @@ function App(): React.JSX.Element {
       'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
       'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
       'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
+      'app.zoomIn': () => window.api.zoom(1),
+      'app.zoomOut': () => window.api.zoom(-1),
+      'app.zoomReset': () => window.api.zoom(0),
       'app.search': () => setSearchOpen(!searchOpen),
       'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
       'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
@@ -852,6 +875,11 @@ function App(): React.JSX.Element {
       if (anywhereId) {
         event.preventDefault()
         return anywhere[anywhereId]()
+      }
+      // ⌘+ is ⇧⌘= on most layouts, and the numpad has its own keys; all of them zoom
+      if (event.metaKey && !event.altKey && !event.ctrlKey && ['Equal', 'NumpadAdd', 'NumpadEqual'].includes(event.code) && event.shiftKey) {
+        event.preventDefault()
+        return window.api.zoom(1)
       }
       const numpadStep = event.metaKey && event.altKey && !event.shiftKey && !event.ctrlKey ? NUMPAD_FONT_STEPS.get(event.code) : undefined
       if (numpadStep !== undefined) {
@@ -1197,8 +1225,8 @@ function App(): React.JSX.Element {
 
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
-  // One workspace needs no switcher; New workspace stays in the palette and the Go menu
-  const showRail = shell.rail && !shell.zen && workspaces.length >= 2
+  // Shown even with no workspace yet: its + is where the first one is made
+  const showRail = shell.rail && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1262,6 +1290,8 @@ function App(): React.JSX.Element {
     // Beyond the fields: what the render functions and isPanelVisible read, so views built from them refresh
     [repos, workspaceId, scopeRepoPaths, scopeLabel, selected, worktree, explorerRoot, browseRoot, defaultCwd, diffStyle, appTab, activePage, comments, patches, worktreeFiles, fileReload, dock.layout, shell.zen, draggingPanel, plugins]
   )
+  // The split page sees itself as the active page, so its layout keeps its own panels and widths
+  const splitHost = useMemo((): HostApi => ({ ...host, activeTab: splitPage?.id ?? '', activePage: splitPage?.id ?? '' }), [host, splitPage?.id])
 
   const commands: Command[] = [
     { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: actionKeys('wt.rescan') || undefined, run: rescan },
@@ -1270,6 +1300,10 @@ function App(): React.JSX.Element {
       const letter = leaderOf(tab.id)
       return { id: `tab:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()}`, icon: tab.icon, shortcut: letter ? `G ${letter.toUpperCase()}` : undefined, run: () => goPage(tab.id) }
     }),
+    ...tabs
+      .filter((tab) => tab.id !== appTab && tab.id !== splitPage?.id)
+      .map((tab): Command => ({ id: `split:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()} in split`, icon: 'splitRight', run: () => setSplitTab(tab.id) })),
+    ...(splitPage ? [{ id: 'split:close', group: 'Actions', label: `Close split (${splitPage.label.toLowerCase()})`, icon: 'close', run: () => setSplitTab(null) } satisfies Command] : []),
     { id: 'search', group: 'Actions', label: 'Search in projects', icon: 'search', shortcut: actionKeys('app.search') || undefined, run: () => setSearchOpen(true) },
     ...(
       [
@@ -1613,8 +1647,7 @@ function App(): React.JSX.Element {
     </div>
   )
 
-  const worktreeView = (
-    <div className="flex min-h-0 flex-1 flex-col">
+  const worktreeLayout = (
       <PageLayout
         listLabel="Worktrees"
         inspectorLabel="Explorer"
@@ -1645,6 +1678,10 @@ function App(): React.JSX.Element {
         main={worktreeMain}
         inspector={worktreeInspector}
       />
+  )
+  const worktreeView = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {worktreeLayout}
       {settings.bottomPanel === 'full' && dockFrame('bottom')}
     </div>
   )
@@ -1657,11 +1694,22 @@ function App(): React.JSX.Element {
       <div
         className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card pr-2 ${chromeless ? 'pl-2' : 'pl-[88px] [-webkit-app-region:drag]'}`}
       >
+        <span className="mr-1">
+          <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={shell.rail} onClick={() => toggleShellPanel('rail')}>
+            <Icon name="panel" className="size-3.5" />
+          </IconButton>
+        </span>
         {tabs.map((tab, index) => {
           const letter = leaderOf(tab.id)?.toUpperCase()
           const keys = [letter && `G ${letter}`, digitLabel('tabs', index + 1)].filter(Boolean).join(', ')
           return (
-            <button key={tab.id} title={keys ? `${tab.label} (${keys})` : tab.label} onClick={() => goPage(tab.id)} className={tabClass(appTab === tab.id)}>
+            <button
+              key={tab.id}
+              title={keys ? `${tab.label} (${keys})` : tab.label}
+              onClick={() => goPage(tab.id)}
+              onContextMenu={(event) => pageTabMenu(event, tab)}
+              className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
+            >
               {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
               {tab.label}
               {'Badge' in tab && tab.Badge && <tab.Badge />}
@@ -1744,9 +1792,14 @@ function App(): React.JSX.Element {
 
       {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights */}
       {!showTitle && !chromeless && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
-      <div className="flex min-h-0 flex-1">
+      <div
+        className="flex min-h-0 flex-1"
+        onFocusCapture={(event) => setSplitFocused(event.target instanceof Element && event.target.closest('[data-split-pane]') !== null)}
+      >
       {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
       <Zone id="main" className="flex-1">
+      {/* With a split, a line over the side that has the keyboard */}
+      {splitPage && !splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70" />}
       {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
       <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
@@ -1770,6 +1823,29 @@ function App(): React.JSX.Element {
       </ErrorBoundary>
       </div>
       </Zone>
+      {splitPage && (
+        <HostContext.Provider value={splitHost}>
+          <div data-split-pane style={{ width: splitWidth }} className="relative flex min-h-0 min-w-0 shrink-0 flex-col border-l border-border">
+            <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />
+            <div className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${splitFocused ? 'text-foreground' : 'text-muted-foreground'}`}>
+              {splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary/70" />}
+              <Icon name={splitPage.icon} className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{splitPage.label}</span>
+              <IconButton label="Swap sides" onClick={() => goPage(splitPage.id)}>
+                <Icon name="compare" className="size-3.5" />
+              </IconButton>
+              <IconButton label="Close split" onClick={() => setSplitTab(null)}>
+                <Icon name="close" className="size-3.5" />
+              </IconButton>
+            </div>
+            <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <ErrorBoundary label={splitPage.label} resetKey={`${workspaceId}:split:${splitPage.id}`}>
+                <Suspense fallback={<div className="flex-1" />}>{splitPluginTab ? <splitPluginTab.render /> : worktreeLayout}</Suspense>
+              </ErrorBoundary>
+            </div>
+          </div>
+        </HostContext.Provider>
+      )}
       </div>
       {shell.status && !shell.zen && <StatusBar workspace={workspace ?? { name: scopeLabel }} pageLabel={appTabLabel} />}
       <WhichKey
