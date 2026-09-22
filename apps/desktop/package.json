@@ -25,7 +25,8 @@
     "@electron-toolkit/utils": "^4.0.0",
     "electron-updater": "^6.8.9",
     "node-pty": "1.1.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.2",
