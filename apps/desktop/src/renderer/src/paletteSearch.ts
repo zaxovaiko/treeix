@@ -17,14 +17,29 @@ const MATCH_LIMIT = 8
 /** Searching one group, by prefix or because it's the only one */
 const GROUP_LIMIT = 100
 
-/** Letters of `needle` in order within `text`: runs and word starts score higher; null when one is missing */
+const WORD_BREAK = /[\s/\-_.:(!#@]/
+
+/** Where `needle` starts a word of `haystack`, or -1 */
+function wordStart(needle: string, haystack: string): number {
+  for (let index = haystack.indexOf(needle); index !== -1; index = haystack.indexOf(needle, index + 1)) {
+    if (index === 0 || WORD_BREAK.test(haystack[index - 1])) return index
+  }
+  return -1
+}
+
+/**
+ * Letters of `needle` in order within `text`: runs and word starts score higher; null when one is missing. A needle
+ * typed out whole at a word start wins first, so "split" matches "split" and not an s from "close" and the rest scattered
+ */
 export function fuzzy(needle: string, text: string): { score: number; marks: number[] } | null {
   const haystack = text.toLowerCase()
+  const whole = wordStart(needle, haystack)
+  if (whole !== -1) return { score: needle.length * 3 + 2, marks: Array.from(needle, (_, offset) => whole + offset) }
   const marks: number[] = []
   let score = 0
   for (let index = 0; index < haystack.length && marks.length < needle.length; index++) {
     if (haystack[index] !== needle[marks.length]) continue
-    score += (index === (marks.at(-1) ?? -2) + 1 ? 3 : 1) + (index === 0 || /[\s/\-_.:(!#@]/.test(haystack[index - 1]) ? 2 : 0)
+    score += (index === (marks.at(-1) ?? -2) + 1 ? 3 : 1) + (index === 0 || WORD_BREAK.test(haystack[index - 1]) ? 2 : 0)
     marks.push(index)
   }
   return marks.length === needle.length ? { score, marks } : null
