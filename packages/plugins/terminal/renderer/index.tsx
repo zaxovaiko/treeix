@@ -26,6 +26,7 @@ import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
 import { digitPressed } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { getCurrentWorkspaceId, inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
+import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } from './folder'
 import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
 import { startRename, TaskList } from './TaskList'
@@ -135,7 +136,8 @@ function TerminalPage(): React.JSX.Element {
   const [markdownPreview, setMarkdownPreview] = useMarkdownPreview()
   useEffect(() => host.registerFileOpener(TAB_ID, open), [])
   const previewRoot = preview?.root ?? host.explorerRoot
-  const label = task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, host.defaultCwd)
+  const cwd = useTerminalCwd(host)
+  const label = task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, cwd)
 
   return (
     <PageLayout
@@ -150,7 +152,16 @@ function TerminalPage(): React.JSX.Element {
       main={
         <div className="flex min-h-0 min-w-0 flex-1">
           <div className={`min-w-0 flex-1 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
-            <TaskTerminals task={task} label={label} cwd={host.defaultCwd} history={task ? historyOf(history, task) : history} repos={host.repos} orientation="horizontal" page />
+            <TaskTerminals
+              task={task}
+              label={label}
+              cwd={cwd}
+              history={task ? historyOf(history, task) : history}
+              repos={host.repos}
+              orientation="horizontal"
+              page
+              onGoToFolder={(path) => goToFolder(host, path)}
+            />
           </div>
           {preview && (
             <aside style={previewMaximized ? undefined : { width: previewWidth }} className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}>
@@ -237,6 +248,7 @@ function useFileLinks(): void {
 
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
   const host = useHost()
+  const cwd = useTerminalCwd(host)
   const { task, sessions, history } = useTaskScope()
   // The panel closes itself once the last session exits; opened empty by hand (⌘J) it stays
   const hadSessions = useRef(sessions.length > 0)
@@ -250,8 +262,8 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
   return (
     <TaskTerminals
       task={task}
-      label={task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, host.defaultCwd)}
-      cwd={host.defaultCwd}
+      label={task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, cwd)}
+      cwd={cwd}
       history={task ? historyOf(history, task) : history}
       repos={host.repos}
       orientation={side === 'bottom' ? 'horizontal' : 'vertical'}
@@ -295,16 +307,29 @@ function reveal(host: HostApi, id: string): void {
 
 /** A new tab of the task on screen, focused */
 function newTab(host: HostApi, kind: SessionKind, view: SessionView = 'terminal'): void {
-  openTab(scope.task?.worktreePath ?? host.defaultCwd, kind, scope.task?.id, view)
+  openTab(scope.task?.worktreePath ?? terminalCwd(host), kind, scope.task?.id, view)
   showTerminals(host)
 }
 
 /** ⌘⇧T: a task with a shell in the current folder, named after that folder */
-function startTask(host: HostApi): void {
-  const cwd = host.defaultCwd
+function startTask(host: HostApi, cwd = terminalCwd(host)): void {
   const name = uniqueName(worktreeLabel(host.repos, cwd), scope.tasks.map((task) => taskLabel(task, host.repos)))
   openTab(cwd, 'shell', createTask(name, cwd))
   showTerminals(host)
+}
+
+/** The folder dropdown lives on the Terminal page, so it goes there first */
+function openFolderPicker(host: HostApi): void {
+  if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
+  setFolderPickerOpen(true)
+}
+
+/** Goes to a folder: its group if there is one, else a new group with a shell there; later groups start there too */
+function goToFolder(host: HostApi, path: string): void {
+  setPickedFolder(host.workspaceId, path)
+  const existing = scope.tasks.find((task) => task.worktreePath === path)
+  if (existing) switchTask(host, existing)
+  else startTask(host, path)
 }
 
 /** ⌃⌘↑ ⌃⌘↓: the previous or next task; focus follows into its terminal unless it is on the task list */
@@ -357,6 +382,7 @@ function Root(): React.JSX.Element | null {
 defineActions([
   { id: 'panel.terminal', label: 'Toggle the terminal panel', section: 'Terminal', keys: key('KeyJ', { meta: true }) },
   { id: 'terminal.sessions', label: 'Find and switch sessions', section: 'Terminal', keys: key('KeyJ', { meta: true, shift: true }) },
+  { id: 'terminal.goToFolder', label: 'Go to folder: its group, or a new one there', section: 'Terminal', keys: key('KeyO', { meta: true }) },
   { id: 'terminal.newGroup', label: 'New group with a shell in the current folder', section: 'Terminal', keys: key('KeyT', { meta: true, shift: true }) },
   { id: 'terminal.previousGroup', label: 'Previous group', section: 'Terminal', keys: key('ArrowUp', { meta: true, ctrl: true }) },
   { id: 'terminal.nextGroup', label: 'Next group', section: 'Terminal', keys: key('ArrowDown', { meta: true, ctrl: true }) },
@@ -401,7 +427,8 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.newGroup': () => startTask(host),
     'terminal.newTab': () => newTab(host, 'shell'),
     'terminal.newTabAlt': () => newTab(host, 'shell'),
-    'terminal.reopenClosed': () => reopenClosed(host)
+    'terminal.reopenClosed': () => reopenClosed(host),
+    'terminal.goToFolder': () => openFolderPicker(host)
   }
   const anywhereId = actionForEvent(event, Object.keys(anywhere))
   if (anywhereId) {
@@ -427,7 +454,7 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
   }
   const split = actionForEvent(event, ['terminal.splitRight', 'terminal.splitDown'])
   if (split && (onPage || host.isPanelVisible(TAB_ID))) {
-    void splitPane(split === 'terminal.splitDown' ? 'bottom' : 'right', host.defaultCwd)
+    void splitPane(split === 'terminal.splitDown' ? 'bottom' : 'right', terminalCwd(host))
     return true
   }
   // Moving between panes and zooming one only make sense with a terminal focused
@@ -499,6 +526,7 @@ const plugin: RendererPlugin = {
   commands: (host) => [
     { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: actionKeys('terminal.sessions') || undefined, run: () => dialogs.update({ sessions: 'all' }) },
     { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: actionKeys('terminal.newGroup') || undefined, run: () => startTask(host) },
+    { id: 'terminal:folder', group: 'Actions', label: 'Go to folder', icon: 'folder', shortcut: actionKeys('terminal.goToFolder') || undefined, run: () => openFolderPicker(host) },
     ...getAgents().map((agent) => ({
       id: `session:${agent.id}`,
       group: 'Actions',

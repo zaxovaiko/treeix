@@ -12,7 +12,7 @@ import { useCached } from '@treeix/atlassian/renderer/cache'
 import type { Epic, JiraPerson, WorkItem, WorkItemDetail } from '../shared/types'
 import { detailCache, jiraApi, resolveImage, selection, TTL } from './api'
 import { branchFor, isBranchFor } from './branch'
-import { Picker } from './Picker'
+import { Picker } from '@treeix/app/Picker'
 import { EpicChip, PriorityMark, StatusPill, TypeMark } from './marks'
 
 export type StatusOption = { name: string; category: WorkItem['statusCategory'] }

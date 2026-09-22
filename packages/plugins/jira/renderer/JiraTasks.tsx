@@ -7,7 +7,7 @@ import { EmptyState, FoldAllButton, IconButton, UserAvatar, usePersisted } from 
 import { workspaceKey } from '@treeix/app/workspaces'
 import type { Epic, JiraPerson, WorkItem, WorkItemList } from '../shared/types'
 import { branchFor } from './branch'
-import { Picker } from './Picker'
+import { Picker } from '@treeix/app/Picker'
 import { applyPatch, type Patches, pendingPatches } from './optimistic'
 import { useCached } from '@treeix/atlassian/renderer/cache'
 import { withList } from '@treeix/atlassian/renderer/panels'

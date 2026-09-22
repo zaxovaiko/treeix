@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Icon } from '@treeix/app/Icon'
-import { Popup } from '@treeix/app/ui'
+import { Icon } from './Icon'
+import { Popup } from './ui'
 
 export type PickerOption = { id: string; label: string; section: string; render: React.ReactNode }
 
@@ -38,7 +38,8 @@ export function Picker({
   const [active, setActive] = useState(0)
   const button = useRef<HTMLButtonElement>(null)
   const input = useRef<HTMLInputElement>(null)
-  const needle = query.trim().toLowerCase()
+  // Every word somewhere in the label, in any order: "lobby openora" finds openora's lobby branch
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   useEffect(() => {
     if (open) onQuery?.(query.trim())
   }, [open, query])
@@ -48,7 +49,7 @@ export function Picker({
     setActive(0)
     input.current?.focus()
   }, [open])
-  const shown = options.filter((option) => option.label.toLowerCase().includes(needle))
+  const shown = options.filter((option) => words.every((word) => option.label.toLowerCase().includes(word)))
   const sections = [...new Set(shown.map((option) => option.section))].map((section) => ({ section, options: shown.filter((option) => option.section === section) }))
   // Sections reorder options, so the keyboard walks them in the order they are drawn
   const ordered = sections.flatMap((section) => section.options)

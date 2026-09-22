@@ -5,11 +5,14 @@ import { actionKeys } from '@treeix/shared/keymap'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
+import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { agentOr, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
 import { ListToggle, useHost, usePanels } from '@treeix/sdk'
-import { errorMessage } from '@treeix/app/ui'
+import { errorMessage, ResizeGrip } from '@treeix/app/ui'
+import { Picker, type PickerOption } from '@treeix/app/Picker'
+import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, aggregateStatus, type Task, type TerminalTab, tabPanes } from './tasks'
 import { StatusMark } from './taskUi'
@@ -166,8 +169,10 @@ function SplitDivider({
         onPointerDown={startDrag}
         onDoubleClick={() => onResize({ ...weights, [before]: 1, [after]: 1 })}
         title="Drag to resize, double-click to even out"
-        className={`absolute z-10 hover:bg-foreground/30 active:bg-foreground/40 ${axis === 'x' ? 'inset-y-0 -left-[2px] w-[5px] cursor-col-resize' : 'inset-x-0 -top-[2px] h-[5px] cursor-row-resize'}`}
-      />
+        className={`group absolute z-10 ${axis === 'x' ? 'inset-y-0 -left-1.5 w-3 cursor-col-resize' : 'inset-x-0 -top-1.5 h-3 cursor-row-resize'}`}
+      >
+        <ResizeGrip across={axis === 'y'} />
+      </div>
     </div>
   )
 }
@@ -376,8 +381,101 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
   )
 }
 
+const CHOOSE = 'choose:'
+const DEFAULT = 'default:'
+
+/** The folder on screen as a searchable dropdown: the workspace's checkouts, recent picks, home, or any folder (⌘O) */
+function FolderPicker({ label, current, onGo }: { label: string; current: string; onGo: (path: string) => void }): React.JSX.Element {
+  const host = useHost()
+  const open = useFolderPickerOpen()
+  const inScope = (host.repos ?? []).filter((repo) => !host.scopeRepoPaths || host.scopeRepoPaths.includes(repo.path))
+  const home = window.api.home
+  const option = (section: string, label?: string) => (path: string): PickerOption => {
+    const name = label ?? worktreeLabel(host.repos, path)
+    return { id: path, label: `${section} ${name} ${path}`, section, render: <FolderRow name={name} path={path} /> }
+  }
+  // Recent picks first, the likeliest next; everything below leaves them out so no folder shows twice
+  const recent = recentFolders()
+  const unseen = (path: string): boolean => !recent.includes(path)
+  // A project with one checkout is one row under Projects; one with worktrees gets a section, its main checkout first
+  const single = inScope.filter((repo) => repo.worktrees.length <= 1 && unseen(repo.worktrees[0]?.path ?? repo.path))
+  const withWorktrees = inScope.filter((repo) => repo.worktrees.length > 1)
+  const projectOptions = [
+    ...single.map((repo) => option('Projects', baseName(repo.path))(repo.worktrees[0]?.path ?? repo.path)),
+    ...withWorktrees.flatMap((repo) =>
+      [...repo.worktrees]
+        .sort((a, b) => Number(b.path === repo.path) - Number(a.path === repo.path))
+        .filter((worktree) => unseen(worktree.path))
+        .map((worktree) => option(baseName(repo.path), branchLabel(worktree))(worktree.path))
+    )
+  ]
+  const action = (id: string, text: string): PickerOption => ({ id, label: text, section: '', render: <span className="truncate text-muted-foreground">{text}</span> })
+  const picked = pickedFolder(host.workspaceId)
+  const options = [
+    ...recent.map((path) => option('Recent')(path)),
+    ...projectOptions,
+    ...(unseen(home) ? [option('Home')(home)] : []),
+    action(CHOOSE, 'Choose folder…'),
+    ...(picked ? [action(DEFAULT, `Back to the default, ${worktreeLabel(host.repos, host.defaultCwd)}`)] : [])
+  ]
+  const pick = (id: string): void => {
+    if (id === DEFAULT) return setPickedFolder(host.workspaceId, null)
+    if (id !== CHOOSE) return onGo(id)
+    void window.api.pickFolder().then((path) => {
+      if (path) onGo(path)
+    })
+  }
+  return (
+    <Picker
+      title={`Go to folder (${actionKeys('terminal.goToFolder')}); new groups start there`}
+      trigger={
+        <span className="flex h-6 max-w-48 min-w-0 items-center gap-1.5 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+          <Icon name="folder" className="size-3 shrink-0" />
+          <span className="truncate">{label}</span>
+          <Icon name="chevron" className="size-3 shrink-0 rotate-90" />
+        </span>
+      }
+      options={options}
+      current={current}
+      placeholder="Go to folder"
+      open={open}
+      onOpenChange={setFolderPickerOpen}
+      onPick={pick}
+      width="w-96"
+    />
+  )
+}
+
+function FolderRow({ name, path }: { name: string; path: string }): React.JSX.Element {
+  return (
+    <span title={path} className="flex min-w-0 items-baseline gap-2">
+      <span className="max-w-[70%] shrink-0 truncate text-foreground">{name}</span>
+      {/* Right to left so a long path keeps its end, the part that tells checkouts apart */}
+      <span dir="rtl" className="min-w-0 shrink-[3] truncate text-left text-[11px] text-muted-foreground">
+        <bdi>{path.replace(window.api.home, '~')}</bdi>
+      </span>
+    </span>
+  )
+}
+
 /** Tabs of the task with new tab and split buttons; on the Terminal page also the list and inspector toggles. `sessions` are the task's */
-function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | null; label: string; cwd: string; sessions: Session[]; page: boolean; onHide?: () => void }): React.JSX.Element {
+function TabStrip({
+  task,
+  label,
+  cwd,
+  sessions,
+  page,
+  onHide,
+  onGoToFolder
+}: {
+  task: Task | null
+  label: string
+  cwd: string
+  sessions: Session[]
+  page: boolean
+  onHide?: () => void
+  onGoToFolder?: (path: string) => void
+}): React.JSX.Element {
   const panels = usePanels()
   const newTab = (kind: SessionKind, view: SessionView): void => openTab(task?.worktreePath ?? cwd, kind, task?.id, view)
   const { main, other } = useNewTabEntries()
@@ -395,13 +493,7 @@ function TabStrip({ task, label, cwd, sessions, page, onHide }: { task: Task | n
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
           <ListToggle />
-          {!panels.list && (
-            // Just a label for the group on screen; the list toggle beside it is the one control
-            <span className="flex h-6 max-w-48 min-w-0 cursor-default items-center gap-1.5 px-1 text-xs text-muted-foreground">
-              <Icon name="folder" className="size-3 shrink-0" />
-              <span className="truncate">{label}</span>
-            </span>
-          )}
+          {onGoToFolder && <FolderPicker label={label} current={task?.worktreePath ?? cwd} onGo={onGoToFolder} />}
           <span className="ml-1 h-4 w-px shrink-0 bg-border" />
         </div>
       )}
@@ -484,7 +576,8 @@ export function TaskTerminals({
   repos,
   orientation,
   page,
-  onHide
+  onHide,
+  onGoToFolder
 }: {
   task: Task | null
   /** The task's name for headers */
@@ -499,6 +592,8 @@ export function TaskTerminals({
   page: boolean
   /** Closes the panel, when docked */
   onHide?: () => void
+  /** Goes to a folder picked from the group's label, on the Terminal page */
+  onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
   const { sessions: allSessions, zoomed } = useTerminals()
   const [weights, setWeights] = useState<Record<string, number>>({})
@@ -517,7 +612,7 @@ export function TaskTerminals({
 
   return (
     <div data-terminal-panes className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} />
+      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} onGoToFolder={onGoToFolder} />
       {columns.length === 0 ? (
         <EmptyTask task={task} label={label} cwd={cwd} history={history} repos={repos} />
       ) : (
