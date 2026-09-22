@@ -16,10 +16,16 @@ const noSubscribe = (): (() => void) => () => undefined
 
 const withoutScheme = (url: string): string => url.replace(/^https?:\/\//, '').replace(/\/$/, '')
 
-/** "<session title> · <worktree>" for the session listening on a port */
-export function sessionDetail(sessions: SessionSummary[], repos: Repo[] | null, sessionId: string): string {
+/** The listening process's folder: relative inside the session's worktree (apps/web), its name outside, nothing at the root */
+function folderOf(cwd: string | null, worktreePath: string | undefined): string {
+  if (!cwd || cwd === worktreePath) return ''
+  return worktreePath && cwd.startsWith(`${worktreePath}/`) ? cwd.slice(worktreePath.length + 1) : (cwd.split('/').at(-1) ?? cwd)
+}
+
+/** "<folder> · <session title> · <worktree>" for the server on a port */
+export function portDetail(sessions: SessionSummary[], repos: Repo[] | null, { sessionId, cwd }: SessionPort): string {
   const session = sessions.find((candidate) => candidate.id === sessionId)
-  return session ? `${session.title} · ${worktreeLabel(repos, session.worktreePath)}` : ''
+  return [folderOf(cwd, session?.worktreePath), session && `${session.title} · ${worktreeLabel(repos, session.worktreePath)}`].filter(Boolean).join(' · ')
 }
 
 /** Servers started by sessions, as suggestions */
@@ -29,7 +35,7 @@ export function useRunning(): Suggestion[] {
   const ports = useSyncExternalStore(service?.subscribe ?? noSubscribe, service?.getPorts ?? (() => NO_PORTS))
   // Titles and worktrees come from the sessions
   const sessions = useSyncExternalStore(service?.subscribe ?? noSubscribe, service?.getSessions ?? (() => NO_SESSIONS))
-  return useMemo(() => ports.map(({ port, url, sessionId }) => ({ url, label: `localhost:${port}`, detail: sessionDetail(sessions, host.repos, sessionId) })), [ports, sessions, host.repos])
+  return useMemo(() => ports.map((port) => ({ url: port.url, label: `localhost:${port.port}`, detail: portDetail(sessions, host.repos, port) })), [ports, sessions, host.repos])
 }
 
 export function useSuggestions(query: string): SuggestionSection[] {

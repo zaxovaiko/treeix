@@ -1,23 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createBridge, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
-import { IconButton, usePersisted } from '@treeix/app/ui'
+import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import type { ConsoleEntry, NetworkEntry, Vital } from '../shared/types'
-import { consoleComment, entryCommentId, networkComment, vitalComment } from './comments'
+import { consoleComment, entryCommentId, networkComment, seconds, vitalComment } from './comments'
 import { useEntries } from './entries'
 import type { BrowserTab } from './tabs'
 
 const bridge = createBridge('browser')
 type Pane = 'console' | 'network' | 'performance'
 
+let toggleShown: (() => void) | null = null
+/** ⌘J: opens or hides the strip on screen; false when none is */
+export const toggleStrip = (): boolean => (toggleShown?.(), toggleShown !== null)
+
 const isProblem = (entry: NetworkEntry): boolean => entry.failed !== null || (entry.status ?? 0) >= 400
 const tone = (bad: boolean, warn = false): string => (bad ? 'text-red-400' : warn ? 'text-amber-400' : 'text-muted-foreground')
 
-export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
+/** `onDevtools` opens the full DevTools, for what the strip doesn't show: flame charts, sources, the DOM */
+export function Strip({ tab, onDevtools }: { tab: BrowserTab; onDevtools: () => void }): React.JSX.Element {
   const host = useHost()
   const [open, setOpen] = usePersisted<boolean>('browser.strip', false)
   const [pane, setPane] = usePersisted<Pane>('browser.stripPane', 'console')
   const [all, setAll] = useState(false)
+  const [height, setHeight] = usePersisted<number>('browser.stripHeight', 144)
+  useEffect(() => {
+    const toggle = (): void => setOpen(!open)
+    toggleShown = toggle
+    return () => {
+      if (toggleShown === toggle) toggleShown = null
+    }
+  }, [open])
   const { console: logs, network, vitals } = useEntries(tab.guestId)
   const worktree = host.selectedWorktree ?? host.defaultCwd
   const { guestId } = tab
@@ -49,7 +62,7 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
           }))
         : vitals.map((entry) => ({
             entry,
-            cells: [entry.name, entry.element, entry.name === 'CLS' ? String(Math.round(entry.value * 100) / 100) : `${Math.round(entry.value)} ms`, ''],
+            cells: [entry.name, [entry.element, entry.detail].filter(Boolean).join(' · '), entry.name === 'CLS' ? String(Math.round(entry.value * 100) / 100) : `${Math.round(entry.value)} ms`, entry.start ? `at ${seconds(entry.start)}` : ''],
             bad: (entry.name === 'LCP' && entry.value > 4000) || (entry.name === 'INP' && entry.value > 500) || (entry.name === 'CLS' && entry.value > 0.25),
             warn: entry.name === 'Long task' || (entry.name === 'LCP' && entry.value > 2500) || (entry.name === 'INP' && entry.value > 200) || (entry.name === 'CLS' && entry.value > 0.1)
           }))
@@ -63,7 +76,8 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
     </button>
   )
   return (
-    <div className="shrink-0 border-t border-border">
+    <div className="relative shrink-0 border-t border-border">
+      {open && <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />}
       <div className="flex items-center px-2">
         {paneButton('console', 'Console', errors)}
         {paneButton('network', 'Network')}
@@ -75,21 +89,24 @@ export function Strip({ tab }: { tab: BrowserTab }): React.JSX.Element {
               <Icon name="list" className="size-3.5" />
             </IconButton>
           )}
+          <IconButton label="Open DevTools (⌥⌘I)" onClick={onDevtools}>
+            <Icon name="code" className="size-3.5" />
+          </IconButton>
           <IconButton label={open ? 'Hide' : 'Show'} onClick={() => setOpen(!open)}>
             <Icon name="chevron" className={`size-3.5 ${open ? 'rotate-90' : '-rotate-90'}`} />
           </IconButton>
         </span>
       </div>
       {open && (
-        <div className="h-36 overflow-y-auto">
+        <div style={{ height }} className="overflow-y-auto">
           {rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
           {rows
             .slice()
             .reverse()
             .map(({ entry, cells, bad, warn }) => (
-              <label key={entry.id} className="grid cursor-pointer grid-cols-[16px_56px_minmax(0,1fr)_72px_56px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50">
+              <label key={entry.id} className="grid cursor-pointer grid-cols-[16px_72px_minmax(0,1fr)_72px_64px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50">
                 <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
-                <span className={tone(bad, warn)}>{cells[0]}</span>
+                <span className={`truncate ${tone(bad, warn)}`}>{cells[0]}</span>
                 <span className="truncate" title={cells[1]}>
                   {cells[1]}
                 </span>

@@ -7,7 +7,8 @@ import { addVital } from './entries'
 import { onPageMessage, PageLayer } from './pages'
 import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
-import { sessionDetail } from './Suggestions'
+import { portDetail } from './Suggestions'
+import { toggleStrip } from './Strip'
 import { getBrowser, openTab, selectTab, updateBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
 import type { Vital } from '../shared/types'
@@ -19,6 +20,9 @@ const bridge = createBridge('browser')
 let host: HostApi | null = null
 
 const isBrowserFocused = (): boolean => document.activeElement?.closest('[data-browser]') != null
+// Closing a tab removes the focused page or button, so focus falls to the body; the Browser page keeps its keys then
+const ownsKeys = (current: HostApi): boolean => isBrowserFocused() || (current.activeTab === TAB_ID && document.activeElement === document.body)
+const isConsoleKey = (event: KeyboardEvent): boolean => event.code === 'KeyJ' && event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey
 
 /** Chrome's keys, while the browser has focus */
 const SHORTCUTS: ShortcutInfo[] = (
@@ -30,7 +34,8 @@ const SHORTCUTS: ShortcutInfo[] = (
     ['⌘[ ⌘]', 'Back, forward'],
     ['⌘R', 'Reload'],
     ['⌥⌘I', 'Developer tools'],
-    ['⌘⇧C', 'Design mode, comment on an element']
+    ['⌘⇧C', 'Design mode, comment on an element'],
+    ['⌘J', 'Console, network and performance']
   ] satisfies [string, string][]
 ).map(([keys, label]) => ({ keys, label, section: 'Browser' }))
 
@@ -94,7 +99,7 @@ function ServerNotices(): React.JSX.Element | null {
       const notify = Date.now() >= settleUntil && browserSettings.get().notifyPorts
       const added = (notify ? fresh : [])
         .filter((port) => !showsPort(port.port))
-        .map((port) => ({ id: nextNoticeId++, key: portKey(port), url: port.url, label: `localhost:${port.port}`, detail: sessionDetail(service.getSessions(), host?.repos ?? null, port.sessionId) }))
+        .map((port) => ({ id: nextNoticeId++, key: portKey(port), url: port.url, label: `localhost:${port.port}`, detail: portDetail(service.getSessions(), host?.repos ?? null, port) }))
       setNotices((list) => {
         // Stopped servers take their card with them
         const kept = list.filter((notice) => live.has(notice.key) && !added.some((item) => item.key === notice.key))
@@ -145,7 +150,16 @@ function Root(): React.JSX.Element {
         if (!vital || typeof vital.value !== 'number' || typeof vital.name !== 'string') return
         const name = VITAL_NAMES.find((candidate) => candidate === vital.name)
         if (!name) return
-        addVital(tab.guestId, { kind: 'vital', id: `${name}-${vital.time ?? 0}`, name, value: vital.value, element: String(vital.element ?? ''), time: Number(vital.time ?? 0) })
+        addVital(tab.guestId, {
+          kind: 'vital',
+          id: `${name}-${vital.time ?? 0}`,
+          name,
+          value: vital.value,
+          element: String(vital.element ?? ''),
+          detail: String(vital.detail ?? ''),
+          start: Number(vital.start ?? 0),
+          time: Number(vital.time ?? 0)
+        })
       }),
     []
   )
@@ -185,15 +199,16 @@ const plugin: RendererPlugin = {
   tabs: [{ id: TAB_ID, label: 'Browser', icon: 'globe', order: 15, render: BrowserPage }],
   panels: [{ id: TAB_ID, label: 'Browser', icon: 'globe', render: () => <BrowserView place="panel" /> }],
   Root,
-  onKeyDown: (event) => {
-    if (!isBrowserFocused()) return false
+  onKeyDown: (event, current) => {
+    if (!ownsKeys(current)) return false
+    if (isConsoleKey(event)) return toggleStrip()
     const action = browserAction({ code: event.code, meta: event.metaKey, shift: event.shiftKey, alt: event.altKey, control: event.ctrlKey })
     if (!action || action === 'closeTab') return false
     runBrowserAction(action)
     return true
   },
-  onCloseShortcut: () => {
-    if (!isBrowserFocused()) return false
+  onCloseShortcut: (current) => {
+    if (!ownsKeys(current)) return false
     runBrowserAction('closeTab')
     return true
   },

@@ -106,11 +106,21 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
     const history = (): Partial<BrowserTab> => ({ canGoBack: view.canGoBack(), canGoForward: view.canGoForward() })
     const handlers: [string, (event: Event & Record<string, unknown>) => void][] = [
       ['did-start-loading', () => patch({ loading: true, crashed: false })],
+      [
+        'did-fail-load',
+        (event) => {
+          // -3 is a load cut short by another one, like a redirect or a click during loading
+          if (event.isMainFrame === false || event.errorCode === -3) return
+          // The failed address stays in the bar, so a first load that never connected still says what it tried
+          patch({ url: String(event.validatedURL), loading: false, error: { code: Number(event.errorCode), description: String(event.errorDescription), url: String(event.validatedURL) } })
+        }
+      ],
       ['did-stop-loading', () => patch({ loading: false, ...history() })],
       [
         'did-navigate',
         (event) => {
-          patch({ url: String(event.url), ...history() })
+          const code = Number(event.httpResponseCode)
+          patch({ url: String(event.url), status: code > 0 ? code : null, error: null, committed: true, ...history() })
           recordVisit(String(event.url))
           try {
             clearVitals(view.getWebContentsId())
@@ -155,7 +165,8 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
       // A page's popups become tabs in main; the attribute only lets window.open reach that handler
       allowpopups
       // A blank tab stays hidden so the view's empty state shows through
-      style={{ position: 'absolute', inset: 0, visibility: active && tab.url !== 'about:blank' ? 'visible' : 'hidden' }}
+      // So does one still connecting or failed, for the view's loader and error page
+      style={{ position: 'absolute', inset: 0, visibility: active && tab.url !== 'about:blank' && tab.committed && !tab.error ? 'visible' : 'hidden' }}
     />
   )
 }

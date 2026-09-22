@@ -11,13 +11,19 @@ export type BrowserTab = {
   /** The page's webContents id once it attached; main keys its per-page work by it */
   guestId: number | null
   crashed: boolean
+  /** The page's HTTP status; its own error page shows, so 4xx and 5xx only mark the address bar */
+  status: number | null
+  /** A load that never reached a server, e.g. nothing listening on the port; Chromium's error page is replaced by ours */
+  error: { code: number; description: string; url: string } | null
+  /** False until the first navigation commits, so a new tab shows a loader rather than a blank page */
+  committed: boolean
 }
 
 export type BrowserState = { tabs: BrowserTab[]; activeId: string | null; /** Newest first */ closed: string[] }
 
 const CLOSED_LIMIT = 20
 
-const newTab = (url: string, id: string): BrowserTab => ({ id, url, title: '', favicon: null, loading: false, canGoBack: false, canGoForward: false, guestId: null, crashed: false })
+const newTab = (url: string, id: string): BrowserTab => ({ id, url, title: '', favicon: null, loading: false, canGoBack: false, canGoForward: false, guestId: null, crashed: false, status: null, error: null, committed: false })
 
 export function openTab(state: BrowserState, url: string, id: string = crypto.randomUUID()): BrowserState {
   const at = state.tabs.findIndex((tab) => tab.id === state.activeId)

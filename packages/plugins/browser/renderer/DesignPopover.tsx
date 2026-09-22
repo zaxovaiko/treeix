@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createBridge, useHost } from '@treeix/sdk'
+import { usePersisted } from '@treeix/app/ui'
 import type { Attachment } from '@treeix/shared/comments'
 import { elementComment } from './comments'
 import { clearSelection, useDesign } from './pages'
@@ -15,16 +16,32 @@ export function DesignPopover(): React.JSX.Element | null {
   const { activeId, tabs } = useBrowser()
   const [note, setNote] = useState('')
   const [error, setError] = useState(false)
+  const [withShot, setWithShot] = usePersisted<boolean>('browser.designShot', true)
+  const [shot, setShot] = useState<Attachment | null>(null)
   const stale = !!selection && selection.tabId !== activeId
+  const guestId = tabs.find((candidate) => candidate.id === selection?.tabId)?.guestId ?? null
+  // Taken as the element is picked, so the thumbnail shows what the agent will get before the note is written
+  useEffect(() => {
+    setShot(null)
+    if (!selection || !withShot || !guestId) return
+    let current = true
+    void bridge
+      .invoke<Attachment | null>('capture', guestId, selection.value.rect, selection.value.viewport)
+      .then((taken) => current && setShot(taken))
+      .catch(() => undefined)
+    return () => {
+      current = false
+    }
+  }, [selection, withShot, guestId])
   // A tab switch or close leaves the selection behind; drop it so it doesn't reappear over the wrong page
   useEffect(() => {
     if (stale) clearSelection()
   }, [stale])
   if (!selection || stale) return null
-  const { value, tabId } = selection
-  const tab = tabs.find((candidate) => candidate.id === tabId)
+  const { value } = selection
   const below = value.rect.y + value.rect.height + 8
-  const top = below + 120 > value.viewport.height ? Math.max(8, value.rect.y - 128) : below
+  const height = withShot && shot ? 200 : 128
+  const top = below + height - 8 > value.viewport.height ? Math.max(8, value.rect.y - height) : below
   const left = Math.max(8, Math.min(value.rect.x, value.viewport.width - WIDTH - 8))
   const close = (): void => {
     setNote('')
@@ -33,8 +50,7 @@ export function DesignPopover(): React.JSX.Element | null {
   }
   const add = async (): Promise<void> => {
     if (!note.trim()) return setError(true)
-    const shot = tab?.guestId ? await bridge.invoke<Attachment | null>('capture', tab.guestId, value.rect, value.viewport).catch(() => null) : null
-    host.addComment(elementComment(value, note.trim(), host.selectedWorktree ?? host.defaultCwd, shot ?? undefined))
+    host.addComment(elementComment(value, note.trim(), host.selectedWorktree ?? host.defaultCwd, withShot && shot ? shot : undefined))
     host.flash('Added the element to comments')
     close()
   }
@@ -56,7 +72,12 @@ export function DesignPopover(): React.JSX.Element | null {
         className="w-full resize-none rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
       />
       {error && <div className="mt-1 text-[11px] text-red-400">Write a note first</div>}
-      <div className="mt-1.5 flex justify-end gap-1.5">
+      {withShot && shot && <img src={shot.thumbnail} alt="Screenshot of the element" className="mt-1.5 max-h-20 rounded border border-border object-contain" />}
+      <div className="mt-1.5 flex items-center justify-end gap-1.5">
+        <label className="mr-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+          <input type="checkbox" checked={withShot} onChange={() => setWithShot(!withShot)} />
+          Screenshot
+        </label>
         <button onClick={close} className="h-6 rounded px-2 text-xs text-muted-foreground hover:bg-accent">
           Cancel
         </button>

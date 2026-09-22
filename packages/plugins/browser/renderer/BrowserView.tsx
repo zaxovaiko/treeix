@@ -9,9 +9,10 @@ import { importLabel } from './SettingsPage'
 import { browserSettings } from './settings'
 import { Strip } from './Strip'
 import { type Suggestion, SuggestionRow, Suggestions, sectionLabel, useRunning, useSuggestions } from './Suggestions'
-import { activeTab, closeTab, getBrowser, openTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
+import { activeTab, closeTab, getBrowser, openTab, patchTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 import type { ImportInfo } from '../shared/types'
+import { httpProblem, loadError } from './loadErrors'
 
 const bridge = createBridge('browser')
 
@@ -23,7 +24,9 @@ export function navigate(input: string): void {
   const tab = activeTab()
   if (!tab) return updateBrowser((state) => openTab(state, url))
   const page = pageOf(tab.id)
-  if (page) void page.loadURL(url)
+  // A blank tab shows the loader from the start rather than its empty page until the server answers
+  if (tab.url === 'about:blank') updateBrowser((state) => patchTab(state, tab.id, { url, committed: false, error: null }))
+  if (page) void page.loadURL(url).catch(() => undefined)
 }
 
 export function runBrowserAction(action: BrowserAction): void {
@@ -169,6 +172,8 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
     }
   }, [shown, devtools, dockOpen])
   const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
+  const problem = httpProblem(tab?.status ?? null)
+  const failure = tab?.error ? loadError(tab.error.code, tab.error.url) : null
   return (
     <div data-browser className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
       <div className="flex h-8 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-1">
@@ -178,7 +183,14 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
             onMouseDown={() => updateBrowser((state) => selectTab(state, candidate.id))}
             className={`group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs ${candidate.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'}`}
           >
-            {candidate.favicon ? <img src={candidate.favicon} alt="" className="size-3.5" /> : <Icon name="globe" className="size-3.5" />}
+            {candidate.loading && !candidate.favicon ? (
+              <Icon name="loader" className="size-3.5 animate-spin text-muted-foreground" />
+            ) : candidate.favicon ? (
+              // A declared icon can 404; the globe stands in rather than a broken image
+              <img src={candidate.favicon} alt="" className="size-3.5" onError={() => updateBrowser((state) => patchTab(state, candidate.id, { favicon: null }))} />
+            ) : (
+              <Icon name="globe" className="size-3.5" />
+            )}
             <span className="min-w-0 flex-1 truncate">{candidate.url === 'about:blank' ? 'New tab' : candidate.title || candidate.url.replace(/^https?:\/\//, '')}</span>
             <button
               aria-label="Close tab"
@@ -194,7 +206,8 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           <Icon name="plus" className="size-3.5" />
         </button>
       </div>
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+      <div className="relative flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+        {tab?.loading && <span className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 animate-pulse bg-primary" />}
         <button aria-label="Back" title="Back (⌘[)" className={toolButton} disabled={!tab?.canGoBack} onClick={() => runBrowserAction('back')}>
           <Icon name="arrowLeft" className="size-3.5" />
         </button>
@@ -236,6 +249,15 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
             }}
             className="h-6 w-full rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
           />
+          {problem && !suggesting && (
+            <span
+              title={`${problem.title} ${problem.hint}`}
+              className={`pointer-events-none absolute top-1/2 right-1.5 flex h-4 -translate-y-1/2 items-center gap-1 rounded px-1 text-[10.5px] ${tab?.status && tab.status >= 500 ? 'bg-red-400/15 text-red-400' : 'bg-amber-400/15 text-amber-400'}`}
+            >
+              <Icon name={problem.icon} className="size-3" />
+              {problem.title} {problem.hint}
+            </span>
+          )}
           {suggesting && rows.length > 0 && <Suggestions sections={sections} highlighted={highlighted} onOpen={openAddress} onHighlight={setHighlighted} />}
         </div>
         {place === 'tab' && <ProfileBadge />}
@@ -283,6 +305,28 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           </div>
         )}
         {shown && (!tab || tab.url === 'about:blank') && <EmptyPage onOpen={() => runBrowserAction('focusAddress')} />}
+        {shown && tab && tab.url !== 'about:blank' && !tab.committed && !tab.error && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
+            <Icon name="loader" className="size-5 animate-spin" />
+            <span className="max-w-80 truncate font-mono">{tab.url.replace(/^https?:\/\//, '')}</span>
+          </div>
+        )}
+        {shown && tab?.error && failure && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="grid size-12 place-items-center rounded-xl bg-foreground/5 text-muted-foreground">
+              <Icon name={failure.icon} className="size-6" />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-foreground">{failure.title}</div>
+              {failure.hint && <div className="mt-1 text-xs text-muted-foreground">{failure.hint}</div>}
+              <div className="mt-2 font-mono text-[11px] text-muted-foreground/70">{tab.error.description}</div>
+            </div>
+            <button onClick={() => runBrowserAction('reload')} className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs hover:bg-accent">
+              <Icon name="refresh" className="size-3.5" />
+              Reload
+            </button>
+          </div>
+        )}
         {shown && tab?.crashed && (
           <div className="relative z-20 flex h-full flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
             This page crashed
@@ -292,7 +336,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           </div>
         )}
       </div>
-      {tab && place === 'tab' && <Strip tab={tab} />}
+      {tab && place === 'tab' && <Strip tab={tab} onDevtools={() => runBrowserAction('devtools')} />}
       {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock key={tab.guestId} guestId={tab.guestId} />}
     </div>
   )

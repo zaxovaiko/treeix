@@ -21,12 +21,12 @@ test('consoleComment and networkComment summarise and keep details in the body',
 })
 
 test('vitalComment names the metric and the element', () => {
-  const vital: Vital = { kind: 'vital', id: 'v1', name: 'CLS', value: 0.18, element: 'div.plan', time: 0 }
+  const vital: Vital = { kind: 'vital', id: 'v1', name: 'CLS', value: 0.18, element: 'div.plan', detail: '', start: 0, time: 0 }
   expect(vitalComment(vital, 7, page, '/repo')).toMatchObject({ id: entryCommentId(vital, 7), text: 'Performance: CLS 0.18', body: 'Caused by: div.plan' })
 })
 
 test('entryCommentId differs per page and per launch, since entry ids restart', () => {
-  const vital: Vital = { kind: 'vital', id: 'v1', name: 'CLS', value: 0.18, element: 'div.plan', time: 0 }
+  const vital: Vital = { kind: 'vital', id: 'v1', name: 'CLS', value: 0.18, element: 'div.plan', detail: '', start: 0, time: 0 }
   expect(entryCommentId(vital, 7)).toMatch(/^browser:[a-z0-9]+:7:vital:v1$/)
   expect(entryCommentId(vital, 7)).not.toBe(entryCommentId(vital, 8))
 })
