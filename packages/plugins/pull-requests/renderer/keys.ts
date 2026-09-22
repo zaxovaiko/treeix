@@ -67,8 +67,9 @@ type Handlers = Partial<Record<Verb, () => void>>
 /** Handlers of the views on screen, the list's and the pull request's, for the palette */
 const sources = new Set<() => Handlers>()
 
-/** Palette entries for what the pull request on screen can do right now */
-export function pullRequestCommands(): Command[] {
+/** Palette entries for what the pull request on screen can do right now; the page kept off screen offers none */
+export function pullRequestCommands(onPage: boolean): Command[] {
+  if (!onPage) return []
   const handlers: Handlers = Object.assign({}, ...[...sources].map((get) => get()))
   return VERBS.flatMap(({ verb, label, icon }) => {
     const run = handlers[verb]

@@ -183,7 +183,7 @@ const plugin: RendererPlugin = {
   tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'] }],
   Root: Polling,
   Settings: PullRequestSettings,
-  commands: (host) => [...pullRequestCommands(), ...listedCommands(host)],
+  commands: (host) => [...pullRequestCommands(host.activeTab === TAB_ID), ...listedCommands(host)],
   toolMarks: {
     gh: () => <ProviderMark provider="github" className="size-4" />,
     glab: () => <ProviderMark provider="gitlab" className="size-4" />
