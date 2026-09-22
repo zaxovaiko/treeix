@@ -142,7 +142,7 @@ let ports: SessionPort[] = []
 let portsTimer: ReturnType<typeof setInterval> | null = null
 export const getPorts = (): SessionPort[] => ports
 
-const samePorts = (a: SessionPort[], b: SessionPort[]): boolean => a.length === b.length && a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port)
+const samePorts = (a: SessionPort[], b: SessionPort[]): boolean => a.length === b.length && a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port && port.cwd === b[index].cwd)
 
 function setPorts(next: SessionPort[]): void {
   if (samePorts(ports, next)) return
@@ -155,9 +155,9 @@ let polling = false
 async function pollPorts(): Promise<void> {
   if (polling || document.hidden) return
   polling = true
-  const found = await bridge.invoke<{ sessionId: string; port: number }[]>('ports').catch(() => null)
+  const found = await bridge.invoke<{ sessionId: string; port: number; cwd: string | null }[]>('ports').catch(() => null)
   polling = false
-  if (found && portsTimer) setPorts(found.map(({ sessionId, port }) => ({ sessionId, port, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
+  if (found && portsTimer) setPorts(found.map(({ sessionId, port, cwd }) => ({ sessionId, port, cwd, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
 }
 
 /** Asks main for listening ports only while some session has a running process */
@@ -654,6 +654,21 @@ void restoreSessions().catch(() => {
   restored = true
 })
 
+/**
+ * Draws with WebGL instead of DOM rows, which is what keeps a busy agent's redraws from lagging the window. A lost
+ * context (the GPU reset, or Chromium dropping the oldest of its ~16 contexts) falls back to the DOM renderer
+ */
+// ponytail: one context per opened terminal; release contexts of hidden sessions if more than ~16 stay open
+function drawWithGpu(terminal: import('@xterm/xterm').Terminal): void {
+  void import('@xterm/addon-webgl')
+    .then(({ WebglAddon }) => {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => webgl.dispose())
+      terminal.loadAddon(webgl)
+    })
+    .catch(() => undefined)
+}
+
 /** Open the xterm lazily: it needs a mounted element to measure fonts */
 export function attachSession(id: string, container: HTMLElement): void {
   const session = findTerminal(id)
@@ -665,6 +680,7 @@ export function attachSession(id: string, container: HTMLElement): void {
   if (!session.opened) {
     session.terminal.open(session.element)
     session.opened = true
+    drawWithGpu(session.terminal)
   }
   fitSession(id)
   void wakeSession(id)
