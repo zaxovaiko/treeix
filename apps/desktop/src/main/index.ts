@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import type { ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
 import { saveAttachment } from './attachments'
+import { migrateUserData } from './userData'
 import { createPath, listDirectory, renamePath, saveFile, stopWatching, trashPath, watchFile } from './files'
 import { createHistory } from './history'
 import { enableTextMenu, showContextMenu } from './contextMenu'
@@ -20,10 +21,13 @@ app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_
 // ponytail: apps launched from Finder get a minimal PATH, add Homebrew so gh/glab resolve
 process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean).join(':')
 
-// Renaming the app would move app data to a new folder; keep the original one so settings, comments and attachments survive
 app.setName('Treeix')
-// --user-data-dir runs a separate profile, e.g. for demo screenshots
-if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', join(app.getPath('appData'), 'quick-diff'))
+// TREEIX_USER_DATA or --user-data-dir runs a separate profile, e.g. for demo screenshots
+if (process.env.TREEIX_USER_DATA) app.setPath('userData', process.env.TREEIX_USER_DATA)
+else if (!app.commandLine.hasSwitch('user-data-dir')) {
+  const userData = join(app.getPath('appData'), 'Treeix')
+  app.setPath('userData', migrateUserData(join(app.getPath('appData'), 'quick-diff'), userData))
+}
 
 function createWindow(): void {
   const window = new BrowserWindow({
