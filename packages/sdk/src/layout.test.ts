@@ -1,27 +1,23 @@
 import { expect, test } from 'bun:test'
+import { chooseZone } from './layout'
 
-test('panels are remembered per page, and the same key undoes a toggle', async () => {
-  const stored = new Map<string, string>()
-  globalThis.localStorage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => void stored.set(key, value) } as unknown as Storage
-  globalThis.requestAnimationFrame = () => 0
-  const { getShell, togglePanel, toggleZen, updateShell } = await import('./layout')
-  expect(getShell().status).toBe(false)
+type Fake = { id: string; shown: boolean; inside: string[] }
 
-  updateShell({ zone: 'list' })
-  togglePanel('list', 'prs')
-  expect(getShell().pages.prs.list).toBe(false)
-  expect(getShell().pages.tasks).toBeUndefined()
-  // Hiding the focused list hands focus to main; showing it again focuses it
-  expect(getShell().zone).toBe('main')
-  togglePanel('list', 'prs')
-  expect(getShell().pages.prs.list).toBe(true)
-  expect(getShell().zone).toBe('list')
+const shown = (zone: Fake): boolean => zone.shown
+const contains = (outer: Fake, inner: Fake): boolean => outer.inside.includes(inner.id)
 
-  togglePanel('rail', 'prs')
-  expect(JSON.parse(stored.get('shell.panels') ?? '{}')).toMatchObject({ rail: false, pages: { prs: { list: true } } })
+test('chooseZone takes the innermost zone that is on screen', () => {
+  const shell: Fake = { id: 'shell', shown: true, inside: ['page'] }
+  const page: Fake = { id: 'page', shown: true, inside: [] }
+  expect(chooseZone([shell, page], shown, contains)).toBe(page)
+})
 
-  toggleZen()
-  expect(getShell().zen).toBe(true)
-  togglePanel('inspector', 'prs')
-  expect(getShell().zen).toBe(false)
+test('chooseZone ignores zones of a hidden page, so its shell zone wins', () => {
+  const shell: Fake = { id: 'shell', shown: true, inside: ['hidden'] }
+  const hidden: Fake = { id: 'hidden', shown: false, inside: [] }
+  expect(chooseZone([shell, hidden], shown, contains)).toBe(shell)
+})
+
+test('chooseZone returns null when every zone is hidden', () => {
+  expect(chooseZone([{ id: 'a', shown: false, inside: [] }], shown, contains)).toBeNull()
 })

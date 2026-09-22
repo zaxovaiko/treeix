@@ -98,10 +98,20 @@ export function showPanel(panel: 'list' | 'inspector', page: string): void {
   if (!pagePanels(page)[panel]) setPagePanels(page, { [panel]: true })
 }
 
+/** The zone to act on: the innermost one that has a layout box, so zones of a page kept mounted off screen are passed over */
+export function chooseZone<T>(candidates: T[], shown: (candidate: T) => boolean, contains: (outer: T, inner: T) => boolean): T | null {
+  const visible = candidates.filter(shown)
+  return visible.find((candidate) => !visible.some((other) => other !== candidate && contains(candidate, other))) ?? null
+}
+
 /** The zone element itself; a page's main zone inside the shell's main zone wins over it */
 function zoneElement(zone: ZoneId): HTMLElement | null {
   const all = [...document.querySelectorAll<HTMLElement>(`[data-zone="${zone}"]`)]
-  return all.find((element) => !element.querySelector(`[data-zone="${zone}"]`)) ?? null
+  return chooseZone(
+    all,
+    (element) => element.checkVisibility(),
+    (outer, inner) => outer.contains(inner)
+  )
 }
 
 /** The element last focused inside each zone, so coming back lands where you left (the terminal you typed in) */
@@ -230,8 +240,9 @@ export function Zone({
   const focused = useSyncExternalStore(subscribe, () => state.zone === id)
   const hintKey = JSON.stringify(hints ?? [])
   useEffect(() => {
-    // The shell's main zone around a page's own main zone leaves the status bar to the inner one
-    if (!focused || ref.current?.querySelector(`[data-zone="${id}"]`)) return
+    // The shell's main zone around a page's own main zone leaves the status bar to the inner one, unless that page is off screen
+    const inner = [...(ref.current?.querySelectorAll<HTMLElement>(`[data-zone="${id}"]`) ?? [])].some((element) => element.checkVisibility())
+    if (!focused || inner) return
     updateShell({ zoneLabel: label ?? ZONE_LABELS[id], hints: hints ?? [] })
   }, [focused, label, hintKey])
   return (
