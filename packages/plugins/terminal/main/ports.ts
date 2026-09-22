@@ -1,4 +1,4 @@
-export type SessionPortEntry = { sessionId: string; port: number }
+export type SessionPortEntry = { sessionId: string; port: number; pid: number }
 export type Listener = { pid: number; port: number }
 
 /** `ps -A -o pid=,ppid=`: each pid's parent */
@@ -38,7 +38,18 @@ export function attributePorts(shells: Map<string, number>, parents: Map<number,
     const sessionId = current === undefined ? undefined : sessionOf.get(current)
     if (!sessionId || seen.has(`${sessionId}:${port}`)) continue
     seen.add(`${sessionId}:${port}`)
-    found.push({ sessionId, port })
+    found.push({ sessionId, port, pid })
   }
   return found
+}
+
+/** `lsof -a -p <pids> -d cwd -Fpn`: each process's working directory */
+export function parseCwds(lsof: string): Map<number, string> {
+  const cwds = new Map<number, string>()
+  let pid: number | null = null
+  for (const line of lsof.split('\n')) {
+    if (line.startsWith('p')) pid = Number(line.slice(1)) || null
+    else if (line.startsWith('n') && pid !== null) cwds.set(pid, line.slice(1))
+  }
+  return cwds
 }

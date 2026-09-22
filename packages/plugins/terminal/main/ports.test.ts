@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { attributePorts, parseListeners, parseParents } from './ports'
+import { attributePorts, parseCwds, parseListeners, parseParents } from './ports'
 
 const PS = `    1     0
   500     1
@@ -52,9 +52,9 @@ test('gives a port to the session whose shell is an ancestor or the process itse
     ['b', 700]
   ])
   expect(attributePorts(shells, parseParents(PS), parseListeners(LSOF))).toEqual([
-    { sessionId: 'a', port: 5173 },
-    { sessionId: 'b', port: 3000 },
-    { sessionId: 'b', port: 8080 }
+    { sessionId: 'a', port: 5173, pid: 502 },
+    { sessionId: 'b', port: 3000, pid: 700 },
+    { sessionId: 'b', port: 8080, pid: 700 }
   ])
 })
 
@@ -68,6 +68,13 @@ test('drops ports outside every session and survives a parent cycle', () => {
 
 test('the shell itself listening counts, a pid ps no longer lists does not', () => {
   const shells = new Map([['a', 500]])
-  expect(attributePorts(shells, parseParents(PS), [{ pid: 500, port: 9000 }])).toEqual([{ sessionId: 'a', port: 9000 }])
+  expect(attributePorts(shells, parseParents(PS), [{ pid: 500, port: 9000 }])).toEqual([{ sessionId: 'a', port: 9000, pid: 500 }])
   expect(attributePorts(shells, parseParents(PS), [{ pid: 4242, port: 9001 }])).toEqual([])
+})
+
+test('reads each process working directory from lsof', () => {
+  const cwds = parseCwds('p502\nfcwd\nn/repo/apps/web\np700\nfcwd\nn/repo/apps/api\n')
+  expect(cwds.get(502)).toBe('/repo/apps/web')
+  expect(cwds.get(700)).toBe('/repo/apps/api')
+  expect(parseCwds('garbage\nn/orphan\n').size).toBe(0)
 })

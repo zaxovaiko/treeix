@@ -89,7 +89,8 @@ export type SessionSummary = {
 }
 
 /** A TCP port a session's process listens on, e.g. a dev server */
-export type SessionPort = { sessionId: string; port: number; url: string }
+/** `cwd` is the folder the listening process runs in, which tells apart servers of one session */
+export type SessionPort = { sessionId: string; port: number; url: string; cwd: string | null }
 
 /** Agent and terminal sessions, provided by the terminal plugin */
 export type SessionsService = {
