@@ -1139,6 +1139,7 @@ function App(): React.JSX.Element {
     const frame = { left: 'border-r', right: 'border-l', bottom: 'border-t' }[side]
     const aside = (
       <aside
+        data-dock-frame
         style={side === 'bottom' ? { height: size } : { width: size }}
         className={`relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card ${frame} ${side === 'bottom' ? '' : 'flex-1'}`}
       >

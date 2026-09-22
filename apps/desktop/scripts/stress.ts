@@ -4,7 +4,7 @@
  *   bun run --cwd apps/desktop stress                 builds, then runs every case
  *   bun apps/desktop/scripts/stress.ts [case…] [--open]   the last build; --open leaves the window up to poke at
  *
- * Cases: window-zoom, idle, terminal-flood, many-terminals, page-switching, browser-tabs, split-toggle, palette-and-folder-picker.
+ * Cases: window-zoom, idle, terminal-flood, many-terminals, page-switching, page-keepalive, browser-tabs, split-toggle, palette-and-folder-picker.
  *
  * Runs its own window with a throwaway HOME and user data, so nothing of yours is touched and every run starts clean.
  * A case fails when its slowest frame or its p95 frame goes over the case's budget; the exit code says whether any did.
@@ -260,6 +260,38 @@ const CASES: Case[] = [
       return [
         `switch p50 ${Math.round(timings[Math.floor(timings.length / 2)])} ms, p95 ${Math.round(timings[Math.floor(timings.length * 0.95)])} ms (incl. CDP round trip)`,
         back > 100 ? `terminal is sized after coming back (${shown} px, then ${back} px)` : `FAIL terminal came back ${back} px wide`
+      ]
+    }
+  },
+  {
+    name: 'page-keepalive',
+    budget: { maxFrame: 250, p95Frame: 34 },
+    run: async (driver) => {
+      // A mark on the page's own DOM survives only while the page stays mounted
+      await driver.evaluate(clickTitle('Pull requests'))
+      await driver.frames()
+      await sleep(1500)
+      await driver.evaluate(`(document.querySelector('[data-zone="main"]').dataset.stressMark = 'kept')`)
+      await driver.evaluate(clickTitle('Terminal'))
+      await driver.frames()
+      await sleep(600)
+      await driver.evaluate(`(() => { if (window.__revisit) return; window.__revisit = []; new PerformanceObserver((list) => list.getEntries().forEach((entry) => window.__revisit.push(entry.duration))).observe({ type: 'longtask' }) })()`)
+      await driver.evaluate(`window.__revisit = []`)
+      await driver.evaluate(clickTitle('Pull requests'))
+      await driver.frames()
+      await sleep(1500)
+      const kept = await driver.evaluate(`document.querySelector('[data-zone="main"]')?.dataset.stressMark ?? ''`)
+      const blocked = Math.round(Number(await driver.evaluate(`(window.__revisit ?? []).reduce((sum, value) => sum + value, 0)`)))
+      // With the bottom terminal open, the dock has to be drawn once, around the page on screen
+      await driver.press('KeyJ', { meta: true })
+      await driver.frames()
+      await sleep(800)
+      const docks = Number(await driver.evaluate(`document.querySelectorAll('[data-dock-frame]').length`))
+      await driver.press('KeyJ', { meta: true })
+      return [
+        kept === 'kept' ? 'the page came back mounted' : 'FAIL the page was rebuilt',
+        blocked <= 120 ? `revisit blocked ${blocked} ms` : `FAIL revisit blocked ${blocked} ms`,
+        docks === 1 ? 'one dock frame with several pages kept' : `FAIL ${docks} dock frames`
       ]
     }
   },
