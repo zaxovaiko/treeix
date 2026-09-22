@@ -180,7 +180,8 @@ function TabDock({
   }, [])
   // The same wrapper whether the page is on screen or kept behind it, so React keeps the page instead of rebuilding it
   const frames = active && (placement === 'full' || (settled && claims === 0))
-  return <>{withDock(<DockSlot.Provider value={active && placement !== 'full' ? claim : null}>{children}</DockSlot.Provider>, frames)}</>
+  // The slot stays offered off screen too: a PageLayout that stopped docking would rebuild its main zone on every switch
+  return <>{withDock(<DockSlot.Provider value={placement !== 'full' ? claim : null}>{children}</DockSlot.Provider>, frames)}</>
 }
 
 function App(): React.JSX.Element {
@@ -1309,7 +1310,11 @@ function App(): React.JSX.Element {
   const keptTabs = keptPages(pluginTabs, visitedTabs, appTab, splitPageId)
   const keptIds = keptTabs.map((tab) => tab.id).join()
   // A kept page reads its own panels and widths; `activeTab` still names the page the user is looking at
-  const pageHosts = useMemo(() => new Map(keptTabs.map((tab): [string, HostApi] => [tab.id, { ...host, activePage: tab.id }])), [host, keptIds])
+  // Its dock is drawn without frames while off screen, so the panels live once, around the page on screen
+  const pageHosts = useMemo(
+    () => new Map(keptTabs.map((tab): [string, HostApi] => [tab.id, { ...host, activePage: tab.id, withDock: (content) => latest.current.withDock(content, tab.id === appTab) }])),
+    [host, keptIds]
+  )
   /**
    * A page kept off screen is handed back the very element it was last rendered with. React sees the same element and
    * skips the whole subtree, so the pages behind the one on screen cost nothing until the user comes back to them.

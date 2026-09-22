@@ -272,7 +272,8 @@ const CASES: Case[] = [
       await driver.frames()
       await sleep(1500)
       const pageZone = `[...document.querySelectorAll('[data-zone="main"]')].filter((zone) => zone.checkVisibility()).at(-1)`
-      await driver.evaluate(`(${pageZone}.dataset.stressMark = 'kept')`)
+      // Marked on the page's content too: its main zone can survive while what sits inside it is rebuilt
+      await driver.evaluate(`(${pageZone}.dataset.stressMark = 'kept', ${pageZone}.querySelector('*').dataset.stressMark = 'kept')`)
       await driver.evaluate(clickTitle('Terminal'))
       await driver.frames()
       await sleep(600)
@@ -281,7 +282,7 @@ const CASES: Case[] = [
       await driver.evaluate(clickTitle('Pull requests'))
       await driver.frames()
       await sleep(1500)
-      const kept = await driver.evaluate(`${pageZone}?.dataset.stressMark ?? ''`)
+      const kept = await driver.evaluate(`${pageZone}?.querySelector('*')?.dataset.stressMark ?? ''`)
       const blocked = Math.round(Number(await driver.evaluate(`(window.__revisit ?? []).reduce((sum, value) => sum + value, 0)`)))
       // With the bottom terminal open, the dock has to be drawn once, around the page on screen
       await driver.press('KeyJ', { meta: true })
