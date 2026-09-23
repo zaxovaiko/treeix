@@ -52,6 +52,9 @@ const LIGHT_ANSI: TerminalTheme = {
   brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14', brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#a5a5a5'
 }
 
+/** The GPU renderer's canvas text misses the font smoothing macOS gives page text, so dark on light looks thin unless drawn a step heavier */
+const textWeight = (): '500' | 'normal' => (THEMES[activeTheme()].mode === 'light' ? '500' : 'normal')
+
 function terminalTheme(): TerminalTheme {
   const { foreground, mode } = THEMES[activeTheme()]
   // Transparent so the pane's own background fills the space the fitted grid leaves over
@@ -66,7 +69,7 @@ subscribeSettings(() => {
   for (const session of state.sessions) {
     if (session.view !== 'terminal') continue
     session.terminal.options.theme = theme
-    if (session.opened) drawWithGpu(session.terminal)
+    session.terminal.options.fontWeight = textWeight()
     if (session.terminal.options.scrollback !== terminalScrollback) session.terminal.options.scrollback = terminalScrollback
     if (session.terminal.options.fontSize === terminalFontSize && session.terminal.options.fontFamily === fontFamily) continue
     Object.assign(session.terminal.options, { fontSize: terminalFontSize, fontFamily })
@@ -326,6 +329,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     fontFamily: fontStack(getSettings().terminalFont, MONO_STACK),
     fontSize: getSettings().terminalFontSize,
     lineHeight: 1.15,
+    fontWeight: textWeight(),
     cursorBlink: true,
     cursorStyle: 'bar',
     cursorWidth: 2,
@@ -660,28 +664,14 @@ void restoreSessions().catch(() => {
  * context (the GPU reset, or Chromium dropping the oldest of its ~16 contexts) falls back to the DOM renderer
  */
 // ponytail: one context per opened terminal; release contexts of hidden sessions if more than ~16 stay open
-// ponytail: light themes draw with the DOM renderer, slower on floods of output; revisit if light users see lag
-const gpuAddons = new WeakMap<Terminal, { dispose: () => void }>()
-function drawWithGpu(terminal: Terminal): void {
-  // Canvas text misses the font smoothing macOS gives page text, which dark on light shows as thin, washed out glyphs
-  if (THEMES[activeTheme()].mode === 'light') {
-    gpuAddons.get(terminal)?.dispose()
-    gpuAddons.delete(terminal)
-    return
-  }
-  if (gpuAddons.has(terminal)) return
-  const pending = { dispose: () => gpuAddons.delete(terminal) }
-  gpuAddons.set(terminal, pending)
+function drawWithGpu(terminal: import('@xterm/xterm').Terminal): void {
   void import('@xterm/addon-webgl')
     .then(({ WebglAddon }) => {
-      // The theme turned light while the addon loaded
-      if (gpuAddons.get(terminal) !== pending) return
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => webgl.dispose())
       terminal.loadAddon(webgl)
-      gpuAddons.set(terminal, webgl)
     })
-    .catch(() => gpuAddons.delete(terminal))
+    .catch(() => undefined)
 }
 
 /** Open the xterm lazily: it needs a mounted element to measure fonts */
