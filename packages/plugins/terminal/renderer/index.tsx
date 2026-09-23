@@ -141,6 +141,7 @@ function TerminalPage(): React.JSX.Element {
 
   return (
     <PageLayout
+      defaults={{ list: false }}
       listWidth={240}
       list={<TaskList tasks={tasks} current={task} sessions={sessions} repos={host.repos} onNew={() => startTask(host)} history={task ? historyOf(history, task) : history} />}
       main={
