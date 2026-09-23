@@ -47,3 +47,6 @@ export const newTabEntries = (agents: Agent[], views: Record<string, SessionView
     const other: NewTabEntry = view === 'chat' ? { agent: agent.id, view: 'terminal', label: `${agent.label} in terminal`, secondary: true } : { agent: agent.id, view: 'chat', label: `${agent.label} chat`, secondary: true }
     return [main, other]
   })
+
+/** What xterm sends on its own, not the user: focus in and out, cursor position and device reports, color replies */
+export const isTerminalReply = (data: string): boolean => /^\x1b(?:\[[?>]?[\d;]*[IORcnt]|\][^\x07\x1b]*(?:\x07|\x1b\\))$/.test(data)

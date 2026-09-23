@@ -12,7 +12,7 @@ import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, remo
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
-import { isDefaultChatTitle, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
+import { isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 
 export { type SessionKind, type SessionStatus, type SessionView }
 
@@ -97,6 +97,14 @@ bridge.on('status', (id, status) => {
   // Claude's idle reminder a minute after its turn ended says nothing new
   if (status === 'done' || (status === 'input' && previous !== 'done' && previous !== 'input')) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
 })
+
+/**
+ * Answering a permission prompt or a question fires no hook until the tool finishes, or none at all when it is declined,
+ * so a key pressed while the agent waits counts as the answer
+ */
+function userInput(id: string, data: string): void {
+  if (hookStatus.get(id) === 'input' && !isTerminalReply(data)) hookStatus.set(id, 'working')
+}
 
 /** A system notification while the window is in the background; clicking it shows the session */
 function notifyAgent(id: string, what: string): void {
@@ -416,13 +424,18 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
   // xterm answers them while parsing, and those answers would land in the shell as text like 1;2c
   let replaying = true
   terminal.onData((data) => {
-    if (!replaying) bridge.send('write', id, data)
+    if (replaying) return
+    bridge.send('write', id, data)
+    userInput(id, data)
   })
   // ⌘ combos are app shortcuts (split, zoom, close); xterm would otherwise send keys like ⇧⌘↵ to the shell and swallow the event
   terminal.attachCustomKeyEventHandler((event) => {
     // xterm sends a plain Enter for Shift+Enter, which submits in Claude Code; Esc+Enter (Option+Enter) inserts a newline there and in zsh
     if (event.key === 'Enter' && event.shiftKey && !event.metaKey && !event.altKey && !event.ctrlKey) {
-      if (event.type === 'keydown') bridge.send('write', id, '\x1b\r')
+      if (event.type === 'keydown') {
+        bridge.send('write', id, '\x1b\r')
+        userInput(id, '\r')
+      }
       return false
     }
     // ⌘←, ⌘→ and ⌘⌫ edit the line like in iTerm and Terminal.app: start of line, end of line, delete to start
@@ -866,6 +879,7 @@ export function sendText(id: string, text: string, submit: boolean): void {
     return revealSession(id)
   }
   const write = (): void => {
+    userInput(id, text)
     bridge.send('write', id, `\x1b[200~${text}\x1b[201~`)
     if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
   }

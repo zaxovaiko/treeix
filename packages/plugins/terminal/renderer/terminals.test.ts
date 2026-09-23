@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { BUILTIN_AGENTS } from '@treeix/app/agents'
-import { isDefaultChatTitle, newTabEntries, parseMeta, unarchived } from './sessionMeta'
+import { isDefaultChatTitle, isTerminalReply, newTabEntries, parseMeta, unarchived } from './sessionMeta'
 
 const saved = { worktreePath: '/repo', kind: 'claude', title: 'Claude', startedAt: 1, workspaceId: 'w', agentSessionId: 'abc' }
 
@@ -35,4 +35,11 @@ test('isDefaultChatTitle matches only the titles new chats get', () => {
   expect(isDefaultChatTitle('New chat 3')).toBe(true)
   expect(isDefaultChatTitle('New chat about auth')).toBe(false)
   expect(isDefaultChatTitle('Fix the login bug')).toBe(false)
+})
+
+test('isTerminalReply tells what xterm answers on its own from keys the user pressed', () => {
+  for (const reply of ['\x1b[I', '\x1b[O', '\x1b[12;40R', '\x1b[?1;2c', '\x1b[>0;276;0c', '\x1b]11;rgb:0000/0000/0000\x07', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\']) {
+    expect(isTerminalReply(reply)).toBe(true)
+  }
+  for (const key of ['1', '\r', 'y', '\x1b[B', '\x1b', 'hello']) expect(isTerminalReply(key)).toBe(false)
 })
