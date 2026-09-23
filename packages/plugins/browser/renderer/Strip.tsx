@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createBridge, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
@@ -17,8 +18,8 @@ export const toggleStrip = (): boolean => (toggleShown?.(), toggleShown !== null
 const isProblem = (entry: NetworkEntry): boolean => entry.failed !== null || (entry.status ?? 0) >= 400
 const tone = (bad: boolean, warn = false): string => (bad ? 'text-red-400' : warn ? 'text-amber-400' : 'text-muted-foreground')
 
-/** `onDevtools` opens the full DevTools, for what the strip doesn't show: flame charts, sources, the DOM */
-export function Strip({ tab, onDevtools }: { tab: BrowserTab; onDevtools: () => void }): React.JSX.Element {
+/** Console, network and performance of the page; `slot` is where its pane switches render, in the address bar */
+export function Strip({ tab, slot }: { tab: BrowserTab; slot: HTMLElement | null }): React.JSX.Element {
   const host = useHost()
   const [open, setOpen] = usePersisted<boolean>('browser.strip', false)
   const [pane, setPane] = usePersisted<Pane>('browser.stripPane', 'console')
@@ -66,56 +67,61 @@ export function Strip({ tab, onDevtools }: { tab: BrowserTab; onDevtools: () => 
             bad: (entry.name === 'LCP' && entry.value > 4000) || (entry.name === 'INP' && entry.value > 500) || (entry.name === 'CLS' && entry.value > 0.25),
             warn: entry.name === 'Long task' || (entry.name === 'LCP' && entry.value > 2500) || (entry.name === 'INP' && entry.value > 200) || (entry.name === 'CLS' && entry.value > 0.1)
           }))
-  const paneButton = (id: Pane, label: string, badge?: number): React.JSX.Element => (
-    <button
-      onClick={() => (setPane(id), setOpen(true))}
-      className={`flex h-8 items-center gap-1.5 border-b-2 px-2 text-xs ${pane === id && open ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-    >
-      {label}
-      {!!badge && <span className="rounded bg-red-400/15 px-1 text-[10.5px] text-red-400 tabular-nums">{badge}</span>}
-    </button>
+  const paneButton = (id: Pane, label: string, badge?: number): React.JSX.Element => {
+    const shown = pane === id && open
+    return (
+      <button
+        title={shown ? `Hide ${label}` : label}
+        aria-pressed={shown}
+        onClick={() => (shown ? setOpen(false) : (setPane(id), setOpen(true)))}
+        className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-xs ${shown ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+      >
+        {label}
+        {!!badge && <span className="rounded bg-red-400/15 px-1 text-[10.5px] text-red-400 tabular-nums">{badge}</span>}
+      </button>
+    )
+  }
+  // The pane switches sit in the address bar's right end; only the open pane takes room under the page
+  const bar = (
+    <>
+      {paneButton('console', 'Console', errors)}
+      {paneButton('network', 'Network')}
+      {paneButton('performance', 'Performance')}
+      {pane !== 'performance' && open && (
+        <IconButton label={all ? 'Only problems' : 'Show all'} active={all} onClick={() => setAll(!all)}>
+          <Icon name="list" className="size-3.5" />
+        </IconButton>
+      )}
+    </>
   )
   return (
-    <div className="relative shrink-0 border-t border-border">
-      {open && <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />}
-      <div className="flex items-center px-2">
-        {paneButton('console', 'Console', errors)}
-        {paneButton('network', 'Network')}
-        {paneButton('performance', 'Performance')}
-        <span className="flex-1" />
-        <span className="flex items-center gap-0.5">
-          {pane !== 'performance' && open && (
-            <IconButton label={all ? 'Only problems' : 'Show all'} active={all} onClick={() => setAll(!all)}>
-              <Icon name="list" className="size-3.5" />
-            </IconButton>
-          )}
-          <IconButton label="Open DevTools (⌥⌘I)" onClick={onDevtools}>
-            <Icon name="code" className="size-3.5" />
-          </IconButton>
-          <IconButton label={open ? 'Hide' : 'Show'} onClick={() => setOpen(!open)}>
-            <Icon name="chevron" className={`size-3.5 ${open ? 'rotate-90' : '-rotate-90'}`} />
-          </IconButton>
-        </span>
-      </div>
+    <>
+      {slot && createPortal(bar, slot)}
       {open && (
-        <div style={{ height }} className="overflow-y-auto">
-          {rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
-          {rows
-            .slice()
-            .reverse()
-            .map(({ entry, cells, bad, warn }) => (
-              <label key={entry.id} className="grid cursor-pointer grid-cols-[16px_72px_minmax(0,1fr)_72px_64px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50">
-                <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
-                <span className={`truncate ${tone(bad, warn)}`}>{cells[0]}</span>
-                <span className="truncate" title={cells[1]}>
-                  {cells[1]}
-                </span>
-                <span className={`text-right ${tone(bad, warn)}`}>{cells[2]}</span>
-                <span className="text-right text-muted-foreground">{cells[3]}</span>
-              </label>
-            ))}
+        <div className="relative shrink-0 border-t border-border">
+          <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />
+          <div style={{ height }} className="overflow-y-auto">
+            {rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
+            {rows
+              .slice()
+              .reverse()
+              .map(({ entry, cells, bad, warn }) => (
+                <label
+                  key={entry.id}
+                  className="grid cursor-pointer grid-cols-[16px_72px_minmax(0,1fr)_72px_64px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50"
+                >
+                  <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
+                  <span className={`truncate ${tone(bad, warn)}`}>{cells[0]}</span>
+                  <span className="truncate" title={cells[1]}>
+                    {cells[1]}
+                  </span>
+                  <span className={`text-right ${tone(bad, warn)}`}>{cells[2]}</span>
+                  <span className="text-right text-muted-foreground">{cells[3]}</span>
+                </label>
+              ))}
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

@@ -172,6 +172,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
     }
   }, [shown, devtools, dockOpen])
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [stripSlot, setStripSlot] = useState<HTMLDivElement | null>(null)
   // An empty name goes back to the page's own title
   const renameTab = (id: string, name: string): void => {
     setRenaming(null)
@@ -221,7 +222,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
               aria-label="Close tab"
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => updateBrowser((state) => closeTab(state, candidate.id))}
-              className="invisible size-4 rounded group-hover:visible hover:bg-foreground/10"
+              className="invisible grid size-4 shrink-0 place-items-center rounded group-hover:visible hover:bg-foreground/10"
             >
               <Icon name="close" className="size-3" />
             </button>
@@ -322,6 +323,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           <Icon name="code" className="size-3.5" />
         </button>
         {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
+        {place === 'tab' && <div ref={setStripSlot} className="flex shrink-0 items-center gap-0.5 border-l border-border pl-1" />}
       </div>
       <div ref={ref} className="relative min-h-0 flex-1">
         {elsewhere && (
@@ -361,7 +363,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           </div>
         )}
       </div>
-      {tab && place === 'tab' && <Strip tab={tab} onDevtools={() => runBrowserAction('devtools')} />}
+      {tab && place === 'tab' && <Strip tab={tab} slot={stripSlot} />}
       {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock key={tab.guestId} guestId={tab.guestId} />}
     </div>
   )
