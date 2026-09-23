@@ -66,6 +66,7 @@ subscribeSettings(() => {
   for (const session of state.sessions) {
     if (session.view !== 'terminal') continue
     session.terminal.options.theme = theme
+    if (session.opened) drawWithGpu(session.terminal)
     if (session.terminal.options.scrollback !== terminalScrollback) session.terminal.options.scrollback = terminalScrollback
     if (session.terminal.options.fontSize === terminalFontSize && session.terminal.options.fontFamily === fontFamily) continue
     Object.assign(session.terminal.options, { fontSize: terminalFontSize, fontFamily })
@@ -659,14 +660,28 @@ void restoreSessions().catch(() => {
  * context (the GPU reset, or Chromium dropping the oldest of its ~16 contexts) falls back to the DOM renderer
  */
 // ponytail: one context per opened terminal; release contexts of hidden sessions if more than ~16 stay open
-function drawWithGpu(terminal: import('@xterm/xterm').Terminal): void {
+// ponytail: light themes draw with the DOM renderer, slower on floods of output; revisit if light users see lag
+const gpuAddons = new WeakMap<Terminal, { dispose: () => void }>()
+function drawWithGpu(terminal: Terminal): void {
+  // Canvas text misses the font smoothing macOS gives page text, which dark on light shows as thin, washed out glyphs
+  if (THEMES[activeTheme()].mode === 'light') {
+    gpuAddons.get(terminal)?.dispose()
+    gpuAddons.delete(terminal)
+    return
+  }
+  if (gpuAddons.has(terminal)) return
+  const pending = { dispose: () => gpuAddons.delete(terminal) }
+  gpuAddons.set(terminal, pending)
   void import('@xterm/addon-webgl')
     .then(({ WebglAddon }) => {
+      // The theme turned light while the addon loaded
+      if (gpuAddons.get(terminal) !== pending) return
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => webgl.dispose())
       terminal.loadAddon(webgl)
+      gpuAddons.set(terminal, webgl)
     })
-    .catch(() => undefined)
+    .catch(() => gpuAddons.delete(terminal))
 }
 
 /** Open the xterm lazily: it needs a mounted element to measure fonts */
