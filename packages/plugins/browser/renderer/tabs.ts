@@ -4,6 +4,8 @@ export type BrowserTab = {
   id: string
   url: string
   title: string
+  /** Set by renaming the tab; shown over the page's title */
+  name?: string
   favicon: string | null
   loading: boolean
   canGoBack: boolean
@@ -47,6 +49,8 @@ export function reopenTab(state: BrowserState): BrowserState {
 
 export const selectTab = (state: BrowserState, id: string): BrowserState => (state.tabs.some((tab) => tab.id === id) ? { ...state, activeId: id } : state)
 
+export const tabLabel = (tab: BrowserTab): string => tab.name ?? (tab.url === 'about:blank' ? 'New tab' : tab.title || tab.url.replace(/^https?:\/\//, ''))
+
 export const patchTab = (state: BrowserState, id: string, patch: Partial<BrowserTab>): BrowserState => ({
   ...state,
   tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, ...patch } : tab))
@@ -60,9 +64,10 @@ function load(): BrowserState {
   try {
     const saved: unknown = JSON.parse(storage?.getItem(KEY) ?? 'null')
     if (typeof saved !== 'object' || saved === null) return { tabs: [], activeId: null, closed: [] }
-    const { urls, active } = saved as { urls?: unknown; active?: unknown }
+    const { urls, active, names } = saved as { urls?: unknown; active?: unknown; names?: unknown }
     const list = Array.isArray(urls) ? urls.filter((url): url is string => typeof url === 'string') : []
-    const tabs = list.map((url) => newTab(url, crypto.randomUUID()))
+    const nameAt = (index: number): string | undefined => (Array.isArray(names) && typeof names[index] === 'string' ? names[index] : undefined)
+    const tabs = list.map((url, index) => ({ ...newTab(url, crypto.randomUUID()), name: nameAt(index) }))
     const index = typeof active === 'number' ? active : 0
     return { tabs, activeId: tabs[index]?.id ?? tabs[0]?.id ?? null, closed: [] }
   } catch {
@@ -77,7 +82,7 @@ export function updateBrowser(change: (current: BrowserState) => BrowserState): 
   const next = change(state)
   if (next === state) return
   state = next
-  storage?.setItem(KEY, JSON.stringify({ urls: state.tabs.map((tab) => tab.url), active: state.tabs.findIndex((tab) => tab.id === state.activeId) }))
+  storage?.setItem(KEY, JSON.stringify({ urls: state.tabs.map((tab) => tab.url), names: state.tabs.map((tab) => tab.name ?? null), active: state.tabs.findIndex((tab) => tab.id === state.activeId) }))
   listeners.forEach((listener) => listener())
 }
 

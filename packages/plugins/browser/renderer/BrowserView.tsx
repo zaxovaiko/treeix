@@ -9,7 +9,7 @@ import { importLabel } from './SettingsPage'
 import { browserSettings } from './settings'
 import { Strip } from './Strip'
 import { type Suggestion, SuggestionRow, Suggestions, sectionLabel, useRunning, useSuggestions } from './Suggestions'
-import { activeTab, closeTab, getBrowser, openTab, patchTab, reopenTab, selectTab, updateBrowser, useBrowser } from './tabs'
+import { activeTab, closeTab, getBrowser, openTab, patchTab, reopenTab, selectTab, tabLabel, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 import type { ImportInfo } from '../shared/types'
 import { httpProblem, loadError } from './loadErrors'
@@ -171,6 +171,12 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
       }
     }
   }, [shown, devtools, dockOpen])
+  const [renaming, setRenaming] = useState<string | null>(null)
+  // An empty name goes back to the page's own title
+  const renameTab = (id: string, name: string): void => {
+    setRenaming(null)
+    updateBrowser((state) => patchTab(state, id, { name: name.trim() || undefined }))
+  }
   const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
   const problem = httpProblem(tab?.status ?? null)
   const failure = tab?.error ? loadError(tab.error.code, tab.error.url) : null
@@ -191,7 +197,26 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
             ) : (
               <Icon name="globe" className="size-3.5" />
             )}
-            <span className="min-w-0 flex-1 truncate">{candidate.url === 'about:blank' ? 'New tab' : candidate.title || candidate.url.replace(/^https?:\/\//, '')}</span>
+            {renaming === candidate.id ? (
+              <input
+                autoFocus
+                defaultValue={tabLabel(candidate)}
+                aria-label="Tab name"
+                onFocus={(event) => event.currentTarget.select()}
+                onBlur={(event) => (event.currentTarget.dataset.cancelled ? setRenaming(null) : renameTab(candidate.id, event.currentTarget.value))}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== 'Escape') return
+                  if (event.key === 'Escape') event.currentTarget.dataset.cancelled = 'true'
+                  event.currentTarget.blur()
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                className="h-5 min-w-0 flex-1 rounded bg-foreground/10 px-1 text-xs text-foreground outline-none"
+              />
+            ) : (
+              <span title="Double-click to rename" onDoubleClick={() => setRenaming(candidate.id)} className="min-w-0 flex-1 truncate">
+                {tabLabel(candidate)}
+              </span>
+            )}
             <button
               aria-label="Close tab"
               onMouseDown={(event) => event.stopPropagation()}
