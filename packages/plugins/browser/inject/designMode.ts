@@ -1,5 +1,6 @@
 import { ipcRenderer, webFrame } from 'electron'
-import { isReactSource, reactOf } from './react'
+import { isReactSource, reactOf, type ReactSource } from './react'
+import { sourceOf } from './sourceMap'
 import { type Step, selectorFor } from './selector'
 
 let outline: HTMLDivElement | null = null
@@ -55,8 +56,9 @@ const onClick = async (event: MouseEvent): Promise<void> => {
   const selector = steps.length ? selectorFor(steps, unique) : target.tagName.toLowerCase()
   const html = target.outerHTML.slice(0, 1024)
   target.setAttribute(PICKED, '')
-  const react: unknown = await webFrame.executeJavaScript(`(${reactOf})(document.querySelector('[${PICKED}]'))`).catch(() => null)
+  const found: unknown = await webFrame.executeJavaScript(`(${reactOf})(document.querySelector('[${PICKED}]'))`).catch(() => null)
   target.removeAttribute(PICKED)
+  const react = isReactSource(found) ? await withOriginalSource(found) : null
   ipcRenderer.sendToHost('selection', {
     selector,
     tag: target.tagName.toLowerCase(),
@@ -65,8 +67,14 @@ const onClick = async (event: MouseEvent): Promise<void> => {
     rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
     viewport: { width: window.innerWidth, height: window.innerHeight },
     url: location.href,
-    ...(isReactSource(react) ? { react } : {})
+    ...(react ? { react } : {})
   })
+}
+
+/** Bundlers like Turbopack serve chunks, so the stack's file and line go through the page's source map when it has one */
+async function withOriginalSource({ frame, ...react }: ReactSource): Promise<ReactSource> {
+  const source = frame ? await sourceOf(frame).catch(() => null) : null
+  return source ? { ...react, source } : react
 }
 
 const clickListener = (event: MouseEvent): void => void onClick(event)

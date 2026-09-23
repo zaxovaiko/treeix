@@ -1,4 +1,6 @@
-export type ReactSource = { components: string[]; source: string | null }
+export type StackFrame = { url: string; line: number; column: number }
+/** `frame` is where the bundled code sits, for a source map to turn into `source`; it never leaves the page's preload */
+export type ReactSource = { components: string[]; source: string | null; frame?: StackFrame }
 
 /**
  * The React components around an element and where it is written, e.g. `src/Card.tsx:42`. Runs in the page's own world,
@@ -16,14 +18,17 @@ export function reactOf(element: Element | null): ReactSource | null {
     const wrapper = type as { displayName?: string; render?: unknown; type?: unknown }
     return wrapper.displayName ?? nameOf(wrapper.render ?? wrapper.type)
   }
+  let frame: StackFrame | undefined
   const placeOf = (fiber: Fiber): string | null => {
     if (fiber._debugSource) return `${fiber._debugSource.fileName}:${fiber._debugSource.lineNumber}`
     // The stack of the JSX call: the first frame outside React's own files is the component the element is written in
-    for (const frame of fiber._debugStack?.stack?.split('\n').slice(1) ?? []) {
-      const match = /([a-z-]+:\/\/\S+?):(\d+):\d+\)?$/.exec(frame.trim())
+    for (const line of fiber._debugStack?.stack?.split('\n').slice(1) ?? []) {
+      const match = /([a-z-]+:\/\/\S+?):(\d+):(\d+)\)?$/.exec(line.trim())
       if (!match || /node_modules|\/react(-dom)?[./_-]|jsx-(dev-)?runtime/.test(match[1])) continue
       try {
-        return `${decodeURIComponent(new URL(match[1]).pathname).replace(/^\/(\.\/)?/, '')}:${match[2]}`
+        const place = `${decodeURIComponent(new URL(match[1]).pathname).replace(/^\/(\.\/)?/, '')}:${match[2]}`
+        frame = { url: match[1], line: Number(match[2]), column: Number(match[3]) }
+        return place
       } catch {
         continue
       }
@@ -37,7 +42,8 @@ export function reactOf(element: Element | null): ReactSource | null {
     const name = typeof fiber.type === 'string' ? null : nameOf(fiber.type)
     if (name && name !== components[0]) components.unshift(name)
   }
-  return components.length || source ? { components, source } : null
+  if (!components.length && !source) return null
+  return frame ? { components, source, frame } : { components, source }
 }
 
 export const isReactSource = (value: unknown): value is ReactSource => {
