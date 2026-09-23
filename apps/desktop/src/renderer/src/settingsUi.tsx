@@ -81,7 +81,8 @@ export function Row({ label, description, children }: { label: string; descripti
         <span className="block text-[13px]">{label}</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
       </span>
-      {children}
+      {/* A control that wraps under its label stays on the right */}
+      <div className="ml-auto flex min-w-0 justify-end">{children}</div>
     </div>
   )
 }
