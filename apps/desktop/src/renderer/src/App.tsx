@@ -291,9 +291,9 @@ function App(): React.JSX.Element {
     setFolder: setScopeFolder,
     setFocus: setScopeFocus
   }
-  // New sessions start in the selected worktree, else the focused project, folder filter, the workspace's chosen project or the folder holding its projects
+  // New sessions start in the project the workspace chose for them, else the selected worktree, the focused project, folder filter or the folder holding its projects
   const terminalPath = workspace?.terminalPath && workspace.repoPaths.includes(workspace.terminalPath) ? workspace.terminalPath : ''
-  const defaultCwd = selected ?? (scope.focus || scope.folder || terminalPath || commonFolder(workspace?.repoPaths ?? []) || window.api.home)
+  const defaultCwd = terminalPath || (selected ?? (scope.focus || scope.folder || commonFolder(workspace?.repoPaths ?? []) || window.api.home))
 
   const inCurrentWorkspace = (session: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(session, workspace, repos, workspaces)
   const sessions = allSessions.filter(inCurrentWorkspace)

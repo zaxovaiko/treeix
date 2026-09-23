@@ -44,6 +44,10 @@ export type Settings = {
   /** Code font size in px for editors, diffs and previews, independent of window zoom */
   editorFontSize: number
   terminalFontSize: number
+  /** 'auto' draws a step heavier on light themes, where GPU-drawn text misses macOS font smoothing */
+  terminalFontWeight: TerminalFontWeight
+  /** xterm's minimumContrastRatio: text colors are pushed until they reach it against the background; 1 is off */
+  terminalContrast: TerminalContrast
   /** Lines each terminal keeps above its screen */
   terminalScrollback: number
   /** Font family names; empty keeps the built-in stack */
@@ -51,6 +55,11 @@ export type Settings = {
   editorFont: string
   terminalFont: string
 }
+
+export const TERMINAL_FONT_WEIGHTS = ['auto', '300', '400', '500', '600'] as const
+export type TerminalFontWeight = (typeof TERMINAL_FONT_WEIGHTS)[number]
+export const TERMINAL_CONTRASTS = [1, 3, 4.5, 7] as const
+export type TerminalContrast = (typeof TERMINAL_CONTRASTS)[number]
 
 const KEY = 'settings'
 export const MIN_OPACITY = 40
@@ -156,7 +165,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', claudeSkipPermissions: false, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', claudeSkipPermissions: false, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -187,6 +196,7 @@ export function parseCustomAgents(value: unknown): Agent[] {
         promptFlag: text('promptFlag'),
         sessionIdFlag: text('sessionIdFlag'),
         resumeCommand: text('resumeCommand'),
+        resumeLatestCommand: text('resumeLatestCommand'),
         agent: candidate.agent !== false,
         ...(chat ? { chat } : {})
       }
@@ -223,6 +233,8 @@ function load(): Settings {
       editorFontSize: clampFontSize(candidate.editorFontSize, DEFAULTS.editorFontSize),
       terminalFontSize: clampFontSize(candidate.terminalFontSize, DEFAULTS.terminalFontSize),
       terminalScrollback: clampScrollback(candidate.terminalScrollback),
+      terminalFontWeight: TERMINAL_FONT_WEIGHTS.find((weight) => weight === candidate.terminalFontWeight) ?? DEFAULTS.terminalFontWeight,
+      terminalContrast: TERMINAL_CONTRASTS.find((ratio) => ratio === candidate.terminalContrast) ?? DEFAULTS.terminalContrast,
       uiFont: typeof candidate.uiFont === 'string' ? candidate.uiFont : '',
       editorFont: typeof candidate.editorFont === 'string' ? candidate.editorFont : '',
       terminalFont: typeof candidate.terminalFont === 'string' ? candidate.terminalFont : '',
@@ -238,6 +250,13 @@ setKeymapOverrides(settings.keymap)
 const listeners = new Set<() => void>()
 
 export const getSettings = (): Settings => settings
+
+/** The global shortcut only summons the hotkey window while that window is switched on */
+export function hotkeyOptions(): { shortcut: Shortcut | null; hideOnBlur: boolean; only: boolean } {
+  const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = settings
+  const shortcut = hotkeyOnly ? hotkey : null
+  return { shortcut, hideOnBlur: hotkeyHideOnBlur, only: shortcut !== null }
+}
 
 export function updateSettings(patch: Partial<Settings>): void {
   settings = { ...settings, ...patch }

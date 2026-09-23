@@ -33,6 +33,9 @@ export const isDefaultChatTitle = (title: string): boolean => new RegExp(`^${NEW
 
 export const unarchived = <T extends { archived?: boolean }>(entries: T[]): T[] => entries.filter((entry) => !entry.archived)
 
+/** Agents with a key of their own for a new tab */
+export const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab' }
+
 export type NewTabEntry = { agent: string; view: SessionView; label: string; secondary: boolean }
 
 /** Each agent in its default view, then its other view when it has a chat command */

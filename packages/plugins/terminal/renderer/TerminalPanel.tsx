@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { Repo } from '@treeix/shared/types'
 import { useService } from '@treeix/app/plugins'
-import { actionKeys } from '@treeix/shared/keymap'
+import { actionKeys, shortcutOf } from '@treeix/shared/keymap'
+import { toAccelerator } from '@treeix/shared/shortcut'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
@@ -16,10 +17,11 @@ import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useF
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, aggregateStatus, type Task, type TerminalTab, tabPanes } from './tasks'
 import { StatusMark } from './taskUi'
-import { newTabEntries, type NewTabEntry } from './sessionMeta'
+import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
   archiveClosedSession,
   attachSession,
+  releaseGpu,
   clearTerminal,
   closeTab,
   type ClosedSession,
@@ -52,6 +54,12 @@ const draggingSession = (event: React.DragEvent): boolean => event.dataTransfer.
 const draggedSessions = (event: React.DragEvent): string[] => event.dataTransfer.getData(SESSION_MIME).split(' ').filter(Boolean)
 
 const LONG_PRESS_MS = 400
+
+/** The menu shows an action's key as rebound in Settings */
+const acceleratorOf = (action: string | undefined): string | undefined => {
+  const shortcut = action ? shortcutOf(action) : null
+  return (shortcut && toAccelerator(shortcut)) ?? undefined
+}
 
 /** Starts a session as a new tab of the task and focuses it */
 export const openTab = (cwd: string, kind: SessionKind, taskId?: string, view: SessionView = 'terminal'): void =>
@@ -215,9 +223,12 @@ function TerminalPane({
     if (!host || session.view !== 'terminal') return
     attachSession(session.id, host)
     // The Terminal page and a panel docked on another page show the same session, so whichever comes on screen takes it back
-    const observer = new ResizeObserver(() => (host.offsetWidth > 0 ? attachSession(session.id, host) : undefined))
+    const observer = new ResizeObserver(() => (host.offsetWidth > 0 ? attachSession(session.id, host) : releaseGpu(session.id, host)))
     observer.observe(host)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      releaseGpu(session.id, host)
+    }
   }, [session.id])
   // A dormant chat connects once shown, and once the chat plugin has loaded
   useEffect(() => {
@@ -483,9 +494,11 @@ function TabStrip({
   const { main, other } = useNewTabEntries()
   const menuEntry = (entry: NewTabEntry): MenuEntry => ({
     label: entry.label,
-    accelerator: entry.view !== 'terminal' ? undefined : entry.agent === 'shell' ? 'CmdOrCtrl+T' : entry.agent === 'claude' ? 'CmdOrCtrl+Alt+T' : undefined,
+    accelerator: acceleratorOf(entry.view === 'terminal' ? NEW_TAB_ACTIONS[entry.agent] : undefined),
     run: () => newTab(entry.agent, entry.view)
   })
+  // Claude in the view Settings gives it
+  const claude = main.find((entry) => entry.agent === 'claude')
   const showMenu = (event: React.MouseEvent): void => openMenu(event, [...main.map(menuEntry), null, ...other.map(menuEntry)])
   // A click opens Claude; holding opens the menu instead, and the click that ends the hold does nothing
   const pressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -508,7 +521,7 @@ function TabStrip({
         {task?.tabs.map((tab, index) => <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />)}
       </div>
       <button
-        title="New Claude tab (⌥⌘T); hold or right-click for Shell (⌘T) and other agents"
+        title={`New Claude tab (${actionKeys('terminal.newClaudeTab')}); hold or right-click for Shell (${actionKeys('terminal.newTab')}) and other agents`}
         aria-label="New tab"
         onPointerDown={(event) => {
           held.current = false
@@ -519,11 +532,20 @@ function TabStrip({
         }}
         onPointerUp={endPress}
         onPointerLeave={endPress}
-        onClick={() => !held.current && newTab('claude', 'terminal')}
+        onClick={() => !held.current && claude && newTab(claude.agent, claude.view)}
         onContextMenu={showMenu}
         className={stripButton}
       >
         <Icon name="plus" className="size-3.5" />
+      </button>
+      {/* Makes the menu behind a long press on + findable */}
+      <button
+        title={`Shell (${actionKeys('terminal.newTab')}), other agents and chats`}
+        aria-label="More new tabs"
+        onClick={showMenu}
+        className="-ml-1 grid h-6 w-3.5 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <Icon name="chevron" className="size-2.5 rotate-90" />
       </button>
       <span className="min-w-2 flex-1" />
       {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}

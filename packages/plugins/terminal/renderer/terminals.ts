@@ -11,7 +11,7 @@ import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './pane
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
-import type { LiveTerminal } from '../shared/types'
+import type { AgentHookStatus, LiveTerminal } from '../shared/types'
 import { isDefaultChatTitle, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 
 export { type SessionKind, type SessionStatus, type SessionView }
@@ -52,13 +52,22 @@ const LIGHT_ANSI: TerminalTheme = {
   brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14', brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#a5a5a5'
 }
 
-/** The GPU renderer's canvas text misses the font smoothing macOS gives page text, so dark on light looks thin unless drawn a step heavier */
-const textWeight = (): '500' | 'normal' => (THEMES[activeTheme()].mode === 'light' ? '500' : 'normal')
+/**
+ * Glyphs the GPU renderer draws onto a transparent canvas come out at about half their color, so the canvas is opaque in
+ * the theme's background unless the window itself is see-through
+ */
+const seeThrough = (): boolean => getSettings().opacity < 100
+
+/** Canvas text misses the font smoothing macOS gives page text, so dark on light matches it a step heavier */
+function textWeight(): '300' | '400' | '500' | '600' {
+  const weight = getSettings().terminalFontWeight
+  if (weight !== 'auto') return weight
+  return THEMES[activeTheme()].mode === 'light' ? '500' : '400'
+}
 
 function terminalTheme(): TerminalTheme {
-  const { foreground, mode } = THEMES[activeTheme()]
-  // Transparent so the pane's own background fills the space the fitted grid leaves over
-  const base = { background: '#00000000', foreground, cursor: foreground, selectionBackground: mode === 'light' ? '#0000002e' : '#ffffff33' }
+  const { foreground, background, mode } = THEMES[activeTheme()]
+  const base = { background: seeThrough() ? '#00000000' : background, foreground, cursor: foreground, selectionBackground: mode === 'light' ? '#0000002e' : '#ffffff33' }
   return mode === 'light' ? { ...base, ...LIGHT_ANSI } : base
 }
 
@@ -69,12 +78,20 @@ subscribeSettings(() => {
   for (const session of state.sessions) {
     if (session.view !== 'terminal') continue
     session.terminal.options.theme = theme
+    if (session.terminal.options.allowTransparency !== seeThrough()) session.terminal.options.allowTransparency = seeThrough()
     session.terminal.options.fontWeight = textWeight()
+    session.terminal.options.minimumContrastRatio = getSettings().terminalContrast
     if (session.terminal.options.scrollback !== terminalScrollback) session.terminal.options.scrollback = terminalScrollback
     if (session.terminal.options.fontSize === terminalFontSize && session.terminal.options.fontFamily === fontFamily) continue
     Object.assign(session.terminal.options, { fontSize: terminalFontSize, fontFamily })
     fitSession(session.id)
   }
+})
+
+/** What each agent session last reported through its hooks, see the terminal plugin's main hooks */
+const hookStatus = new Map<string, AgentHookStatus>()
+bridge.on('status', (id, status) => {
+  if (typeof id === 'string' && (status === 'input' || status === 'working')) hookStatus.set(id, status)
 })
 
 const ACTIVE_WINDOW_MS = 2000
@@ -226,7 +243,9 @@ const printedPlan = (screen: string, current: string | null): string | null => [
 
 function detectStatus(session: TerminalSession, screen: string): SessionStatus {
   if (session.status === 'exited' || session.status === 'dormant') return session.status
-  if (isAgent(session.kind) && WAITING_FOR_INPUT.test(screen)) return 'input'
+  // Claude reports through its hooks; agents without them, or sessions started before, are read off the screen
+  const hooked = hookStatus.get(session.id)
+  if (isAgent(session.kind) && (hooked ? hooked === 'input' : WAITING_FOR_INPUT.test(screen))) return 'input'
   return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
 }
 
@@ -330,10 +349,11 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     fontSize: getSettings().terminalFontSize,
     lineHeight: 1.15,
     fontWeight: textWeight(),
+    minimumContrastRatio: getSettings().terminalContrast,
     cursorBlink: true,
     cursorStyle: 'bar',
     cursorWidth: 2,
-    allowTransparency: true,
+    allowTransparency: seeThrough(),
     // ⌥ types characters like ą and ś on Polish and other layouts; ⌥ arrows and ⌥⌫ still move and delete by word
     macOptionIsMeta: false,
     scrollback: getSettings().terminalScrollback,
@@ -428,7 +448,23 @@ async function startSession(worktreePath: string, kind: SessionKind, promptArgum
   const meta = newMeta(worktreePath, kind, 'terminal')
   const id = await spawnSession(meta, startCommand(agentOr(kind), promptArgument, meta.agentSessionId))
   await openSession(id, meta, '', null)
+  if (kind === 'codex') void learnCodexConversation(id)
   return id
+}
+
+// ponytail: matches by folder and start time; two Codex sessions started in one folder within the same poll can swap
+const CODEX_POLLS_MS = [3000, 10_000, 30_000, 90_000]
+/** Codex names its conversation only once it runs, so its id is looked up in its sessions folder a few times after start */
+async function learnCodexConversation(id: string): Promise<void> {
+  for (const delay of CODEX_POLLS_MS) {
+    await new Promise((done) => setTimeout(done, delay))
+    const session = findTerminal(id)
+    if (!session || session.agentSessionId) return
+    const found = await bridge.invoke<{ id: string }[]>('codexConversations', session.worktreePath, session.startedAt - 5000).catch(() => [])
+    const taken = new Set(state.sessions.map((candidate) => candidate.agentSessionId))
+    const conversation = found.find((candidate) => !taken.has(candidate.id))
+    if (conversation) return update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, agentSessionId: conversation.id } : candidate)) })
+  }
 }
 
 /** Chat needs the chat plugin on and an agent with a chat command */
@@ -604,8 +640,12 @@ async function restoreSessions(): Promise<void> {
   const savedTasks = loadTasks()
   const live = await bridge.invoke<LiveTerminal[]>('list')
   for (const terminal of live) {
-    const meta = parseMetaText(terminal.meta)
-    if (meta) await openSession(terminal.id, meta, terminal.output, terminal.exitCode, { cols: terminal.cols, rows: terminal.rows })
+    const spawned = parseMetaText(terminal.meta)
+    if (!spawned) continue
+    // The process keeps the meta it started with; a Codex conversation learned since is only in the saved copy
+    const meta = { ...spawned, agentSessionId: spawned.agentSessionId ?? saved.sessions.find((entry) => entry.id === terminal.id)?.agentSessionId ?? null }
+    await openSession(terminal.id, meta, terminal.output, terminal.exitCode, { cols: terminal.cols, rows: terminal.rows })
+    if (meta.kind === 'codex' && !meta.agentSessionId) void learnCodexConversation(terminal.id)
   }
   const eager = live.length === 0 && savedTasks ? shownPanes(savedTasks.tasks, savedTasks.selected, getCurrentWorkspaceId()) : []
   for (const { id, ...savedMeta } of saved.sessions) {
@@ -663,15 +703,32 @@ void restoreSessions().catch(() => {
  * Draws with WebGL instead of DOM rows, which is what keeps a busy agent's redraws from lagging the window. A lost
  * context (the GPU reset, or Chromium dropping the oldest of its ~16 contexts) falls back to the DOM renderer
  */
-// ponytail: one context per opened terminal; release contexts of hidden sessions if more than ~16 stay open
-function drawWithGpu(terminal: import('@xterm/xterm').Terminal): void {
+const gpu = new Map<string, { dispose: () => void }>()
+function drawWithGpu(session: TerminalSession): void {
+  if (gpu.has(session.id)) return
+  const loading = { dispose: () => void gpu.delete(session.id) }
+  gpu.set(session.id, loading)
   void import('@xterm/addon-webgl')
     .then(({ WebglAddon }) => {
+      // Released while the addon loaded
+      if (gpu.get(session.id) !== loading) return
       const webgl = new WebglAddon()
-      webgl.onContextLoss(() => webgl.dispose())
-      terminal.loadAddon(webgl)
+      const release = {
+        dispose: () => {
+          gpu.delete(session.id)
+          webgl.dispose()
+        }
+      }
+      webgl.onContextLoss(() => release.dispose())
+      session.terminal.loadAddon(webgl)
+      gpu.set(session.id, release)
     })
-    .catch(() => undefined)
+    .catch(() => gpu.delete(session.id))
+}
+
+/** Only sessions on screen hold a WebGL context: Chromium keeps about 16 and silently drops the oldest */
+export function releaseGpu(id: string, container: HTMLElement): void {
+  if (findTerminal(id)?.element.parentElement === container) gpu.get(id)?.dispose()
 }
 
 /** Open the xterm lazily: it needs a mounted element to measure fonts */
@@ -685,8 +742,8 @@ export function attachSession(id: string, container: HTMLElement): void {
   if (!session.opened) {
     session.terminal.open(session.element)
     session.opened = true
-    drawWithGpu(session.terminal)
   }
+  if (container.offsetWidth > 0) drawWithGpu(session)
   fitSession(id)
   void wakeSession(id)
 }
@@ -721,6 +778,8 @@ export function killSession(id: string): void {
     chat?.forget(id)
   } else {
     if (session.status !== 'dormant') bridge.send('kill', id)
+    gpu.delete(id)
+    hookStatus.delete(id)
     session.terminal.dispose()
   }
   const taskId = taskOf(state.tasks, id)?.id

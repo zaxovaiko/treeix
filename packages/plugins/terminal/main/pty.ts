@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import { type IPty, spawn } from 'node-pty'
-import type { LiveTerminal, TerminalOptions } from '../shared/types'
+import type { AgentHookStatus, LiveTerminal, TerminalOptions } from '../shared/types'
 import { withoutAgentVariables } from '@treeix/host/env'
 import { coalesceOutput } from './coalesce'
 import { attributePorts, parseCwds, parseListeners, parseParents, type SessionPortEntry } from './ports'
@@ -42,6 +42,7 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
     env: {
       ...withoutAgentVariables(process.env),
       ...extraEnv,
+      TREEIX_SESSION_ID: id,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       // Apps opened from Finder get no locale, and without one shells mangle non-ASCII input
@@ -115,6 +116,12 @@ export async function listeningPorts(): Promise<(SessionPortEntry & { cwd: strin
     // lsof exits 1 when nothing listens
     return []
   }
+}
+
+/** What an agent's hooks reported, for the window that owns the session */
+export function reportStatus(id: string, status: AgentHookStatus): void {
+  const owner = sessions.get(id)?.owner
+  if (owner && !owner.isDestroyed()) owner.send('plugin:terminal:status', id, status)
 }
 
 export const writeTerminal = (id: string, data: string): void => sessions.get(id)?.pty?.write(data)

@@ -22,7 +22,7 @@ function ExplorerHeader(): React.JSX.Element {
     if (folder) host.setBrowsedFolder(folder)
   }
   return (
-    <div className="flex h-8 shrink-0 items-center gap-0.5 border-t border-border pr-1.5 pl-3">
+    <div className="flex h-8 shrink-0 items-center gap-0.5 pr-1.5 pl-3">
       <span className="shrink-0 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Files</span>
       <span title={host.explorerRoot} className="min-w-0 flex-1 truncate pl-1.5 text-[11px] text-muted-foreground">
         {label}

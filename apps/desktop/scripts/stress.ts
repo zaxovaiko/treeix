@@ -154,6 +154,21 @@ async function newShell(driver: Driver, split = false): Promise<void> {
   await sleep(400)
 }
 
+/** A colored full-screen redraw many times over, like a busy agent's TUI */
+const COLOR_REDRAW = `for i in $(seq 1 300); do printf '\\033[H'; for j in $(seq 1 40); do printf '\\033[3%dm%04d \\033[1mEnforcing\\033[0m that \\033[32mlimit\\033[0m against \\033[35mdeposits\\033[0m %s\\033[K\\n' $((j%7+1)) $i $RANDOM; done; done`
+
+/** Settings apply on load, so the theme is written and the window reloaded; `null` puts back the default */
+async function reloadWithTheme(driver: Driver, theme: string | null): Promise<void> {
+  await driver.evaluate(`(() => { const settings = JSON.parse(localStorage.getItem('settings') ?? '{}'); if (${JSON.stringify(theme)} === null) delete settings.theme; else settings.theme = ${JSON.stringify(theme)}; localStorage.setItem('settings', JSON.stringify(settings)); location.reload() })()`)
+  await sleep(1500)
+  await driver.until(`!!document.querySelector('[data-zone]')`, 30_000)
+  await sleep(1500)
+  await driver.evaluate(`window.confirm = () => true`)
+  await driver.evaluate(HARNESS)
+  // The run reads the frames painted during the case, and the reload started them over
+  await sleep(500)
+}
+
 const CASES: Case[] = [
   {
     name: 'window-zoom',
@@ -294,6 +309,67 @@ const CASES: Case[] = [
         kept === 'kept' ? 'the page came back mounted' : 'FAIL the page was rebuilt',
         blocked <= 120 ? `revisit blocked ${blocked} ms` : `FAIL revisit blocked ${blocked} ms`,
         docks === 1 ? 'one dock frame with several pages kept' : `FAIL ${docks} dock frames`
+      ]
+    }
+  },
+  {
+    name: 'terminal-return',
+    budget: { maxFrame: 250, p95Frame: 34 },
+    run: async (driver) => {
+      // A terminal docked on another page shows the same session; coming back, the Terminal page has to take it back
+      await driver.evaluate(clickTitle('Terminal'))
+      await newShell(driver)
+      await driver.evaluate(clickTitle('Pull requests'))
+      await sleep(600)
+      await driver.press('KeyJ', { meta: true })
+      await sleep(800)
+      await driver.press('KeyJ', { meta: true })
+      await driver.evaluate(clickTitle('Terminal'))
+      await driver.frames()
+      await sleep(800)
+      const shown = await driver.evaluate(`[...document.querySelectorAll('[data-session-id] .xterm-screen')].some((screen) => screen.checkVisibility() && screen.getBoundingClientRect().width > 0)`)
+      return [shown ? 'the Terminal page shows its terminal again' : 'FAIL the Terminal page came back empty']
+    }
+  },
+  {
+    name: 'light-terminal',
+    budget: { maxFrame: 250, p95Frame: 34 },
+    run: async (driver) => {
+      // Light themes keep the GPU renderer; the DOM one made busy agent sessions lag
+      const theme = String(await driver.evaluate(`JSON.parse(localStorage.getItem('settings') ?? '{}').theme ?? ''`))
+      await reloadWithTheme(driver, 'light')
+      await newShell(driver)
+      await driver.evaluate(`(window.__stress.frames = [], window.__stress.longTasks = [], window.__stress.last = 0)`)
+      await driver.type(COLOR_REDRAW)
+      await sleep(6000)
+      const gpu = await driver.evaluate(`[...document.querySelectorAll('[data-session-id] .xterm')].some((terminal) => terminal.checkVisibility() && terminal.querySelector('canvas'))`)
+      const frames = (await driver.evaluate(`window.__stress.frames`)) as number[]
+      await reloadWithTheme(driver, theme || null)
+      const slow = frames.filter((gap) => gap > 50).length
+      return [gpu ? 'light theme draws with WebGL' : 'FAIL light theme fell back to the DOM renderer', slow <= 5 ? `${slow} frames over 50 ms while redrawing` : `FAIL ${slow} frames over 50 ms while redrawing`]
+    }
+  },
+  {
+    name: 'browser-keeps-size',
+    budget: { maxFrame: 250, p95Frame: 34 },
+    run: async (driver) => {
+      // Shrinking a hidden page to nothing made every site lay itself out again, a visible jump on each switch back
+      await driver.evaluate(clickTitle('Browser'))
+      await sleep(500)
+      await driver.evaluate(typeAddress(driver.pages.heavy))
+      await sleep(2500)
+      const size = `JSON.stringify([...document.querySelectorAll('webview')].map((view) => { const r = view.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)] }))`
+      const shown = String(await driver.evaluate(size))
+      await driver.evaluate(clickTitle('Terminal'))
+      await sleep(800)
+      const hidden = String(await driver.evaluate(size))
+      const covered = await driver.evaluate(`[...document.querySelectorAll('[data-browser]')].some((layer) => layer.style.position === 'fixed' && getComputedStyle(layer).visibility === 'visible')`)
+      await driver.evaluate(clickTitle('Browser'))
+      await sleep(400)
+      await driver.evaluate(`document.querySelectorAll('[data-browser] [aria-label="Close tab"]').forEach((button) => button.click())`)
+      return [
+        hidden === shown ? `the page kept its size off screen, ${shown}` : `FAIL the page went from ${shown} to ${hidden} off screen`,
+        covered ? 'FAIL the hidden page layer is visible over the Terminal page' : 'the page layer stays hidden off screen'
       ]
     }
   },

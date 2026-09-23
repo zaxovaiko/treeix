@@ -32,7 +32,7 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'panel.listAlt', label: 'Toggle list, second key', section: 'Panels', keys: key('KeyB', { meta: true }) },
   { id: 'panel.inspector', label: 'Toggle inspector', menuLabel: 'Inspector', section: 'Panels', keys: key('KeyB', { meta: true, alt: true }) },
   { id: 'panel.rail', label: 'Toggle workspace rail', menuLabel: 'Workspace rail', section: 'Panels', keys: key('KeyR', { meta: true, alt: true }) },
-  { id: 'panel.title', label: 'Toggle title bar', menuLabel: 'Title bar', section: 'Panels', keys: null },
+  { id: 'panel.title', label: 'Toggle title bar', menuLabel: 'Title bar', section: 'Panels', keys: key('KeyT', { meta: true, ctrl: true }) },
   { id: 'shell.zen', label: 'Zen: the main zone alone, no tabs, rail or bars', menuLabel: 'Zen', section: 'Panels', keys: key('Enter', { meta: true, shift: true }) },
   { id: 'app.shortcuts', label: 'Keyboard sheet', section: 'Panels', keys: key('Slash', { meta: true }) },
   { id: 'app.shortcutsBare', label: 'Keyboard sheet, second key', section: 'Panels', keys: key('Slash', { shift: true }) },

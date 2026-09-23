@@ -5,14 +5,14 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ErrorBoundary } from './ErrorBoundary'
-import { activeTheme, fontStack, getSettings, MONO_STACK, SANS_STACK, subscribeSettings } from './settings'
+import { activeTheme, fontStack, getSettings, hotkeyOptions, MONO_STACK, SANS_STACK, subscribeSettings } from './settings'
 import { applyTheme, THEMES } from './themes'
 
 // Fetched while the settings below apply; ~330KB of editor code stays out of the entry chunk
 const editModule = import('@pierre/diffs/edit')
 
 function applyAppearance(): void {
-  const { opacity, hotkey, hotkeyHideOnBlur, hotkeyOnly, editorFontSize, uiFont, editorFont } = getSettings()
+  const { opacity, editorFontSize, uiFont, editorFont } = getSettings()
   const theme = activeTheme()
   applyTheme(theme, opacity / 100, getSettings().borderStrength / 100)
   document.documentElement.style.setProperty('--font-sans', fontStack(uiFont, SANS_STACK))
@@ -23,7 +23,7 @@ function applyAppearance(): void {
   // The System theme hands appearance back to macOS; otherwise prefers-color-scheme would stay on the last fixed theme's mode
   window.api.setTranslucent(opacity < 100, THEMES[theme].background, getSettings().theme === 'system' ? 'system' : THEMES[theme].mode)
   // Registering the same shortcut again is a no-op in the main process
-  window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null })
+  window.api.configureHotkey(hotkeyOptions())
 }
 applyAppearance()
 subscribeSettings(applyAppearance)

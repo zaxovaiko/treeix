@@ -86,8 +86,14 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
   hideOnBlur = options.hideOnBlur
   if (options.only !== only) {
     only = options.only
+    // Hotkey-only leaves ⌘Tab and the Dock, so the shortcut is the one way in; otherwise it is a regular app again
+    if (process.platform === 'darwin') app.setActivationPolicy(only ? 'accessory' : 'regular')
     if (only && !summoned) summon(window)
     else if (!only && summoned) restore(window)
+    if (!only) {
+      window.show()
+      window.focus()
+    }
   }
   if (!watched.has(window)) {
     watched.add(window)

@@ -5,7 +5,7 @@ import { Icon } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
 import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
-import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, SYSTEM_FONTS, updateSettings, useSettings } from './settings'
+import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, hotkeyOptions, SYSTEM_FONTS, TERMINAL_CONTRASTS, TERMINAL_FONT_WEIGHTS, type TerminalFontWeight as TerminalFontWeightChoice, updateSettings, useSettings } from './settings'
 import { type Agent, useAgents } from './agents'
 import { type Theme, THEMES, type ThemeId } from './themes'
 import { EmptyState, Popup } from './ui'
@@ -44,8 +44,7 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
     return () => {
       window.removeEventListener('keydown', capture, true)
       updateShell({ recording: false })
-      const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = getSettings()
-      window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null })
+      window.api.configureHotkey(hotkeyOptions())
     }
   }, [recording])
 
@@ -77,7 +76,7 @@ function GlobalShortcut(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   // main.tsx registers every change too; this call is only for the error to show here
   useEffect(() => {
-    window.api.configureHotkey({ shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkeyOnly && hotkey !== null }).then(setError)
+    window.api.configureHotkey(hotkeyOptions()).then(setError)
   }, [hotkey, hotkeyHideOnBlur, hotkeyOnly])
   return (
     <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -375,7 +374,7 @@ const SETTINGS: SettingSpec[] = [
     card: 'Hotkey window',
     label: 'Global shortcut',
     description:
-      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing.',
+      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. Any key works, including § on ISO keyboards; while it is on, that key opens Treeix instead of typing. Only active with Hotkey window only switched on.',
     Control: GlobalShortcut
   },
   {
@@ -429,6 +428,33 @@ const SETTINGS: SettingSpec[] = [
     label: 'Terminal font',
     description: 'Terminal and agent sessions. Open terminals resize to fit; ⌥⌘= and ⌥⌘- change the size from a terminal.',
     Control: fontRow('terminalFont', { key: 'terminalFontSize', fallback: 12, label: 'terminal font' })
+  },
+  {
+    section: 'Terminal',
+    card: 'Font',
+    label: 'Terminal font weight',
+    description: 'Auto draws a step heavier on light themes, where GPU-drawn text misses macOS font smoothing and looks thin.',
+    Control: function TerminalFontWeight() {
+      const { terminalFontWeight } = useSettings()
+      const labels: Record<TerminalFontWeightChoice, string> = { auto: 'Auto', '300': 'Light', '400': 'Regular', '500': 'Medium', '600': 'Semibold' }
+      return <Segmented value={terminalFontWeight} options={TERMINAL_FONT_WEIGHTS.map((weight) => [weight, labels[weight]])} onChange={(next) => updateSettings({ terminalFontWeight: next })} />
+    }
+  },
+  {
+    section: 'Terminal',
+    card: 'Font',
+    label: 'Minimum contrast',
+    description: 'Darkens or lightens text colors that are too close to the background, like VS Code. 4.5 is the WCAG AA ratio.',
+    Control: function TerminalContrast() {
+      const { terminalContrast } = useSettings()
+      return (
+        <Segmented
+          value={`${terminalContrast}`}
+          options={TERMINAL_CONTRASTS.map((ratio): [string, string] => [`${ratio}`, ratio === 1 ? 'Off' : `${ratio}`])}
+          onChange={(next) => updateSettings({ terminalContrast: TERMINAL_CONTRASTS.find((ratio) => `${ratio}` === next) ?? 4.5 })}
+        />
+      )
+    }
   },
   {
     section: 'Terminal',

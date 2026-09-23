@@ -16,14 +16,14 @@ import {
   togglePanel,
   useHost
 } from '@treeix/sdk'
-import { getAgents } from '@treeix/app/agents'
+import { getAgent, getAgents, viewFor } from '@treeix/app/agents'
 import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { useService } from '@treeix/app/plugins'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
 import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
-import { digitPressed } from '@treeix/app/settings'
+import { digitPressed, getSettings } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { getCurrentWorkspaceId, inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
 import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } from './folder'
@@ -32,7 +32,7 @@ import { SessionsDialog } from './SessionsDialog'
 import { startRename, TaskList } from './TaskList'
 import { openTab, TaskTerminals } from './TerminalPanel'
 import { resolvePath } from './fileLinks'
-import { unarchived } from './sessionMeta'
+import { NEW_TAB_ACTIONS, unarchived } from './sessionMeta'
 import { type Task, taskOf, uniqueName } from './tasks'
 import { switchTask, taskLabel } from './taskUi'
 import {
@@ -306,6 +306,12 @@ function newTab(host: HostApi, kind: SessionKind, view: SessionView = 'terminal'
   showTerminals(host)
 }
 
+/** How an agent opens by default, per Settings; chats need the chat plugin on */
+function defaultView(host: HostApi, id: string): SessionView {
+  const agent = getAgent(id)
+  return agent && host.service('chat') ? viewFor(agent, getSettings().agentViews) : 'terminal'
+}
+
 /** ⌘⇧T: a task with a shell in the current folder, named after that folder */
 function startTask(host: HostApi, cwd = terminalCwd(host)): void {
   const name = uniqueName(worktreeLabel(host.repos, cwd), scope.tasks.map((task) => taskLabel(task, host.repos)))
@@ -407,9 +413,6 @@ defineActions([
   { id: 'terminal.deleteInList', label: 'Delete the group, its sessions go to History (group list)', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true }) }
 ])
 
-/** Agents with a key of their own for a new tab */
-const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab' }
-
 const PANE_SIDES: Record<string, 'left' | 'right' | 'top' | 'bottom'> = { 'terminal.paneLeft': 'left', 'terminal.paneRight': 'right', 'terminal.paneUp': 'top', 'terminal.paneDown': 'bottom' }
 
 function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
@@ -428,7 +431,7 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.newGroup': () => startTask(host),
     'terminal.newTab': () => newTab(host, 'shell'),
     'terminal.newTabAlt': () => newTab(host, 'shell'),
-    'terminal.newClaudeTab': () => newTab(host, 'claude'),
+    'terminal.newClaudeTab': () => newTab(host, 'claude', defaultView(host, 'claude')),
     'terminal.reopenClosed': () => reopenClosed(host),
     'terminal.goToFolder': () => openFolderPicker(host)
   }

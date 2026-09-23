@@ -15,6 +15,8 @@ export type Agent = {
   sessionIdFlag?: string
   /** Command that resumes a conversation; `{id}` is replaced with the session's uuid */
   resumeCommand?: string
+  /** Resumes the agent's latest conversation, for a session whose conversation id was never learned */
+  resumeLatestCommand?: string
   /** false only for the shell, which is a terminal rather than an agent */
   agent: boolean
   /** Chat through an adapter; agents without it are terminal only */
@@ -38,7 +40,7 @@ export const BUILTIN_AGENTS = {
     agent: true,
     chat: { adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp@0.79.0' }
   },
-  // ponytail: Codex can't be given an id up front, so relaunch resumes its latest conversation; read ~/.codex/sessions if two Codex sessions clash
+  // Codex can't be given an id up front; the terminal plugin finds it in ~/.codex/sessions after the session starts
   codex: {
     id: 'codex',
     label: 'Codex',
@@ -46,7 +48,8 @@ export const BUILTIN_AGENTS = {
     color: 'var(--color-foreground)',
     command: 'codex',
     promptFlag: '',
-    resumeCommand: 'codex resume --last',
+    resumeCommand: 'codex resume {id}',
+    resumeLatestCommand: 'codex resume --last',
     agent: true,
     chat: { adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' }
   },
@@ -96,5 +99,5 @@ export function resumeCommandFor(agent: Agent, agentSessionId: string | null): s
   const template = agent.resumeCommand
   if (!template) return startCommand(agent, undefined, agentSessionId)
   if (!template.includes('{id}')) return template
-  return agentSessionId ? template.replaceAll('{id}', agentSessionId) : startCommand(agent, undefined, agentSessionId)
+  return agentSessionId ? template.replaceAll('{id}', agentSessionId) : (agent.resumeLatestCommand ?? startCommand(agent, undefined, agentSessionId))
 }

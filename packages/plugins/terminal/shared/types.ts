@@ -10,3 +10,6 @@ export type TerminalOptions = {
 }
 
 export type LiveTerminal = { id: string; meta: string; output: string; exitCode: number | null; cols: number; rows: number }
+
+/** What Claude Code's hooks report: `input` when it waits for the user, `working` otherwise */
+export type AgentHookStatus = 'input' | 'working'
