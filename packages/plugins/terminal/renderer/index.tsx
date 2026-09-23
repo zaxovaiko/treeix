@@ -141,13 +141,7 @@ function TerminalPage(): React.JSX.Element {
 
   return (
     <PageLayout
-      listLabel="Groups"
-      inspectorLabel="Group"
       listWidth={240}
-      hints={{
-        list: [['⌘⇧T', 'new group'], ['e', 'rename'], ['⌘⌫', 'delete']],
-        main: [['⌘T', 'new tab'], ['⌃⌘↑↓', 'group']]
-      }}
       list={<TaskList tasks={tasks} current={task} sessions={sessions} repos={host.repos} onNew={() => startTask(host)} history={task ? historyOf(history, task) : history} />}
       main={
         <div className="flex min-h-0 min-w-0 flex-1">
@@ -356,6 +350,8 @@ function Root(): React.JSX.Element | null {
   useEffect(() => {
     if (current.task && getTerminals().selected[currentId] !== current.task.id) selectTask(current.task.id)
   }, [current.task?.id, currentId])
+  // A workspace switched to starts from its own default folder, not one picked the last time it was on screen
+  useEffect(() => setPickedFolder(currentId, null), [currentId])
   useEffect(() => onShellCommand('closedSessions', () => dialogs.update({ sessions: 'closed' })), [])
   const hostRef = useRef(host)
   hostRef.current = host
@@ -388,6 +384,7 @@ defineActions([
   { id: 'terminal.nextGroup', label: 'Next group', section: 'Terminal', keys: key('ArrowDown', { meta: true, ctrl: true }) },
   { id: 'terminal.newTab', label: 'New shell tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true }) },
   { id: 'terminal.newTabAlt', label: 'New shell tab, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
+  { id: 'terminal.newClaudeTab', label: 'New Claude tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
   { id: 'terminal.splitRight', label: 'Split the active pane right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
   { id: 'terminal.splitDown', label: 'Split the active pane down with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true, shift: true }) },
   { id: 'terminal.paneLeft', label: 'Focus the pane to the left', section: 'Terminal', keys: key('ArrowLeft', { meta: true, alt: true }) },
@@ -409,6 +406,9 @@ defineActions([
   { id: 'terminal.deleteInList', label: 'Delete the group, its sessions go to History (group list)', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true }) }
 ])
 
+/** Agents with a key of their own for a new tab */
+const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab' }
+
 const PANE_SIDES: Record<string, 'left' | 'right' | 'top' | 'bottom'> = { 'terminal.paneLeft': 'left', 'terminal.paneRight': 'right', 'terminal.paneUp': 'top', 'terminal.paneDown': 'bottom' }
 
 function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
@@ -427,6 +427,7 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.newGroup': () => startTask(host),
     'terminal.newTab': () => newTab(host, 'shell'),
     'terminal.newTabAlt': () => newTab(host, 'shell'),
+    'terminal.newClaudeTab': () => newTab(host, 'claude'),
     'terminal.reopenClosed': () => reopenClosed(host),
     'terminal.goToFolder': () => openFolderPicker(host)
   }
@@ -533,7 +534,7 @@ const plugin: RendererPlugin = {
       label: `New ${agent.label} tab`,
       detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
       icon: 'terminal' as const,
-      shortcut: agent.id === 'shell' ? actionKeys('terminal.newTab') || undefined : undefined,
+      shortcut: actionKeys(NEW_TAB_ACTIONS[agent.id] ?? '') || undefined,
       run: () => newTab(host, agent.id)
     })),
     ...(host.service('chat') ? getAgents().filter((agent) => agent.chat) : []).map((agent) => ({

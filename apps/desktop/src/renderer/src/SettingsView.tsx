@@ -249,7 +249,7 @@ function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel'>(key: K, o
   }
 }
 
-function toggle(key: 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly', label: string): ComponentType {
+function toggle(key: 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions', label: string): ComponentType {
   return function SettingSwitch() {
     const value = useSettings()[key]
     return <Switch checked={value} label={label} onChange={() => updateSettings({ [key]: !value })} />
@@ -429,6 +429,13 @@ const SETTINGS: SettingSpec[] = [
     label: 'Terminal font',
     description: 'Terminal and agent sessions. Open terminals resize to fit; ⌥⌘= and ⌥⌘- change the size from a terminal.',
     Control: fontRow('terminalFont', { key: 'terminalFontSize', fallback: 12, label: 'terminal font' })
+  },
+  {
+    section: 'Terminal',
+    card: 'Agent sessions',
+    label: 'Skip Claude permissions',
+    description: 'Starts Claude terminal sessions with --dangerously-skip-permissions, so it runs every tool without asking. Applies to sessions started after the change.',
+    Control: toggle('claudeSkipPermissions', 'Skip Claude permissions')
   },
   {
     section: 'Terminal',
@@ -1085,9 +1092,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
   return (
     <PageLayout
       id="settings"
-      listLabel="Settings"
       listWidth={220}
-      hints={{ list: [['/', 'search']], main: [['j k', 'move'], ['⏎', 'toggle'], ['← →', 'change']] }}
       list={
         <>
           <div className="flex h-9 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Settings</div>

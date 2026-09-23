@@ -413,11 +413,6 @@ export function ConfluenceTab(): React.JSX.Element {
 
   return (
     <PageLayout
-      listLabel="Pages"
-      hints={{
-        list: [['j k', 'move'], ['⏎', 'open'], ['← →', 'fold'], ['/', 'search']],
-        main: [['a', 'to agent'], ['o', 'open'], ['y', 'copy link'], ['r', 'reload']]
-      }}
       list={listPane}
       main={selectedId ? <PageMain page={shownPage} parent={parent} error={pageError} onReload={reloadPage} onAgent={addToComments} onCopy={copyLink} /> : <EmptyState fill icon="file" title="Pick a page or paste a Confluence link" />}
     />

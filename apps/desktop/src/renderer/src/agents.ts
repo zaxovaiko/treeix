@@ -54,14 +54,20 @@ export const BUILTIN_AGENTS = {
 } as const satisfies Record<string, Agent>
 
 /** Built-ins first, then the user's; a custom agent sharing a built-in id replaces it in place */
-let cache: { from: Agent[]; list: Agent[] } | null = null
+let cache: { from: Agent[]; skip: boolean; list: Agent[] } | null = null
 export function getAgents(): Agent[] {
-  const custom = getSettings().customAgents
-  if (cache?.from !== custom) {
-    const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? agent)
-    cache = { from: custom, list: [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))] }
+  const { customAgents: custom, claudeSkipPermissions: skip } = getSettings()
+  if (cache?.from !== custom || cache.skip !== skip) {
+    const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? (skip && agent.id === 'claude' ? skippingPermissions(agent) : agent))
+    cache = { from: custom, skip, list: [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))] }
   }
   return cache.list
+}
+
+/** The built-in Claude with the Settings switch that lets it run every tool without asking */
+const skippingPermissions = (agent: Agent): Agent => {
+  const skipping = (command: string): string => command.replaceAll(CLAUDE, `${CLAUDE} --dangerously-skip-permissions`)
+  return { ...agent, command: agent.command && skipping(agent.command), resumeCommand: agent.resumeCommand && skipping(agent.resumeCommand) }
 }
 
 export const getAgent = (id: string): Agent | undefined => getAgents().find((agent) => agent.id === id)

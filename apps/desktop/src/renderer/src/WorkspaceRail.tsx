@@ -125,7 +125,7 @@ export function WorkspaceRail({
   })
 
   return (
-    <Zone id="rail" label="Workspaces" className="w-[52px] shrink-0 items-center gap-1 border-r border-border bg-sidebar py-2">
+    <Zone id="rail" className="w-[52px] shrink-0 items-center gap-1 border-r border-border bg-sidebar py-2">
       {workspaces.map((workspace, index) => (
         <Tile
           key={workspace.id}

@@ -253,14 +253,8 @@ export function EnvPage(): React.JSX.Element {
   return (
     <>
       <PageLayout
-        listLabel="Env"
-        inspectorLabel="Variable"
         inspectorWidth={270}
         listWidth={240}
-        hints={{
-          list: [['j k', 'move'], ['⏎', 'open'], ['/', 'filter'], ['r', 'rescan']],
-          main: [['j k', 'move'], ['⏎', 'edit'], ['c', 'comment'], ['v', 'reveal'], ['i', 'inspector'], ['⌘S', 'save']]
-        }}
         list={list}
         main={main}
         inspector={inspector}

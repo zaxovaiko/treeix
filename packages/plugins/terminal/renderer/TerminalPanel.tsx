@@ -24,7 +24,6 @@ import {
   closeTab,
   type ClosedSession,
   createSession,
-  fitSession,
   focusSession,
   focusShown,
   forgetClosedSession,
@@ -51,6 +50,8 @@ const SESSION_MIME = 'application/x-treeix-session'
 /** Dragged panes or tabs carry their session ids, space separated */
 const draggingSession = (event: React.DragEvent): boolean => event.dataTransfer.types.includes(SESSION_MIME)
 const draggedSessions = (event: React.DragEvent): string[] => event.dataTransfer.getData(SESSION_MIME).split(' ').filter(Boolean)
+
+const LONG_PRESS_MS = 400
 
 /** Starts a session as a new tab of the task and focuses it */
 export const openTab = (cwd: string, kind: SessionKind, taskId?: string, view: SessionView = 'terminal'): void =>
@@ -213,7 +214,8 @@ function TerminalPane({
     const host = hostRef.current
     if (!host || session.view !== 'terminal') return
     attachSession(session.id, host)
-    const observer = new ResizeObserver(() => fitSession(session.id))
+    // The Terminal page and a panel docked on another page show the same session, so whichever comes on screen takes it back
+    const observer = new ResizeObserver(() => (host.offsetWidth > 0 ? attachSession(session.id, host) : undefined))
     observer.observe(host)
     return () => observer.disconnect()
   }, [session.id])
@@ -481,9 +483,14 @@ function TabStrip({
   const { main, other } = useNewTabEntries()
   const menuEntry = (entry: NewTabEntry): MenuEntry => ({
     label: entry.label,
-    accelerator: entry.agent === 'shell' && entry.view === 'terminal' ? 'CmdOrCtrl+T' : undefined,
+    accelerator: entry.view !== 'terminal' ? undefined : entry.agent === 'shell' ? 'CmdOrCtrl+T' : entry.agent === 'claude' ? 'CmdOrCtrl+Alt+T' : undefined,
     run: () => newTab(entry.agent, entry.view)
   })
+  const showMenu = (event: React.MouseEvent): void => openMenu(event, [...main.map(menuEntry), null, ...other.map(menuEntry)])
+  // A click opens Claude; holding opens the menu instead, and the click that ends the hold does nothing
+  const pressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const held = useRef(false)
+  const endPress = (): void => clearTimeout(pressTimer.current)
   const plans = useService('plans')
   const activeTab = task ? activeTabOf(task) : undefined
   // A lone pane has no header, so its plan shows here
@@ -501,9 +508,19 @@ function TabStrip({
         {task?.tabs.map((tab, index) => <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />)}
       </div>
       <button
-        title="New tab: Shell (⌘T) or an agent"
+        title="New Claude tab (⌥⌘T); hold or right-click for Shell (⌘T) and other agents"
         aria-label="New tab"
-        onClick={(event) => openMenu(event, [...main.map(menuEntry), null, ...other.map(menuEntry)])}
+        onPointerDown={(event) => {
+          held.current = false
+          pressTimer.current = setTimeout(() => {
+            held.current = true
+            showMenu(event)
+          }, LONG_PRESS_MS)
+        }}
+        onPointerUp={endPress}
+        onPointerLeave={endPress}
+        onClick={() => !held.current && newTab('claude', 'terminal')}
+        onContextMenu={showMenu}
         className={stripButton}
       >
         <Icon name="plus" className="size-3.5" />

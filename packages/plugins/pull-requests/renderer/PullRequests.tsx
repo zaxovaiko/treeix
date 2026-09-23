@@ -25,7 +25,7 @@ import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
 import { EmptyState, errorMessage, FoldAllButton, IconButton, Popup, readStored, ResizeHandle, TextPrompt, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
-import { type Command, focusZone, getShell, type IconName, isTyping, Kbd, type KeyHint, ListToggle, PageLayout, togglePanel, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
+import { type Command, focusZone, getShell, type IconName, isTyping, Kbd, ListToggle, PageLayout, togglePanel, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
 
 // ponytail: keeps the most recently loaded details, which carry every patch; raise if reopening older PRs refetches too often
 const MAX_CACHED_DETAILS = 30
@@ -96,38 +96,6 @@ function ConflictNotice({ pr, patches, onOpen }: { pr: PullRequest; patches: Fil
 const DETAIL_FOCUS_REFRESH_MS = 30_000
 /** Files changed remembers its panels apart from the conversation: the diff wants the inspector's width */
 const FILES_PAGE = 'prs:files'
-
-const LIST_HINTS: KeyHint[] = [
-  ['j k', 'move'],
-  ['⏎', 'open'],
-  ['/', 'search'],
-  ['⇧S', 'sort'],
-  ['f', 'involves me']
-]
-const CONVERSATION_HINTS: KeyHint[] = [
-  ['j k', 'threads'],
-  ['[ ]', 'switch'],
-  ['c', 'comment'],
-  ['a', 'agent'],
-  ['x', 'resolve'],
-  ['r', 'review'],
-  ['m', 'merge'],
-  ['⇧R', 'ready']
-]
-const FILES_HINTS: KeyHint[] = [
-  ['n p', 'file'],
-  ['j k', 'threads'],
-  ['v', 'viewed'],
-  ['c', 'comment'],
-  ['a', 'agent'],
-  ['[ ]', 'switch']
-]
-const INSPECTOR_HINTS: KeyHint[] = [
-  ['⇧A', 'assign'],
-  ['w', 'worktree'],
-  ['o', 'open'],
-  ['y', 'copy link']
-]
 
 /** What a pull request's detail needs from the host, bound by the plugin entry */
 export type DetailProps = {
@@ -438,8 +406,6 @@ export function PullRequestsView({
         <PullRequestDetailView pr={selected} list={list} {...detailProps} />
       ) : (
         <PageLayout
-          listLabel="Pull requests"
-          hints={{ list: LIST_HINTS }}
           list={list}
           main={<EmptyState fill icon="pullRequest" title={data ? 'No pull request selected' : 'Loading...'} />}
         />
@@ -859,6 +825,9 @@ function ThreadCard({
   )
 }
 
+/** Pull requests whose folders were opened once, so a folder closed later stays closed */
+const reviewsOpened = new Set<string>()
+
 const MERGE_METHODS: Record<MergeMethod, { label: string; detail: string }> = {
   squash: { label: 'Squash and merge', detail: 'All changes in one commit' },
   merge: { label: 'Merge commit', detail: 'All commits plus a merge commit' },
@@ -996,6 +965,12 @@ export function PullRequestDetailView({
 
   const patches = detail?.patches ?? []
   const folders = useMemo(() => folderPaths(patches), [patches])
+  // A review opens with every folder of its files open, whatever the app's default for folder groups
+  useEffect(() => {
+    if (folders.length === 0 || reviewsOpened.has(pr.url)) return
+    reviewsOpened.add(pr.url)
+    setToggledFolders((current) => new Set([...current, ...allFolders(folders, true)]))
+  }, [folders])
   const anyFolderOpen = folders.some((folder) => groupOpen(toggledFolders, folder))
   const foldFolders = (): void => setToggledFolders(allFolders(folders, !anyFolderOpen))
   const canFoldFolders = view === 'files' && groupFiles && folders.length > 1
@@ -1926,9 +1901,6 @@ export function PullRequestDetailView({
       <PageLayout
         id={pageId}
         defaults={view === 'files' ? { inspector: false } : undefined}
-        listLabel="Pull requests"
-        inspectorLabel="Details"
-        hints={{ list: LIST_HINTS, main: view === 'files' ? FILES_HINTS : CONVERSATION_HINTS, inspector: INSPECTOR_HINTS }}
         list={list}
         main={
           <ErrorBoundary label={`${prefix(pr)}${pr.number}`} resetKey={pr.url}>

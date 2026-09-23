@@ -676,7 +676,7 @@ export function attachSession(id: string, container: HTMLElement): void {
   // Sessions started before this setting existed keep their old cursor until they are shown again
   session.terminal.options.cursorStyle = 'bar'
   session.terminal.options.cursorWidth = 2
-  container.appendChild(session.element)
+  if (session.element.parentElement !== container) container.appendChild(session.element)
   if (!session.opened) {
     session.terminal.open(session.element)
     session.opened = true

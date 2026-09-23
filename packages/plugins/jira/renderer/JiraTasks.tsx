@@ -426,12 +426,7 @@ export function JiraTasks(): React.JSX.Element {
 
   return (
     <PageLayout
-      listLabel="Tasks"
       listWidth={400}
-      hints={{
-        list: [['j k', 'move'], ['← →', 'fold'], ['/', 'search'], ['f', 'mine'], ['v', 'group']],
-        main: [['s', 'status'], ['u', 'assign'], ['e', 'edit'], ['c', 'comment'], ['w', 'worktree'], ['a', 'to agent']]
-      }}
       list={listPane}
       main={
         <TicketMain

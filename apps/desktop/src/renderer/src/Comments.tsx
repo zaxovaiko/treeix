@@ -448,7 +448,6 @@ export function AgentCommentsDrawer({
   comments,
   labelOf,
   top,
-  bottom,
   renderSend,
   onOpen,
   onOpenWorktree,
@@ -459,7 +458,6 @@ export function AgentCommentsDrawer({
   comments: ReviewComment[]
   labelOf: (worktreePath: string) => string
   top: number
-  bottom: number
   /** The send button for a worktree's comments; `active` gives it the drawer's t and ⌘↵ */
   renderSend: (worktreePath: string, active: boolean) => React.ReactNode
   onOpen: (comment: ReviewComment) => void
@@ -517,7 +515,7 @@ export function AgentCommentsDrawer({
       ref={ref}
       data-drawer
       tabIndex={-1}
-      style={{ top, bottom }}
+      style={{ top, bottom: 0 }}
       className="fixed right-0 z-[45] flex w-[440px] max-w-[90vw] flex-col border-l border-input bg-popover shadow-2xl shadow-black/60 outline-none [-webkit-app-region:no-drag]"
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { cycleZone, getShell, isTyping, type KeyHint, KeyHintLabel, Keys, type ShortcutInfo, toggleZen, updateShell, useShell, useZone, type ZoneId } from '@treeix/sdk'
+import { useEffect, useRef } from 'react'
+import { cycleZone, getShell, isTyping, KeyHintLabel, Keys, type ShortcutInfo, toggleZen, updateShell, useShell } from '@treeix/sdk'
 import { actionForEvent, actionKeys, actionList } from '../../shared/keymap'
 import { registerActionRunner } from './actionRunners'
 import { Icon, type IconName } from './Icon'
@@ -38,7 +38,7 @@ type ShellKeys = {
   enabled: boolean
   /** The key pressed after the leader */
   onLeader: (event: KeyboardEvent) => void
-  onTogglePanel: (panel: 'list' | 'inspector' | 'rail' | 'title' | 'status') => void
+  onTogglePanel: (panel: 'list' | 'inspector' | 'rail' | 'title') => void
   onSheet: () => void
 }
 
@@ -48,7 +48,6 @@ const shellActions = (latest: React.RefObject<ShellKeys>): Record<string, () => 
   'panel.inspector': () => latest.current.onTogglePanel('inspector'),
   'panel.rail': () => latest.current.onTogglePanel('rail'),
   'panel.title': () => latest.current.onTogglePanel('title'),
-  'panel.status': () => latest.current.onTogglePanel('status'),
   'shell.zen': toggleZen,
   'app.shortcuts': () => latest.current.onSheet()
 })
@@ -100,64 +99,6 @@ export function useShellKeys(options: ShellKeys): void {
 }
 
 const terminalFocused = (): boolean => document.activeElement?.closest('[data-session-id]') != null
-
-/** Whether keyboard focus is in a terminal, where bare keys are typed rather than acted on */
-function useTerminalFocused(): boolean {
-  const [focused, setFocused] = useState(false)
-  useEffect(() => {
-    const update = (): void => setFocused(terminalFocused())
-    window.addEventListener('focusin', update)
-    window.addEventListener('focusout', update)
-    return () => {
-      window.removeEventListener('focusin', update)
-      window.removeEventListener('focusout', update)
-    }
-  }, [])
-  return focused
-}
-
-const DEFAULT_HINTS: Record<ZoneId, KeyHint[]> = {
-  rail: [['j k', 'move'], ['⏎', 'open'], ['esc', 'back']],
-  list: [['j k', 'move'], ['⏎', 'open']],
-  main: [['esc', 'back']],
-  inspector: [['esc', 'back']],
-  dock: [['esc', 'back']]
-}
-
-/** Where you are and what the keys do there: workspace, page, focused zone and its key hints */
-export function StatusBar({ workspace, pageLabel }: { workspace: { name: string; color?: string }; pageLabel: string }): React.JSX.Element {
-  const { zone, label } = useZone()
-  const { hints } = useShell()
-  const terminal = useTerminalFocused()
-  const hint = (id: string, label: string): KeyHint[] => (actionKeys(id) ? [[actionKeys(id), label] as KeyHint] : [])
-  const shown: KeyHint[] = terminal
-    ? [
-        ...hint('terminal.newTab', 'new tab'),
-        ...hint('terminal.splitRight', 'split'),
-        ['⌥1-9', 'pane'],
-        ['⌘W', 'close'],
-        ...hint('shell.zen', 'zen'),
-        ...hint('app.leader', 'go to'),
-        ...hint('zone.next', 'leave terminal')
-      ]
-    : [...hints, ...DEFAULT_HINTS[zone]]
-  return (
-    <footer className="flex h-6 shrink-0 items-center gap-3 overflow-hidden border-t border-border bg-card px-2 text-[11px] text-muted-foreground">
-      <span className="flex shrink-0 items-center gap-1.5 text-foreground/80">
-        <span className="size-2 rounded-[3px] bg-foreground/30" style={workspace.color ? { background: workspace.color } : undefined} />
-        {workspace.name}
-      </span>
-      <span className="text-muted-foreground/40">/</span>
-      <span className="shrink-0">{pageLabel}</span>
-      <span className="shrink-0 rounded bg-foreground/[.08] px-1.5 text-[10.5px] font-medium text-foreground">{terminal ? 'Terminal input' : label}</span>
-      <span className="flex min-w-0 items-center gap-3 overflow-hidden">
-        {shown.slice(0, 7).map((hint) => (
-          <KeyHintLabel key={hint.join(':')} hint={hint} />
-        ))}
-      </span>
-    </footer>
-  )
-}
 
 /** The leader's menu, while G waits for the next key */
 export function WhichKey({ pages, workspaces }: { pages: { letter: string; label: string; icon: IconName }[]; workspaces: string[] }): React.JSX.Element | null {

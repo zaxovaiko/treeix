@@ -9,7 +9,6 @@ import { HostContext } from './index'
  */
 export type ZoneId = 'rail' | 'list' | 'main' | 'inspector' | 'dock'
 export const ZONE_ORDER: ZoneId[] = ['rail', 'list', 'main', 'inspector', 'dock']
-export const ZONE_LABELS: Record<ZoneId, string> = { rail: 'Workspaces', list: 'List', main: 'Main', inspector: 'Inspector', dock: 'Bottom terminal' }
 
 /** Keys and what they do, e.g. ['j k', 'move']; a space separates keys pressed one after another */
 export type KeyHint = [keys: string, label: string]
@@ -18,17 +17,13 @@ export type KeyHint = [keys: string, label: string]
 export type ShortcutInfo = { keys: string; label: string; section: string; page?: string }
 
 /** Panels a key toggles; list and inspector are remembered per page, the others for the whole window */
-export type PanelName = 'list' | 'inspector' | 'rail' | 'title' | 'status'
+export type PanelName = 'list' | 'inspector' | 'rail' | 'title'
 
 type PagePanels = { list: boolean; inspector: boolean; listWidth: number | null; inspectorWidth: number | null }
-type StoredPanels = { rail: boolean; title: boolean; status: boolean; pages: Record<string, PagePanels> }
+type StoredPanels = { rail: boolean; title: boolean; pages: Record<string, PagePanels> }
 
 export type ShellState = StoredPanels & {
   zone: ZoneId
-  /** Name of the focused zone for the status bar, e.g. "Tasks" for a list of tasks */
-  zoneLabel: string
-  /** Key hints of the focused zone, shown in the status bar */
-  hints: KeyHint[]
   /** Only the main zone is shown */
   zen: boolean
   /** G or ⌘G was pressed and the next key picks where to go */
@@ -41,7 +36,7 @@ const PANELS_KEY = 'shell.panels'
 const DEFAULT_PAGE: PagePanels = { list: true, inspector: true, listWidth: null, inspectorWidth: null }
 
 function loadPanels(): StoredPanels {
-  const defaults: StoredPanels = { rail: true, title: true, status: false, pages: {} }
+  const defaults: StoredPanels = { rail: true, title: true, pages: {} }
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(PANELS_KEY) ?? 'null')
     if (typeof stored !== 'object' || stored === null) return defaults
@@ -52,7 +47,6 @@ function loadPanels(): StoredPanels {
     return {
       rail: flag(record.rail, defaults.rail),
       title: flag(record.title, defaults.title),
-      status: flag(record.status, defaults.status),
       pages: Object.fromEntries(
         pages.flatMap(([page, value]) => {
           if (typeof value !== 'object' || value === null) return []
@@ -66,7 +60,7 @@ function loadPanels(): StoredPanels {
   }
 }
 
-let state: ShellState = { ...loadPanels(), zone: 'main', zoneLabel: ZONE_LABELS.main, hints: [], zen: false, leader: false, recording: false }
+let state: ShellState = { ...loadPanels(), zone: 'main', zen: false, leader: false, recording: false }
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener)
@@ -77,9 +71,9 @@ export const getShell = (): ShellState => state
 
 export function updateShell(patch: Partial<ShellState>): void {
   state = { ...state, ...patch }
-  if ('rail' in patch || 'title' in patch || 'status' in patch || 'pages' in patch) {
-    const { rail, title, status, pages } = state
-    localStorage.setItem(PANELS_KEY, JSON.stringify({ rail, title, status, pages }))
+  if ('rail' in patch || 'title' in patch || 'pages' in patch) {
+    const { rail, title, pages } = state
+    localStorage.setItem(PANELS_KEY, JSON.stringify({ rail, title, pages }))
   }
   listeners.forEach((listener) => listener())
 }
@@ -171,7 +165,7 @@ export function togglePanel(panel: PanelName, page: string): void {
     shown = !state[panel]
     updateShell({ [panel]: shown })
   }
-  if (panel === 'title' || panel === 'status') return
+  if (panel === 'title') return
   if (shown) focusZone(panel)
   else if (state.zone === panel) focusZone('main')
 }
@@ -191,7 +185,6 @@ export function usePanels(page?: string): {
   inspector: boolean
   rail: boolean
   title: boolean
-  status: boolean
   zen: boolean
   toggle: (panel: PanelName) => void
   toggleZen: () => void
@@ -206,7 +199,6 @@ export function usePanels(page?: string): {
     inspector: visible(prefs.inspector),
     rail: visible(shell.rail),
     title: visible(shell.title),
-    status: visible(shell.status),
     zen: shell.zen,
     toggle: (panel) => togglePanel(panel, key),
     toggleZen
@@ -214,41 +206,29 @@ export function usePanels(page?: string): {
 }
 
 /** The focused zone, and a way to move focus to another one */
-export function useZone(): { zone: ZoneId; label: string; focusZone: (zone: ZoneId) => void } {
+export function useZone(): { zone: ZoneId; focusZone: (zone: ZoneId) => void } {
   const zone = useSyncExternalStore(subscribe, () => state.zone)
-  const label = useSyncExternalStore(subscribe, () => state.zoneLabel)
-  return { zone, label, focusZone }
+  return { zone, focusZone }
 }
 
 /**
  * A focus zone: clicking or focusing inside it makes it the focused zone, F6 visits it, and while focused it gets
- * the inset frame and its `label` and `hints` show in the status bar. Mark the element that should take keyboard
+ * the inset frame. Mark the element that should take keyboard
  * focus when the zone is entered with `data-zone-focus`; later visits return to whatever was focused last.
  */
 export function Zone({
   id,
-  label,
-  hints,
   className = '',
   style,
   children
 }: {
   id: ZoneId
-  label?: string
-  hints?: KeyHint[]
   className?: string
   style?: CSSProperties
   children?: ReactNode
 }): React.JSX.Element {
   const ref = useRef<HTMLElement>(null)
   const focused = useSyncExternalStore(subscribe, () => state.zone === id)
-  const hintKey = JSON.stringify(hints ?? [])
-  useEffect(() => {
-    // The shell's main zone around a page's own main zone leaves the status bar to the inner one, unless that page is off screen
-    const inner = [...(ref.current?.querySelectorAll<HTMLElement>(`[data-zone="${id}"]`) ?? [])].some((element) => element.checkVisibility())
-    if (!focused || inner) return
-    updateShell({ zoneLabel: label ?? ZONE_LABELS[id], hints: hints ?? [] })
-  }, [focused, label, hintKey])
   return (
     <section
       ref={ref}
@@ -292,9 +272,6 @@ export function PageLayout({
   list,
   main,
   inspector,
-  listLabel,
-  inspectorLabel,
-  hints,
   listWidth = 280,
   inspectorWidth = 300,
   resizable = true,
@@ -306,10 +283,6 @@ export function PageLayout({
   list?: ReactNode
   main?: ReactNode
   inspector?: ReactNode
-  /** Status bar names for the zones, e.g. "Tasks" */
-  listLabel?: string
-  inspectorLabel?: string
-  hints?: Partial<Record<'list' | 'main' | 'inspector', KeyHint[]>>
   /** Starting widths in px, until the user drags them */
   listWidth?: number
   inspectorWidth?: number
@@ -335,16 +308,16 @@ export function PageLayout({
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       {list !== undefined && prefs.list && !shell.zen && (
-        <Zone id="list" label={listLabel} hints={hints?.list} style={{ width: listSize }} className="shrink-0 border-r border-border bg-sidebar">
+        <Zone id="list" style={{ width: listSize }} className="shrink-0 border-r border-border bg-sidebar">
           {list}
           {resizable && <ResizeHandle width={listSize} min={LIST_LIMITS.list[0]} max={LIST_LIMITS.list[1]} onResize={(next) => setPagePanels(page, { listWidth: next })} />}
         </Zone>
       )}
-      <Zone id="main" hints={hints?.main} className="flex-1 bg-background">
+      <Zone id="main" className="flex-1 bg-background">
         {claimDock && host ? host.withDock(main) : main}
       </Zone>
       {inspector !== undefined && prefs.inspector && !shell.zen && (
-        <Zone id="inspector" label={inspectorLabel} hints={hints?.inspector} style={{ width: inspectorSize }} className="shrink-0 border-l border-border bg-card">
+        <Zone id="inspector" style={{ width: inspectorSize }} className="shrink-0 border-l border-border bg-card">
           {inspector}
           {resizable && (
             <ResizeHandle edge="left" width={inspectorSize} min={LIST_LIMITS.inspector[0]} max={LIST_LIMITS.inspector[1]} onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />

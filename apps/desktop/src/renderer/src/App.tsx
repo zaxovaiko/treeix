@@ -33,7 +33,7 @@ import { codeThemeOptions, diffBackground, FileView, findLineElement } from './F
 import { FileIcon, Icon } from './Icon'
 import { findService, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
-import { LEADER_PAGES, leaderOf, ShortcutSheet, StatusBar, useShellKeys, WhichKey } from './Shell'
+import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
 import { isPageId, showSettingsPage } from './settingsNav'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
@@ -1087,7 +1087,9 @@ function App(): React.JSX.Element {
 
   const onSent = (message: string): void => {
     flash(message)
-    if (!message.startsWith('Copied') && !dock.isVisible('terminal')) dock.show('terminal')
+    if (message.startsWith('Copied')) return
+    setDrawerOpen(false)
+    if (!dock.isVisible('terminal')) dock.show('terminal')
   }
 
   /** Sends the comments collected for a checkout to an agent session there; pull requests use their local worktree or repo */
@@ -1151,18 +1153,6 @@ function App(): React.JSX.Element {
         className={`relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card ${frame} ${side === 'bottom' ? '' : 'flex-1'}`}
       >
         <ResizeHandle edge={RESIZE_EDGE[side]} width={size} min={min} max={max} onResize={(next) => dock.resize(side, next)} />
-        <div
-          draggable
-          title={`Drag to move ${info.label}`}
-          onDragStart={(event) => {
-            event.dataTransfer.setData('text/plain', panel)
-            startPanelDrag(panel)
-          }}
-          onDragEnd={() => setDraggingPanel(null)}
-          className="group/grip absolute top-0 left-1/2 z-30 flex h-2.5 w-14 -translate-x-1/2 cursor-grab items-start justify-center pt-[3px] active:cursor-grabbing"
-        >
-          <span className="h-1 w-8 rounded-full bg-foreground/10 group-hover/grip:bg-foreground/40" />
-        </div>
         <div className="min-h-0 flex-1">
           <ErrorBoundary label={info.label} resetKey={panel}>
             <Suspense fallback={null}>{renderPanel(panel, side)}</Suspense>
@@ -1172,7 +1162,7 @@ function App(): React.JSX.Element {
     )
     // Every dock is the dock zone, so F6 reaches a terminal docked on either side too
     return (
-      <Zone id="dock" label={side === 'bottom' && info.label === 'Terminal' ? 'Bottom terminal' : info.label} className="shrink-0">
+      <Zone id="dock" className="shrink-0">
         {aside}
       </Zone>
     )
@@ -1363,8 +1353,7 @@ function App(): React.JSX.Element {
         ['list', 'Toggle list'],
         ['inspector', 'Toggle inspector'],
         ['rail', 'Toggle workspace rail'],
-        ['title', 'Toggle title bar'],
-        ['status', 'Toggle status bar']
+        ['title', 'Toggle title bar']
       ] as const
     ).map(([panel, label]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut: actionKeys(`panel.${panel}`) || undefined, run: () => toggleShellPanel(panel) })),
     { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: actionKeys('app.comments') || undefined, run: () => setDrawerOpen(true) },
@@ -1702,13 +1691,6 @@ function App(): React.JSX.Element {
 
   const worktreeLayout = (
       <PageLayout
-        listLabel="Worktrees"
-        inspectorLabel="Explorer"
-        hints={{
-          list: [['n', 'new'], ['t', 'terminal'], ['/', 'filter']],
-          main: [['n p', 'file'], ['j k', 'line'], ['c', 'comment'], ['o', 'open'], ['w', 'split'], ['t', 'terminal']],
-          inspector: [['h l', 'fold'], ['/', 'filter']]
-        }}
         list={
           <Sidebar
             repos={workspaceRepos}
@@ -1893,7 +1875,6 @@ function App(): React.JSX.Element {
         </HostContext.Provider>
       )}
       </div>
-      {shell.status && !shell.zen && <StatusBar workspace={workspace ?? { name: scopeLabel }} pageLabel={appTabLabel} />}
       <WhichKey
         pages={[...tabs, { id: 'settings', label: 'Settings', icon: 'settings' as const }].flatMap((tab) => {
           const letter = leaderOf(tab.id)
@@ -1907,7 +1888,6 @@ function App(): React.JSX.Element {
           comments={comments}
           labelOf={checkoutLabel}
           top={showTitle ? 36 : chromeless ? 0 : 28}
-          bottom={shell.status && !shell.zen ? 24 : 0}
           renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
           onOpen={(comment) => {
             if (comment.kind === 'reference') return
