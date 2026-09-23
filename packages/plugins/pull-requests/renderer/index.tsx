@@ -134,7 +134,7 @@ function PullRequestSettings(): React.JSX.Element {
   const { prFilesView, prPollMinutes } = prSettings.use()
   return (
     <>
-      <Row label="Files" description="Show one changed file at a time, or scroll through every file like GitHub. Files marked viewed collapse in the scroll.">
+      <Row label="Files" description="Show one changed file at a time, or scroll through every file like GitHub. Files you mark viewed collapse in the scroll; a review opens with every file expanded.">
         <Segmented
           value={prFilesView}
           options={[

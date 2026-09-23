@@ -891,6 +891,8 @@ export function PullRequestDetailView({
   /** Last file under the pointer, which symbol navigation resolves against in the all-files scroll */
   const [pointerPath, setPointerPath] = useScopedState<string | null>(pr.url, null)
   const [viewed, setViewed] = useScopedState<Set<string>>(pr.url, new Set())
+  /** Files marked viewed in this review; files viewed before stay open, so a review always starts with every file expanded */
+  const [folded, setFolded] = useScopedState<Set<string>>(pr.url, new Set())
   const [picker, setPicker] = useScopedState<'files' | 'review' | 'merge' | 'assign' | null>(pr.url, null)
   const [fullFile, setFullFile] = useScopedState<string | null>(pr.url, null)
   const [addedFiles, setAddedFiles] = useScopedState<Set<string>>(pr.url, new Set())
@@ -1004,6 +1006,7 @@ export function PullRequestDetailView({
     if (nowViewed) next.add(path)
     else next.delete(path)
     setViewed(next)
+    setFolded((current) => new Set(nowViewed ? [...current, path] : [...current].filter((candidate) => candidate !== path)))
     if (nowViewed) {
       // Carry on to the next unviewed file below, wrapping to the top, like working through a review
       const index = patches.findIndex((patch) => patch.path === path)
@@ -1413,8 +1416,8 @@ export function PullRequestDetailView({
 
   const renderFile = (patch: FilePatch): React.JSX.Element => {
     const isViewed = viewed.has(patch.path)
-    // Like GitHub, viewed files fold away in the scroll; in single-file view the open file always shows
-    const collapsed = allFiles && isViewed
+    // Like GitHub, a file marked viewed folds away in the scroll; in single-file view the open file always shows
+    const collapsed = allFiles && isViewed && folded.has(patch.path)
     const preview = markdownPreview && isMarkdownPath(patch.path)
     const fileThreads = threads.filter((thread) => thread.path === patch.path && thread.line !== null)
     const fileDraft = draftPath === patch.path ? draft : null
