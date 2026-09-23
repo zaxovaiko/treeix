@@ -20,7 +20,8 @@ const { version } = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 
 const define = { __APP_VERSION__: JSON.stringify(version) }
 
 export default defineConfig({
-  main: { define, resolve: { alias } },
+  // The chat adapter SDK and zod are pure JS: bundled, only what's used ships instead of every zod build and locale
+  main: { define, resolve: { alias }, build: { externalizeDeps: { exclude: ['@agentclientprotocol/sdk', 'zod'] } } },
   preload: {
     define,
     resolve: { alias },

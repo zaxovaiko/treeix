@@ -22,14 +22,13 @@
     "build:native": "node-gyp rebuild -C native/mac-window"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.5.0",
     "@electron-toolkit/utils": "^4.0.0",
     "electron-updater": "^6.8.9",
     "node-pty": "1.1.0",
-    "typescript": "^5.9.3",
-    "zod": "4.6.5"
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@agentclientprotocol/sdk": "1.5.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@pierre/diffs": "^1.4.2",
@@ -53,6 +52,7 @@
     "rehype-sanitize": "6.0.0",
     "remark-gfm": "4.0.1",
     "tailwindcss": "^4.3.3",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "zod": "4.6.5"
   }
 }

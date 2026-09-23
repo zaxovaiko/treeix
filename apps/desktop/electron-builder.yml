@@ -12,13 +12,14 @@ directories:
 # A denylist let dist/ and src/ in as soon as node_modules stopped dominating the archive.
 files:
   - out/**
-  - resources/**
   - native/mac-window/build/Release/*.node
   - node_modules/**
   - package.json
   # node-pty ships a 14MB prebuild per platform and only ever loads its own. Packaging for Windows needs this revisited.
   - '!node_modules/node-pty/prebuilds/{darwin-x64,win32-arm64,win32-x64}/**'
   - '!node_modules/node-pty/{src,deps,third_party,scripts}/**'
+  # Headers for compiling native modules; node-pty ships prebuilt and never loads it
+  - '!node_modules/node-addon-api/**'
   # The language service only calls the typescript API and its lib.*.d.ts files; the CLI compiler, tsserver and the
   # translated diagnostics are two thirds of the package and are never loaded.
   - '!node_modules/typescript/lib/{_tsc.js,_tsserver.js,_typingsInstaller.js,tsc.js,tsserver.js,tsserverlibrary.js,typingsInstaller.js,watchGuard.js}'
@@ -26,7 +27,6 @@ files:
   - '!node_modules/typescript/lib/{cs,de,es,fr,it,ja,ko,pl,pt-br,ru,tr,zh-cn,zh-tw}/**'
   - '!node_modules/typescript/bin/**'
 asarUnpack:
-  - resources/**
   - node_modules/node-pty/**
   - native/mac-window/build/Release/*.node
 win:
