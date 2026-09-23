@@ -12,14 +12,16 @@ import { buildMenu, type MenuAction } from './appMenu'
 import { configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
 import { hover, navigate, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
+import { loadShellPath } from './env'
 import { checkTools, commandExists } from './tools'
 import { setupUpdates } from './updates'
 import { BROWSER_PARTITION, configureBrowserSession, hardenWebview } from './webviewPolicy'
 
 app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_VERSION__, version: '', copyright: 'Apache 2.0' })
 
-// ponytail: apps launched from Finder get a minimal PATH, add Homebrew so gh/glab resolve
+// Apps launched from Finder get a minimal PATH: Homebrew now, the user's full shell PATH once it has loaded
 process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean).join(':')
+const shellPath = loadShellPath()
 
 app.setName('Treeix')
 // TREEIX_USER_DATA or --user-data-dir runs a separate profile, e.g. for demo screenshots
@@ -93,7 +95,7 @@ app.whenReady().then(() => {
   ipcMain.handle('searchText', (_, worktreePaths: string[], query: string, options: SearchOptions) => searchText(worktreePaths, query, options))
   ipcMain.handle('hover', (_, worktreePath: string, target: SymbolTarget) => hover(worktreePath, target))
   ipcMain.handle('checkTools', () => checkTools(enabledTools()))
-  ipcMain.handle('commandExists', (_, name: unknown) => (typeof name === 'string' ? commandExists(name) : false))
+  ipcMain.handle('commandExists', async (_, name: unknown) => (await shellPath, typeof name === 'string' ? commandExists(name) : false))
   ipcMain.handle('plugins:setEnabled', (_, ids: string[]) => setEnabledPlugins(ids, app.getPath('userData')))
   ipcMain.handle('configureHotkey', (event, options: HotkeyOptions) => {
     const window = BrowserWindow.fromWebContents(event.sender)
