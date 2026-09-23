@@ -4,7 +4,7 @@ import { Row, Segmented } from '@treeix/app/settingsUi'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage } from '@treeix/app/ui'
 import type { PullRequest } from '../shared/types'
-import { POLL_MINUTES, prSettings } from './api'
+import { api, POLL_MINUTES, prSettings } from './api'
 import { cachedPullRequests, findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
 import { pullRequestCommands } from './keys'
 import type { DetailProps } from './PullRequests'
@@ -61,11 +61,34 @@ function useViewProps(): DetailProps {
       host.addComment({ id: crypto.randomUUID(), worktreePath, filePath: patch.path, range: { start: 0, end: 0 }, code: '', text: '' })
       host.flash(`Added ${baseName(patch.path)} to comments on ${baseName(worktreePath)}`)
     },
+    // The log tail goes along: the agent may not have the CLI or access to the CI
+    onAddPipelineFailure: async (pr) => {
+      const worktreePath = checkoutOf(host, pr)
+      host.flash('Fetching the failed jobs...')
+      const jobs = await api.failedJobs(pr).catch((reason: unknown) => (host.flash(errorMessage(reason)), null))
+      if (!jobs) return
+      const logs = jobs.map((job) => `${job.name}:\n${fenced(job.log || '(no log)')}`)
+      host.addComment({
+        id: crypto.randomUUID(),
+        worktreePath,
+        filePath: pr.pipeline?.url ?? pr.url,
+        range: { start: 0, end: 0 },
+        code: '',
+        text: [`The pipeline of ${prefix(pr)}${pr.number} failed. Find the cause and fix it.`, ...logs].join('\n\n')
+      })
+      host.flash(`Added ${jobs.length === 1 ? 'the failed job' : `${jobs.length} failed jobs`} to comments on ${baseName(worktreePath)}`)
+    },
     onCreateWorktree: (pr) => {
       host.flash(`Creating worktree for ${pr.sourceBranch}...`)
       host.createWorktree(pr.repoPath, pr.sourceBranch).catch((reason: unknown) => host.flash(errorMessage(reason)))
     }
   }
+}
+
+/** A log as quoted data, fenced longer than any fence inside it */
+const fenced = (log: string): string => {
+  const fence = '`'.repeat(Math.max(3, ...(log.match(/`+/g) ?? []).map((run) => run.length + 1)))
+  return `${fence}\n${log}\n${fence}`
 }
 
 function DetailTab({ pr: opened }: { pr: PullRequest }): React.JSX.Element {
@@ -156,11 +179,11 @@ function PullRequestSettings(): React.JSX.Element {
 }
 
 /**
- * Opens a pull request link from elsewhere, like a terminal, as a tab. A new one may not be in the list yet,
+ * Opens a pull request or pipeline link from elsewhere, like a terminal, as the pull request's tab. A new one may not be in the list yet,
  * so the workspace's list is fetched once before giving up.
  */
 async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> {
-  if (!/\/(pull|merge_requests)\/\d+/.test(url)) return false
+  if (!/\/(pull|merge_requests|pipelines)\/\d+/.test(url)) return false
   const pr = findCachedPullRequest(url) ?? (host.scopeRepoPaths ? (await refreshPullRequests(host.scopeRepoPaths), findCachedPullRequest(url)) : null)
   if (!pr) return false
   host.openTab(detailTab(pr))

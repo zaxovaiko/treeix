@@ -1,7 +1,8 @@
 import type { MainPlugin } from '@treeix/sdk/main'
-import type { TerminalOptions } from '../shared/types'
+import type { SessionUsage, TerminalOptions, TranscriptRef } from '../shared/types'
 import { codexConversations } from './codex'
-import { watchStatuses, withStatusHooks } from './hooks'
+import { claudeCost, watchStatuses, withStatusHooks } from './hooks'
+import { searchTranscripts, transcriptUsage } from './transcripts'
 import { createTerminal, reportStatus, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
 
 const plugin: MainPlugin = {
@@ -26,6 +27,11 @@ const plugin: MainPlugin = {
     context.handle('cwd', (_, id: string) => terminalCwd(id))
     context.handle('ports', () => listeningPorts())
     context.handle('codexConversations', (_, cwd: string, since: number) => codexConversations(cwd, since))
+    context.handle('searchTranscripts', (_, query: string, refs: TranscriptRef[]) => searchTranscripts(String(query), Array.isArray(refs) ? refs : []))
+    context.handle('usage', async (_, ref: TranscriptRef): Promise<SessionUsage | null> => {
+      const [usage, costUsd] = await Promise.all([transcriptUsage(ref), statuses.then(({ folder }) => claudeCost(folder, ref.sessionId))])
+      return usage && { ...usage, costUsd }
+    })
     context.onDispose(killAllTerminals)
   }
 }

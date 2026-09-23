@@ -27,7 +27,11 @@ export type PullRequest = {
   review: ReviewStatus | null
   /** Open and can't merge cleanly into the target branch; false while the provider is still computing it */
   conflicts: boolean
+  /** CI on the head commit of an open PR: GitHub's checks, GitLab's pipeline; null when there is none or it was skipped */
+  pipeline: Pipeline | null
 }
+
+export type Pipeline = { status: 'passed' | 'failed' | 'running'; url: string }
 
 /**
  * `requested`: your review is (re-)requested. `approved`/`changes`/`commented`: your latest review.
@@ -89,6 +93,8 @@ export type PullRequestDetail = {
   viewer: string | null
   /** Your own latest verdict; null when you haven't approved or requested changes */
   myReview: 'approved' | 'changes' | null
+  /** Latest commit of the source branch, to tell what changed since you last looked */
+  headSha: string | null
 }
 
 /** Someone asked to review or who reviewed; `requested` means their review is currently pending */

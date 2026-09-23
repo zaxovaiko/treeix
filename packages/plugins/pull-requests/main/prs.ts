@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ConflictResult, ImageResult, Person, Provider, PullRequest, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
+import type { ConflictResult, ImageResult, Person, Provider, PullRequest, Pipeline, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
 
@@ -80,7 +80,8 @@ export function toGithubPullRequest(raw: Json, repoPath: string): PullRequest {
     changedFiles: numberOrNull(raw.changedFiles),
     commentCount: null,
     review: null,
-    conflicts: text(raw.mergeable) === 'CONFLICTING'
+    conflicts: text(raw.mergeable) === 'CONFLICTING',
+    pipeline: null
   }
 }
 
@@ -103,7 +104,8 @@ export function toGitlabPullRequest(raw: Json, repoPath: string): PullRequest {
     changedFiles: null,
     commentCount: numberOrNull(raw.user_notes_count),
     review: null,
-    conflicts: raw.has_conflicts === true && text(raw.state) === 'opened'
+    conflicts: raw.has_conflicts === true && text(raw.state) === 'opened',
+    pipeline: null
   }
 }
 
@@ -118,6 +120,7 @@ const REVIEW_QUERY = `query($q: String!) {
         reviewRequests(first: 30) { nodes { requestedReviewer { ... on User { login } } } }
         latestReviews(first: 30) { nodes { author { login } state commit { oid } } }
         commits(last: 100) { nodes { commit { oid } } }
+        head: commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
         comments { totalCount }
         reviewThreads { totalCount }
       }
@@ -162,6 +165,47 @@ export function githubReviewStatuses(raw: unknown): Map<number, ReviewStatus> {
   return statuses
 }
 
+const GITHUB_CHECKS: Record<string, Pipeline['status']> = { SUCCESS: 'passed', FAILURE: 'failed', ERROR: 'failed', PENDING: 'running', EXPECTED: 'running' }
+
+/** The head commit's check rollup per PR number, from REVIEW_QUERY's response; its checks tab is the pipeline's page */
+export function githubPipelines(raw: unknown): Map<number, Pipeline['status']> {
+  const statuses = new Map<number, Pipeline['status']>()
+  for (const pr of list(object(object(object(raw).data).search).nodes)) {
+    const number = numberOrNull(pr.number)
+    const state = text(object(object(object(list(object(pr.head).nodes)[0]).commit).statusCheckRollup).state)
+    if (number !== null && GITHUB_CHECKS[state]) statuses.set(number, GITHUB_CHECKS[state])
+  }
+  return statuses
+}
+
+// Skipped, manual and canceled pipelines say nothing about the code, so they show as none
+const GITLAB_PIPELINES: Record<string, Pipeline['status']> = {
+  SUCCESS: 'passed',
+  FAILED: 'failed',
+  RUNNING: 'running',
+  PENDING: 'running',
+  CREATED: 'running',
+  PREPARING: 'running',
+  WAITING_FOR_RESOURCE: 'running',
+  SCHEDULED: 'running'
+}
+
+/** The head pipeline of each open merge request by iid; GitLab's REST list doesn't include it */
+export function gitlabPipelines(raw: unknown, host: string): Map<number, Pipeline> {
+  const pipelines = new Map<number, Pipeline>()
+  for (const request of list(object(object(object(object(raw).data).project).mergeRequests).nodes)) {
+    const pipeline = object(request.headPipeline)
+    const status = GITLAB_PIPELINES[text(pipeline.status)]
+    const iid = Number(text(request.iid))
+    if (status && Number.isInteger(iid) && text(pipeline.path)) pipelines.set(iid, { status, url: `https://${host}${text(pipeline.path)}` })
+  }
+  return pipelines
+}
+
+const GITLAB_PIPELINE_QUERY = `query($path: ID!) {
+  project(fullPath: $path) { mergeRequests(state: opened, first: ${LIST_LIMIT}, sort: UPDATED_DESC) { nodes { iid headPipeline { status path } } } }
+}`
+
 // Same order and size as `gh pr list`, so counts cover every listed PR; review marks only apply to open ones
 const githubReviewData = (remote: Remote, repoPath: string): Promise<unknown> =>
   runJson('gh', ['api', 'graphql', '--hostname', remote.host, '-f', `q=repo:${remote.slug} is:pr sort:updated-desc`, '-f', `query=${REVIEW_QUERY}`], repoPath)
@@ -179,14 +223,28 @@ async function listForRepo(repoPath: string): Promise<PullRequest[]> {
     ])
     const reviews = githubReviewStatuses(reviewData)
     const counts = githubCommentCounts(reviewData)
-    return pullRequests.map((pr) => ({
-      ...pr,
-      review: pr.state === 'open' ? (reviews.get(pr.number) ?? null) : null,
-      commentCount: counts.get(pr.number) ?? null
-    }))
+    const checks = githubPipelines(reviewData)
+    return pullRequests.map((pr) => {
+      const check = pr.state === 'open' ? checks.get(pr.number) : undefined
+      return {
+        ...pr,
+        review: pr.state === 'open' ? (reviews.get(pr.number) ?? null) : null,
+        commentCount: counts.get(pr.number) ?? null,
+        pipeline: check ? { status: check, url: `${pr.url}/checks` } : null
+      }
+    })
   }
   const path = `projects/:id/merge_requests?state=all&order_by=updated_at&per_page=${LIST_LIMIT}`
-  return list(await runJson('glab', ['api', path], repoPath)).map((raw) => toGitlabPullRequest(raw, repoPath))
+  // Pipelines are a nicety too: the list still loads without them
+  const [requests, pipelineData] = await Promise.all([
+    runJson('glab', ['api', path], repoPath),
+    runJson('glab', ['api', 'graphql', '-f', `query=${GITLAB_PIPELINE_QUERY}`, '-f', `path=${remote.slug}`], repoPath).catch(() => null)
+  ])
+  const pipelines = gitlabPipelines(pipelineData, remote.host)
+  return list(requests).map((raw) => {
+    const pr = toGitlabPullRequest(raw, repoPath)
+    return pr.state === 'open' ? { ...pr, pipeline: pipelines.get(pr.number) ?? null } : pr
+  })
 }
 
 export async function listPullRequests(repoPaths: string[]): Promise<PullRequestList> {
@@ -366,6 +424,65 @@ export function githubFilesToPatches(files: Json[]): FilePatch[] {
   })
 }
 
+/** Paths that differ between two commits of a pull request; after a force push the old commit may be gone and this fails */
+export async function filesChangedBetween(pullRequest: PullRequest, from: string, to: string): Promise<string[]> {
+  const { repoPath } = pullRequest
+  if (!/^[0-9a-f]{7,64}$/.test(from) || !/^[0-9a-f]{7,64}$/.test(to)) throw new Error('Not a commit')
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  if (remote.provider === 'github') {
+    const compare = await runJson('gh', ['api', '--hostname', remote.host, `repos/${remote.slug}/compare/${from}...${to}`], repoPath)
+    return list(object(compare).files).map((file) => text(file.filename))
+  }
+  const compare = await runJson('glab', ['api', `projects/:id/repository/compare?from=${from}&to=${to}&straight=true`], repoPath)
+  return list(object(compare).diffs).map((diff) => text(diff.new_path))
+}
+
+const FAILED_JOBS_SHOWN = 3
+const LOG_TAIL_LINES = 80
+
+/** Newer runners stamp each line: `2026-09-23T17:01:55.886433Z 01O+` */
+const GITLAB_LINE_PREFIX = /^\d{4}-\d\d-\d\dT[\d:.]+Z [0-9a-f]{2}[OE]\+? ?/
+
+/** The end of a CI log without colors or GitLab's collapsible section markers, where the error usually is */
+export function logTail(log: string): string {
+  const lines = log
+    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^.*\r(?!$)/, '').replace(GITLAB_LINE_PREFIX, '').replace(/section_(start|end):\d+:\S+/g, ''))
+  while (lines.length > 0 && !lines.at(-1)?.trim()) lines.pop()
+  return lines.slice(-LOG_TAIL_LINES).join('\n')
+}
+
+/** The failed jobs of a pull request's pipeline, each with the tail of its log */
+export async function failedJobLogs(pullRequest: PullRequest): Promise<{ name: string; log: string }[]> {
+  const cwd = pullRequest.repoPath
+  if (pullRequest.provider === 'gitlab') {
+    const pipelineId = pullRequest.pipeline?.url.match(/\/pipelines\/(\d+)/)?.[1]
+    if (!pipelineId) return []
+    const jobs = await runJson('glab', ['api', `projects/:id/pipelines/${pipelineId}/jobs?scope[]=failed&per_page=${FAILED_JOBS_SHOWN}`], cwd)
+    return Promise.all(
+      (Array.isArray(jobs) ? jobs : []).slice(0, FAILED_JOBS_SHOWN).map(async (job) => ({
+        name: text(object(job).name),
+        log: logTail(await run('glab', ['api', `projects/:id/jobs/${String(object(job).id)}/trace`], cwd).catch(() => ''))
+      }))
+    )
+  }
+  const checks = await runJson('gh', ['pr', 'checks', `${pullRequest.number}`, '--json', 'name,bucket,link'], cwd).catch((reason: unknown) =>
+    // gh exits 1 when a check failed, with the JSON still on stdout
+    isJson(reason) && typeof reason.stdout === 'string' ? JSON.parse(reason.stdout) : []
+  )
+  const failed = (Array.isArray(checks) ? checks : []).map(object).filter((check) => check.bucket === 'fail')
+  return Promise.all(
+    failed.slice(0, FAILED_JOBS_SHOWN).map(async (check) => {
+      const jobId = text(check.link).match(/\/job\/(\d+)/)?.[1]
+      const log = jobId ? await run('gh', ['run', 'view', '--job', jobId, '--log-failed'], cwd).catch(() => '') : ''
+      // --log-failed prefixes every line with the job and step names
+      return { name: text(check.name), log: logTail(log.replace(/^[^\t\n]*\t[^\t\n]*\t/gm, '')) }
+    })
+  )
+}
+
 export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullRequestDetail> {
   const { repoPath, number } = pullRequest
   const remote = await remoteOf(repoPath)
@@ -396,7 +513,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
     }`
     const [filePatches, view, reviewComments, issueComments, extra] = await Promise.all([
       patches,
-      runJson('gh', ['pr', 'view', `${number}`, '-R', repo, '--json', 'body'], repoPath),
+      runJson('gh', ['pr', 'view', `${number}`, '-R', repo, '--json', 'body,headRefOid'], repoPath),
       pages(`repos/${remote.slug}/pulls/${number}/comments`),
       pages(`repos/${remote.slug}/issues/${number}/comments`),
       // Without it threads and files still show, just without resolve buttons and viewed marks
@@ -411,7 +528,8 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
       reviewers: githubReviewers(extra),
       assignees: list(object(object(object(object(object(extra).data).repository).pullRequest).assignees).nodes).map((user) => ({ login: text(user.login), avatarUrl: text(user.avatarUrl) || null })),
       myReview: githubMyReview(extra),
-      viewer: text(object(object(object(extra).data).viewer).login) || null
+      viewer: text(object(object(object(extra).data).viewer).login) || null,
+      headSha: text(object(view).headRefOid) || null
     }
   }
 
@@ -432,7 +550,8 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
     assignees: list(object(request).assignees).map(gitlabPerson),
     // GitLab tells only whether you approved; a change request shows as your reviewer state, not here
     myReview: object(approvals).user_has_approved === true ? 'approved' : null,
-    viewer
+    viewer,
+    headSha: text(object(object(request).diff_refs).head_sha) || null
   }
 }
 

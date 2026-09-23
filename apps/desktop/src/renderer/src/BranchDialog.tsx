@@ -7,8 +7,11 @@ import { Kbd, type SessionKind } from '@treeix/sdk'
 import { type Agent, useAgents } from './agents'
 import { useService } from './plugins'
 import { errorMessage, Popup, usePersisted } from './ui'
+import { raceBranches } from './worktreePlans'
 
-export type NewBranchRequest = { repoPath: string; name: string; base: string; worktree: boolean; session: SessionKind | null }
+/** Several agents race on the same prompt, each in a worktree of its own named after it */
+export type NewBranchRequest = { repoPath: string; name: string; base: string; worktree: boolean; sessions: SessionKind[]; prompt: string }
+
 
 const localName = (branch: string): string => branch.replace(/^origin\//, '')
 
@@ -125,7 +128,8 @@ export function BranchDialog({
   const [branches, setBranches] = useState<Branch[] | null>(null)
   const [name, setName] = useState(initialName)
   const [worktree, setWorktree] = useState(initialWorktree)
-  const [session, setSession] = usePersisted<SessionKind | null>('branchDialog.agent', null)
+  const [chosen, setChosen] = usePersisted<string>('branchDialog.agents', '')
+  const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const sessionsAvailable = useService('sessions') !== null
   const [error, setError] = useState<string | null>(null)
@@ -138,14 +142,15 @@ export function BranchDialog({
 
   const existing = branches?.find((branch) => localName(branch.name) === name.trim())
   const baseValue = base.trim() || 'HEAD'
-  const sessionKind = sessionsAvailable ? session : null
   const agents = useAgents()
+  const sessions = sessionsAvailable ? chosen.split(',').filter((id) => agents.some((agent) => agent.id === id)) : []
+  const toggleAgent = (id: string): void => setChosen((sessions.includes(id) ? sessions.filter((candidate) => candidate !== id) : [...sessions, id]).join(','))
 
   const submit = (): void => {
     if (!name.trim() || busy || (!worktree && existing)) return
     setBusy(true)
     setError(null)
-    onSubmit({ repoPath: repo.path, name: localName(name.trim()), base: baseValue, worktree, session: worktree ? sessionKind : null })
+    onSubmit({ repoPath: repo.path, name: localName(name.trim()), base: baseValue, worktree, sessions: worktree ? sessions : [], prompt: prompt.trim() })
       .then(onClose)
       .catch((reason: unknown) => setError(errorMessage(reason)))
       .finally(() => setBusy(false))
@@ -196,9 +201,9 @@ export function BranchDialog({
             {[null, ...agents].map((agent: Agent | null) => (
               <button
                 key={agent?.id ?? 'none'}
-                onClick={() => setSession(agent?.id ?? null)}
+                onClick={() => (agent ? toggleAgent(agent.id) : setChosen(''))}
                 className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ${
-                  (session ?? null) === (agent?.id ?? null) ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
+                  (agent ? sessions.includes(agent.id) : sessions.length === 0) ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
                 }`}
               >
                 {agent ? (
@@ -214,13 +219,32 @@ export function BranchDialog({
           </div>
         )}
 
+        {worktree && sessions.length > 0 && (
+          <>
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              rows={3}
+              placeholder={sessions.length > 1 ? 'Prompt every agent gets, optional' : 'Prompt, optional'}
+              className="mt-3 w-full resize-none rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
+            />
+            {sessions.length > 1 && name.trim() && (
+              <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                {raceBranches(localName(name.trim()), sessions)
+                  .map(({ branch }) => branch)
+                  .join(', ')}
+              </p>
+            )}
+          </>
+        )}
+
         {error && <p className="mt-3 text-xs break-words text-red-400 select-text">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
             Cancel
           </button>
           <button onClick={submit} disabled={!name.trim() || busy || (!worktree && Boolean(existing))} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
-            {busy ? 'Creating…' : worktree ? 'Create worktree' : existing ? 'Branch exists' : 'Create branch'}
+            {busy ? 'Creating…' : worktree ? (sessions.length > 1 ? `Create ${sessions.length} worktrees` : 'Create worktree') : existing ? 'Branch exists' : 'Create branch'}
             <Kbd hint>⌘⏎</Kbd>
           </button>
         </div>

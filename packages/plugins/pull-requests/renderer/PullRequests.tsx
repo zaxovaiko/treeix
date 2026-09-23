@@ -16,7 +16,7 @@ import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } fr
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { CommentDraft, orderRange } from '@treeix/app/Comments'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
-import { ConflictMark, groupPullRequests, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prefix, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
+import { ConflictMark, groupPullRequests, PipelineDot, PipelineLink, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prefix, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
 import { FilterSearch, matchesFilters, parseFilters, type PullRequestFilter } from './PullRequestFilter'
 import { usePullRequestKeys } from './keys'
 import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
@@ -112,6 +112,8 @@ export type DetailProps = {
   /** Adds a changed file's path to the agent comments */
   onAddFile: (pr: PullRequest, patch: FilePatch) => void
   onCreateWorktree: (pr: PullRequest) => void
+  /** Adds the failed jobs' logs to the agent comments */
+  onAddPipelineFailure: (pr: PullRequest) => void
 }
 
 function Segment<T extends string>({ value, options, onChange }: { value: T; options: [T, React.ReactNode][]; onChange: (value: T) => void }): React.JSX.Element {
@@ -277,6 +279,7 @@ export function PullRequestsView({
           <span title={pr.title} className={`min-w-0 flex-1 truncate text-[12.5px] ${settled ? '' : 'font-medium'}`}>
             {pr.title}
           </span>
+          <PipelineDot pipeline={pr.pipeline} />
           <span className="shrink-0 text-[10.5px] text-muted-foreground">{timeAgo(pr.updatedAt)}</span>
         </div>
         {/* Author, branch and the size of the change on one line; tags get their own line below */}
@@ -853,6 +856,42 @@ function useScopedState<T>(scope: string, initial: T): [T, React.Dispatch<React.
   return [initial, set]
 }
 
+/** Heads each pull request had at its last two visits to its files, kept on this machine */
+type Visit = { head: string; previous: string | null }
+
+function readVisit(key: string): Visit | null {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
+    return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'head') === 'string' ? (value as Visit) : null
+  } catch {
+    return null
+  }
+}
+
+/** Files that changed since the head seen at the previous visit; null on a first visit or when nothing moved */
+function useChangesSince(pr: PullRequest, head: string | null, looking: boolean): Set<string> | null {
+  const [since, setSince] = useScopedState<{ from: string; to: string; files: Set<string> } | null>(pr.url, null)
+  useEffect(() => {
+    if (!head || !looking) return
+    const key = `prs.visit:${pr.url}`
+    const stored = readVisit(key)
+    const visit: Visit = !stored ? { head, previous: null } : stored.head === head ? stored : { head, previous: stored.head }
+    if (visit !== stored) localStorage.setItem(key, JSON.stringify(visit))
+    const from = visit.previous
+    if (!from) return setSince(null)
+    if (since?.from === from && since.to === head) return
+    let stale = false
+    api.filesChangedBetween(pr, from, head).then(
+      (files) => stale || setSince({ from, to: head, files: new Set(files) }),
+      () => stale || setSince(null)
+    )
+    return () => {
+      stale = true
+    }
+  }, [pr.url, head, looking])
+  return since && since.to === head ? since.files : null
+}
+
 export function PullRequestDetailView({
   pr,
   list,
@@ -864,7 +903,8 @@ export function PullRequestDetailView({
   onAddToComments,
   onAddNote,
   onAddFile,
-  onCreateWorktree
+  onCreateWorktree,
+  onAddPipelineFailure
 }: DetailProps & {
   pr: PullRequest
   /** The pull request list, when it sits beside this view */
@@ -965,7 +1005,10 @@ export function PullRequestDetailView({
     await load()
   }
 
-  const patches = detail?.patches ?? []
+  const since = useChangesSince(pr, detail?.headSha ?? null, view === 'files')
+  const [sinceOnly, setSinceOnly] = useScopedState(pr.url, false)
+  const allPatches = detail?.patches ?? []
+  const patches = useMemo(() => (sinceOnly && since ? allPatches.filter((patch) => since.has(patch.path)) : allPatches), [allPatches, since, sinceOnly])
   const folders = useMemo(() => folderPaths(patches), [patches])
   // A review opens with every folder of its files open, whatever the app's default for folder groups
   useEffect(() => {
@@ -1083,6 +1126,11 @@ export function PullRequestDetailView({
   const addThread = (thread: ReviewThread): void => {
     onAddToComments(pr, thread)
     setAddedThreads(new Set(addedThreads).add(thread.id))
+  }
+  const addUnresolved = (): void => {
+    const fresh = allThreads.filter((thread) => thread.resolved === false && !addedThreads.has(thread.id))
+    fresh.forEach((thread) => onAddToComments(pr, thread))
+    setAddedThreads(new Set([...addedThreads, ...fresh.map((thread) => thread.id)]))
   }
   const addFile = (patch: FilePatch): void => {
     onAddFile(pr, patch)
@@ -1671,6 +1719,13 @@ export function PullRequestDetailView({
           {pr.additions !== null && <span className="font-mono text-emerald-400">+{pr.additions}</span>}
           {pr.deletions !== null && <span className="font-mono text-red-400">-{pr.deletions}</span>}
           <span className="whitespace-nowrap">updated {timeAgo(pr.updatedAt)} ago</span>
+          <PipelineLink pipeline={pr.pipeline} />
+          {pr.pipeline?.status === 'failed' && (
+            <button title="Add the failed jobs' logs to agent comments" onClick={() => onAddPipelineFailure(pr)} className="flex shrink-0 items-center gap-1 rounded px-1 whitespace-nowrap hover:bg-accent hover:text-foreground">
+              <Icon name="plus" className="size-3" />
+              agent
+            </button>
+          )}
           {detail && detail.reviewers.length > 0 && (
             <button onClick={showReviewers} className="flex shrink-0 items-center gap-1.5 rounded px-1 hover:bg-accent hover:text-foreground">
               reviewers
@@ -1707,7 +1762,16 @@ export function PullRequestDetailView({
           <Kbd hint>[</Kbd>
           <Kbd hint>]</Kbd>
           <span className="flex-1" />
-          {unresolvedCount > 0 && <span className="text-[11px] whitespace-nowrap text-amber-400">{unresolvedCount} unresolved</span>}
+          {unresolvedCount > 0 && (
+            <button
+              title="Add every unresolved thread to agent comments"
+              onClick={addUnresolved}
+              className="flex items-center gap-1 rounded px-1 text-[11px] whitespace-nowrap text-amber-400 hover:bg-accent"
+            >
+              {unresolvedCount} unresolved
+              <Icon name="plus" className="size-3" />
+            </button>
+          )}
           {resolvedCount > 0 && (
             <button onClick={() => setShowResolved(!showResolved)} className="text-[11px] whitespace-nowrap text-muted-foreground hover:text-foreground">
               {showResolved ? `Hide ${resolvedCount} resolved` : `Show ${resolvedCount} resolved`}
@@ -1770,6 +1834,15 @@ export function PullRequestDetailView({
           <span className="truncate font-medium" title={`Click a line number in a diff to comment on ${providerName(pr)}`}>
             {patches.length} files
           </span>
+          {since && (
+            <button
+              title={sinceOnly ? 'Show every file' : 'Only the files that changed since your last visit'}
+              onClick={() => setSinceOnly(!sinceOnly)}
+              className={`shrink-0 rounded px-1.5 py-0.5 whitespace-nowrap ${sinceOnly ? 'bg-amber-400/15 text-amber-400' : 'text-amber-400/80 hover:bg-accent'}`}
+            >
+              {since.size} new
+            </button>
+          )}
           <Kbd hint>n</Kbd>
           <Kbd hint>p</Kbd>
           <span className="flex-1" />

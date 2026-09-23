@@ -8,13 +8,17 @@ import {
   type LineRange,
   type PatchRow,
   patchRows,
+  changeBlockStarts,
   rangeLabel,
   type ReviewComment
 } from '../../shared/comments'
 import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
 import { getAgents, isAgent } from './agents'
 import { keptPages, keyboardPage, visitedIn } from './keepAlive'
+import { CleanupDialog } from './CleanupDialog'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
+import { raceBranches } from './worktreePlans'
+import { shellQuote } from '../../shared/shell'
 import { HistoryDialog } from './HistoryDialog'
 import type { Branch, CodeLocation, FilePatch, SearchMatch, Repo, Worktree, WorktreeFiles } from '../../shared/types'
 import { allFolders, ChangedFileList, folderPaths } from './ChangedFiles'
@@ -538,28 +542,33 @@ function App(): React.JSX.Element {
     if (appTab === key) setAppTab(tab?.parent ?? 'worktrees')
   }
 
-  const startSession = (kind: SessionKind, cwd = defaultCwd): void => {
+  const startSession = (kind: SessionKind, cwd = defaultCwd, prompt = ''): void => {
     const service = findService('sessions')
     if (!service) return
-    void service.start(cwd, kind)
+    void service.start(cwd, kind, prompt ? shellQuote(prompt) : undefined)
     // Sessions show in the terminal panel unless the Terminal tab is already open
     if (appTab !== 'terminal' && panelIds.includes('terminal') && !dock.isVisible('terminal')) dock.show('terminal')
   }
 
   const sessionsAvailable = findService('sessions') !== null
+  const [cleanupOpen, setCleanupOpen] = useState(false)
   const [branchDialog, setBranchDialog] = useState<{ repo: Repo; worktree: boolean; base?: string } | null>(null)
   const [prompt, setPrompt] = useState<{ title: string; description?: string; placeholder?: string; initialValue?: string; confirmLabel: string; onSubmit: (value: string) => Promise<void> } | null>(null)
 
-  const createWorktree = async (repoPath: string, branch: string, base?: string, session: SessionKind | null = null): Promise<void> => {
+  const createWorktree = async (repoPath: string, branch: string, base?: string, session: SessionKind | null = null, prompt = ''): Promise<void> => {
     const path = await window.api.addWorktree(repoPath, branch, base)
     flash(`Created worktree ${branch}`)
     rescan()
     openWorktree(path)
-    if (session) startSession(session, path)
+    if (session) startSession(session, path, prompt)
   }
 
-  const submitBranch = async ({ repoPath, name, base, worktree, session }: NewBranchRequest): Promise<void> => {
-    if (worktree) return createWorktree(repoPath, name, base, session)
+  const submitBranch = async ({ repoPath, name, base, worktree, sessions, prompt }: NewBranchRequest): Promise<void> => {
+    // One after another: git locks the repository while it adds a worktree
+    if (worktree) {
+      for (const { branch, session } of raceBranches(name, sessions)) await createWorktree(repoPath, branch, base, session, prompt)
+      return
+    }
     await window.api.createBranch(repoPath, name, base)
     flash(`Created branch ${name}`)
     rescan()
@@ -631,6 +640,7 @@ function App(): React.JSX.Element {
       },
       { label: 'New workspace…', run: () => setEditingWorkspace(null) },
       null,
+      { label: 'Clean up worktrees…', run: () => setCleanupOpen(true) },
       { label: 'Rescan worktrees', accelerator: 'R', run: rescan }
     ])
 
@@ -982,6 +992,15 @@ function App(): React.JSX.Element {
     // An open file handles the comment keys itself
     if (viewer || !file) return
     const arrow = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
+    if (id === 'wt.nextChange' || id === 'wt.previousChange') {
+      const forward = id === 'wt.nextChange'
+      const starts = changeBlockStarts(diffRows)
+      const target = forward ? starts.find((start) => start > lineCursor) : starts.findLast((start) => start < lineCursor)
+      if (target !== undefined) return act(() => setLineCursor(target))
+      const at = files.findIndex((candidate) => candidate.path === file.path)
+      const next = files[at + (forward ? 1 : -1)]
+      return next ? act(() => showDiff(next.path)) : undefined
+    }
     if (id === 'wt.lineDown' || id === 'wt.lineUp' || arrow) return act(() => moveLineCursor(id === 'wt.lineDown' || arrow === 1 ? 1 : -1))
     const row = cursorRow ?? diffRows[firstChange]
     if ((id === 'wt.comment' || id === 'wt.commentAlt') && row) {
@@ -1337,6 +1356,7 @@ function App(): React.JSX.Element {
   }
 
   const commands: Command[] = [
+    { id: 'cleanup', group: 'Actions', label: 'Clean up worktrees', icon: 'trash', run: () => setCleanupOpen(true) },
     { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: actionKeys('wt.rescan') || undefined, run: rescan },
     { id: 'settings', group: 'Actions', label: 'Settings', icon: 'settings', shortcut: actionKeys('app.settings') || undefined, run: openSettings },
     ...tabs.map((tab): Command => {
@@ -1952,6 +1972,18 @@ function App(): React.JSX.Element {
         />
       )}
       {prompt && <TextPrompt {...prompt} onClose={() => setPrompt(null)} />}
+      {cleanupOpen && (
+        <CleanupDialog
+          repos={workspaceRepos ? reposInScope(workspaceRepos, scope) : []}
+          onRemoved={(paths) => {
+            if (paths.length === 0) return
+            if (selected && paths.includes(selected)) setSelected(null)
+            flash(`Removed ${paths.length} ${paths.length === 1 ? 'worktree' : 'worktrees'}`)
+            rescan()
+          }}
+          onClose={() => setCleanupOpen(false)}
+        />
+      )}
       {branchDialog && (
         <BranchDialog
           repo={branchDialog.repo}

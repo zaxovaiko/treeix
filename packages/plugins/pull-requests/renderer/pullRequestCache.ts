@@ -32,10 +32,10 @@ export const samePullRequestUrl = (url: string, prUrl: string): boolean => {
   return clean === prUrl || clean.startsWith(`${prUrl}/`)
 }
 
-/** Newest fetch first, so a scope refreshed a while ago can't hand back an older copy */
+/** By its own address or its pipeline's; newest fetch first, so a scope refreshed a while ago can't hand back an older copy */
 export function findCachedPullRequest(url: string): PullRequest | null {
   for (const { list } of [...lists.values()].reverse()) {
-    const found = list.pullRequests.find((pr) => samePullRequestUrl(url, pr.url))
+    const found = list.pullRequests.find((pr) => samePullRequestUrl(url, pr.url) || (pr.pipeline != null && samePullRequestUrl(url, pr.pipeline.url)))
     if (found) return found
   }
   return null

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { splitPatch } from '@treeix/host/git'
-import { githubFilesToPatches, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview } from './prs'
+import { githubFilesToPatches, githubPipelines, gitlabPipelines, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview, logTail } from './prs'
 
 test('parseRemote', () => {
   expect(parseRemote('git@github.com:blurifycom/openora.git')).toEqual({ provider: 'github', host: 'github.com', slug: 'blurifycom/openora' })
@@ -185,4 +185,22 @@ test('parseMergeTreeConflicts lists each conflicted path once and stops at the m
   expect(parseMergeTreeConflicts('438ac9c\nsrc/a.ts\nsrc/a.ts\nb.md\n\nAuto-merging src/a.ts\n')).toEqual(['src/a.ts', 'b.md'])
   expect(parseMergeTreeConflicts('438ac9c\nx\n')).toEqual(['x'])
   expect(parseMergeTreeConflicts('438ac9c\n')).toEqual([])
+})
+
+test('githubPipelines reads the head commit check rollup', () => {
+  const head = (state: string | null) => ({ nodes: [{ commit: { statusCheckRollup: state ? { state } : null } }] })
+  const raw = { data: { search: { nodes: [{ number: 1, head: head('SUCCESS') }, { number: 2, head: head('ERROR') }, { number: 3, head: head('PENDING') }, { number: 4, head: head(null) }] } } }
+  expect([...githubPipelines(raw)]).toEqual([[1, 'passed'], [2, 'failed'], [3, 'running']])
+})
+
+test('gitlabPipelines links each merge request to its head pipeline and skips ones that say nothing', () => {
+  const node = (iid: string, status: string) => ({ iid, headPipeline: { status, path: `/g/p/-/pipelines/${iid}` } })
+  const raw = { data: { project: { mergeRequests: { nodes: [node('7', 'FAILED'), node('8', 'SKIPPED'), { iid: '9', headPipeline: null }] } } } }
+  expect([...gitlabPipelines(raw, 'gitlab.example.com')]).toEqual([[7, { status: 'failed', url: 'https://gitlab.example.com/g/p/-/pipelines/7' }]])
+})
+
+test('logTail drops colors, GitLab stamps, sections and progress redraws, keeping the end', () => {
+  const log = ['\x1b[32;1mstep\x1b[0m', '2026-09-23T17:01:55.886433Z 01O+section_start:1:build\rbuilding', 'progress 1%\rprogress 100%', 'error TS2307', '', '']
+  expect(logTail(log.join('\n'))).toBe('step\nbuilding\nprogress 100%\nerror TS2307')
+  expect(logTail(Array.from({ length: 200 }, (_, index) => `${index}`).join('\n')).split('\n')).toHaveLength(80)
 })

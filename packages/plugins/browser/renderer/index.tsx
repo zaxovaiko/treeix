@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createBridge, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
+import { type Command, createBridge, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { BrowserView, runBrowserAction } from './BrowserView'
 import { DesignPopover } from './DesignPopover'
@@ -43,6 +43,16 @@ const SHORTCUTS: ShortcutInfo[] = (
 function openUrl(url: string): void {
   updateBrowser((state) => openTab(state, url))
   if (host && !host.isPanelVisible(TAB_ID)) host.setActiveTab(TAB_ID)
+}
+
+/** Dev servers started from the palette; their first port opens in the browser without asking */
+const pendingDevServers = new Set<string>()
+
+async function runDevServer(current: HostApi, folder: string): Promise<void> {
+  const sessions = current.service('sessions')
+  const command = await bridge.invoke<string | null>('devServerCommand', folder)
+  if (!sessions || !command) return current.flash('No dev, start or serve script in package.json')
+  pendingDevServers.add(await sessions.runCommand(folder, command))
 }
 
 const NOTICE_MS = 12_000
@@ -94,11 +104,13 @@ function ServerNotices(): React.JSX.Element | null {
     return service.subscribe(() => {
       const ports = service.getPorts()
       const fresh = ports.filter((port) => !known.has(portKey(port)))
+      const started = fresh.filter((port) => pendingDevServers.delete(port.sessionId))
+      started.forEach((port) => openUrl(port.url))
       const live = new Set(ports.map(portKey))
       known = live
       const notify = Date.now() >= settleUntil && browserSettings.get().notifyPorts
       const added = (notify ? fresh : [])
-        .filter((port) => !showsPort(port.port))
+        .filter((port) => !showsPort(port.port) && !started.includes(port))
         .map((port) => ({ id: nextNoticeId++, key: portKey(port), url: port.url, label: `localhost:${port.port}`, detail: portDetail(service.getSessions(), host?.repos ?? null, port) }))
       setNotices((list) => {
         // Stopped servers take their card with them
@@ -212,7 +224,12 @@ const plugin: RendererPlugin = {
     runBrowserAction('closeTab')
     return true
   },
-  commands: () => [{ id: 'browser:new', group: 'Actions', label: 'New browser tab', icon: 'globe', shortcut: '⌘T', run: () => (openUrl('about:blank'), setTimeout(() => runBrowserAction('focusAddress'), 50)) }],
+  commands: (current) => [
+    ...(current.selectedWorktree && current.service('sessions')
+      ? [{ id: 'browser:devServer', group: 'Actions', label: `Run dev server in ${current.selectedWorktreeLabel ?? 'the worktree'}`, icon: 'terminal', run: () => void runDevServer(current, current.selectedWorktree ?? '') } satisfies Command]
+      : []),
+    { id: 'browser:new', group: 'Actions', label: 'New browser tab', icon: 'globe', shortcut: '⌘T', run: () => (openUrl('about:blank'), setTimeout(() => runBrowserAction('focusAddress'), 50)) }
+  ],
   shortcuts: SHORTCUTS,
   Settings: BrowserSettings,
   services: {

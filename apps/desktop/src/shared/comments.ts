@@ -66,6 +66,11 @@ export function patchRows(patch: string): PatchRow[] {
   return rows
 }
 
+const isChange = (row: PatchRow | undefined): boolean => row !== undefined && (row.text.startsWith('+') || row.text.startsWith('-'))
+
+/** Where each block of changed rows starts, for jumping between them */
+export const changeBlockStarts = (rows: PatchRow[]): number[] => rows.flatMap((row, index) => (isChange(row) && !isChange(rows[index - 1]) ? [index] : []))
+
 export function extractLines(patch: string, range: LineRange): string {
   const rows = patchRows(patch)
   const startSide = range.side ?? 'additions'

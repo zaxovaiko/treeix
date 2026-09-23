@@ -1,6 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
-import { assignableUsers, closePullRequest, setAssigned, commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
+import { failedJobLogs, filesChangedBetween, assignableUsers, closePullRequest, setAssigned, commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
 
 const plugin: MainPlugin = {
   tools: [
@@ -11,6 +11,8 @@ const plugin: MainPlugin = {
     context.handle('list', (_, repoPaths: string[]) => listPullRequests(repoPaths))
     context.handle('detail', (_, pullRequest: PullRequest) => pullRequestDetail(pullRequest))
     context.handle('file', (_, pullRequest: PullRequest, filePath: string) => pullRequestFile(pullRequest, filePath))
+    context.handle('changedBetween', (_, pullRequest: PullRequest, from: string, to: string) => filesChangedBetween(pullRequest, String(from), String(to)))
+    context.handle('failedJobs', (_, pullRequest: PullRequest) => failedJobLogs(pullRequest))
     context.handle('conflicts', (_, pullRequest: PullRequest) => conflictingFiles(pullRequest))
     context.handle('image', (_, pullRequest: PullRequest, source: string) => pullRequestImage(pullRequest, source))
     context.handle('setThreadResolved', (_, pullRequest: PullRequest, thread: ReviewThread, resolved: boolean) => setThreadResolved(pullRequest, thread, resolved))

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { commentsPrompt, extractFileLines, extractLines, formatComments, isReviewComment, rangeLabel, type ReviewComment } from './comments'
+import { commentsPrompt, extractFileLines, extractLines, formatComments, isReviewComment, rangeLabel, type ReviewComment, changeBlockStarts } from './comments'
 
 const base = { worktreePath: '/repo', range: { start: 0, end: 0 }, code: '' }
 
@@ -87,4 +87,9 @@ test('a reference carries its own text only when nothing else can fetch it', () 
   expect(commentsPrompt([{ ...ticket, inline: true }], null)).toBe('Jira BF-1 https://x/BF-1\n\nTranslations are missing on the invoice.\n')
   // The link stays in front of the body, so an agent that can fetch more still knows where to look
   expect(commentsPrompt([{ ...ticket, inline: true }], null).startsWith('Jira BF-1 https://x/BF-1')).toBe(true)
+})
+
+test('changeBlockStarts finds the first row of each run of changes', () => {
+  const rows = ['+a', '+b', ' c', '-d', '+e', ' f', '+g'].map((text) => ({ old: null, new: null, text }))
+  expect(changeBlockStarts(rows)).toEqual([0, 3, 6])
 })

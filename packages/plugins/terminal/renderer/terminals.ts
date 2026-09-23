@@ -11,7 +11,7 @@ import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './pane
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
-import type { AgentHookStatus, LiveTerminal } from '../shared/types'
+import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
 import { isDefaultChatTitle, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 
 export { type SessionKind, type SessionStatus, type SessionView }
@@ -91,8 +91,20 @@ subscribeSettings(() => {
 /** What each agent session last reported through its hooks, see the terminal plugin's main hooks */
 const hookStatus = new Map<string, AgentHookStatus>()
 bridge.on('status', (id, status) => {
-  if (typeof id === 'string' && (status === 'input' || status === 'working')) hookStatus.set(id, status)
+  if (typeof id !== 'string' || (status !== 'input' && status !== 'working' && status !== 'done')) return
+  const previous = hookStatus.get(id)
+  hookStatus.set(id, status)
+  // Claude's idle reminder a minute after its turn ended says nothing new
+  if (status === 'done' || (status === 'input' && previous !== 'done' && previous !== 'input')) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
 })
+
+/** A system notification while the window is in the background; clicking it shows the session */
+function notifyAgent(id: string, what: string): void {
+  const session = findSession(id)
+  if (!session || !getSettings().agentNotifications || document.hasFocus()) return
+  const notification = new Notification(`${agentOr(session.kind).label} ${what}`, { body: session.title })
+  notification.onclick = () => revealSession(id)
+}
 
 const ACTIVE_WINDOW_MS = 2000
 // ponytail: screen-scraped prompt detection, switch to Claude Code hooks if it misfires
@@ -124,6 +136,15 @@ let webLinkHandler: ((url: string) => void) | null = null
 export const setWebLinkHandler = (handler: typeof webLinkHandler): void => {
   webLinkHandler = handler
 }
+
+/** The agent conversation behind a session or closed session, when it has one to read */
+export const transcriptRef = (session: (SessionMeta & { id: string }) | undefined): TranscriptRef | null =>
+  session?.agentSessionId ? { sessionId: session.id, kind: session.kind, agentSessionId: session.agentSessionId } : null
+
+/** Ids of the sessions whose conversation mentions `query` */
+export const searchTranscripts = (query: string, refs: TranscriptRef[]): Promise<string[]> => bridge.invoke<string[]>('searchTranscripts', query, refs).catch(() => [])
+
+export const sessionUsage = (ref: TranscriptRef): Promise<SessionUsage | null> => bridge.invoke<SessionUsage | null>('usage', ref).catch(() => null)
 
 const HISTORY_KEY = 'terminals.history'
 const HISTORY_LIMIT = 100

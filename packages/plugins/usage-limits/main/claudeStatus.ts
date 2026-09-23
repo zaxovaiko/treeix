@@ -8,7 +8,8 @@ const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)
 
 /**
  * Claude Code hands every status line command its session state, including the account's
- * rate_limits after each API response. The bridge keeps that input for the title bar, then
+ * rate_limits after each API response. The bridge keeps that input for the title bar, and each session's for the
+ * terminal plugin, which reads the session's cost from it (see its USAGE_PREFIX). Then it
  * runs the user's own status line on the same input so their terminal looks unchanged.
  */
 export function bridgeScript(statusFile: string): string {
@@ -18,6 +19,9 @@ input=$(cat)
 case "$input" in
   *'"rate_limits"'*) printf '%s' "$input" > ${shellQuote(`${statusFile}.tmp`)} && mv -f ${shellQuote(`${statusFile}.tmp`)} ${shellQuote(statusFile)} ;;
 esac
+if [ -n "$TREEIX_AGENT_STATUS" ] && [ -n "$TREEIX_SESSION_ID" ]; then
+  printf '%s' "$input" > "$TREEIX_AGENT_STATUS/usage-$TREEIX_SESSION_ID" 2>/dev/null
+fi
 if [ -n "$TREEIX_PREVIOUS_STATUSLINE" ]; then
   printf '%s' "$input" | sh -c "$TREEIX_PREVIOUS_STATUSLINE"
 fi

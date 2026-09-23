@@ -7,6 +7,7 @@ import type { ImportInfo } from '../shared/types'
 import { importCookies } from './cookies/importer'
 import { listProfiles, profileSource } from './cookies/profiles'
 import { captureElement, responseBody, watchGuest } from './guests'
+import { devServerCommand } from './devServer'
 
 const isImportInfo = (value: unknown): value is ImportInfo =>
   value === null ||
@@ -14,6 +15,7 @@ const isImportInfo = (value: unknown): value is ImportInfo =>
 
 const plugin: MainPlugin = {
   activate: (context) => {
+    context.handle('devServerCommand', (_, folder: string) => (typeof folder === 'string' ? devServerCommand(folder) : null))
     // Only pages embedded by the window asking may be wired, so one window can't reach another's pages
     context.handle('attach', (event, guestId: number) => {
       const guest = webContents.fromId(guestId)

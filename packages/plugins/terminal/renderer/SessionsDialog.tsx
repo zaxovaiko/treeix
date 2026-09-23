@@ -6,7 +6,18 @@ import { timeAgo } from '@treeix/app/time'
 import { Keys } from '@treeix/sdk'
 import { type Task, taskOf } from './tasks'
 import { taskLabel } from './taskUi'
-import { type ClosedSession, forgetClosedSession, killSession, type Session } from './terminals'
+import { type ClosedSession, forgetClosedSession, killSession, searchTranscripts, type Session, sessionUsage, transcriptRef } from './terminals'
+import type { SessionUsage } from '../shared/types'
+
+/** Shorter queries match too many conversations to be useful, and each search reads every transcript */
+const CONTENT_QUERY_MIN = 3
+const CONTENT_SEARCH_DELAY_MS = 300
+
+const tokens = (count: number): string => (count >= 1_000_000 ? `${(count / 1_000_000).toFixed(1)}M` : count >= 1000 ? `${Math.round(count / 1000)}k` : `${count}`)
+
+/** "1.2M in · 34k out · 3.1M cached · $3.40" */
+export const usageLabel = ({ input, output, cached, costUsd }: SessionUsage): string =>
+  [`${tokens(input)} in`, `${tokens(output)} out`, cached > 0 && `${tokens(cached)} cached`, costUsd !== undefined && `$${costUsd.toFixed(2)}`].filter(Boolean).join(' · ')
 
 const GROUPS = [
   ['input', 'Needs input'],
@@ -51,8 +62,34 @@ export function SessionsDialog({
     entry
   }))
   const needle = query.trim().toLowerCase()
-  const rows = GROUPS.flatMap(([group]) => [...live, ...closed].filter((row) => row.group === group && `${row.label} ${row.detail}`.toLowerCase().includes(needle)))
+  const [contentHits, setContentHits] = useState<Set<string>>(new Set())
+  const [usage, setUsage] = useState<{ id: string; usage: SessionUsage | null } | null>(null)
+  const idOf = (row: Row): string => row.session?.id ?? row.entry?.id ?? ''
+  const titleMatch = (row: Row): boolean => `${row.label} ${row.detail}`.toLowerCase().includes(needle)
+  const rows = GROUPS.flatMap(([group]) => [...live, ...closed].filter((row) => row.group === group && (titleMatch(row) || contentHits.has(idOf(row)))))
   const current = Math.min(active, rows.length - 1)
+  const shown = rows[current]
+  const shownRef = shown ? transcriptRef(shown.session ?? shown.entry) : null
+
+  // Conversations are searched once typing pauses; a newer query drops the older answer
+  useEffect(() => {
+    if (needle.length < CONTENT_QUERY_MIN) return setContentHits(new Set())
+    let stale = false
+    const refs = [...live, ...closed].flatMap((row) => transcriptRef(row.session ?? row.entry) ?? [])
+    const timer = setTimeout(() => void searchTranscripts(needle, refs).then((ids) => stale || setContentHits(new Set(ids))), CONTENT_SEARCH_DELAY_MS)
+    return () => {
+      stale = true
+      clearTimeout(timer)
+    }
+  }, [needle])
+  useEffect(() => {
+    if (!shownRef) return setUsage(null)
+    let stale = false
+    void sessionUsage(shownRef).then((result) => stale || setUsage({ id: shownRef.sessionId, usage: result }))
+    return () => {
+      stale = true
+    }
+  }, [shownRef?.sessionId])
 
   // Closing puts focus back where it was; a picked session takes it right after
   useEffect(() => {
@@ -96,7 +133,7 @@ export function SessionsDialog({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={mode === 'closed' ? 'Reopen a closed session' : 'Find a session by title or group'}
+            placeholder={mode === 'closed' ? 'Reopen a closed session, or search its conversation' : 'Find a session by title, group or conversation'}
             spellCheck={false}
             className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
           />
@@ -121,6 +158,7 @@ export function SessionsDialog({
                 {row.session && <StatusDot session={row.session} />}
                 <span className="min-w-0 truncate">{row.label}</span>
                 <span className="min-w-0 truncate text-xs text-muted-foreground">{row.detail}</span>
+                {!titleMatch(row) && <span className="shrink-0 text-[11px] text-muted-foreground/70">in conversation</span>}
                 <span className="flex-1" />
                 <button
                   title={row.session ? 'Close session to History (⌘⌫)' : 'Remove from History (⌘⌫)'}
@@ -140,6 +178,8 @@ export function SessionsDialog({
         </div>
         <div className="flex h-8 shrink-0 items-center gap-3 overflow-hidden border-t border-border px-3 text-[11px] text-muted-foreground">
           <span className="truncate">Closed sessions reopen as a new tab of their group</span>
+          <span className="flex-1" />
+          {shownRef && usage?.id === shownRef.sessionId && usage.usage && <span className="shrink-0 tabular-nums">{usageLabel(usage.usage)}</span>}
         </div>
       </div>
     </div>

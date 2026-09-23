@@ -12,7 +12,7 @@ const report = (status: AgentHookStatus): { hooks: { type: 'command'; command: s
   hooks: [{ type: 'command', command: `[ -n "$TREEIX_SESSION_ID" ] && printf ${status} > "$TREEIX_AGENT_STATUS/$TREEIX_SESSION_ID" 2>/dev/null; true` }]
 })
 
-/** Claude settings with hooks that report when it needs the user (a permission prompt or idle question) and when it works again */
+/** Claude settings with hooks that report when it needs the user (a permission prompt or idle question), works again, or ends its turn */
 export function withStatusHooks(settings: string): string {
   let parsed: Record<string, unknown> = {}
   try {
@@ -22,17 +22,32 @@ export function withStatusHooks(settings: string): string {
     // Unreadable settings from a plugin still get the hooks
   }
   const working = report('working')
-  const hooks = { Notification: [report('input')], UserPromptSubmit: [working], PreToolUse: [{ matcher: '*', ...working }], PostToolUse: [{ matcher: '*', ...working }], Stop: [working] }
+  const hooks = { Notification: [report('input')], UserPromptSubmit: [working], PreToolUse: [{ matcher: '*', ...working }], PostToolUse: [{ matcher: '*', ...working }], Stop: [report('done')] }
   return JSON.stringify({ ...parsed, hooks })
 }
 
-const isHookStatus = (value: string): value is AgentHookStatus => value === 'input' || value === 'working'
+/** The usage-limits plugin's status line bridge keeps each session's last status line input here as `usage-<session id>` */
+export const USAGE_PREFIX = 'usage-'
+
+/** Claude's own running cost of the session, from its last status line input */
+export async function claudeCost(folder: string, sessionId: string): Promise<number | undefined> {
+  try {
+    const input: unknown = JSON.parse(await readFile(join(folder, `${USAGE_PREFIX}${sessionId}`), 'utf8'))
+    const cost = typeof input === 'object' && input !== null ? Reflect.get(input, 'cost') : null
+    const total = typeof cost === 'object' && cost !== null ? Reflect.get(cost, 'total_cost_usd') : null
+    return typeof total === 'number' ? total : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const isHookStatus = (value: string): value is AgentHookStatus => value === 'input' || value === 'working' || value === 'done'
 
 /** Makes the folder hooks write to and calls `onStatus` for every report; the returned function removes it */
 export async function watchStatuses(onStatus: (sessionId: string, status: AgentHookStatus) => void): Promise<{ folder: string; stop: () => void }> {
   const folder = await mkdtemp(join(tmpdir(), 'treeix-agent-status-'))
   const watcher = watch(folder, (_event, name) => {
-    if (!name) return
+    if (!name || name.startsWith(USAGE_PREFIX)) return
     void readFile(join(folder, name), 'utf8')
       .then((text) => isHookStatus(text.trim()) && onStatus(name, text.trim() as AgentHookStatus))
       .catch(() => undefined)

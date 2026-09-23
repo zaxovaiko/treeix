@@ -26,3 +26,12 @@ test('bridge keeps inputs with rate limits and still runs the previous status li
   expect(run(withLimits, 'cat; echo " shown"')).toBe(`${withLimits} shown\n`)
   expect(readFileSync(statusFile, 'utf8')).toBe(withLimits)
 })
+
+test('bridge keeps each Treeix session its own input, for its cost', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'treeix bridge '))
+  const script = join(folder, 'statusline.sh')
+  writeFileSync(script, bridgeScript(join(folder, 'latest.json')))
+  const input = '{"cost":{"total_cost_usd":1.25}}'
+  execFileSync('sh', [script], { input, env: { PATH: process.env.PATH ?? '', TREEIX_AGENT_STATUS: folder, TREEIX_SESSION_ID: 'abc' } })
+  expect(readFileSync(join(folder, 'usage-abc'), 'utf8')).toBe(input)
+})

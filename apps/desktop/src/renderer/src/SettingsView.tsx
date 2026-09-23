@@ -248,7 +248,7 @@ function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel'>(key: K, o
   }
 }
 
-function toggle(key: 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions', label: string): ComponentType {
+function toggle(key: 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'agentNotifications', label: string): ComponentType {
   return function SettingSwitch() {
     const value = useSettings()[key]
     return <Switch checked={value} label={label} onChange={() => updateSettings({ [key]: !value })} />
@@ -462,6 +462,13 @@ const SETTINGS: SettingSpec[] = [
     label: 'Skip Claude permissions',
     description: 'Starts Claude terminal sessions with --dangerously-skip-permissions, so it runs every tool without asking. Applies to sessions started after the change.',
     Control: toggle('claudeSkipPermissions', 'Skip Claude permissions')
+  },
+  {
+    section: 'Terminal',
+    card: 'Agent sessions',
+    label: 'Notifications',
+    description: 'A macOS notification when Claude finishes or needs an answer while Treeix is in the background. Click it to open the session.',
+    Control: toggle('agentNotifications', 'Notifications')
   },
   {
     section: 'Terminal',

@@ -21,6 +21,8 @@ export const api = {
   close: (pullRequest: PullRequest) => bridge.invoke<void>('close', pullRequest),
   commentOnPullRequest: (pullRequest: PullRequest, comment: PullRequestComment) => bridge.invoke<void>('comment', pullRequest, comment),
   reactToPullRequestComment: (pullRequest: PullRequest, commentId: string, reaction: Reaction) => bridge.invoke<void>('react', pullRequest, commentId, reaction),
+  filesChangedBetween: (pullRequest: PullRequest, from: string, to: string) => bridge.invoke<string[]>('changedBetween', pullRequest, from, to),
+  failedJobs: (pullRequest: PullRequest) => bridge.invoke<{ name: string; log: string }[]>('failedJobs', pullRequest),
   conflictingFiles: (pullRequest: PullRequest) => bridge.invoke<ConflictResult>('conflicts', pullRequest),
   image: (pullRequest: PullRequest, source: string) => bridge.invoke<ImageResult>('image', pullRequest, source)
 }

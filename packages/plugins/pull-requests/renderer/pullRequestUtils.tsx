@@ -1,5 +1,5 @@
 import type { Repo } from '@treeix/shared/types'
-import type { PullRequest, PullRequestState, ReviewStatus, ReviewThread } from '../shared/types'
+import type { Pipeline, PullRequest, PullRequestState, ReviewStatus, ReviewThread } from '../shared/types'
 import { Icon } from '@treeix/app/Icon'
 export { timeAgo, untilLabel } from '@treeix/app/time'
 export { UserAvatar } from '@treeix/app/ui'
@@ -142,6 +142,30 @@ export function ConflictMark({ pr }: { pr: PullRequest }): React.JSX.Element | n
     >
       Conflicts
     </span>
+  )
+}
+
+const PIPELINE_LOOK: Record<Pipeline['status'], { label: string; dot: string }> = {
+  passed: { label: 'Pipeline passed', dot: 'bg-emerald-400' },
+  failed: { label: 'Pipeline failed', dot: 'bg-red-400' },
+  running: { label: 'Pipeline running', dot: 'animate-pulse bg-amber-400' }
+}
+
+/** One colored dot for the head commit's CI; lists from before pipelines were fetched have none */
+export function PipelineDot({ pipeline }: { pipeline: Pipeline | null | undefined }): React.JSX.Element | null {
+  if (!pipeline) return null
+  const { label, dot } = PIPELINE_LOOK[pipeline.status]
+  return <span title={label} aria-label={label} className={`size-1.5 shrink-0 rounded-full ${dot}`} />
+}
+
+/** The dot and its status as a link to the pipeline, for a pull request's header */
+export function PipelineLink({ pipeline }: { pipeline: Pipeline | null | undefined }): React.JSX.Element | null {
+  if (!pipeline) return null
+  return (
+    <button title="Open the pipeline" onClick={() => window.open(pipeline.url)} className="flex shrink-0 items-center gap-1.5 rounded px-1 whitespace-nowrap hover:bg-accent hover:text-foreground">
+      <PipelineDot pipeline={pipeline} />
+      {PIPELINE_LOOK[pipeline.status].label.toLowerCase()}
+    </button>
   )
 }
 

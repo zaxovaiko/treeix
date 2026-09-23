@@ -42,6 +42,8 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'wt.previousFile', label: 'Previous changed file', section: 'Worktrees', page: 'worktrees', keys: key('KeyP') },
   { id: 'wt.lineDown', label: 'Move the line cursor down in the diff', section: 'Worktrees', page: 'worktrees', keys: key('KeyJ') },
   { id: 'wt.lineUp', label: 'Move the line cursor up in the diff', section: 'Worktrees', page: 'worktrees', keys: key('KeyK') },
+  { id: 'wt.nextChange', label: 'Next block of changes, then the next file', section: 'Worktrees', page: 'worktrees', keys: key('KeyJ', { shift: true }) },
+  { id: 'wt.previousChange', label: 'Previous block of changes, then the previous file', section: 'Worktrees', page: 'worktrees', keys: key('KeyK', { shift: true }) },
   { id: 'wt.comment', label: 'Agent comment on the line', section: 'Worktrees', page: 'worktrees', keys: key('KeyC') },
   { id: 'wt.commentAlt', label: 'Agent comment on the line, second key', section: 'Worktrees', page: 'worktrees', keys: key('KeyA') },
   { id: 'wt.open', label: 'Open the file at the line to edit', section: 'Worktrees', page: 'worktrees', keys: key('KeyO') },
