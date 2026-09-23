@@ -58,6 +58,10 @@ const sameRect = (a: DOMRect | null, b: DOMRect | null): boolean =>
 export function PageLayer({ children }: { children?: React.ReactNode }): React.JSX.Element {
   const { tabs, activeId } = useBrowser()
   const [rect, setRect] = useState<DOMRect | null>(null)
+  // Hidden pages keep their last size: shrunk to nothing, every site would lay itself out again on each switch back
+  const lastBox = useRef(new DOMRect(0, 0, 0, 0))
+  const onScreen = !!rect && rect.width > 0 && rect.height > 0
+  if (onScreen) lastBox.current = rect
   const hasSlot = useSyncExternalStore(subscribeSlots, () => slots.length > 0)
   useEffect(() => {
     if (!hasSlot) {
@@ -85,11 +89,11 @@ export function PageLayer({ children }: { children?: React.ReactNode }): React.J
       cancelAnimationFrame(frame)
     }
   }, [hasSlot])
-  const box = rect ?? new DOMRect(0, 0, 0, 0)
+  const box = lastBox.current
   return (
     <div
       data-browser
-      style={{ position: 'fixed', left: box.x, top: box.y, width: box.width, height: box.height, visibility: rect ? 'visible' : 'hidden', zIndex: 10 }}
+      style={{ position: 'fixed', left: box.x, top: box.y, width: box.width, height: box.height, visibility: onScreen ? 'visible' : 'hidden', zIndex: 10 }}
     >
       {tabs.map((tab) => (
         <Page key={tab.id} tab={tab} active={tab.id === activeId} />
