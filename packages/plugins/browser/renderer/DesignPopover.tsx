@@ -7,7 +7,7 @@ import { clearSelection, useDesign } from './pages'
 import { useBrowser } from './tabs'
 
 const bridge = createBridge('browser')
-const WIDTH = 260
+const WIDTH = 300
 
 /** Over the page, under the selected element: the note that becomes a browser comment */
 export function DesignPopover(): React.JSX.Element | null {
@@ -59,6 +59,11 @@ export function DesignPopover(): React.JSX.Element | null {
       <div className="mb-1.5 truncate font-mono text-[11px] text-muted-foreground" title={value.selector}>
         {value.selector}
       </div>
+      {value.react && (
+        <div className="-mt-1 mb-1.5 truncate font-mono text-[11px] text-muted-foreground" title={value.react.source ?? undefined}>
+          {[value.react.components.at(-1), value.react.source].filter(Boolean).join(' · ')}
+        </div>
+      )}
       <textarea
         autoFocus
         rows={3}
@@ -78,11 +83,11 @@ export function DesignPopover(): React.JSX.Element | null {
           <input type="checkbox" checked={withShot} onChange={() => setWithShot(!withShot)} />
           Screenshot
         </label>
-        <button onClick={close} className="h-6 rounded px-2 text-xs text-muted-foreground hover:bg-accent">
+        <button onClick={close} className="h-6 shrink-0 rounded px-2 text-xs text-muted-foreground hover:bg-accent">
           Cancel
         </button>
-        <button onClick={() => void add()} className="h-6 rounded border border-border px-2 text-xs hover:bg-accent">
-          Add comment ⌘↵
+        <button onClick={() => void add()} className="flex h-6 shrink-0 items-center gap-1.5 rounded border border-border px-2 text-xs whitespace-nowrap hover:bg-accent">
+          Add comment <span className="text-muted-foreground">⌘↵</span>
         </button>
       </div>
     </div>

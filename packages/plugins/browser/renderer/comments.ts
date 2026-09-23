@@ -25,7 +25,11 @@ export const elementComment = (selection: ElementSelection, note: string, worktr
     selection.url,
     worktreePath,
     note,
-    [`Element: ${selection.selector}`, ...(selection.text ? [`Text: ${selection.text}`] : []), `HTML: ${selection.html}`].join('\n'),
+    [
+      `Element: ${selection.selector}`,
+      ...(selection.react?.components.length ? [`Components: ${selection.react.components.join(' > ')}`] : []),
+      ...(selection.react?.source ? [`Source: ${selection.react.source}`] : []),
+      ...(selection.text ? [`Text: ${selection.text}`] : []), `HTML: ${selection.html}`].join('\n'),
     attachment ? [attachment] : undefined
   )
 

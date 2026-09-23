@@ -1,8 +1,11 @@
-import { ipcRenderer } from 'electron'
+import { ipcRenderer, webFrame } from 'electron'
+import { isReactSource, reactOf } from './react'
 import { type Step, selectorFor } from './selector'
 
 let outline: HTMLDivElement | null = null
 let hovered: Element | null = null
+/** Set on the picked element for the page's own world to find it; attributes are the one thing both worlds see */
+const PICKED = 'data-treeix-picked'
 
 function stepsOf(element: Element): Step[] {
   const steps: Step[] = []
@@ -39,7 +42,7 @@ const onMove = (event: MouseEvent): void => {
   }
 }
 
-const onClick = (event: MouseEvent): void => {
+const onClick = async (event: MouseEvent): Promise<void> => {
   event.preventDefault()
   event.stopPropagation()
   const target = event.altKey ? (hovered?.parentElement ?? hovered) : hovered
@@ -50,16 +53,23 @@ const onClick = (event: MouseEvent): void => {
   const steps = stepsOf(target)
   // body/html climb out of stepsOf's range and produce no steps; their tag alone is already a usable selector
   const selector = steps.length ? selectorFor(steps, unique) : target.tagName.toLowerCase()
+  const html = target.outerHTML.slice(0, 1024)
+  target.setAttribute(PICKED, '')
+  const react: unknown = await webFrame.executeJavaScript(`(${reactOf})(document.querySelector('[${PICKED}]'))`).catch(() => null)
+  target.removeAttribute(PICKED)
   ipcRenderer.sendToHost('selection', {
     selector,
     tag: target.tagName.toLowerCase(),
     text: (target.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 200),
-    html: target.outerHTML.slice(0, 1024),
+    html,
     rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
     viewport: { width: window.innerWidth, height: window.innerHeight },
-    url: location.href
+    url: location.href,
+    ...(isReactSource(react) ? { react } : {})
   })
 }
+
+const clickListener = (event: MouseEvent): void => void onClick(event)
 
 const onKey = (event: KeyboardEvent): void => {
   if (event.key !== 'Escape') return
@@ -73,14 +83,14 @@ function setDesignMode(on: boolean): void {
     Object.assign(outline.style, { position: 'fixed', zIndex: '2147483647', pointerEvents: 'none', outline: '2px solid #3b82f6', background: 'rgb(59 130 246 / 0.08)', display: 'none' })
     document.documentElement.append(outline)
     document.addEventListener('mousemove', onMove, true)
-    document.addEventListener('click', onClick, true)
+    document.addEventListener('click', clickListener, true)
     document.addEventListener('keydown', onKey, true)
   } else if (!on && outline) {
     outline.remove()
     outline = null
     hovered = null
     document.removeEventListener('mousemove', onMove, true)
-    document.removeEventListener('click', onClick, true)
+    document.removeEventListener('click', clickListener, true)
     document.removeEventListener('keydown', onKey, true)
   }
 }
