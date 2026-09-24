@@ -322,6 +322,17 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         >
           <Icon name="code" className="size-3.5" />
         </button>
+        {place === 'tab' && host.service('sessions') && (
+          <button
+            aria-label="Terminal"
+            title="Terminal beside the page; move it to a side from its title bar button"
+            aria-pressed={host.isPanelVisible('terminal')}
+            className={`${toolButton} ${host.isPanelVisible('terminal') ? 'bg-primary/15 text-primary' : ''}`}
+            onClick={() => (host.isPanelVisible('terminal') ? host.hidePanel('terminal') : host.showPanel('terminal'))}
+          >
+            <Icon name="terminal" className="size-3.5" />
+          </button>
+        )}
         {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
         {place === 'tab' && <div ref={setStripSlot} className="flex shrink-0 items-center gap-0.5 border-l border-border pl-1" />}
       </div>

@@ -208,7 +208,7 @@ function BrowserPage(): React.JSX.Element {
 }
 
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'Browser', icon: 'globe', order: 15, render: BrowserPage }],
+  tabs: [{ id: TAB_ID, label: 'Browser', icon: 'globe', order: 15, render: BrowserPage, panels: ['terminal'] }],
   panels: [{ id: TAB_ID, label: 'Browser', icon: 'globe', render: () => <BrowserView place="panel" /> }],
   Root,
   onKeyDown: (event, current) => {
