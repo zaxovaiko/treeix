@@ -386,7 +386,15 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     // ⌥ types characters like ą and ś on Polish and other layouts; ⌥ arrows and ⌥⌫ still move and delete by word
     macOptionIsMeta: false,
     scrollback: getSettings().terminalScrollback,
-    theme: terminalTheme()
+    theme: terminalTheme(),
+    // Hyperlinks programs print (Claude Code's PR and file links) would otherwise open in the browser on a plain click
+    linkHandler: {
+      activate: (event, uri) => {
+        if (!event.metaKey) return
+        if (/^https?:\/\//.test(uri)) webLinkHandler?.(uri)
+        else if (uri.startsWith('file://')) fileLinkHandler?.(id, decodeURIComponent(new URL(uri).pathname), null)
+      }
+    }
   })
   const fit = new FitAddon()
   terminal.loadAddon(fit)
