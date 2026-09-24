@@ -175,8 +175,8 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
       // A page's popups become tabs in main; the attribute only lets window.open reach that handler
       allowpopups
       // A blank tab stays hidden so the view's empty state shows through
-      // So does one still connecting or failed, for the view's loader and error page
-      style={{ position: 'absolute', inset: 0, visibility: active && tab.url !== 'about:blank' && tab.committed && !tab.error ? 'visible' : 'hidden' }}
+      // So does one still connecting or failed, for the view's loader and error page. `inherit`, not `visible`: a visible child shows through its hidden layer
+      style={{ position: 'absolute', inset: 0, visibility: active && tab.url !== 'about:blank' && tab.committed && !tab.error ? 'inherit' : 'hidden' }}
     />
   )
 }

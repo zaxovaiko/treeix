@@ -363,13 +363,14 @@ const CASES: Case[] = [
       await driver.evaluate(clickTitle('Terminal'))
       await sleep(800)
       const hidden = String(await driver.evaluate(size))
-      const covered = await driver.evaluate(`[...document.querySelectorAll('[data-browser]')].some((layer) => layer.style.position === 'fixed' && getComputedStyle(layer).visibility === 'visible')`)
+      // The pages themselves: a page styled visible shows through its hidden layer
+      const covered = await driver.evaluate(`[...document.querySelectorAll('webview')].some((view) => getComputedStyle(view).visibility === 'visible')`)
       await driver.evaluate(clickTitle('Browser'))
       await sleep(400)
       await driver.evaluate(`document.querySelectorAll('[data-browser] [aria-label="Close tab"]').forEach((button) => button.click())`)
       return [
         hidden === shown ? `the page kept its size off screen, ${shown}` : `FAIL the page went from ${shown} to ${hidden} off screen`,
-        covered ? 'FAIL the hidden page layer is visible over the Terminal page' : 'the page layer stays hidden off screen'
+        covered ? 'FAIL a page is visible over the Terminal page' : 'the pages stay hidden off screen'
       ]
     }
   },
