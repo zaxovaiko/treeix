@@ -280,10 +280,22 @@ export async function deleteBranch(repoPath: string, name: string): Promise<void
   await git(repoPath, ['branch', '-d', name])
 }
 
-/** Checks out an existing local or remote branch, or creates it from `base` (HEAD when omitted) */
-export async function addWorktree(repoPath: string, branch: string, base?: string): Promise<string> {
+/** Creates in flight, by repository and branch: a second click before the list refreshes gets the same worktree */
+const addingWorktrees = new Map<string, Promise<string>>()
+
+/** Checks out an existing local or remote branch, or creates it from `base` (HEAD when omitted); a branch that already has a worktree gets that one */
+export function addWorktree(repoPath: string, branch: string, base?: string): Promise<string> {
+  const key = `${repoPath}\0${branch}`
+  const pending = addingWorktrees.get(key) ?? createWorktree(repoPath, branch, base).finally(() => addingWorktrees.delete(key))
+  addingWorktrees.set(key, pending)
+  return pending
+}
+
+async function createWorktree(repoPath: string, branch: string, base?: string): Promise<string> {
   const name = (await git(repoPath, ['check-ref-format', '--branch', branch]).catch(() => '')).trim()
   if (!name || name.startsWith('-')) throw new Error(`"${branch}" is not a valid branch name`)
+  const existing = parseWorktreeList(await git(repoPath, ['worktree', 'list', '--porcelain'])).find((worktree) => worktree.branch === name)
+  if (existing) return existing.path
   const path = worktreeDir(repoPath, name)
   if (base?.startsWith('-')) throw new Error(`"${base}" is not a valid base`)
   if (await succeeds(repoPath, ['show-ref', '--verify', '--quiet', `refs/heads/${name}`])) {

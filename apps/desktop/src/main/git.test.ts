@@ -73,6 +73,9 @@ test('addWorktree, discardChanges and removeWorktree on a real repository', asyn
     const path = await addWorktree(repo, 'feat/x')
     expect(run('worktree', 'list')).toContain('feat+x')
     await expect(addWorktree(repo, 'bad..name')).rejects.toThrow('not a valid branch name')
+    // A second click before the list refreshes, and a branch that already has its worktree, both get the same one
+    expect(await Promise.all([addWorktree(repo, 'feat/y'), addWorktree(repo, 'feat/y')])).toEqual([worktreeDir(repo, 'feat/y'), worktreeDir(repo, 'feat/y')])
+    expect(await addWorktree(repo, 'feat/x')).toBe(path)
 
     writeFileSync(join(path, 'a.txt'), 'changed\n')
     writeFileSync(join(path, 'new.txt'), 'untracked\n')
