@@ -738,31 +738,64 @@ void restoreSessions().catch(() => {
  * context (the GPU reset, or Chromium dropping the oldest of its ~16 contexts) falls back to the DOM renderer
  */
 const gpu = new Map<string, { dispose: () => void }>()
+/** Sessions that hold or are loading a context, least recently shown first */
+const gpuOrder: string[] = []
+/** Recently shown sessions keep their context, so switching back to them draws at once; leaves room for other webviews */
+const GPU_KEPT = 8
+
+const isOnScreen = (id: string): boolean => {
+  const element = findTerminal(id)?.element
+  return !!element?.isConnected && element.offsetWidth > 0
+}
+
+function dropGpu(id: string): void {
+  gpu.get(id)?.dispose()
+  gpu.delete(id)
+  const index = gpuOrder.indexOf(id)
+  if (index !== -1) gpuOrder.splice(index, 1)
+}
+
+/** Frees the contexts of the sessions shown longest ago, never one on screen */
+function trimGpu(): void {
+  for (const id of [...gpuOrder]) {
+    if (gpu.size <= GPU_KEPT) return
+    if (!isOnScreen(id)) dropGpu(id)
+  }
+}
+
 function drawWithGpu(session: TerminalSession): void {
+  const index = gpuOrder.indexOf(session.id)
+  if (index !== -1) gpuOrder.splice(index, 1)
+  gpuOrder.push(session.id)
   if (gpu.has(session.id)) return
-  const loading = { dispose: () => void gpu.delete(session.id) }
+  // The DOM renderer draws the first frames in a different font; blank until the GPU takes over reads as no change.
+  // Transparent rather than hidden, which would stop the terminal taking focus
+  const shown = (): void => void (session.element.style.opacity = '')
+  session.element.style.opacity = '0'
+  const loading = { dispose: shown }
   gpu.set(session.id, loading)
+  trimGpu()
   void import('@xterm/addon-webgl')
     .then(({ WebglAddon }) => {
       // Released while the addon loaded
       if (gpu.get(session.id) !== loading) return
       const webgl = new WebglAddon()
-      const release = {
-        dispose: () => {
-          gpu.delete(session.id)
-          webgl.dispose()
-        }
-      }
-      webgl.onContextLoss(() => release.dispose())
+      const release = { dispose: () => webgl.dispose() }
+      webgl.onContextLoss(() => dropGpu(session.id))
       session.terminal.loadAddon(webgl)
       gpu.set(session.id, release)
+      // The atlas draws on the next frame
+      requestAnimationFrame(shown)
     })
-    .catch(() => gpu.delete(session.id))
+    .catch(() => {
+      shown()
+      dropGpu(session.id)
+    })
 }
 
-/** Only sessions on screen hold a WebGL context: Chromium keeps about 16 and silently drops the oldest */
+/** A session leaving the screen keeps its context until newer ones need the room */
 export function releaseGpu(id: string, container: HTMLElement): void {
-  if (findTerminal(id)?.element.parentElement === container) gpu.get(id)?.dispose()
+  if (findTerminal(id)?.element.parentElement === container) trimGpu()
 }
 
 /** Open the xterm lazily: it needs a mounted element to measure fonts */
@@ -812,7 +845,7 @@ export function killSession(id: string): void {
     chat?.forget(id)
   } else {
     if (session.status !== 'dormant') bridge.send('kill', id)
-    gpu.delete(id)
+    dropGpu(id)
     hookStatus.delete(id)
     session.terminal.dispose()
   }
@@ -986,6 +1019,7 @@ export async function switchView(id: string): Promise<void> {
     chat.stop(id)
   } else {
     if (session.status !== 'dormant') bridge.send('kill', id)
+    dropGpu(id)
     session.terminal.dispose()
     next = crypto.randomUUID()
     openChat(next, { ...metaOf(session), view: 'chat' })
