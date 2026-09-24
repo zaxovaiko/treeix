@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname } from 'node:path'
 import type { WebContents } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import type { AgentHookStatus, LiveTerminal, TerminalOptions } from '../shared/types'
@@ -30,12 +33,22 @@ function killSessionsWithWindow(owner: WebContents): void {
   })
 }
 
+const isFolder = (path: string): boolean => statSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false
+
+/** A removed worktree leaves its group pointing at a folder that is gone, where a shell exits at once without a word: the nearest folder that still exists */
+export function existingFolder(path: string): string {
+  let folder = path
+  while (!isFolder(folder) && dirname(folder) !== folder) folder = dirname(folder)
+  return isFolder(folder) ? folder : homedir()
+}
+
 export function createTerminal(owner: WebContents, { cwd, command, cols, rows, meta, id: requested }: TerminalOptions, extraEnv: Record<string, string> = {}): string {
   const id = requested && !sessions.has(requested) ? requested : randomUUID()
+  const folder = existingFolder(cwd)
   // Login shell so GUI launches still get the user's PATH (claude, codex, bun...)
   const pty = spawn(process.env.SHELL ?? '/bin/zsh', ['-l'], {
     name: 'xterm-256color',
-    cwd,
+    cwd: folder,
     cols,
     rows,
     // Empty PROMPT_EOL_MARK: zsh otherwise prints an inverse % when the first fit resizes the fresh shell mid-line
@@ -50,8 +63,10 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
       PROMPT_EOL_MARK: ''
     }
   })
-  const entry: Entry = { pty, owner, meta, chunks: [], size: 0, exitCode: null }
+  const moved = folder === cwd ? '' : `\x1b[33m${cwd} no longer exists, so this session opened in ${folder}\x1b[0m\r\n`
+  const entry: Entry = { pty, owner, meta, chunks: moved ? [moved] : [], size: moved.length, exitCode: null }
   sessions.set(id, entry)
+  if (moved) output.push(id, moved)
   killSessionsWithWindow(owner)
   pty.onData((data) => {
     // Append-only with an occasional trim: slicing a 256k string on every chunk showed up in main-process profiles
