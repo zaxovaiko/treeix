@@ -31,6 +31,11 @@ test('normalizeGitlabDiff', () => {
   expect(patches[1].patch).toContain('--- /dev/null\n+++ b/new.ts')
   const gitFormatted = 'diff --git a/x b/x\nindex 1..2\n--- a/x\n+++ b/x\n'
   expect(normalizeGitlabDiff(gitFormatted)).toBe(gitFormatted)
+  // Newer glab prints git headers, with a mode line between them and the file names for new and deleted files
+  const created = 'diff --git a/n.sql b/n.sql\nnew file mode 100644\n--- /dev/null\n+++ b/n.sql\n@@ -0,0 +1 @@\n+x'
+  const deleted = 'diff --git a/d.sql b/d.sql\ndeleted file mode 100644\n--- a/d.sql\n+++ /dev/null\n@@ -1 +0,0 @@\n-y'
+  expect(normalizeGitlabDiff(`${created}\n${deleted}`)).toBe(`${created}\n${deleted}`)
+  expect(splitPatch(normalizeGitlabDiff(`${created}\n${deleted}`)).map(({ path }) => path)).toEqual(['n.sql', 'd.sql'])
 })
 
 test('githubThreads groups replies under their root comment', () => {

@@ -380,16 +380,22 @@ export function gitlabThreads(discussions: Json[]): ReviewThread[] {
 
 const stripPrefix = (path: string, prefix: string): string => (path.startsWith(prefix) ? path.slice(prefix.length) : path)
 
-/** `glab mr diff` prints file headers without `diff --git` lines, which the diff splitter needs */
+/**
+ * Older `glab mr diff` prints file headers without `diff --git` lines, which the diff splitter needs. Newer glab prints
+ * them, with lines like `new file mode` before the file names, and those headers are kept as they are
+ */
 export function normalizeGitlabDiff(diff: string): string {
   const lines = diff.split('\n')
   const output: string[] = []
+  /** Between a `diff --git` line and its first hunk */
+  let inGitHeader = false
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]
     const next = lines[index + 1] ?? ''
-    const previous = output.at(-1) ?? ''
-    const isHeader = line.startsWith('--- ') && next.startsWith('+++ ') && !previous.startsWith('index ')
-    if (!isHeader || previous.startsWith('diff --git')) {
+    if (line.startsWith('diff --git')) inGitHeader = true
+    else if (line.startsWith('@@')) inGitHeader = false
+    const isHeader = line.startsWith('--- ') && next.startsWith('+++ ')
+    if (!isHeader || inGitHeader) {
       output.push(line)
       continue
     }
