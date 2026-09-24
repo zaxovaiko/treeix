@@ -147,6 +147,20 @@ export async function readFile(worktreePath: string, filePath: string): Promise<
   return bytes.includes(0) ? null : bytes.toString('utf8')
 }
 
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024
+const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon' }
+
+/** Image type of a path by its extension; SVG is text and opens as code */
+export const imageType = (filePath: string): string | null => IMAGE_TYPES[filePath.split('.').pop()?.toLowerCase() ?? ''] ?? null
+
+/** A picture in the worktree as a data URL, for showing it; null when it is not an image, outside the worktree or too big */
+export async function readImage(worktreePath: string, filePath: string): Promise<string | null> {
+  const absolute = resolve(worktreePath, filePath)
+  const type = imageType(filePath)
+  if (!type || relative(worktreePath, absolute).startsWith('..') || (await stat(absolute)).size > MAX_IMAGE_BYTES) return null
+  return `data:${type};base64,${(await readFileBytes(absolute)).toString('base64')}`
+}
+
 const escapeRegExp = (text: string): string => text.replace(/[$]/g, '\\$')
 
 // ponytail: regex guesses, swap for a language server if jumps get unreliable

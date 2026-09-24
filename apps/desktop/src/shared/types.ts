@@ -111,6 +111,8 @@ export type Api = {
   /** Native folder picker; null when cancelled */
   pickFolder: () => Promise<string | null>
   readFile: (worktreePath: string, filePath: string) => Promise<string | null>
+  /** A data URL of a picture in the worktree; null when it is not one or too big */
+  readImage: (worktreePath: string, filePath: string) => Promise<string | null>
   /** Language service answers for TS/JS, text search for everything else */
   navigate: (worktreePath: string, kind: NavigationKind, target: SymbolTarget) => Promise<CodeLocation[]>
   hover: (worktreePath: string, target: SymbolTarget) => Promise<HoverInfo | null>

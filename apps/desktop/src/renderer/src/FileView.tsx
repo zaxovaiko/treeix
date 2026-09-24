@@ -42,7 +42,45 @@ export function findLineElement(root: ParentNode, line: number, type?: string): 
 
 const AUTOSAVE_DELAY_MS = 800
 
-export function FileView({
+const IMAGE_PATH = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i
+
+/** Pictures show as themselves, on a checkerboard so transparency reads; everything else opens as code */
+export function FileView(props: Parameters<typeof TextFileView>[0]): React.JSX.Element {
+  return IMAGE_PATH.test(props.path) && props.contents === undefined ? <ImageView worktreePath={props.worktreePath} path={props.path} /> : <TextFileView {...props} />
+}
+
+function ImageView({ worktreePath, path }: { worktreePath: string; path: string }): React.JSX.Element {
+  const [source, setSource] = useState<{ path: string; url: string | null } | null>(null)
+  const [size, setSize] = useState<string | null>(null)
+  useEffect(() => {
+    let stale = false
+    setSize(null)
+    void window.api.readImage(worktreePath, path).then((url) => stale || setSource({ path, url }))
+    return () => {
+      stale = true
+    }
+  }, [worktreePath, path])
+  if (source?.path !== path) return <EmptyState fill title="Loading..." />
+  if (!source.url) return <EmptyState fill icon="file" title="Image too large to preview" />
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        className="grid min-h-0 flex-1 place-items-center overflow-auto p-6"
+        style={{ backgroundImage: 'repeating-conic-gradient(var(--color-muted) 0 25%, transparent 0 50%)', backgroundSize: '16px 16px' }}
+      >
+        <img
+          src={source.url}
+          alt={path}
+          onLoad={(event) => setSize(`${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`)}
+          className="max-h-full max-w-full object-contain [image-rendering:auto]"
+        />
+      </div>
+      {size && <div className="shrink-0 border-t border-border px-3 py-1 text-[11px] text-muted-foreground tabular-nums">{size}</div>}
+    </div>
+  )
+}
+
+function TextFileView({
   worktreePath,
   path,
   line,

@@ -7,7 +7,7 @@ import { migrateUserData } from './userData'
 import { createPath, listDirectory, renamePath, saveFile, stopWatching, trashPath, watchFile } from './files'
 import { createHistory } from './history'
 import { enableTextMenu, showContextMenu } from './contextMenu'
-import { addWorktree, createBranch, deleteBranch, diff, listBranches, discardChanges, listFiles, searchText, readFile, removeWorktree, scan } from './git'
+import { addWorktree, createBranch, deleteBranch, diff, listBranches, discardChanges, listFiles, searchText, readFile, readImage, removeWorktree, scan } from './git'
 import { buildMenu, type MenuAction } from './appMenu'
 import { configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
 import { hover, navigate, stopLanguageProcess } from './language'
@@ -91,6 +91,7 @@ app.whenReady().then(() => {
     return canceled ? null : (filePaths[0] ?? null)
   })
   ipcMain.handle('readFile', (_, worktreePath: string, filePath: string) => readFile(worktreePath, filePath))
+  ipcMain.handle('readImage', (_, worktreePath: string, filePath: string) => readImage(worktreePath, filePath).catch(() => null))
   ipcMain.handle('navigate', (_, worktreePath: string, kind: NavigationKind, target: SymbolTarget) => navigate(worktreePath, kind, target))
   ipcMain.handle('searchText', (_, worktreePaths: string[], query: string, options: SearchOptions) => searchText(worktreePaths, query, options))
   ipcMain.handle('hover', (_, worktreePath: string, target: SymbolTarget) => hover(worktreePath, target))

@@ -12,6 +12,7 @@ const api: Api = {
   zoom: (step: number) => ipcRenderer.send('zoom', step),
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),
+  readImage: (worktreePath, filePath) => ipcRenderer.invoke('readImage', worktreePath, filePath),
   navigate: (worktreePath, kind, target) => ipcRenderer.invoke('navigate', worktreePath, kind, target),
   hover: (worktreePath, target) => ipcRenderer.invoke('hover', worktreePath, target),
   searchText: (worktreePaths, query, options) => ipcRenderer.invoke('searchText', worktreePaths, query, options),
