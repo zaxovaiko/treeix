@@ -49,9 +49,12 @@ export function Explorer({
   onCreate,
   onExpand,
   onParent,
+  rootPath,
   zone = 'inspector'
 }: {
   files: WorktreeFiles | null
+  /** Folder the paths are relative to; gitignored folders, which git lists without their contents, are read from it when opened */
+  rootPath?: string
   changed: Set<string>
   activePath: string | null
   onOpen: (path: string) => void
@@ -68,7 +71,17 @@ export function Explorer({
 }): React.JSX.Element {
   const [filter, setFilter] = usePersisted<string>(workspaceKey('explorer.filter'), '')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const allPaths = useMemo(() => [...(files?.files ?? []), ...(files?.ignored ?? [])].sort(), [files])
+  /** Contents of gitignored folders opened so far, by folder; read from disk a level at a time since node_modules can be huge */
+  const [ignoredContents, setIgnoredContents] = useState<Record<string, string[]>>({})
+  const readIgnored = (folder: string): void => {
+    if (rootPath) void window.api.listDirectory(rootPath, folder).then((entries) => setIgnoredContents((current) => ({ ...current, [folder]: entries })))
+  }
+  const openedIgnored = useRef<string[]>([])
+  openedIgnored.current = Object.keys(ignoredContents)
+  useEffect(() => setIgnoredContents({}), [rootPath])
+  // The file list refreshes as files change; the folders already open are read again with it
+  useEffect(() => openedIgnored.current.forEach(readIgnored), [files])
+  const allPaths = useMemo(() => [...(files?.files ?? []), ...(files?.ignored ?? []), ...Object.values(ignoredContents).flat()].sort(), [files, ignoredContents])
   const tree = useMemo(() => buildTree(allPaths), [allPaths])
   const ignoredDirs = useMemo(() => (files?.ignored ?? []).filter((path) => path.endsWith('/')), [files])
   const ignoredFiles = useMemo(() => new Set(files?.ignored ?? []), [files])
@@ -102,6 +115,7 @@ export function Explorer({
     else {
       next.add(path)
       onExpand?.(path)
+      if (isIgnored(path) && !(path in ignoredContents)) readIgnored(path)
     }
     setExpanded(next)
   }
@@ -115,7 +129,9 @@ export function Explorer({
   const rows: Row[] = needle
     ? matches.slice(0, MAX_FILTER_RESULTS).map((path) => ({ path, label: path, depth: 0, dir: null }))
     : [...dirRows(tree, 0), ...tree.files.map((path) => ({ path, label: path, depth: 0, dir: null }))]
-  const emptyIgnored = (row: Row): boolean => row.dir !== null && isIgnored(row.path) && row.dir.dirs.length === 0 && row.dir.files.length === 0
+  // Without a root there is nothing to read; with one, a folder counts as empty only once it was read
+  const emptyIgnored = (row: Row): boolean =>
+    row.dir !== null && isIgnored(row.path) && row.dir.dirs.length === 0 && row.dir.files.length === 0 && (!rootPath || row.path in ignoredContents)
 
   const [cursorPath, setCursorPath] = useState<string | null>(activePath)
   useEffect(() => setCursorPath(activePath), [activePath])
@@ -259,7 +275,7 @@ export function FolderExplorer({ root, activePath, onOpen, onParent }: { root: s
     window.api.listFiles(root).then(setRepoFiles, () => load(''))
   }, [root])
   const tree = useMemo(() => repoFiles ?? (files ? { files, ignored: [] } : null), [repoFiles, files])
-  return <Explorer files={tree} changed={NOTHING_CHANGED} activePath={activePath} onOpen={onOpen} onExpand={repoFiles ? undefined : load} onParent={onParent} />
+  return <Explorer files={tree} rootPath={repoFiles ? root : undefined} changed={NOTHING_CHANGED} activePath={activePath} onOpen={onOpen} onExpand={repoFiles ? undefined : load} onParent={onParent} />
 }
 
 const NOTHING_CHANGED = new Set<string>()

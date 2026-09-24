@@ -1234,6 +1234,7 @@ function App(): React.JSX.Element {
     worktree && !browseRoot ? (
       <Explorer
         files={worktreeFiles}
+        rootPath={worktree.path}
         changed={new Set(files.map((patch) => patch.path))}
         activePath={activePath}
         onOpen={open}
@@ -1470,6 +1471,7 @@ function App(): React.JSX.Element {
         {worktree ? (
           <Explorer
             files={worktreeFiles}
+            rootPath={worktree.path}
             changed={changedPaths}
             activePath={viewer?.path ?? null}
             onOpen={(path) => setViewer({ path, line: null })}
