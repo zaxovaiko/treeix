@@ -9,6 +9,8 @@ test('elementComment carries the selector, text and HTML excerpt', () => {
   const comment = elementComment(selection, 'Shows NaN', '/repo', { path: '/att/a.png', name: 'a.png' })
   expect(comment).toMatchObject({ kind: 'browser', filePath: page, text: 'Shows NaN', worktreePath: '/repo', range: { start: 0, end: 0 }, code: '', attachments: [{ path: '/att/a.png', name: 'a.png' }] })
   expect(comment.body).toBe('Element: .plan:nth-of-type(2) .price\nText: $NaN\nHTML: <span class="price">$NaN</span>')
+  const withSource = elementComment({ ...selection, react: { components: ['Pricing', 'Plan'], source: '/app/src/Plan.tsx:9' } }, 'Shows NaN', '/repo')
+  expect(withSource.body).toBe('Element: .plan:nth-of-type(2) .price\nComponents: Pricing > Plan\nSource: /app/src/Plan.tsx:9\nText: $NaN')
 })
 
 test('consoleComment and networkComment summarise and keep details in the body', () => {

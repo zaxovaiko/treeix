@@ -29,7 +29,10 @@ export const elementComment = (selection: ElementSelection, note: string, worktr
       `Element: ${selection.selector}`,
       ...(selection.react?.components.length ? [`Components: ${selection.react.components.join(' > ')}`] : []),
       ...(selection.react?.source ? [`Source: ${selection.react.source}`] : []),
-      ...(selection.text ? [`Text: ${selection.text}`] : []), `HTML: ${selection.html}`].join('\n'),
+      ...(selection.text ? [`Text: ${selection.text}`] : []),
+      // With the source file the agent reads the component itself; the rendered HTML would only fill the prompt
+      ...(selection.react?.source ? [] : [`HTML: ${selection.html}`])
+    ].join('\n'),
     attachment ? [attachment] : undefined
   )
 
