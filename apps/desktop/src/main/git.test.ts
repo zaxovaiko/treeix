@@ -37,6 +37,13 @@ new file mode 100644
     ['a.ts', 1, 1],
     ['dir/b.ts', 0, 0]
   ])
+  // Git quotes paths with non-ASCII bytes, quotes or control characters, spelling bytes in octal
+  const quoted = 'diff --git "a/\\303\\251.txt" "b/\\303\\251.txt"\n--- "a/\\303\\251.txt"\n+++ "b/\\303\\251.txt"\n@@ -1 +1,2 @@\n b\n+b2\n'
+  const renamed = 'diff --git a/old name.txt "b/n\\303\\251w \\"x\\".txt"\nsimilarity index 100%\n'
+  expect(splitPatch(quoted + renamed).map(({ path, additions }) => [path, additions])).toEqual([
+    ['é.txt', 1],
+    ['néw "x".txt', 0]
+  ])
 })
 
 test('isDefinitionLine', () => {

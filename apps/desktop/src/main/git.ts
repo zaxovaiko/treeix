@@ -96,6 +96,36 @@ export async function scan(): Promise<Repo[]> {
   return repos.filter((repo) => repo.worktrees.length > 0)
 }
 
+const C_ESCAPES: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, '\\': 92 }
+
+/** The inside of a path git quoted, which spells non-ASCII bytes in octal: `\303\251` is é */
+function unquoteGitPath(quoted: string): string {
+  const bytes: number[] = []
+  for (let index = 0; index < quoted.length; index++) {
+    const char = quoted[index]
+    if (char !== '\\') {
+      bytes.push(...Buffer.from(char))
+      continue
+    }
+    const next = quoted[index + 1] ?? ''
+    if (/[0-7]/.test(next)) {
+      bytes.push(parseInt(quoted.slice(index + 1, index + 4), 8))
+      index += 3
+    } else {
+      bytes.push(C_ESCAPES[next] ?? next.charCodeAt(0))
+      index++
+    }
+  }
+  return Buffer.from(bytes).toString('utf8')
+}
+
+/** The new path from a `diff --git a/x b/y` line; either side may be quoted */
+function diffPath(header: string): string {
+  const quoted = header.match(/ "b\/((?:[^"\\]|\\.)*)"$/)
+  if (quoted) return unquoteGitPath(quoted[1])
+  return header.match(/^diff --git (?:"(?:[^"\\]|\\.)*"|a\/.+?) b\/(.+)$/)?.[1] ?? ''
+}
+
 export function splitPatch(patch: string): FilePatch[] {
   return patch
     .split(/^(?=diff --git )/m)
@@ -104,7 +134,7 @@ export function splitPatch(patch: string): FilePatch[] {
       const hunkStart = chunk.indexOf('\n@@')
       const hunks = hunkStart === -1 ? '' : chunk.slice(hunkStart)
       return {
-        path: chunk.match(/^diff --git a\/.+? b\/(.+)$/m)?.[1] ?? '',
+        path: diffPath(chunk.split('\n', 1)[0]),
         patch: chunk,
         additions: hunks.match(/^\+/gm)?.length ?? 0,
         deletions: hunks.match(/^-/gm)?.length ?? 0
