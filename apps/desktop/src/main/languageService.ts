@@ -4,7 +4,8 @@ import ts from 'typescript'
 import { supportsLanguageService } from '../shared/languages'
 import type { CodeDiagnostic, CodeLocation, CodePosition, CodeRange, CompletionDetails, CompletionItem, HoverInfo, NavigationKind, SignatureHelp, SymbolTarget } from '../shared/types'
 
-const MAX_SERVICES = 3
+// Solution-style configs give a worktree two or more programs (node and web), so fit a few worktrees' worth
+const MAX_SERVICES = 6
 
 type Project = { service: ts.LanguageService; roots: Set<string> }
 /** Insertion order doubles as recency, so the first entry is the least recently used */
@@ -64,27 +65,28 @@ function createProject(configPath: string | undefined, directory: string): Proje
   return { service: ts.createLanguageService(host, ts.createDocumentRegistry()), roots }
 }
 
-const owners = new Map<string, string | undefined>()
+const owners = new Map<string, (string | undefined)[]>()
 /**
- * The nearest tsconfig, or for a solution-style one (`files: []` plus references) the referenced
+ * The nearest tsconfig, or for a solution-style one (`files: []` plus references) every referenced
  * config that includes the file, like tsserver: the solution's own program redirects the file to
- * a build output and never holds its source
+ * a build output and never holds its source. The first entry answers single-program requests
  */
-function ownerConfig(fileName: string): string | undefined {
-  if (owners.has(fileName)) return owners.get(fileName)
+function ownerConfigs(fileName: string): (string | undefined)[] {
+  const cached = owners.get(fileName)
+  if (cached) return cached
   const nearest = ts.findConfigFile(dirname(fileName), ts.sys.fileExists)
   const parsed = nearest ? parseConfig(nearest) : undefined
   const referenced =
     parsed && !parsed.fileNames.includes(fileName)
-      ? parsed.projectReferences?.map(ts.resolveProjectReferencePath).find((reference) => parseConfig(reference)?.fileNames.includes(fileName))
-      : undefined
-  owners.set(fileName, referenced ?? nearest)
-  return referenced ?? nearest
+      ? (parsed.projectReferences ?? []).map(ts.resolveProjectReferencePath).filter((reference) => parseConfig(reference)?.fileNames.includes(fileName))
+      : []
+  const configs = referenced.length > 0 ? referenced : [nearest]
+  owners.set(fileName, configs)
+  return configs
 }
 
 /** One service per owning tsconfig, so monorepo packages resolve with their own settings */
-function projectFor(worktreePath: string, fileName: string): Project {
-  const configPath = ownerConfig(fileName)
+function projectFor(worktreePath: string, fileName: string, configPath = ownerConfigs(fileName)[0]): Project {
   const insideWorktree = configPath && !relative(worktreePath, configPath).startsWith('..')
   const key = insideWorktree ? configPath : `${worktreePath}/`
   let project = projects.get(key)
@@ -135,29 +137,40 @@ function referenceSpans(service: ts.LanguageService, fileName: string, position:
   )
 }
 
+function spansAt(service: ts.LanguageService, kind: NavigationKind, fileName: string, position: number): { fileName: string; start: number; isDefinition?: boolean }[] {
+  return kind === 'definition'
+    ? (service.getDefinitionAtPosition(fileName, position) ?? []).map((entry) => ({ fileName: entry.fileName, start: entry.textSpan.start }))
+    : kind === 'typeDefinition'
+      ? (service.getTypeDefinitionAtPosition(fileName, position) ?? []).map((entry) => ({ fileName: entry.fileName, start: entry.textSpan.start }))
+      : kind === 'implementation'
+        ? (service.getImplementationAtPosition(fileName, position) ?? []).map((entry) => ({ fileName: entry.fileName, start: entry.textSpan.start }))
+        : referenceSpans(service, fileName, position)
+}
+
 /** Resolves with null when the file is not part of any TypeScript program */
 export function navigate(worktreePath: string, kind: NavigationKind, target: SymbolTarget): CodeLocation[] | null {
   const fileName = resolve(worktreePath, target.path)
   if (!supportsLanguageService(fileName)) return null
   // Only an open editor's text: after its tab closed, a stale cursor target must not bring the text back
   if (target.text !== undefined && overlays.has(fileName)) setOverlay(fileName, target.text)
-  const project = projectFor(worktreePath, fileName)
-  const position = positionOf(project, fileName, target)
-  if (position === null) return null
-  const { service } = project
-  const spans: { fileName: string; start: number; isDefinition?: boolean }[] =
-    kind === 'definition'
-      ? (service.getDefinitionAtPosition(fileName, position) ?? []).map((entry) => ({ fileName: entry.fileName, start: entry.textSpan.start }))
-      : kind === 'typeDefinition'
-        ? (service.getTypeDefinitionAtPosition(fileName, position) ?? []).map((entry) => ({ fileName: entry.fileName, start: entry.textSpan.start }))
-        : kind === 'implementation'
-          ? (service.getImplementationAtPosition(fileName, position) ?? []).map((entry) => ({ fileName: entry.fileName, start: entry.textSpan.start }))
-          : referenceSpans(service, fileName, position)
+  // References to a file shared by several referenced projects (src/shared) live in all of them
+  const configs = kind === 'references' ? ownerConfigs(fileName) : [ownerConfigs(fileName)[0]]
+  const locations: CodeLocation[] = []
+  let answered = false
+  for (const configPath of configs) {
+    const project = projectFor(worktreePath, fileName, configPath)
+    const position = positionOf(project, fileName, target)
+    if (position === null) continue
+    answered = true
+    for (const span of spansAt(project.service, kind, fileName, position)) {
+      const location = toLocation(project, worktreePath, span.fileName, span.start, span.isDefinition)
+      if (location) locations.push(location)
+    }
+  }
+  if (!answered) return null
   // A symbol and its import alias report overlapping spans, keep one per position and remember if any marked it a definition
   const unique = new Map<string, CodeLocation>()
-  for (const span of spans) {
-    const location = toLocation(project, worktreePath, span.fileName, span.start, span.isDefinition)
-    if (!location) continue
+  for (const location of locations) {
     const key = `${location.path}:${location.line}:${location.column}`
     const existing = unique.get(key)
     unique.set(key, { ...location, isDefinition: Boolean(existing?.isDefinition || location.isDefinition) })

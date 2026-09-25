@@ -72,3 +72,16 @@ test('text sent after the editor closed does not come back as unsaved text', () 
   navigate(root, 'definition', { path: 'use.ts', line: 2, column: 13, symbol: 'stale', text: stale })
   expect(hover(root, { path: 'use.ts', line: 1, column: 13, symbol: 'disk' })?.signature).toBe('const disk: 1')
 })
+
+test('references to a file shared by referenced projects come from all of them', () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-ls-'))
+  writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ files: [], references: [{ path: './tsconfig.node.json' }, { path: './tsconfig.web.json' }] }))
+  writeFileSync(join(root, 'tsconfig.node.json'), JSON.stringify({ compilerOptions: { composite: true, strict: true }, include: ['shared.ts', 'main.ts'] }))
+  writeFileSync(join(root, 'tsconfig.web.json'), JSON.stringify({ compilerOptions: { composite: true, strict: true }, include: ['shared.ts', 'app.ts'] }))
+  writeFileSync(join(root, 'shared.ts'), 'export const shared = 1\n')
+  writeFileSync(join(root, 'main.ts'), 'import { shared } from "./shared"\nexport const main = shared\n')
+  writeFileSync(join(root, 'app.ts'), 'import { shared } from "./shared"\nexport const app = shared\n')
+
+  const references = navigate(root, 'references', { path: 'shared.ts', line: 1, column: 13, symbol: 'shared' }) ?? []
+  expect(references.map((location) => `${location.path}:${location.line}`)).toEqual(['app.ts:1', 'app.ts:2', 'main.ts:1', 'main.ts:2', 'shared.ts:1'])
+})
