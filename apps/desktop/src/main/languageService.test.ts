@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { hover, navigate } from './languageService'
+import { closeDocument, completionDetails, completions, diagnostics, hover, navigate, signatureHelp } from './languageService'
 
 test('finds definitions, references and hover info through the tsconfig program', () => {
   const root = mkdtempSync(join(tmpdir(), 'treeix-ls-'))
@@ -17,4 +17,32 @@ test('finds definitions, references and hover info through the tsconfig program'
   expect(references[0].isDefinition).toBe(true)
   expect(hover(root, target)).toEqual({ signature: '(alias) type Status = "pending" | "active"\nimport Status', documentation: 'Grant lifecycle' })
   expect(navigate(root, 'references', { ...target, path: 'notes.md' })).toBeNull()
+})
+
+test('answers from unsaved text: completions, auto-imports, signatures, diagnostics', () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-ls-'))
+  writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'esnext', moduleResolution: 'bundler' }, include: ['*.ts'] }))
+  writeFileSync(join(root, 'grant.ts'), 'export function grant(id: string, days: number): void {}\n')
+  writeFileSync(join(root, 'use.ts'), '')
+
+  const members = completions(root, 'use.ts', 'const list = [1, 2]\nlist.ma', { line: 2, column: 7 }) ?? []
+  expect(members.some((item) => item.name === 'map')).toBe(true)
+
+  const imported = (completions(root, 'use.ts', 'gran', { line: 1, column: 4 }) ?? []).find((item) => item.name === 'grant')
+  expect(imported?.source).not.toBeNull()
+  const details = completionDetails(root, 'use.ts', 'gran', { line: 1, column: 4 }, 'grant', imported?.source ?? null, imported?.data ?? null)
+  expect(details?.edits.map((edit) => edit.text).join('')).toContain('import { grant } from "./grant"')
+
+  const signature = signatureHelp(root, 'use.ts', 'import { grant } from "./grant"\ngrant("a", ', { line: 2, column: 11 })
+  expect(signature?.signatures[0].label).toBe('grant(id: string, days: number): void')
+  expect(signature?.activeParameter).toBe(1)
+
+  const errors = diagnostics(root, 'use.ts', 'const count: number = "x"\n') ?? []
+  expect(errors.map((error) => [error.code, error.range.start.line, error.severity])).toEqual([[2322, 1, 'error']])
+
+  // Closing drops the unsaved text: navigation reads the empty file on disk again
+  closeDocument(root, 'use.ts')
+  expect(diagnostics(root, 'use.ts', '')).toEqual([])
+  expect(completions(root, 'notes.md', '', { line: 1, column: 0 })).toBeNull()
+  expect(diagnostics(root, 'notes.md', '')).toBeNull()
 })

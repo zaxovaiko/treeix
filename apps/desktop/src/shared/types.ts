@@ -51,9 +51,23 @@ export type SearchResult = { matches: SearchMatch[]; truncated: boolean }
 export type SymbolTarget = { path: string; line: number; column: number; symbol: string }
 export type NavigationKind = 'definition' | 'typeDefinition' | 'implementation' | 'references'
 export type HoverInfo = { signature: string; documentation: string }
+
+/** 1-based line, 0-based column, like SymbolTarget */
+export type CodePosition = { line: number; column: number }
+export type CodeRange = { start: CodePosition; end: CodePosition }
+export type CompletionItem = { name: string; kind: string; sortText: string; insertText: string; range: CodeRange | null; source: string | null; data: string | null }
+export type CompletionDetails = { detail: string; documentation: string; edits: { range: CodeRange; text: string }[] }
+export type SignatureHelp = { signatures: { label: string; documentation: string; parameters: { label: string; documentation: string }[] }[]; activeSignature: number; activeParameter: number }
+export type CodeDiagnostic = { range: CodeRange; message: string; severity: 'error' | 'warning' | 'info'; code: number }
+
 export type LanguageRequest =
   | { type: 'navigate'; worktreePath: string; kind: NavigationKind; target: SymbolTarget }
   | { type: 'hover'; worktreePath: string; target: SymbolTarget }
+  | { type: 'completions'; worktreePath: string; path: string; text: string; position: CodePosition }
+  | { type: 'completionDetails'; worktreePath: string; path: string; text: string; position: CodePosition; name: string; source: string | null; data: string | null }
+  | { type: 'signatureHelp'; worktreePath: string; path: string; text: string; position: CodePosition }
+  | { type: 'diagnostics'; worktreePath: string; path: string; text: string }
+  | { type: 'closeDocument'; worktreePath: string; path: string }
 
 export type WorktreeFiles = {
   files: string[]

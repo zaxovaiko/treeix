@@ -5,8 +5,8 @@ import type { LanguageRequest } from '../shared/types'
 process.parentPort.on('message', ({ data }: { data: { id: number; request: LanguageRequest } }) => {
   const { id, request } = data
   try {
-    const result =
-      request.type === 'hover' ? hover(request.worktreePath, request.target) : navigate(request.worktreePath, request.kind, request.target)
+    if (request.type !== 'hover' && request.type !== 'navigate') throw new Error(`${request.type} is not wired over IPC yet`)
+    const result = request.type === 'hover' ? hover(request.worktreePath, request.target) : navigate(request.worktreePath, request.kind, request.target)
     process.parentPort.postMessage({ id, result })
   } catch (error: unknown) {
     process.parentPort.postMessage({ id, error: error instanceof Error ? error.message : String(error) })

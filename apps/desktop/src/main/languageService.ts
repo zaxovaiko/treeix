@@ -2,13 +2,29 @@ import { statSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import ts from 'typescript'
 import { supportsLanguageService } from '../shared/languages'
-import type { CodeLocation, HoverInfo, NavigationKind, SymbolTarget } from '../shared/types'
+import type { CodeDiagnostic, CodeLocation, CodePosition, CodeRange, CompletionDetails, CompletionItem, HoverInfo, NavigationKind, SignatureHelp, SymbolTarget } from '../shared/types'
 
 const MAX_SERVICES = 3
 
 type Project = { service: ts.LanguageService; roots: Set<string> }
 /** Insertion order doubles as recency, so the first entry is the least recently used */
 const projects = new Map<string, Project>()
+
+/** Unsaved editor text by absolute file name; its version makes the program re-read the file */
+const overlays = new Map<string, { text: string; version: number }>()
+let overlayVersion = 0
+
+function setOverlay(fileName: string, text: string | null): void {
+  if (text === null) overlays.delete(fileName)
+  else if (overlays.get(fileName)?.text !== text) overlays.set(fileName, { text, version: ++overlayVersion })
+}
+
+const PREFERENCES: ts.UserPreferences = {
+  includeCompletionsForModuleExports: true,
+  includeCompletionsWithInsertText: true,
+  includeCompletionsWithSnippetText: false,
+  importModuleSpecifierPreference: 'shortest'
+}
 
 function createProject(configPath: string | undefined, directory: string): Project {
   const parsed = configPath
@@ -26,9 +42,12 @@ function createProject(configPath: string | undefined, directory: string): Proje
   const host: ts.LanguageServiceHost = {
     getCompilationSettings: () => options,
     getScriptFileNames: () => [...roots],
-    getScriptVersion: version,
+    getScriptVersion: (fileName) => {
+      const overlay = overlays.get(fileName)
+      return overlay ? `overlay:${overlay.version}` : version(fileName)
+    },
     getScriptSnapshot: (fileName) => {
-      const text = ts.sys.readFile(fileName)
+      const text = overlays.get(fileName)?.text ?? ts.sys.readFile(fileName)
       return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text)
     },
     getCurrentDirectory: () => directory,
@@ -64,7 +83,7 @@ function projectFor(worktreePath: string, fileName: string): Project {
   return project
 }
 
-function positionOf(project: Project, fileName: string, target: SymbolTarget): number | null {
+function positionOf(project: Project, fileName: string, target: CodePosition): number | null {
   const sourceFile = project.service.getProgram()?.getSourceFile(fileName)
   if (!sourceFile) return null
   const lineStarts = sourceFile.getLineStarts()
@@ -138,4 +157,89 @@ export function hover(worktreePath: string, target: SymbolTarget): HoverInfo | n
     signature: ts.displayPartsToString(info.displayParts),
     documentation: [ts.displayPartsToString(info.documentation), ...tags].filter(Boolean).join('\n\n')
   }
+}
+
+type OpenDocument = { service: ts.LanguageService; fileName: string; sourceFile: ts.SourceFile; offset: number }
+
+/** Applies the editor's text, then resolves the position in it */
+function openDocument(worktreePath: string, path: string, text: string, position: CodePosition): OpenDocument | null {
+  const fileName = resolve(worktreePath, path)
+  if (!supportsLanguageService(fileName)) return null
+  setOverlay(fileName, text)
+  const project = projectFor(worktreePath, fileName)
+  const sourceFile = project.service.getProgram()?.getSourceFile(fileName)
+  const offset = positionOf(project, fileName, position)
+  return sourceFile && offset !== null ? { service: project.service, fileName, sourceFile, offset } : null
+}
+
+function rangeOf(sourceFile: ts.SourceFile, start: number, length: number): CodeRange {
+  const from = sourceFile.getLineAndCharacterOfPosition(start)
+  const to = sourceFile.getLineAndCharacterOfPosition(start + length)
+  return { start: { line: from.line + 1, column: from.character }, end: { line: to.line + 1, column: to.character } }
+}
+
+export function completions(worktreePath: string, path: string, text: string, position: CodePosition): CompletionItem[] | null {
+  const document = openDocument(worktreePath, path, text, position)
+  if (!document) return null
+  const result = document.service.getCompletionsAtPosition(document.fileName, document.offset, PREFERENCES)
+  return (result?.entries ?? []).map((entry) => ({
+    name: entry.name,
+    kind: entry.kind,
+    sortText: entry.sortText,
+    insertText: entry.insertText ?? entry.name,
+    range: entry.replacementSpan ? rangeOf(document.sourceFile, entry.replacementSpan.start, entry.replacementSpan.length) : null,
+    source: entry.source ?? null,
+    data: entry.data ? JSON.stringify(entry.data) : null
+  }))
+}
+
+export function completionDetails(worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null): CompletionDetails | null {
+  const document = openDocument(worktreePath, path, text, position)
+  if (!document) return null
+  // data is what completions() serialized from TypeScript's own CompletionEntryData
+  const entryData = data ? (JSON.parse(data) as ts.CompletionEntryData) : undefined
+  const details = document.service.getCompletionEntryDetails(document.fileName, document.offset, name, {}, source ?? undefined, PREFERENCES, entryData)
+  if (!details) return null
+  const edits = (details.codeActions ?? [])
+    .flatMap((action) => action.changes)
+    .filter((change) => change.fileName === document.fileName)
+    .flatMap((change) => change.textChanges)
+    .map((change) => ({ range: rangeOf(document.sourceFile, change.span.start, change.span.length), text: change.newText }))
+  return { detail: ts.displayPartsToString(details.displayParts), documentation: ts.displayPartsToString(details.documentation), edits }
+}
+
+export function signatureHelp(worktreePath: string, path: string, text: string, position: CodePosition): SignatureHelp | null {
+  const document = openDocument(worktreePath, path, text, position)
+  const help = document && document.service.getSignatureHelpItems(document.fileName, document.offset, {})
+  if (!help) return null
+  const parts = ts.displayPartsToString
+  return {
+    signatures: help.items.map((item) => {
+      const parameters = item.parameters.map((parameter) => ({ label: parts(parameter.displayParts), documentation: parts(parameter.documentation) }))
+      return {
+        label: parts(item.prefixDisplayParts) + parameters.map((parameter) => parameter.label).join(parts(item.separatorDisplayParts)) + parts(item.suffixDisplayParts),
+        documentation: parts(item.documentation),
+        parameters
+      }
+    }),
+    activeSignature: help.selectedItemIndex,
+    activeParameter: help.argumentIndex
+  }
+}
+
+const SEVERITY = { [ts.DiagnosticCategory.Error]: 'error', [ts.DiagnosticCategory.Warning]: 'warning', [ts.DiagnosticCategory.Suggestion]: 'info', [ts.DiagnosticCategory.Message]: 'info' } as const
+
+export function diagnostics(worktreePath: string, path: string, text: string): CodeDiagnostic[] | null {
+  const document = openDocument(worktreePath, path, text, { line: 1, column: 0 })
+  if (!document) return supportsLanguageService(path) ? [] : null
+  const { service, fileName, sourceFile } = document
+  return [...service.getSyntacticDiagnostics(fileName), ...service.getSemanticDiagnostics(fileName)].flatMap((diagnostic) =>
+    diagnostic.start === undefined
+      ? []
+      : [{ range: rangeOf(sourceFile, diagnostic.start, diagnostic.length ?? 0), message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), severity: SEVERITY[diagnostic.category], code: diagnostic.code }]
+  )
+}
+
+export function closeDocument(worktreePath: string, path: string): void {
+  setOverlay(resolve(worktreePath, path), null)
 }
