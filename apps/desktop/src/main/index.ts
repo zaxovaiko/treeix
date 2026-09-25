@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
-import type { ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
+import type { CodePosition, ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
 import { saveAttachment } from './attachments'
 import { migrateUserData } from './userData'
 import { createPath, listDirectory, renamePath, saveFile, stopWatching, trashPath, watchFile } from './files'
@@ -10,7 +10,7 @@ import { enableTextMenu, showContextMenu } from './contextMenu'
 import { addWorktree, createBranch, deleteBranch, diff, listBranches, discardChanges, listFiles, searchText, readFile, readImage, removeWorktree, scan } from './git'
 import { buildMenu, type MenuAction } from './appMenu'
 import { configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
-import { hover, navigate, stopLanguageProcess } from './language'
+import { closeDocument, completionDetails, completions, diagnostics, hover, navigate, signatureHelp, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { loadShellPath } from './env'
 import { checkTools, commandExists } from './tools'
@@ -95,6 +95,13 @@ app.whenReady().then(() => {
   ipcMain.handle('navigate', (_, worktreePath: string, kind: NavigationKind, target: SymbolTarget) => navigate(worktreePath, kind, target))
   ipcMain.handle('searchText', (_, worktreePaths: string[], query: string, options: SearchOptions) => searchText(worktreePaths, query, options))
   ipcMain.handle('hover', (_, worktreePath: string, target: SymbolTarget) => hover(worktreePath, target))
+  ipcMain.handle('completions', (_, worktreePath: string, path: string, text: string, position: CodePosition) => completions(worktreePath, path, text, position))
+  ipcMain.handle('completionDetails', (_, worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null) =>
+    completionDetails(worktreePath, path, text, position, name, source, data)
+  )
+  ipcMain.handle('signatureHelp', (_, worktreePath: string, path: string, text: string, position: CodePosition) => signatureHelp(worktreePath, path, text, position))
+  ipcMain.handle('diagnostics', (_, worktreePath: string, path: string, text: string) => diagnostics(worktreePath, path, text))
+  ipcMain.on('closeDocument', (_, worktreePath: string, path: string) => closeDocument(worktreePath, path))
   ipcMain.handle('checkTools', () => checkTools(enabledTools()))
   ipcMain.handle('commandExists', async (_, name: unknown) => (await shellPath, typeof name === 'string' ? commandExists(name) : false))
   ipcMain.handle('plugins:setEnabled', (_, ids: string[]) => setEnabledPlugins(ids, app.getPath('userData')))

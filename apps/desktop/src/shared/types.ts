@@ -130,6 +130,11 @@ export type Api = {
   /** Language service answers for TS/JS, text search for everything else */
   navigate: (worktreePath: string, kind: NavigationKind, target: SymbolTarget) => Promise<CodeLocation[]>
   hover: (worktreePath: string, target: SymbolTarget) => Promise<HoverInfo | null>
+  completions: (worktreePath: string, path: string, text: string, position: CodePosition) => Promise<CompletionItem[]>
+  completionDetails: (worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null) => Promise<CompletionDetails | null>
+  signatureHelp: (worktreePath: string, path: string, text: string, position: CodePosition) => Promise<SignatureHelp | null>
+  diagnostics: (worktreePath: string, path: string, text: string) => Promise<CodeDiagnostic[]>
+  closeDocument: (worktreePath: string, path: string) => void
   /** Rejects with git's message when the pattern is not a valid regex */
   searchText: (worktreePaths: string[], query: string, options: SearchOptions) => Promise<SearchResult>
   checkTools: () => Promise<ToolStatus[]>
