@@ -85,12 +85,9 @@ export function EditorComments({
   useEffect(() => {
     const live = mounted.current
     return () => {
-      handle.editor.changeViewZones((accessor) =>
-        live.forEach(({ id, observer }) => {
-          observer.disconnect()
-          accessor.removeZone(id)
-        })
-      )
+      // Outside changeViewZones, which skips its callback when the editor was disposed first
+      live.forEach(({ observer }) => observer.disconnect())
+      handle.editor.changeViewZones((accessor) => live.forEach(({ id }) => accessor.removeZone(id)))
       live.clear()
     }
   }, [handle])
