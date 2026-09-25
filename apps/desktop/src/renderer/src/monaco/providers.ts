@@ -2,38 +2,10 @@ import type { editor, languages } from 'monaco-editor'
 import type { CodePosition, CodeRange } from '../../../shared/types'
 import type { Monaco } from './setup'
 
-// Keys of monaco.languages.CompletionItemKind; kept as a literal union here so this stays
-// Monaco-free at runtime (providers.test.ts imports these helpers without loading Monaco).
-type CompletionKindName =
-  | 'Method'
-  | 'Function'
-  | 'Constructor'
-  | 'Field'
-  | 'Variable'
-  | 'Class'
-  | 'Struct'
-  | 'Interface'
-  | 'Module'
-  | 'Property'
-  | 'Event'
-  | 'Operator'
-  | 'Unit'
-  | 'Value'
-  | 'Constant'
-  | 'Enum'
-  | 'EnumMember'
-  | 'Keyword'
-  | 'Text'
-  | 'Color'
-  | 'File'
-  | 'Reference'
-  | 'Customcolor'
-  | 'Folder'
-  | 'TypeParameter'
-  | 'User'
-  | 'Issue'
-  | 'Tool'
-  | 'Snippet'
+// Keys of monaco.languages.CompletionItemKind, read straight off the type so this can never drift
+// from the real enum; `languages` is a type-only import, so this stays Monaco-free at runtime
+// (providers.test.ts imports these helpers without loading Monaco).
+type CompletionKindName = keyof typeof languages.CompletionItemKind
 
 const KINDS = {
   method: 'Method',
@@ -78,7 +50,7 @@ const documents = new Map<string, { worktreePath: string; path: string }>()
 export const registerDocument = (model: editor.ITextModel, worktreePath: string, path: string): void => void documents.set(model.uri.toString(), { worktreePath, path })
 export const forgetDocument = (model: editor.ITextModel): void => void documents.delete(model.uri.toString())
 
-const LANGUAGES = ['typescript', 'tsx', 'javascript', 'jsx']
+const LANGUAGES = ['typescript', 'tsx', 'javascript', 'jsx'] as const
 
 type ResolvableCompletionItem = languages.CompletionItem & {
   data?: { uri: string; name: string; source: string | null; data: string | null; position: CodePosition; text: string }
@@ -87,7 +59,8 @@ type ResolvableCompletionItem = languages.CompletionItem & {
 export function registerTypeScriptProviders(monaco: Monaco): void {
   for (const language of LANGUAGES) {
     monaco.languages.registerCompletionItemProvider(language, {
-      triggerCharacters: ['.', '"', "'", '/', '@', '<'],
+      // '<' and '/' aren't forwarded to the TS completion request itself, so they'd only pop Monaco's global list
+      triggerCharacters: ['.', '"', "'", '@'],
       provideCompletionItems: async (model, position) => {
         const document = documents.get(model.uri.toString())
         if (!document) return { suggestions: [] }
@@ -96,15 +69,21 @@ export function registerTypeScriptProviders(monaco: Monaco): void {
         const word = model.getWordUntilPosition(position)
         const wordRange = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
         return {
-          suggestions: items.map((item) => ({
-            label: item.source ? { label: item.name, description: item.source } : item.name,
-            kind: monaco.languages.CompletionItemKind[completionKind(item.kind)],
-            sortText: item.sortText,
-            insertText: item.insertText,
-            range: item.range ? toMonacoRange(item.range) : wordRange,
-            // resolveCompletionItem reads these back
-            data: { uri: model.uri.toString(), name: item.name, source: item.source, data: item.data, position: toCodePosition(position), text }
-          }))
+          suggestions: items.map((item) => {
+            const range = item.range ? toMonacoRange(item.range) : wordRange
+            return {
+              label: item.source ? { label: item.name, description: item.source } : item.name,
+              kind: monaco.languages.CompletionItemKind[completionKind(item.kind)],
+              sortText: item.sortText,
+              insertText: item.insertText,
+              // TS ranges that don't match the word under the cursor (e.g. `?.foo` replacing just `.`) need an
+              // explicit filterText starting with what's already in that range, or Monaco's fuzzy match drops them
+              filterText: item.range ? model.getValueInRange(range) + item.name : undefined,
+              range,
+              // resolveCompletionItem reads these back
+              data: { uri: model.uri.toString(), name: item.name, source: item.source, data: item.data, position: toCodePosition(position), text }
+            }
+          })
         }
       },
       resolveCompletionItem: async (item: ResolvableCompletionItem) => {
