@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { defineActions, key } from '../../shared/keymap'
-import { menuActions, registerActionRunner, runAction } from './actionRunners'
+import { menuActions, registerActionRunner, runAction, runnableActionFor } from './actionRunners'
 
 defineActions([
   { id: 'test.zen', label: 'Zen: the main zone alone', menuLabel: 'Zen', section: 'Panels', keys: key('Enter', { meta: true, shift: true }) },
@@ -50,4 +50,16 @@ test('running an id calls its runner, and an unknown id is a no-op', () => {
   runAction('test.missing')
   expect(ran).toBe(1)
   drop()
+})
+
+test('an editor hands ⌘ chords with a runner back to the app, never plain keys', () => {
+  const drop = registerActionRunner('test.zen', () => undefined)
+  const dropLine = registerActionRunner('test.line', () => undefined)
+  const press = (code: string, modifiers: Partial<Record<'metaKey' | 'shiftKey', boolean>> = {}) =>
+    ({ code, key: code, metaKey: false, shiftKey: false, altKey: false, ctrlKey: false, ...modifiers }) as KeyboardEvent
+  expect(runnableActionFor(press('Enter', { metaKey: true, shiftKey: true }))).toBe('test.zen')
+  expect(runnableActionFor(press('KeyJ'))).toBeUndefined()
+  drop()
+  dropLine()
+  expect(runnableActionFor(press('Enter', { metaKey: true, shiftKey: true }))).toBeUndefined()
 })

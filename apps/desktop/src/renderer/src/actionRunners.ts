@@ -1,4 +1,4 @@
-import { actionOf, shortcutOf } from '../../shared/keymap'
+import { actionForEvent, actionOf, shortcutOf } from '../../shared/keymap'
 import { MENU_SECTIONS, NO_ACCELERATOR, NOT_IN_MENU } from '../../shared/menu'
 import { toAccelerator } from '../../shared/shortcut'
 
@@ -26,6 +26,12 @@ export const runAction = (id: string): void => runners.get(id)?.()
 export const subscribeRunners = (listener: () => void): (() => void) => {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+/** A registered action for a ⌘ or ⌃ chord; editors with their own keymaps pass these back to the app */
+export function runnableActionFor(event: KeyboardEvent): string | undefined {
+  if (!event.metaKey && !event.ctrlKey) return undefined
+  return actionForEvent(event, [...runners.keys()])
 }
 
 const sectionOrder = (section: string): number => MENU_SECTIONS.findIndex(([candidate]) => candidate === section)
