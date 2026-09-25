@@ -6,6 +6,7 @@ import { CommentCard, CommentDraft, orderRange, useCodeDrag } from './Comments'
 import { type Navigate, useSymbolNavigation } from './codeNavigation'
 import { Icon } from './Icon'
 import { CodeEditor, type CodeEditorHandle } from './monaco/CodeEditor'
+import { normalizeEol } from './monaco/text'
 import { EmptyState } from './ui'
 
 import { activeTheme, getSettings } from './settings'
@@ -345,7 +346,8 @@ function TextFileView({
             contents={contents}
             line={line}
             onChange={(text) => {
-              if (text === (latest.current ?? onDisk.current)) return
+              const baseline = latest.current ?? onDisk.current
+              if (baseline !== null && normalizeEol(text) === normalizeEol(baseline)) return
               latest.current = text
               setStatus('pending')
               clearTimeout(timer.current)

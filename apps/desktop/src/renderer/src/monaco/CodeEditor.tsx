@@ -9,6 +9,11 @@ import { languageFor } from './theme'
 
 export type CodeEditorHandle = { editor: MonacoEditor.IStandaloneCodeEditor; monaco: Monaco }
 
+// The same file can be open in more than one CodeEditor at once (a plugin preview alongside the
+// Worktrees viewer); each instance needs its own model, so the URI carries a unique query to keep
+// them from colliding on the same in-memory document.
+let instanceCounter = 0
+
 export function CodeEditor({
   worktreePath,
   path,
@@ -38,8 +43,8 @@ export function CodeEditor({
       await ensureLanguage(monaco, language)
       if (disposed || !host.current) return
       applyEditorTheme(monaco)
-      const uri = monaco.Uri.file(`${worktreePath}/${path}`)
-      const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(contents, language, uri)
+      const uri = monaco.Uri.file(`${worktreePath}/${path}`).with({ query: String(++instanceCounter) })
+      const model = monaco.editor.createModel(contents, language, uri)
       created = monaco.editor.create(host.current, {
         model,
         automaticLayout: true,
@@ -51,7 +56,10 @@ export function CodeEditor({
         fixedOverflowWidgets: true,
         quickSuggestions: { other: true, comments: false, strings: false },
         suggest: { showStatusBar: true, preview: true },
-        tabSize: 2
+        tabSize: 2,
+        // The default EditContext div doesn't register as a text input, so FileView's bare c/a comment
+        // shortcuts (gated on isTyping) would fire while typing in the editor; the textarea target does
+        editContext: false
       })
       created.onKeyDown((event) => {
         const id = runnableActionFor(event.browserEvent)
