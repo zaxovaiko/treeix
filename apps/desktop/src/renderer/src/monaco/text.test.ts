@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { applyExternalText, normalizeEol } from './text'
+import { applyExternalText, gutterRange, normalizeEol } from './text'
 
 test('a disk change becomes the smallest single edit', () => {
   expect(applyExternalText('a\nb\nc', 'a\nb\nc')).toBeNull()
@@ -12,4 +12,10 @@ test('an EOL-only difference is not a change', () => {
   expect(normalizeEol('a\r\nb\rc\n')).toBe('a\nb\nc\n')
   expect(applyExternalText('a\r\nb\r\nc', 'a\nb\nc')).toBeNull()
   expect(applyExternalText('a\rb\rc', 'a\nb\nc')).toBeNull()
+})
+
+test('a line-number drag comments on the lines it covered', () => {
+  expect(gutterRange({ startLineNumber: 4, endLineNumber: 4, endColumn: 12 })).toEqual({ start: 4, end: 4 })
+  expect(gutterRange({ startLineNumber: 4, endLineNumber: 7, endColumn: 1 })).toEqual({ start: 4, end: 6 })
+  expect(gutterRange({ startLineNumber: 4, endLineNumber: 7, endColumn: 9 })).toEqual({ start: 4, end: 7 })
 })

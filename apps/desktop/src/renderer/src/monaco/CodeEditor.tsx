@@ -1,7 +1,7 @@
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useEffect, useRef, useState } from 'react'
 import { supportsLanguageService } from '../../../shared/languages'
-import { runAction, runnableActionFor } from '../actionRunners'
+import { routeAppChord } from '../actionRunners'
 import { fontStack, getSettings, MONO_STACK, useSettings } from '../settings'
 import { EmptyState } from '../ui'
 import { forgetDocument, registerDocument, watchDiagnostics } from './providers'
@@ -66,14 +66,8 @@ export function CodeEditor({
         // shortcuts (gated on isTyping) would fire while typing in the editor; the textarea target does
         editContext: false
       })
-      created.onKeyDown((event) => {
-        const id = runnableActionFor(event.browserEvent)
-        // ⌘/ stays with Monaco's own toggle-line-comment, like VS Code; every other app chord (palette, leader, tab digits) reaches the app instead of Monaco's chords and find-next
-        if (!id || id === 'app.shortcuts') return
-        event.preventDefault()
-        event.stopPropagation()
-        runAction(id)
-      })
+      // ⌘/ stays with Monaco's own toggle-line-comment, like VS Code; every other app chord (palette, leader, tab digits) reaches the app instead of Monaco's chords and find-next
+      created.onKeyDown((event) => routeAppChord(event.browserEvent, ['app.shortcuts']))
       created.onDidChangeModelContent(() => onChangeRef.current(model.getValue()))
       const next = { editor: created, monaco }
       setHandle(next)

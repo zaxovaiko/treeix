@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supportsLanguageService } from '../../shared/languages'
 import type { HoverInfo, NavigationKind, SymbolTarget } from '../../shared/types'
 import { matchesShortcut, toAccelerator } from '../../shared/shortcut'
-import { copyText, openMenu } from './contextMenu'
+import { copyText, type MenuEntry, openMenu } from './contextMenu'
 import { activeTheme, getSettings } from './settings'
 import { LazyMarkdown } from './LazyMarkdown'
 import { Popup } from './ui'
@@ -48,8 +48,16 @@ export const getActiveTarget = (): { target: SymbolTarget; worktreePath: string 
 export const setActiveTarget = (target: SymbolTarget, worktreePath: string): void => void (activeTarget = { target, worktreePath })
 
 /** The right-click menu of a symbol: the navigation actions and copy */
-export function openSymbolMenu(event: MouseEvent | React.MouseEvent, target: SymbolTarget, worktreePath: string, path: string, onNavigate: Navigate): void {
+export function openSymbolMenu(
+  event: MouseEvent | React.MouseEvent,
+  target: SymbolTarget,
+  worktreePath: string,
+  path: string,
+  onNavigate: Navigate,
+  leading: MenuEntry[] = []
+): void {
   openMenu(event, [
+    ...leading,
     ...NAVIGATION_ACTIONS.map(({ kind, label }) => ({
       label,
       accelerator: acceleratorFor(kind),

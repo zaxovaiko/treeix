@@ -34,6 +34,16 @@ export function runnableActionFor(event: KeyboardEvent): string | undefined {
   return actionForEvent(event, [...runners.keys()])
 }
 
+/** Runs the app action a ⌘ or ⌃ chord answers to, unless it's one of `kept`; true when the app took the key */
+export function routeAppChord(event: KeyboardEvent, kept: string[] = []): boolean {
+  const id = runnableActionFor(event)
+  if (!id || kept.includes(id)) return false
+  event.preventDefault()
+  event.stopPropagation()
+  runAction(id)
+  return true
+}
+
 const sectionOrder = (section: string): number => MENU_SECTIONS.findIndex(([candidate]) => candidate === section)
 
 /** Every runnable action of a menu section, with the key it currently answers to */

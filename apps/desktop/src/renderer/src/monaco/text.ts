@@ -3,6 +3,12 @@ export function normalizeEol(text: string): string {
   return text.replace(/\r\n|\r/g, '\n')
 }
 
+/** The lines a line-number drag selected; a selection ending at column 1 stops on the line before */
+export function gutterRange(selection: { startLineNumber: number; endLineNumber: number; endColumn: number }): { start: number; end: number } {
+  const end = selection.endColumn === 1 && selection.endLineNumber > selection.startLineNumber ? selection.endLineNumber - 1 : selection.endLineNumber
+  return { start: selection.startLineNumber, end }
+}
+
 /** The changed middle between two texts, as offsets into `current` */
 export function applyExternalText(current: string, next: string): { start: number; end: number; text: string } | null {
   if (current === next || normalizeEol(current) === normalizeEol(next)) return null
