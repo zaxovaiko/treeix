@@ -26,10 +26,11 @@ const PREFERENCES: ts.UserPreferences = {
   importModuleSpecifierPreference: 'shortest'
 }
 
+const parseConfig = (configPath: string): ts.ParsedCommandLine | undefined =>
+  ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => undefined })
+
 function createProject(configPath: string | undefined, directory: string): Project {
-  const parsed = configPath
-    ? ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => undefined })
-    : undefined
+  const parsed = configPath ? parseConfig(configPath) : undefined
   const options: ts.CompilerOptions = parsed?.options ?? { allowJs: true, jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.ESNext }
   const roots = new Set(parsed?.fileNames ?? [])
   const version = (fileName: string): string => {
@@ -63,9 +64,27 @@ function createProject(configPath: string | undefined, directory: string): Proje
   return { service: ts.createLanguageService(host, ts.createDocumentRegistry()), roots }
 }
 
-/** One service per nearest tsconfig, so monorepo packages resolve with their own settings */
+const owners = new Map<string, string | undefined>()
+/**
+ * The nearest tsconfig, or for a solution-style one (`files: []` plus references) the referenced
+ * config that includes the file, like tsserver: the solution's own program redirects the file to
+ * a build output and never holds its source
+ */
+function ownerConfig(fileName: string): string | undefined {
+  if (owners.has(fileName)) return owners.get(fileName)
+  const nearest = ts.findConfigFile(dirname(fileName), ts.sys.fileExists)
+  const parsed = nearest ? parseConfig(nearest) : undefined
+  const referenced =
+    parsed && !parsed.fileNames.includes(fileName)
+      ? parsed.projectReferences?.map(ts.resolveProjectReferencePath).find((reference) => parseConfig(reference)?.fileNames.includes(fileName))
+      : undefined
+  owners.set(fileName, referenced ?? nearest)
+  return referenced ?? nearest
+}
+
+/** One service per owning tsconfig, so monorepo packages resolve with their own settings */
 function projectFor(worktreePath: string, fileName: string): Project {
-  const configPath = ts.findConfigFile(dirname(fileName), ts.sys.fileExists)
+  const configPath = ownerConfig(fileName)
   const insideWorktree = configPath && !relative(worktreePath, configPath).startsWith('..')
   const key = insideWorktree ? configPath : `${worktreePath}/`
   let project = projects.get(key)

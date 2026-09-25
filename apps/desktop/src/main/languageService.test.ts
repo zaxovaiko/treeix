@@ -46,3 +46,13 @@ test('answers from unsaved text: completions, auto-imports, signatures, diagnost
   expect(completions(root, 'notes.md', '', { line: 1, column: 0 })).toBeNull()
   expect(diagnostics(root, 'notes.md', '')).toBeNull()
 })
+
+test('a solution-style tsconfig answers through the referenced project that includes the file', () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-ls-'))
+  writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ files: [], references: [{ path: './tsconfig.app.json' }] }))
+  writeFileSync(join(root, 'tsconfig.app.json'), JSON.stringify({ compilerOptions: { composite: true, strict: true }, include: ['*.ts'] }))
+  writeFileSync(join(root, 'use.ts'), '')
+
+  const members = completions(root, 'use.ts', 'const list = [1, 2]\nlist.ma', { line: 2, column: 7 }) ?? []
+  expect(members.some((item) => item.name === 'map')).toBe(true)
+})
