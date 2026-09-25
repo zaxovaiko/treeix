@@ -35,6 +35,9 @@ export function CodeEditor({
   const [handle, setHandle] = useState<CodeEditorHandle | null>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  // The model starts from the latest contents, so a disk change during load isn't an undo step back to stale text
+  const contentsRef = useRef(contents)
+  contentsRef.current = contents
   const settings = useSettings()
 
   useEffect(() => {
@@ -47,7 +50,7 @@ export function CodeEditor({
       if (disposed || !host.current) return
       applyEditorTheme(monaco)
       const uri = monaco.Uri.file(`${worktreePath}/${path}`).with({ query: String(++instanceCounter) })
-      const model = monaco.editor.createModel(contents, language, uri)
+      const model = monaco.editor.createModel(contentsRef.current, language, uri)
       registerDocument(model, worktreePath, path)
       diagnosticsWatch = supportsLanguageService(path) ? watchDiagnostics(monaco, model, worktreePath, path) : null
       created = monaco.editor.create(host.current, {
