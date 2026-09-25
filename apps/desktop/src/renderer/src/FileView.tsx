@@ -213,6 +213,7 @@ function TextFileView({
 
   useEffect(() => {
     setDraft(null)
+    setEditor(null)
     setStatus('saved')
     latest.current = null
     onDisk.current = null
