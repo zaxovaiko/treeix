@@ -84,6 +84,8 @@ export async function ensureLanguage(monaco: Monaco, language: string): Promise<
   monaco.languages.register({ id: language })
   const { shikiToMonaco } = await import('@shikijs/monaco')
   shikiToMonaco(shiki, monaco)
+  // shikiToMonaco switches every editor to shiki's raw theme; restore ours even if the editor that asked has closed
+  applyEditorTheme(monaco)
 }
 
 /**
