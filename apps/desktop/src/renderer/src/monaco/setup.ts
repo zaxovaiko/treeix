@@ -55,6 +55,11 @@ async function load(): Promise<{ monaco: Monaco; shiki: Shiki }> {
   }
   monaco.typescript.typescriptDefaults.setModeConfiguration(off)
   monaco.typescript.javascriptDefaults.setModeConfiguration(off)
+  // Their JSON, CSS and HTML modes ask the base worker for validation, folding and colors it doesn't have, which throws; shiki colors these files
+  const { json, css, html } = monaco
+  for (const defaults of [json.jsonDefaults, css.cssDefaults, css.scssDefaults, css.lessDefaults, html.htmlDefaults, html.handlebarDefaults, html.razorDefaults]) {
+    defaults.setModeConfiguration({})
+  }
   const shiki = await createHighlighter({
     themes: [pierreDark as ShikiThemeInput, pierreLight as ShikiThemeInput],
     langs: []
