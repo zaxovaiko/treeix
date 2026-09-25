@@ -9,8 +9,9 @@ import type { CodeEditorHandle } from './CodeEditor'
 import { gutterRange } from './text'
 
 const targetAt = (handle: CodeEditorHandle, path: string, position: { lineNumber: number; column: number } | null): SymbolTarget | null => {
-  const word = position && handle.editor.getModel()?.getWordAtPosition(position)
-  return word && position ? { path, line: position.lineNumber, column: word.startColumn - 1, symbol: word.word } : null
+  const model = handle.editor.getModel()
+  const word = position && model?.getWordAtPosition(position)
+  return word && position && model ? { path, line: position.lineNumber, column: word.startColumn - 1, symbol: word.word, text: model.getValue() } : null
 }
 
 const selectedText = ({ editor }: CodeEditorHandle): string => {

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeDocument, completionDetails, completions, diagnostics, hover, navigate, signatureHelp } from './languageService'
@@ -17,6 +17,9 @@ test('finds definitions, references and hover info through the tsconfig program'
   expect(references[0].isDefinition).toBe(true)
   expect(hover(root, target)).toEqual({ signature: '(alias) type Status = "pending" | "active"\nimport Status', documentation: 'Grant lifecycle' })
   expect(navigate(root, 'references', { ...target, path: 'notes.md' })).toBeNull()
+  // Unsaved text with a line added above: the target's position points into that text, not the file on disk
+  const edited = `\n${readFileSync(join(root, 'use.ts'), 'utf8')}`
+  expect(hover(root, { ...target, line: 3, text: edited })?.signature).toBe('(alias) type Status = "pending" | "active"\nimport Status')
 })
 
 test('answers from unsaved text: completions, auto-imports, signatures, diagnostics', () => {

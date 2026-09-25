@@ -48,7 +48,14 @@ export type SearchOptions = { caseSensitive: boolean; wholeWord: boolean; regex:
 export type SearchMatch = CodeLocation & { worktreePath: string }
 export type SearchResult = { matches: SearchMatch[]; truncated: boolean }
 
-export type SymbolTarget = { path: string; line: number; column: number; symbol: string }
+export type SymbolTarget = {
+  path: string
+  line: number
+  column: number
+  symbol: string
+  /** The editor's unsaved text the position points into; without it the language service reads the file as last seen */
+  text?: string
+}
 export type NavigationKind = 'definition' | 'typeDefinition' | 'implementation' | 'references'
 export type HoverInfo = { signature: string; documentation: string }
 

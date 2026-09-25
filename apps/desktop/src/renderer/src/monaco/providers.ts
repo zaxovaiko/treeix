@@ -126,7 +126,7 @@ export function registerTypeScriptProviders(monaco: Monaco): void {
         const document = documents.get(model.uri.toString())
         const word = model.getWordAtPosition(position)
         if (!document || !word) return null
-        const info = await window.api.hover(document.worktreePath, { path: document.path, line: position.lineNumber, column: word.startColumn - 1, symbol: word.word })
+        const info = await window.api.hover(document.worktreePath, { path: document.path, line: position.lineNumber, column: word.startColumn - 1, symbol: word.word, text: model.getValue() })
         if (!info) return null
         return { contents: [{ value: `\`\`\`typescript\n${info.signature}\n\`\`\`` }, ...(info.documentation ? [{ value: info.documentation }] : [])] }
       }
