@@ -19,6 +19,7 @@ test('finds definitions, references and hover info through the tsconfig program'
   expect(navigate(root, 'references', { ...target, path: 'notes.md' })).toBeNull()
   // Unsaved text with a line added above: the target's position points into that text, not the file on disk
   const edited = `\n${readFileSync(join(root, 'use.ts'), 'utf8')}`
+  diagnostics(root, 'use.ts', edited)
   expect(hover(root, { ...target, line: 3, text: edited })?.signature).toBe('(alias) type Status = "pending" | "active"\nimport Status')
 })
 
@@ -58,4 +59,16 @@ test('a solution-style tsconfig answers through the referenced project that incl
 
   const members = completions(root, 'use.ts', 'const list = [1, 2]\nlist.ma', { line: 2, column: 7 }) ?? []
   expect(members.some((item) => item.name === 'map')).toBe(true)
+})
+
+test('text sent after the editor closed does not come back as unsaved text', () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-ls-'))
+  writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true }, include: ['*.ts'] }))
+  writeFileSync(join(root, 'use.ts'), 'export const disk = 1\nexport const also = 2\n')
+  const stale = '\nexport const stale = 1\n'
+
+  diagnostics(root, 'use.ts', stale)
+  closeDocument(root, 'use.ts')
+  navigate(root, 'definition', { path: 'use.ts', line: 2, column: 13, symbol: 'stale', text: stale })
+  expect(hover(root, { path: 'use.ts', line: 1, column: 13, symbol: 'disk' })?.signature).toBe('const disk: 1')
 })

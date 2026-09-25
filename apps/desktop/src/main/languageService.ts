@@ -139,7 +139,8 @@ function referenceSpans(service: ts.LanguageService, fileName: string, position:
 export function navigate(worktreePath: string, kind: NavigationKind, target: SymbolTarget): CodeLocation[] | null {
   const fileName = resolve(worktreePath, target.path)
   if (!supportsLanguageService(fileName)) return null
-  if (target.text !== undefined) setOverlay(fileName, target.text)
+  // Only an open editor's text: after its tab closed, a stale cursor target must not bring the text back
+  if (target.text !== undefined && overlays.has(fileName)) setOverlay(fileName, target.text)
   const project = projectFor(worktreePath, fileName)
   const position = positionOf(project, fileName, target)
   if (position === null) return null
@@ -168,7 +169,7 @@ export function navigate(worktreePath: string, kind: NavigationKind, target: Sym
 export function hover(worktreePath: string, target: SymbolTarget): HoverInfo | null {
   const fileName = resolve(worktreePath, target.path)
   if (!supportsLanguageService(fileName)) return null
-  if (target.text !== undefined) setOverlay(fileName, target.text)
+  if (target.text !== undefined && overlays.has(fileName)) setOverlay(fileName, target.text)
   const project = projectFor(worktreePath, fileName)
   const position = positionOf(project, fileName, target)
   const info = position === null ? undefined : project.service.getQuickInfoAtPosition(fileName, position)
