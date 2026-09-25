@@ -193,11 +193,16 @@ export function completions(worktreePath: string, path: string, text: string, po
   }))
 }
 
+/** data is what completions() serialized from TypeScript's own CompletionEntryData; narrow before trusting it back */
+function isCompletionEntryData(value: unknown): value is ts.CompletionEntryData {
+  return typeof value === 'object' && value !== null && 'exportName' in value && typeof (value as { exportName: unknown }).exportName === 'string'
+}
+
 export function completionDetails(worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null): CompletionDetails | null {
   const document = openDocument(worktreePath, path, text, position)
   if (!document) return null
-  // data is what completions() serialized from TypeScript's own CompletionEntryData
-  const entryData = data ? (JSON.parse(data) as ts.CompletionEntryData) : undefined
+  const parsed: unknown = data ? JSON.parse(data) : undefined
+  const entryData = isCompletionEntryData(parsed) ? parsed : undefined
   const details = document.service.getCompletionEntryDetails(document.fileName, document.offset, name, {}, source ?? undefined, PREFERENCES, entryData)
   if (!details) return null
   const edits = (details.codeActions ?? [])
