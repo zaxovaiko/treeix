@@ -279,3 +279,24 @@ html:not([data-hints]) [data-key-hint] {
 [data-session-id] .xterm .xterm-viewport {
   background-color: transparent;
 }
+
+/* Monaco paints opaque surfaces of its own; a translucent window shows the panel behind */
+html[data-translucent] .code-editor .monaco-editor,
+html[data-translucent] .code-editor .monaco-editor-background,
+html[data-translucent] .code-editor .monaco-editor .margin {
+  background-color: transparent !important;
+}
+.code-editor-target-line {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+.code-editor-comment-glyph::before {
+  content: '+';
+  display: grid;
+  place-items: center;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}

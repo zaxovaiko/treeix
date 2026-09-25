@@ -5,6 +5,7 @@ import { type Attachment, extractFileLines, type LineRange, rangeLabel, type Rev
 import { CommentCard, CommentDraft, orderRange, useCodeDrag } from './Comments'
 import { type Navigate, useSymbolNavigation } from './codeNavigation'
 import { Icon } from './Icon'
+import { CodeEditor, type CodeEditorHandle } from './monaco/CodeEditor'
 import { EmptyState } from './ui'
 
 import { activeTheme, getSettings } from './settings'
@@ -124,6 +125,8 @@ function TextFileView({
   const conflictRef = useRef<string | null>(null)
   conflictRef.current = conflict
   const version = useMemo(() => (contents ? contentHash(contents) : ''), [contents])
+  const [editor, setEditor] = useState<CodeEditorHandle | null>(null)
+  void editor // wired up for a later task (comments/symbols reaching into the live editor)
 
   const loadFromDisk = (text: string): void => {
     onDisk.current = text
@@ -230,6 +233,7 @@ function TextFileView({
 
   // Highlighting renders asynchronously, so poll a few frames for the target row
   useEffect(() => {
+    if (editable) return
     if (!contents || !line) return
     let attempts = 0
     let frame = requestAnimationFrame(function scroll() {
@@ -334,49 +338,66 @@ function TextFileView({
         onContextMenu={symbols.onContextMenu}
         className={`flex min-h-0 flex-1 flex-col ${drag.range ? 'select-none' : 'select-text'}`}
       >
-        {/* Renders only rows near the viewport: a 1,200-line file was 50k DOM nodes */}
-        <Virtualizer className="min-h-0 flex-1 overflow-auto">
-        <File
-          key={`${path}:${version}`}
-          file={{ name: path, contents, cacheKey: `${worktreePath}:${path}:${version}` }}
-          className="block"
-          style={diffBackground()}
-          lineAnnotations={lineAnnotations}
-          selectedLines={drag.range ?? draft ?? (line ? { start: line, end: line } : null)}
-          edit={editable}
-          onEditChange={(event) => {
-            latest.current = event.file.contents
-            setStatus('pending')
-            clearTimeout(timer.current)
-            timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_DELAY_MS)
-          }}
-          onEditComplete={() => 'accept'}
-          renderAnnotation={({ metadata }) => {
-            const comment = comments.find((candidate) => candidate.id === metadata.commentId)
-            if (comment) return <CommentCard comment={comment} onDelete={() => onDeleteComment(comment)} />
-            return draft ? (
-              <CommentDraft
-                label={`Comment on line ${rangeLabel(draft)}`}
-                onCancel={() => setDraft(null)}
-                onSave={(text, attachments) => {
-                  onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
-                  setDraft(null)
-                }}
-              />
-            ) : null
-          }}
-          options={{
-            ...codeThemeOptions(),
-            disableFileHeader: true,
-            enableLineSelection: true,
-            enableGutterUtility: true,
-            onGutterUtilityClick: (range) => setDraft(orderRange(range)),
-            onLineSelectionEnd: (range) => range && setDraft(orderRange(range)),
-            onLineEnter: (hovered) => drag.enterLine({ lineNumber: hovered.lineNumber }),
-            ...symbols.tokenOptions
-          }}
-        />
-        </Virtualizer>
+        {editable ? (
+          <CodeEditor
+            worktreePath={worktreePath}
+            path={path}
+            contents={contents}
+            line={line}
+            onChange={(text) => {
+              if (text === (latest.current ?? onDisk.current)) return
+              latest.current = text
+              setStatus('pending')
+              clearTimeout(timer.current)
+              timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_DELAY_MS)
+            }}
+            onReady={setEditor}
+          />
+        ) : (
+          // Renders only rows near the viewport: a 1,200-line file was 50k DOM nodes
+          <Virtualizer className="min-h-0 flex-1 overflow-auto">
+            <File
+              key={`${path}:${version}`}
+              file={{ name: path, contents, cacheKey: `${worktreePath}:${path}:${version}` }}
+              className="block"
+              style={diffBackground()}
+              lineAnnotations={lineAnnotations}
+              selectedLines={drag.range ?? draft ?? (line ? { start: line, end: line } : null)}
+              edit={editable}
+              onEditChange={(event) => {
+                latest.current = event.file.contents
+                setStatus('pending')
+                clearTimeout(timer.current)
+                timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_DELAY_MS)
+              }}
+              onEditComplete={() => 'accept'}
+              renderAnnotation={({ metadata }) => {
+                const comment = comments.find((candidate) => candidate.id === metadata.commentId)
+                if (comment) return <CommentCard comment={comment} onDelete={() => onDeleteComment(comment)} />
+                return draft ? (
+                  <CommentDraft
+                    label={`Comment on line ${rangeLabel(draft)}`}
+                    onCancel={() => setDraft(null)}
+                    onSave={(text, attachments) => {
+                      onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
+                      setDraft(null)
+                    }}
+                  />
+                ) : null
+              }}
+              options={{
+                ...codeThemeOptions(),
+                disableFileHeader: true,
+                enableLineSelection: true,
+                enableGutterUtility: true,
+                onGutterUtilityClick: (range) => setDraft(orderRange(range)),
+                onLineSelectionEnd: (range) => range && setDraft(orderRange(range)),
+                onLineEnter: (hovered) => drag.enterLine({ lineNumber: hovered.lineNumber }),
+                ...symbols.tokenOptions
+              }}
+            />
+          </Virtualizer>
+        )}
         {symbols.hoverCard}
       </div>
     </div>

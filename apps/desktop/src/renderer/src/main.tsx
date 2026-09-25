@@ -22,6 +22,7 @@ function applyAppearance(): void {
   document.documentElement.style.setProperty('--diffs-line-height', `${Math.round(editorFontSize * 1.54)}px`)
   // The System theme hands appearance back to macOS; otherwise prefers-color-scheme would stay on the last fixed theme's mode
   window.api.setTranslucent(opacity < 100, THEMES[theme].background, getSettings().theme === 'system' ? 'system' : THEMES[theme].mode)
+  document.documentElement.toggleAttribute('data-translucent', opacity < 100)
   // Registering the same shortcut again is a no-op in the main process
   window.api.configureHotkey(hotkeyOptions())
 }
