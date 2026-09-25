@@ -1,8 +1,10 @@
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useEffect, useRef, useState } from 'react'
+import { supportsLanguageService } from '../../../shared/languages'
 import { runAction, runnableActionFor } from '../actionRunners'
 import { fontStack, getSettings, MONO_STACK, useSettings } from '../settings'
 import { EmptyState } from '../ui'
+import { forgetDocument, registerDocument, watchDiagnostics } from './providers'
 import { applyEditorTheme, ensureLanguage, loadMonaco, type Monaco } from './setup'
 import { applyExternalText } from './text'
 import { languageFor } from './theme'
@@ -38,6 +40,7 @@ export function CodeEditor({
   useEffect(() => {
     let disposed = false
     let created: MonacoEditor.IStandaloneCodeEditor | null = null
+    let diagnosticsWatch: { dispose: () => void } | null = null
     void loadMonaco().then(async (monaco) => {
       const language = languageFor(path)
       await ensureLanguage(monaco, language)
@@ -45,6 +48,8 @@ export function CodeEditor({
       applyEditorTheme(monaco)
       const uri = monaco.Uri.file(`${worktreePath}/${path}`).with({ query: String(++instanceCounter) })
       const model = monaco.editor.createModel(contents, language, uri)
+      registerDocument(model, worktreePath, path)
+      diagnosticsWatch = supportsLanguageService(path) ? watchDiagnostics(monaco, model, worktreePath, path) : null
       created = monaco.editor.create(host.current, {
         model,
         automaticLayout: true,
@@ -77,6 +82,8 @@ export function CodeEditor({
     return () => {
       disposed = true
       const model = created?.getModel()
+      diagnosticsWatch?.dispose()
+      if (model) forgetDocument(model)
       created?.dispose()
       model?.dispose()
       window.api.closeDocument(worktreePath, path)
