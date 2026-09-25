@@ -45,6 +45,21 @@ const acceleratorFor = (kind: NavigationKind): string | undefined => {
 /** The symbol F12 and friends act on: the last one clicked or hovered in any code view */
 let activeTarget: { target: SymbolTarget; worktreePath: string } | null = null
 export const getActiveTarget = (): { target: SymbolTarget; worktreePath: string } | null => activeTarget
+export const setActiveTarget = (target: SymbolTarget, worktreePath: string): void => void (activeTarget = { target, worktreePath })
+
+/** The right-click menu of a symbol: the navigation actions and copy */
+export function openSymbolMenu(event: MouseEvent | React.MouseEvent, target: SymbolTarget, worktreePath: string, path: string, onNavigate: Navigate): void {
+  openMenu(event, [
+    ...NAVIGATION_ACTIONS.map(({ kind, label }) => ({
+      label,
+      accelerator: acceleratorFor(kind),
+      enabled: kind === 'definition' || kind === 'references' || supportsLanguageService(path),
+      run: () => onNavigate(kind, target, worktreePath)
+    })),
+    null,
+    { label: `Copy "${target.symbol}"`, run: () => copyText(target.symbol) }
+  ])
+}
 
 export function navigationKindForKey(event: KeyboardEvent): NavigationKind | null {
   const keys = getSettings().navigationKeys
@@ -188,16 +203,7 @@ export function useSymbolNavigation({
     const target = hovered.current
     if (!target) return
     setCard(null)
-    openMenu(event, [
-      ...NAVIGATION_ACTIONS.map(({ kind, label }) => ({
-        label,
-        accelerator: acceleratorFor(kind),
-        enabled: kind === 'definition' || kind === 'references' || supportsLanguageService(path),
-        run: () => onNavigate(kind, target, worktreePath)
-      })),
-      null,
-      { label: `Copy "${target.symbol}"`, run: () => copyText(target.symbol) }
-    ])
+    openSymbolMenu(event, target, worktreePath, path, onNavigate)
   }
 
   // Portaled: dialogs use backdrop-filter, which would make this fixed card position relative to the dialog

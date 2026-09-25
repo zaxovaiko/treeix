@@ -6,6 +6,7 @@ import { CommentCard, CommentDraft, orderRange, useCodeDrag } from './Comments'
 import { type Navigate, useSymbolNavigation } from './codeNavigation'
 import { Icon } from './Icon'
 import { CodeEditor, type CodeEditorHandle } from './monaco/CodeEditor'
+import { EditorComments, useEditorNavigation } from './monaco/comments'
 import { normalizeEol } from './monaco/text'
 import { EmptyState } from './ui'
 
@@ -127,7 +128,7 @@ function TextFileView({
   conflictRef.current = conflict
   const version = useMemo(() => (contents ? contentHash(contents) : ''), [contents])
   const [editor, setEditor] = useState<CodeEditorHandle | null>(null)
-  void editor // wired up for a later task (comments/symbols reaching into the live editor)
+  useEditorNavigation(editor, worktreePath, path, onNavigate)
 
   const loadFromDisk = (text: string): void => {
     onDisk.current = text
@@ -263,6 +264,29 @@ function TextFileView({
     ...comments.map((comment) => ({ lineNumber: comment.range.end, metadata: { commentId: comment.id } })),
     ...(draft ? [{ lineNumber: draft.end, metadata: { commentId: null } }] : [])
   ]
+  const zones = editable
+    ? [
+        ...comments.map((comment) => ({ line: comment.range.end, key: comment.id, node: <CommentCard comment={comment} onDelete={() => onDeleteComment(comment)} /> })),
+        ...(draft
+          ? [
+              {
+                line: draft.end,
+                key: 'draft',
+                node: (
+                  <CommentDraft
+                    label={`Comment on line ${rangeLabel(draft)}`}
+                    onCancel={() => setDraft(null)}
+                    onSave={(text, attachments) => {
+                      onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
+                      setDraft(null)
+                    }}
+                  />
+                )
+              }
+            ]
+          : [])
+      ]
+    : []
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -336,25 +360,28 @@ function TextFileView({
         hidden={comparing}
         // Text selection belongs to the editor; comments start from the + in the gutter or by dragging line numbers
         onPointerDown={editable ? undefined : drag.onPointerDown}
-        onContextMenu={symbols.onContextMenu}
+        onContextMenu={editable ? undefined : symbols.onContextMenu}
         className={`flex min-h-0 flex-1 flex-col ${drag.range ? 'select-none' : 'select-text'}`}
       >
         {editable ? (
-          <CodeEditor
-            worktreePath={worktreePath}
-            path={path}
-            contents={contents}
-            line={line}
-            onChange={(text) => {
-              const baseline = latest.current ?? onDisk.current
-              if (baseline !== null && normalizeEol(text) === normalizeEol(baseline)) return
-              latest.current = text
-              setStatus('pending')
-              clearTimeout(timer.current)
-              timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_DELAY_MS)
-            }}
-            onReady={setEditor}
-          />
+          <>
+            <CodeEditor
+              worktreePath={worktreePath}
+              path={path}
+              contents={contents}
+              line={line}
+              onChange={(text) => {
+                const baseline = latest.current ?? onDisk.current
+                if (baseline !== null && normalizeEol(text) === normalizeEol(baseline)) return
+                latest.current = text
+                setStatus('pending')
+                clearTimeout(timer.current)
+                timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_DELAY_MS)
+              }}
+              onReady={setEditor}
+            />
+            {editor && <EditorComments handle={editor} zones={zones} onGutterComment={setDraft} />}
+          </>
         ) : (
           // Renders only rows near the viewport: a 1,200-line file was 50k DOM nodes
           <Virtualizer className="min-h-0 flex-1 overflow-auto">

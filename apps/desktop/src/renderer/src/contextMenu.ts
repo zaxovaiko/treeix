@@ -10,7 +10,7 @@ export function normalizeEntries(entries: MenuEntry[]): (MenuAction | null)[] {
   return visible.filter((entry, index) => entry !== null || (index > 0 && visible[index - 1] !== null && visible.slice(index + 1).some(Boolean)))
 }
 
-export function openMenu(event: React.MouseEvent, entries: MenuEntry[]): void {
+export function openMenu(event: MouseEvent | React.MouseEvent, entries: MenuEntry[]): void {
   event.preventDefault()
   event.stopPropagation()
   // Custom menus replace the native text menu, so keep copying a selection available
