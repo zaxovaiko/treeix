@@ -17,6 +17,8 @@ test('finds definitions, references and hover info through the tsconfig program'
   expect(references[0].isDefinition).toBe(true)
   expect(hover(root, target)).toEqual({ signature: '(alias) type Status = "pending" | "active"\nimport Status', documentation: 'Grant lifecycle' })
   expect(navigate(root, 'references', { ...target, path: 'notes.md' })).toBeNull()
+  // A column past the line end (a stale target) clamps to the line end instead of throwing
+  expect(() => hover(root, { ...target, column: 500 })).not.toThrow()
   // Unsaved text with a line added above: the target's position points into that text, not the file on disk
   const edited = `\n${readFileSync(join(root, 'use.ts'), 'utf8')}`
   diagnostics(root, 'use.ts', edited)

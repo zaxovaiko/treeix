@@ -109,7 +109,8 @@ function positionOf(project: Project, fileName: string, target: CodePosition): n
   if (!sourceFile) return null
   const lineStarts = sourceFile.getLineStarts()
   if (target.line < 1 || target.line > lineStarts.length) return null
-  return ts.getPositionOfLineAndCharacter(sourceFile, target.line - 1, target.column)
+  const lineEnd = target.line < lineStarts.length ? lineStarts[target.line] - 1 : sourceFile.text.length
+  return Math.min(lineStarts[target.line - 1] + target.column, lineEnd)
 }
 
 function toLocation(project: Project, worktreePath: string, fileName: string, start: number, isDefinition = false): CodeLocation | null {
