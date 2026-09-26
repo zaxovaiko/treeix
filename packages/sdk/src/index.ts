@@ -1,6 +1,7 @@
 import { createContext, type ComponentType, type ReactNode, useContext, useSyncExternalStore } from 'react'
 import type { Command } from '@treeix/app/CommandPalette'
 import type { IconName } from '@treeix/app/Icon'
+import type { Theme } from '@treeix/app/themes'
 import type { ReviewComment } from '@treeix/shared/comments'
 import type { Repo } from '@treeix/shared/types'
 
@@ -14,7 +15,7 @@ export type PluginManifest = {
   requires?: string[]
 }
 
-export type { Command, IconName }
+export type { Command, IconName, Theme }
 
 export * from './layout'
 export type * from './chat'
@@ -172,6 +173,8 @@ export type RendererPlugin = {
   toolMarks?: Record<string, ComponentType>
   /** Keys the plugin handles, listed in the shortcut sheet (?) and Settings */
   shortcuts?: ShortcutInfo[]
+  /** App themes by id, offered in Settings under their mode */
+  themes?: Record<string, Theme>
 }
 
 /** What the app offers plugins in the renderer */

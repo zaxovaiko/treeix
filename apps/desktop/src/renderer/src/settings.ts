@@ -3,7 +3,7 @@ import { setKeymapOverrides } from '../../shared/keymap'
 import { isShortcut, type Shortcut } from '../../shared/shortcut'
 import type { NavigationKind } from '../../shared/types'
 import type { Agent } from './agents'
-import { isThemeId, type ThemeId } from './themes'
+import { codeTheme, DEFAULT_THEME, resolveTheme, subscribeThemes, type Theme } from './themes'
 
 export type Settings = {
   /** Plugins switched on or off in Settings, by id; absent ones follow their manifest's default */
@@ -17,12 +17,18 @@ export type Settings = {
   /** Background syntax highlighting workers; applied on next launch */
   highlightWorkers: number
   /** 'system' follows the macOS appearance: Neutral when dark, Light when light */
-  theme: ThemeId | 'system'
+  /** 'system' follows the macOS appearance between the light and the dark theme */
+  themeMode: ThemeMode
+  lightTheme: string
+  darkTheme: string
   diffStyle: 'split' | 'unified'
   /** Whether panels start open and folder groups start expanded */
   sections: 'expanded' | 'hidden'
   /** A bottom panel sits under the content beside the sidebar, or spans the full width under it */
   bottomPanel: 'content' | 'full'
+  editorMinimap: boolean
+  editorLineNumbers: 'on' | 'relative' | 'off'
+  editorWordWrap: boolean
   /** Starts Claude sessions with --dangerously-skip-permissions */
   claudeSkipPermissions: boolean
   /** A macOS notification when an agent finishes or needs an answer while the window is in the background */
@@ -56,6 +62,22 @@ export type Settings = {
   uiFont: string
   editorFont: string
   terminalFont: string
+}
+
+export const THEME_MODES = ['system', 'light', 'dark'] as const
+export type ThemeMode = (typeof THEME_MODES)[number]
+
+const nonEmpty = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
+
+/** Earlier versions stored one `theme`: 'system', 'light', or one of the dark themes */
+export function parseAppearance(stored: Record<string, unknown>): Pick<Settings, 'themeMode' | 'lightTheme' | 'darkTheme'> {
+  const legacy = nonEmpty(stored.theme)
+  const legacyMode: ThemeMode | null = legacy === 'system' || legacy === 'light' ? legacy : legacy ? 'dark' : null
+  return {
+    themeMode: THEME_MODES.find((mode) => mode === stored.themeMode) ?? legacyMode ?? 'dark',
+    lightTheme: nonEmpty(stored.lightTheme) ?? DEFAULT_THEME.light,
+    darkTheme: nonEmpty(stored.darkTheme) ?? (legacyMode === 'dark' && legacy ? legacy : DEFAULT_THEME.dark)
+  }
 }
 
 export const TERMINAL_FONT_WEIGHTS = ['auto', '300', '400', '500', '600'] as const
@@ -167,7 +189,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, theme: 'neutral', diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', claudeSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -211,17 +233,20 @@ function load(): Settings {
     const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}')
     if (typeof stored !== 'object' || stored === null) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
+    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
       customAgents: parseCustomAgents(candidate.customAgents),
       agentViews: parseAgentViews(candidate.agentViews),
       chatThinking: parseChatThinking(candidate.chatThinking),
-      theme: candidate.theme === 'system' || isThemeId(candidate.theme) ? candidate.theme : DEFAULTS.theme,
+      ...parseAppearance(candidate),
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
       bottomPanel: candidate.bottomPanel === 'full' ? 'full' : 'content',
+      editorMinimap: flag('editorMinimap'),
+      editorLineNumbers: candidate.editorLineNumbers === 'relative' || candidate.editorLineNumbers === 'off' ? candidate.editorLineNumbers : 'on',
+      editorWordWrap: flag('editorWordWrap'),
       claudeSkipPermissions: candidate.claudeSkipPermissions === true,
       agentNotifications: candidate.agentNotifications !== false,
       sidebarBranches: candidate.sidebarBranches === true,
@@ -278,15 +303,28 @@ export const useSettings = (): Settings => useSyncExternalStore(subscribeSetting
 // Absent outside the renderer (bun tests), where 'system' resolves to dark
 const systemDark = typeof window === 'undefined' ? null : window.matchMedia('(prefers-color-scheme: dark)')
 
-/** The theme actually shown, resolving 'system' against the macOS appearance */
-export const activeTheme = (): ThemeId => (settings.theme !== 'system' ? settings.theme : (systemDark?.matches ?? true) ? 'neutral' : 'light')
+/** The mode shown, resolving 'system' against the macOS appearance */
+const activeMode = (): Theme['mode'] => (settings.themeMode !== 'system' ? settings.themeMode : (systemDark?.matches ?? true) ? 'dark' : 'light')
 
-// A new settings object makes useSettings consumers re-render when the appearance flips under 'system'
-systemDark?.addEventListener('change', () => {
-  if (settings.theme !== 'system') return
+export const activeThemeId = (): string => (activeMode() === 'light' ? settings.lightTheme : settings.darkTheme)
+
+/** The theme actually shown */
+export const activeTheme = (): Theme => resolveTheme(activeThemeId(), activeMode())
+/** Code colors for both slots, so a system appearance flip needs no re-highlight */
+export const codeThemes = (): Record<Theme['mode'], string> => ({
+  dark: codeTheme(resolveTheme(settings.darkTheme, 'dark')),
+  light: codeTheme(resolveTheme(settings.lightTheme, 'light'))
+})
+
+// A new settings object makes useSettings consumers re-render when the appearance flips under 'system' or plugin themes change
+const refresh = (): void => {
   settings = { ...settings }
   listeners.forEach((listener) => listener())
+}
+systemDark?.addEventListener('change', () => {
+  if (settings.themeMode === 'system') refresh()
 })
+subscribeThemes(refresh)
 
 /** Folder groups follow the sections setting; `toggled` holds the ones the user flipped */
 export const groupOpen = (toggled: Set<string>, key: string): boolean => (getSettings().sections === 'expanded') !== toggled.has(key)

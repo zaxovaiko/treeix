@@ -1,5 +1,6 @@
+import { getResolvedOrResolveTheme } from '@pierre/diffs'
 import { activeTheme, getSettings } from '../settings'
-import { THEMES } from '../themes'
+import { codeTheme } from '../themes'
 import { editorThemeColors } from './theme'
 
 export type Monaco = typeof import('monaco-editor')
@@ -14,7 +15,7 @@ type StandaloneThemeData = Parameters<Monaco['editor']['defineTheme']>[1]
 type ShikiThemeInput = NonNullable<Parameters<typeof import('shiki').createHighlighter>[0]['themes']>[number]
 
 let loading: Promise<{ monaco: Monaco; shiki: Shiki }> | null = null
-// Set once `load()` resolves, so the synchronous `applyEditorTheme` can reach them
+// Set once `load()` resolves, so `applyEditorTheme` can reach them
 let loadedShiki: Shiki | null = null
 let toMonacoTheme: ToMonacoTheme | null = null
 
@@ -85,26 +86,34 @@ export async function ensureLanguage(monaco: Monaco, language: string): Promise<
   const { shikiToMonaco } = await import('@shikijs/monaco')
   shikiToMonaco(shiki, monaco)
   // shikiToMonaco switches every editor to shiki's raw theme; restore ours even if the editor that asked has closed
-  applyEditorTheme(monaco)
+  await applyEditorTheme(monaco)
 }
 
 /**
- * Pierre's syntax colors with the app's surface. `@shikijs/monaco` tokenizes through the active
- * shiki theme name, so the editor stays on `pierre-dark`/`pierre-light`; redefining that same
- * theme id with shiki's own token rules plus our chrome colors keeps both syntax highlighting and
- * a themed, transparent editor surface. Call after `loadMonaco()` has resolved once.
+ * The app theme's code colors with the app's surface. `@shikijs/monaco` tokenizes through the active
+ * shiki theme name, so the editor uses the code theme's own name; redefining that same theme id with
+ * shiki's token rules plus our chrome colors keeps both syntax highlighting and a themed, transparent
+ * editor surface. Call after `loadMonaco()` has resolved once.
  */
-export function applyEditorTheme(monaco: Monaco): void {
-  const theme = THEMES[activeTheme()]
-  const syntax = theme.mode === 'light' ? 'pierre-light' : 'pierre-dark'
-  if (loadedShiki && toMonacoTheme) {
-    const base = toMonacoTheme(loadedShiki.getTheme(syntax)) as StandaloneThemeData
-    monaco.editor.defineTheme(syntax, {
-      base: theme.mode === 'light' ? 'vs' : 'vs-dark',
-      inherit: true,
-      rules: base.rules,
-      colors: { ...base.colors, ...editorThemeColors(theme, getSettings().opacity) }
-    })
+export async function applyEditorTheme(monaco: Monaco): Promise<void> {
+  const theme = activeTheme()
+  const syntax = codeTheme(theme)
+  if (!loadedShiki || !toMonacoTheme) return
+  // Pierre's registry knows the bundled shiki themes and the imported ones
+  if (!loadedShiki.getLoadedThemes().includes(syntax)) {
+    await loadedShiki.loadTheme(await getResolvedOrResolveTheme(syntax))
+    // shikiToMonaco maps token colors only for the themes loaded when it ran
+    const { shikiToMonaco } = await import('@shikijs/monaco')
+    shikiToMonaco(loadedShiki, monaco)
   }
+  // A newer call may have switched themes while this one loaded
+  if (codeTheme(activeTheme()) !== syntax) return
+  const base = toMonacoTheme(loadedShiki.getTheme(syntax)) as StandaloneThemeData
+  monaco.editor.defineTheme(syntax, {
+    base: theme.mode === 'light' ? 'vs' : 'vs-dark',
+    inherit: true,
+    rules: base.rules,
+    colors: { ...base.colors, ...editorThemeColors(theme, getSettings().opacity) }
+  })
   monaco.editor.setTheme(syntax)
 }

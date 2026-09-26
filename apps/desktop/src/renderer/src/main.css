@@ -286,6 +286,10 @@ html[data-translucent] .code-editor .monaco-editor-background,
 html[data-translucent] .code-editor .monaco-editor .margin {
   background-color: transparent !important;
 }
+/* Monaco stacks .view-lines over .view-zones, so comment cards between lines would never get the click */
+.code-editor .monaco-editor .view-zones {
+  z-index: 1;
+}
 .code-editor-target-line {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }

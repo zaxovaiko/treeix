@@ -1,7 +1,6 @@
 import { useEffect, useId, useState } from 'react'
-import { activeTheme, useSettings } from '@treeix/app/settings'
+import { activeTheme, activeThemeId, useSettings } from '@treeix/app/settings'
 import { Expandable } from '@treeix/app/Lightbox'
-import { themeMode } from '@treeix/app/themes'
 
 type MermaidApi = (typeof import('mermaid'))['default']
 let mermaidReady: Promise<MermaidApi> | null = null
@@ -14,12 +13,29 @@ function loadMermaid(): Promise<MermaidApi> {
   return mermaidReady
 }
 
+/** Mermaid's base theme derives every diagram color from these, so diagrams take the app theme's surfaces and accent */
+function themeVariables(): Record<string, string | boolean> {
+  const { mode, background, card, popover, foreground, mutedForeground, primary } = activeTheme()
+  return {
+    darkMode: mode === 'dark',
+    background,
+    // Nodes sit a step off the page: light themes lift the card, dark ones the popover
+    primaryColor: popover !== background ? popover : card,
+    primaryTextColor: foreground,
+    primaryBorderColor: primary,
+    secondaryColor: card,
+    tertiaryColor: card,
+    lineColor: mutedForeground,
+    textColor: foreground
+  }
+}
+
 let renderQueue: Promise<unknown> = Promise.resolve()
 
 // mermaid.render shares global state, so parallel diagrams corrupt each other
 function renderDiagram(id: string, code: string): Promise<string> {
   const result = renderQueue.then(() => loadMermaid()).then((mermaid) => {
-    mermaid.initialize({ startOnLoad: false, theme: themeMode(activeTheme()) === 'light' ? 'default' : 'dark', securityLevel: 'strict', fontFamily: 'inherit' })
+    mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: themeVariables(), securityLevel: 'strict', fontFamily: 'inherit' })
     return mermaid.render(id, code)
   })
   renderQueue = result.catch(() => undefined)
@@ -31,7 +47,7 @@ export function Mermaid({ code }: { code: string }): React.JSX.Element {
   const [svg, setSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   useSettings()
-  const theme = activeTheme()
+  const theme = activeThemeId()
 
   useEffect(() => {
     let cancelled = false

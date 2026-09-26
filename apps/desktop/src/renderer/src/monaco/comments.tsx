@@ -83,6 +83,8 @@ export function EditorComments({
   const placement = zones.map((zone) => `${zone.key}@${zone.line}`).join()
 
   useEffect(() => {
+    // Monaco hides its zone layer from screen readers, which would hide the cards' text boxes and buttons too
+    handle.editor.getDomNode()?.querySelector('.lines-content > .view-zones')?.removeAttribute('aria-hidden')
     const live = mounted.current
     return () => {
       // Outside changeViewZones, which skips its callback when the editor was disposed first

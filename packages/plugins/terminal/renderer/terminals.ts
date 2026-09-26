@@ -1,12 +1,12 @@
 import type { FitAddon } from '@xterm/addon-fit'
 import type { Terminal } from '@xterm/xterm'
 import { useSyncExternalStore } from 'react'
+import { terminalPalette, type Theme } from '@treeix/app/themes'
 import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscribeSettings } from '@treeix/app/settings'
 import { agentOr, getAgent, isAgent, resumeCommandFor, startCommand } from '@treeix/app/agents'
 import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
 import { findFileLinks, findWebLinks } from './fileLinks'
-import { THEMES } from '@treeix/app/themes'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
@@ -46,11 +46,8 @@ const LINE_KEYS: Record<string, string> = { ArrowLeft: '\x01', ArrowRight: '\x05
 
 type TerminalTheme = Record<string, string>
 
-// VS Code's light terminal palette; xterm's default ANSI colors assume a dark background
-const LIGHT_ANSI: TerminalTheme = {
-  black: '#000000', red: '#cd3131', green: '#107c10', yellow: '#949800', blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#555555',
-  brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14', brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#a5a5a5'
-}
+/** ANSI colors of the app theme's code theme; they load async, so a theme switch repaints once they arrive */
+let palette: { theme: Theme; colors: TerminalTheme } | null = null
 
 /**
  * Glyphs the GPU renderer draws onto a transparent canvas come out at about half their color, so the canvas is opaque in
@@ -62,16 +59,30 @@ const seeThrough = (): boolean => getSettings().opacity < 100
 function textWeight(): '300' | '400' | '500' | '600' {
   const weight = getSettings().terminalFontWeight
   if (weight !== 'auto') return weight
-  return THEMES[activeTheme()].mode === 'light' ? '500' : '400'
+  return activeTheme().mode === 'light' ? '500' : '400'
 }
 
 function terminalTheme(): TerminalTheme {
-  const { foreground, background, mode } = THEMES[activeTheme()]
+  const theme = activeTheme()
+  const { foreground, background, mode } = theme
   const base = { background: seeThrough() ? '#00000000' : background, foreground, cursor: foreground, selectionBackground: mode === 'light' ? '#0000002e' : '#ffffff33' }
-  return mode === 'light' ? { ...base, ...LIGHT_ANSI } : base
+  if (palette?.theme !== theme) void loadPalette(theme)
+  return { ...base, ...palette?.colors }
 }
 
-subscribeSettings(() => {
+let loadingPalette: Theme | null = null
+async function loadPalette(theme: Theme): Promise<void> {
+  if (loadingPalette === theme) return
+  loadingPalette = theme
+  const colors = await terminalPalette(theme).catch(() => ({}))
+  if (loadingPalette !== theme) return
+  palette = { theme, colors }
+  applyTerminalSettings()
+}
+
+subscribeSettings(applyTerminalSettings)
+
+function applyTerminalSettings(): void {
   const theme = terminalTheme()
   const { terminalFontSize, terminalFont, terminalScrollback } = getSettings()
   const fontFamily = fontStack(terminalFont, MONO_STACK)
@@ -86,7 +97,7 @@ subscribeSettings(() => {
     Object.assign(session.terminal.options, { fontSize: terminalFontSize, fontFamily })
     fitSession(session.id)
   }
-})
+}
 
 /** What each agent session last reported through its hooks, see the terminal plugin's main hooks */
 const hookStatus = new Map<string, AgentHookStatus>()

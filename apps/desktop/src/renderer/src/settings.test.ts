@@ -55,3 +55,48 @@ test('parseChatThinking falls back to collapsed for unknown values and keeps exp
   expect(parseChatThinking('expanded')).toBe('expanded')
   expect(parseChatThinking('hidden')).toBe('hidden')
 })
+
+test('parseAppearance moves the old single theme into its mode', async () => {
+  const { parseAppearance } = await import('./settings')
+  expect(parseAppearance({ theme: 'nord' })).toEqual({ themeMode: 'dark', lightTheme: 'light', darkTheme: 'nord' })
+  expect(parseAppearance({ theme: 'light' })).toEqual({ themeMode: 'light', lightTheme: 'light', darkTheme: 'neutral' })
+  expect(parseAppearance({ theme: 'system' })).toEqual({ themeMode: 'system', lightTheme: 'light', darkTheme: 'neutral' })
+  expect(parseAppearance({ themeMode: 'system', lightTheme: 'github-light', darkTheme: 'github-dark', theme: 'nord' })).toEqual({ themeMode: 'system', lightTheme: 'github-light', darkTheme: 'github-dark' })
+  expect(parseAppearance({})).toEqual({ themeMode: 'dark', lightTheme: 'light', darkTheme: 'neutral' })
+})
+
+test('resolveTheme falls back to the built-in theme of the mode', async () => {
+  const { resolveTheme, setPluginThemes, THEMES } = await import('./themes')
+  const pack = { 'github-light': { ...THEMES.light, label: 'GitHub', primary: '#0969da' } }
+  expect(resolveTheme('github-light', 'light')).toBe(THEMES.light)
+  setPluginThemes(pack)
+  expect(resolveTheme('github-light', 'light')).toBe(pack['github-light'])
+  // A light theme picked for the dark slot, or an unknown id, gets the mode's default
+  expect(resolveTheme('github-light', 'dark')).toBe(THEMES.neutral)
+  expect(resolveTheme('gone', 'light')).toBe(THEMES.light)
+  setPluginThemes({})
+})
+
+test('parseThemeFile reads VS Code color themes with comments and the app theme shape', async () => {
+  const { parseThemeFile } = await import('./themes')
+  const vscode = parseThemeFile(`{
+    // exported from VS Code
+    "$schema": "vscode://schemas/color-theme",
+    "name": "Paper", "type": "light",
+    "colors": { "editor.background": "#fafafa", "editor.foreground": "#222", "button.background": "#0066ccff", },
+    "tokenColors": [{ "scope": "comment", "settings": { "foreground": "#888888" } }],
+  }`)
+  expect(vscode).toMatchObject({ label: 'Paper', mode: 'light', background: '#fafafa', card: '#fafafa', foreground: '#222222', primary: '#0066cc' })
+  expect(vscode?.syntax).toMatchObject({ tokenColors: [{ scope: 'comment' }] })
+  const own = { label: 'Mine', mode: 'dark', background: '#000000', card: '#111111', popover: '#222222', foreground: '#ffffff', mutedForeground: '#888888', primary: '#ff0000', syntax: 'nord' }
+  expect(parseThemeFile(JSON.stringify(own))).toMatchObject(own)
+  expect(parseThemeFile('{"colors": {}}')).toBeNull()
+  expect(parseThemeFile('not json')).toBeNull()
+})
+
+test('terminalPalette takes the code theme ANSI colors, Pierre filling the gaps', async () => {
+  const { terminalPalette, THEMES } = await import('./themes')
+  expect(await terminalPalette({ ...THEMES.neutral, syntax: 'dracula' })).toMatchObject({ red: '#FF5555', brightGreen: '#69FF94' })
+  // light-plus has no terminal colors
+  expect(Object.keys(await terminalPalette({ ...THEMES.light, syntax: 'light-plus' }))).toHaveLength(16)
+})

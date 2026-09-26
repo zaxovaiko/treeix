@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { PluginManifest, RendererPlugin, Services, SessionSummary } from '@treeix/sdk'
 import { getSettings, subscribeSettings, updateSettings } from './settings'
+import { setPluginThemes } from './themes'
 
 const manifests = import.meta.glob<PluginManifest>('../../../../../packages/plugins/*/package.json', { eager: true, import: 'treeix' })
 // Not eager: each plugin's renderer code is its own chunk, fetched only once the plugin is enabled
@@ -61,6 +62,7 @@ function sync(): void {
       })
     )
     state = { loaded: loaded.filter((entry) => entry !== null), ready: true }
+    setPluginThemes(Object.assign({}, ...state.loaded.map(({ plugin }) => plugin.themes ?? {})))
     listeners.forEach((listener) => listener())
   }).catch((reason: unknown) => console.error('Plugins could not be synced', reason))
 }

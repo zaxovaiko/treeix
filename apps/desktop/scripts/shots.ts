@@ -102,7 +102,8 @@ const tab = (id: string, layout: string[][], focus: string): Json => ({ id, layo
 function baseState(): Record<string, unknown> {
   return {
     settings: {
-      theme: 'neutral',
+      themeMode: 'dark',
+      darkTheme: 'neutral',
       diffStyle: 'split',
       sections: 'expanded',
       opacity: 100,

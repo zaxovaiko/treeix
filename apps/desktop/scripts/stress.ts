@@ -157,9 +157,9 @@ async function newShell(driver: Driver, split = false): Promise<void> {
 /** A colored full-screen redraw many times over, like a busy agent's TUI */
 const COLOR_REDRAW = `for i in $(seq 1 300); do printf '\\033[H'; for j in $(seq 1 40); do printf '\\033[3%dm%04d \\033[1mEnforcing\\033[0m that \\033[32mlimit\\033[0m against \\033[35mdeposits\\033[0m %s\\033[K\\n' $((j%7+1)) $i $RANDOM; done; done`
 
-/** Settings apply on load, so the theme is written and the window reloaded; `null` puts back the default */
-async function reloadWithTheme(driver: Driver, theme: string | null): Promise<void> {
-  await driver.evaluate(`(() => { const settings = JSON.parse(localStorage.getItem('settings') ?? '{}'); if (${JSON.stringify(theme)} === null) delete settings.theme; else settings.theme = ${JSON.stringify(theme)}; localStorage.setItem('settings', JSON.stringify(settings)); location.reload() })()`)
+/** Settings apply on load, so the theme mode is written and the window reloaded; `null` puts back the default */
+async function reloadWithThemeMode(driver: Driver, mode: string | null): Promise<void> {
+  await driver.evaluate(`(() => { const settings = JSON.parse(localStorage.getItem('settings') ?? '{}'); if (${JSON.stringify(mode)} === null) delete settings.themeMode; else settings.themeMode = ${JSON.stringify(mode)}; localStorage.setItem('settings', JSON.stringify(settings)); location.reload() })()`)
   await sleep(1500)
   await driver.until(`!!document.querySelector('[data-zone]')`, 30_000)
   await sleep(1500)
@@ -336,15 +336,15 @@ const CASES: Case[] = [
     budget: { maxFrame: 250, p95Frame: 34 },
     run: async (driver) => {
       // Light themes keep the GPU renderer; the DOM one made busy agent sessions lag
-      const theme = String(await driver.evaluate(`JSON.parse(localStorage.getItem('settings') ?? '{}').theme ?? ''`))
-      await reloadWithTheme(driver, 'light')
+      const mode = String(await driver.evaluate(`JSON.parse(localStorage.getItem('settings') ?? '{}').themeMode ?? ''`))
+      await reloadWithThemeMode(driver, 'light')
       await newShell(driver)
       await driver.evaluate(`(window.__stress.frames = [], window.__stress.longTasks = [], window.__stress.last = 0)`)
       await driver.type(COLOR_REDRAW)
       await sleep(6000)
       const gpu = await driver.evaluate(`[...document.querySelectorAll('[data-session-id] .xterm')].some((terminal) => terminal.checkVisibility() && terminal.querySelector('canvas'))`)
       const frames = (await driver.evaluate(`window.__stress.frames`)) as number[]
-      await reloadWithTheme(driver, theme || null)
+      await reloadWithThemeMode(driver, mode || null)
       const slow = frames.filter((gap) => gap > 50).length
       return [gpu ? 'light theme draws with WebGL' : 'FAIL light theme fell back to the DOM renderer', slow <= 5 ? `${slow} frames over 50 ms while redrawing` : `FAIL ${slow} frames over 50 ms while redrawing`]
     }

@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-themes",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "themes",
+    "name": "Theme pack",
+    "description": "Light and dark themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized. Neutral and Light stay without it.",
+    "enabledByDefault": true
+  }
+}

@@ -2,12 +2,20 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { useEffect, useRef, useState } from 'react'
 import { supportsLanguageService } from '../../../shared/languages'
 import { routeAppChord } from '../actionRunners'
-import { fontStack, getSettings, MONO_STACK, useSettings } from '../settings'
+import { fontStack, getSettings, MONO_STACK, type Settings, useSettings } from '../settings'
 import { EmptyState } from '../ui'
 import { forgetDocument, registerDocument, watchDiagnostics } from './providers'
 import { applyEditorTheme, ensureLanguage, loadMonaco, type Monaco } from './setup'
 import { applyExternalText } from './text'
 import { languageFor } from './theme'
+
+const editorOptions = (settings: Settings): MonacoEditor.IEditorOptions => ({
+  fontFamily: fontStack(settings.editorFont, MONO_STACK),
+  fontSize: settings.editorFontSize,
+  minimap: { enabled: settings.editorMinimap },
+  lineNumbers: settings.editorLineNumbers,
+  wordWrap: settings.editorWordWrap ? 'on' : 'off'
+})
 
 export type CodeEditorHandle = { editor: MonacoEditor.IStandaloneCodeEditor; monaco: Monaco }
 
@@ -47,8 +55,8 @@ export function CodeEditor({
     void loadMonaco().then(async (monaco) => {
       const language = languageFor(path)
       await ensureLanguage(monaco, language)
+      await applyEditorTheme(monaco)
       if (disposed || !host.current) return
-      applyEditorTheme(monaco)
       const uri = monaco.Uri.file(`${worktreePath}/${path}`).with({ query: String(++instanceCounter) })
       const model = monaco.editor.createModel(contentsRef.current, language, uri)
       registerDocument(model, worktreePath, path)
@@ -56,8 +64,7 @@ export function CodeEditor({
       created = monaco.editor.create(host.current, {
         model,
         automaticLayout: true,
-        fontFamily: fontStack(getSettings().editorFont, MONO_STACK),
-        fontSize: getSettings().editorFontSize,
+        ...editorOptions(getSettings()),
         glyphMargin: true,
         contextmenu: false,
         scrollBeyondLastLine: false,
@@ -114,9 +121,9 @@ export function CodeEditor({
 
   useEffect(() => {
     if (!handle) return
-    applyEditorTheme(handle.monaco)
-    handle.editor.updateOptions({ fontFamily: fontStack(settings.editorFont, MONO_STACK), fontSize: settings.editorFontSize })
-  }, [handle, settings.theme, settings.opacity, settings.editorFont, settings.editorFontSize])
+    void applyEditorTheme(handle.monaco)
+    handle.editor.updateOptions(editorOptions(settings))
+  }, [handle, settings])
 
   return (
     <div className="code-editor relative min-h-0 flex-1">

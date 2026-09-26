@@ -10,18 +10,18 @@ import { EditorComments, useEditorNavigation } from './monaco/comments'
 import { normalizeEol } from './monaco/text'
 import { EmptyState } from './ui'
 
-import { activeTheme, getSettings } from './settings'
-import { THEMES, withAlpha } from './themes'
+import { activeTheme, codeThemes, getSettings } from './settings'
+import { withAlpha } from './themes'
 
 /** The diff renders in a shadow root with its own background, so pass the theme color in */
 export const diffBackground = (): React.CSSProperties => {
-  const background = withAlpha(THEMES[activeTheme()].background, getSettings().opacity / 100)
+  const background = withAlpha(activeTheme().background, getSettings().opacity / 100)
   return { '--diffs-dark-bg': background, '--diffs-light-bg': background } as React.CSSProperties
 }
-/** Both pierre themes load; themeType picks the one matching the app theme */
-export const codeThemeOptions = (): { theme: { dark: 'pierre-dark'; light: 'pierre-light' }; themeType: 'dark' | 'light' } => ({
-  theme: { dark: 'pierre-dark', light: 'pierre-light' },
-  themeType: THEMES[activeTheme()].mode
+/** Both slots' code themes load; themeType picks the one matching the app theme */
+export const codeThemeOptions = (): { theme: Record<'dark' | 'light', string>; themeType: 'dark' | 'light' } => ({
+  theme: codeThemes(),
+  themeType: activeTheme().mode
 })
 const SCROLL_ATTEMPTS = 60
 

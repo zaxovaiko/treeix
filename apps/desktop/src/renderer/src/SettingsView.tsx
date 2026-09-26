@@ -7,7 +7,7 @@ import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutO
 import { NAVIGATION_ACTIONS } from './codeNavigation'
 import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, hotkeyOptions, SYSTEM_FONTS, TERMINAL_CONTRASTS, TERMINAL_FONT_WEIGHTS, type TerminalFontWeight as TerminalFontWeightChoice, updateSettings, useSettings } from './settings'
 import { type Agent, useAgents } from './agents'
-import { type Theme, THEMES, type ThemeId } from './themes'
+import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile, removeCustomTheme, type Theme } from './themes'
 import { EmptyState, Popup } from './ui'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
@@ -241,14 +241,14 @@ type SettingSpec = {
   note?: (settings: Settings) => string
 }
 
-function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel'>(key: K, options: [Settings[K], string][]): ComponentType {
+function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorLineNumbers'>(key: K, options: [Settings[K], string][]): ComponentType {
   return function SettingSegmented() {
     const value = useSettings()[key]
     return <Segmented value={value} options={options} onChange={(next) => updateSettings({ [key]: next })} />
   }
 }
 
-function toggle(key: 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'agentNotifications', label: string): ComponentType {
+function toggle(key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'agentNotifications', label: string): ComponentType {
   return function SettingSwitch() {
     const value = useSettings()[key]
     return <Switch checked={value} label={label} onChange={() => updateSettings({ [key]: !value })} />
@@ -422,6 +422,19 @@ const SETTINGS: SettingSpec[] = [
     description: 'Code in the editor, diffs and pull requests. Size is independent of window zoom (⌘+ / ⌘-).',
     Control: fontRow('editorFont', { key: 'editorFontSize', fallback: 13, label: 'editor font' })
   },
+  { section: 'Appearance', card: 'Editor', label: 'Minimap', description: 'The code overview along the right edge of the editor.', Control: toggle('editorMinimap', 'Minimap') },
+  {
+    section: 'Appearance',
+    card: 'Editor',
+    label: 'Line numbers',
+    description: 'Relative counts lines from the cursor, handy for jumping a few lines at a time.',
+    Control: segmented('editorLineNumbers', [
+      ['on', 'Absolute'],
+      ['relative', 'Relative'],
+      ['off', 'Off']
+    ])
+  },
+  { section: 'Appearance', card: 'Editor', label: 'Word wrap', description: 'Long lines wrap at the editor width instead of scrolling sideways.', Control: toggle('editorWordWrap', 'Word wrap') },
   {
     section: 'Terminal',
     card: 'Font',
@@ -576,41 +589,131 @@ function ThemePreview({ theme }: { theme: Theme }): React.JSX.Element {
   )
 }
 
-function ThemeCard({ label, selected, onSelect, children }: { label: string; selected: boolean; onSelect: () => void; children: React.ReactNode }): React.JSX.Element | null {
+function ThemeCard({
+  label,
+  selected,
+  onSelect,
+  onRemove,
+  children
+}: {
+  label: string
+  selected: boolean
+  onSelect: () => void
+  onRemove?: () => void
+  children: React.ReactNode
+}): React.JSX.Element | null {
   if (!useSettingMatch(label, 'theme')) return null
   return (
-    <button
-      data-setting={label}
-      onClick={onSelect}
-      className={`min-w-0 overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-input' : 'ring-border hover:ring-input'}`}
-    >
-      {children}
-      <div className="flex items-center gap-2 bg-card px-2.5 py-2 text-xs">
-        <span className="min-w-0 truncate">{label}</span>
-        {selected && <Icon name="check" className="ml-auto size-3 shrink-0 text-foreground" />}
-      </div>
-    </button>
+    <div className="relative min-w-0">
+      <button
+        data-setting={label}
+        onClick={onSelect}
+        className={`w-full min-w-0 overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-input' : 'ring-border hover:ring-input'}`}
+      >
+        {children}
+        <div className="flex items-center gap-2 bg-card px-2.5 py-2 text-xs">
+          <span className="min-w-0 truncate">{label}</span>
+          {selected && <Icon name="check" className="ml-auto size-3 shrink-0 text-foreground" />}
+        </div>
+      </button>
+      {onRemove && (
+        <button
+          title={`Remove ${label}`}
+          onClick={onRemove}
+          className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-md bg-popover text-muted-foreground ring-1 ring-border hover:text-foreground"
+        >
+          <Icon name="close" className="size-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+const THEME_SLOT = { light: 'lightTheme', dark: 'darkTheme' } as const
+
+/** Picking a theme of the other mode while one mode is fixed switches to it, so the pick shows */
+function pickTheme(id: string, mode: Theme['mode']): void {
+  updateSettings({ [THEME_SLOT[mode]]: id, ...(getSettings().themeMode === 'system' ? {} : { themeMode: mode }) })
+}
+
+/** A theme file: the app's own theme JSON or a VS Code color theme */
+function ImportTheme(): React.JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+  const onFile = async (file: File | undefined): Promise<void> => {
+    if (!file) return
+    const theme = parseThemeFile(await file.text())
+    setError(theme ? null : `${file.name} is not a theme: expected a VS Code color theme or Treeix theme JSON`)
+    if (theme) pickTheme(addCustomTheme(theme), theme.mode)
+  }
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 pb-4">
+      <span className={`text-xs ${error ? 'text-red-400' : 'text-muted-foreground'}`}>{error ?? 'Import a VS Code color theme or a Treeix theme JSON'}</span>
+      <label className="shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-xs ring-1 ring-border hover:bg-accent">
+        Import theme…
+        <input
+          type="file"
+          accept=".json,.jsonc,application/json"
+          className="sr-only"
+          onChange={(event) => {
+            void onFile(event.target.files?.[0])
+            event.target.value = ''
+          }}
+        />
+      </label>
+    </div>
+  )
+}
+
+function ThemeGrid({ mode }: { mode: Theme['mode'] }): React.JSX.Element {
+  const settings = useSettings()
+  const current = settings[THEME_SLOT[mode]]
+  const themes = allThemes().filter(([, theme]) => theme.mode === mode)
+  return (
+    <div role="group" aria-label={`${mode === 'light' ? 'Light' : 'Dark'} themes`} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3 px-4 pb-4">
+      {themes.map(([id, theme]) => (
+        <ThemeCard
+          key={id}
+          label={theme.label}
+          selected={current === id || (!themes.some(([known]) => known === current) && id === DEFAULT_THEME[mode])}
+          onSelect={() => pickTheme(id, mode)}
+          onRemove={
+            isCustomTheme(id)
+              ? () => {
+                  // The last painted theme stands in for an unknown id, so a removed selection has to move off it
+                  if (current === id) updateSettings({ [THEME_SLOT[mode]]: DEFAULT_THEME[mode] })
+                  removeCustomTheme(id)
+                }
+              : undefined
+          }
+        >
+          <ThemePreview theme={theme} />
+        </ThemeCard>
+      ))}
+    </div>
   )
 }
 
 function Themes(): React.JSX.Element {
-  const { theme: current } = useSettings()
+  const { themeMode } = useSettings()
   return (
     <Card title="Theme">
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3 p-4">
-        <ThemeCard label="System" selected={current === 'system'} onSelect={() => updateSettings({ theme: 'system' })}>
-          {/* Dark and light halves: the theme follows the macOS appearance */}
-          <div className="grid h-20 grid-cols-2">
-            <ThemePreview theme={THEMES.neutral} />
-            <ThemePreview theme={THEMES.light} />
-          </div>
-        </ThemeCard>
-        {(Object.keys(THEMES) as ThemeId[]).map((id) => (
-          <ThemeCard key={id} label={THEMES[id].label} selected={current === id} onSelect={() => updateSettings({ theme: id })}>
-            <ThemePreview theme={THEMES[id]} />
-          </ThemeCard>
-        ))}
+      <div className="flex items-center justify-between gap-3 p-4">
+        <span className="text-sm">{themeMode === 'system' ? 'Follows macOS between the light and the dark theme' : `Always the ${themeMode} theme`}</span>
+        <Segmented
+          value={themeMode}
+          options={[
+            ['system', 'System'],
+            ['light', 'Light'],
+            ['dark', 'Dark']
+          ]}
+          onChange={(next) => updateSettings({ themeMode: next })}
+        />
       </div>
+      <div className="px-4 pb-2 text-xs text-muted-foreground">Light</div>
+      <ThemeGrid mode="light" />
+      <div className="px-4 pb-2 text-xs text-muted-foreground">Dark</div>
+      <ThemeGrid mode="dark" />
+      <ImportTheme />
     </Card>
   )
 }

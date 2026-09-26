@@ -1,3 +1,5 @@
+import { getResolvedOrResolveTheme, registerCustomTheme, type ThemeRegistration } from '@pierre/diffs'
+
 export type Theme = {
   label: string
   mode: 'dark' | 'light'
@@ -9,8 +11,11 @@ export type Theme = {
   foreground: string
   mutedForeground: string
   primary: string
+  /** Code colors and the terminal palette: a shiki theme name like github-light, or a VS Code color theme; defaults to Pierre */
+  syntax?: string | ThemeRegistration
 }
 
+/** Always there, whatever plugins are on: the fallback for each mode */
 export const THEMES = {
   neutral: {
     label: 'Neutral',
@@ -22,89 +27,6 @@ export const THEMES = {
     foreground: '#f5f5f5',
     mutedForeground: '#848484',
     primary: '#4f5ff0'
-  },
-  // Vercel's Geist dark: black canvas, raised grays, their blue for actions
-  vercel: {
-    label: 'Vercel',
-    mode: 'dark',
-    background: '#000000',
-    card: '#0a0a0a',
-    popover: '#1a1a1a',
-    foreground: '#ededed',
-    mutedForeground: '#a1a1a1',
-    primary: '#0070f3'
-  },
-  // Still black, one step up from Neutral
-  onyx: {
-    label: 'Onyx',
-    mode: 'dark',
-    background: '#0a0a0a',
-    card: '#0a0a0a',
-    popover: '#171717',
-    foreground: '#f2f2f2',
-    mutedForeground: '#8a8a8a',
-    primary: '#4f5ff0'
-  },
-  // Two steps up: near black with a soft lift
-  coal: {
-    label: 'Coal',
-    mode: 'dark',
-    background: '#131313',
-    card: '#131313',
-    popover: '#1f1f1f',
-    foreground: '#eeeeee',
-    mutedForeground: '#8f8f8f',
-    primary: '#4f5ff0'
-  },
-  midnight: {
-    label: 'Midnight',
-    mode: 'dark',
-    background: '#0b0e14',
-    card: '#10141c',
-    popover: '#171c27',
-    foreground: '#e6e9ef',
-    mutedForeground: '#7f8898',
-    primary: '#5b7cfa'
-  },
-  graphite: {
-    label: 'Graphite',
-    mode: 'dark',
-    background: '#161616',
-    card: '#1d1d1d',
-    popover: '#262626',
-    foreground: '#ededed',
-    mutedForeground: '#909090',
-    primary: '#10a37f'
-  },
-  nord: {
-    label: 'Nord',
-    mode: 'dark',
-    background: '#242933',
-    card: '#2e3440',
-    popover: '#3b4252',
-    foreground: '#eceff4',
-    mutedForeground: '#9aa3b5',
-    primary: '#5e81ac'
-  },
-  dracula: {
-    label: 'Dracula',
-    mode: 'dark',
-    background: '#1e1f29',
-    card: '#282a36',
-    popover: '#343746',
-    foreground: '#f8f8f2',
-    mutedForeground: '#8e92ad',
-    primary: '#9d6ff0'
-  },
-  solarized: {
-    label: 'Solarized',
-    mode: 'dark',
-    background: '#001e26',
-    card: '#002b36',
-    popover: '#073642',
-    foreground: '#eee8d5',
-    mutedForeground: '#839496',
-    primary: '#268bd2'
   },
   light: {
     label: 'Light',
@@ -118,9 +40,44 @@ export const THEMES = {
   }
 } satisfies Record<string, Theme>
 
-export type ThemeId = keyof typeof THEMES
+export const DEFAULT_THEME = { dark: 'neutral', light: 'light' } as const satisfies Record<Theme['mode'], keyof typeof THEMES>
 
-export const isThemeId = (value: unknown): value is ThemeId => typeof value === 'string' && Object.hasOwn(THEMES, value)
+let pluginThemes: Record<string, Theme> = {}
+const listeners = new Set<() => void>()
+const notify = (): void => listeners.forEach((listener) => listener())
+
+/** Themes contributed by enabled plugins, replacing the previous set */
+export function setPluginThemes(themes: Record<string, Theme>): void {
+  pluginThemes = themes
+  notify()
+}
+
+export function subscribeThemes(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+/** Every theme on offer, built-in first */
+export const allThemes = (): [string, Theme][] => [...Object.entries(THEMES), ...Object.entries(pluginThemes), ...Object.entries(customThemes)]
+
+const LAST_KEY = 'theme.last'
+/** The last theme painted, so a plugin theme shows at startup before its plugin has loaded */
+const lastApplied = ((): { id: string; theme: Theme } | null => {
+  try {
+    const parsed: unknown = typeof localStorage === 'undefined' ? null : JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null')
+    return typeof parsed === 'object' && parsed !== null && 'id' in parsed && 'theme' in parsed ? (parsed as { id: string; theme: Theme }) : null
+  } catch {
+    return null
+  }
+})()
+
+/** A theme by id; one whose plugin is off (or not loaded yet) falls back to the built-in theme of that mode */
+export function resolveTheme(id: string, mode: Theme['mode']): Theme {
+  const found: Theme | undefined = Object.hasOwn(THEMES, id) ? THEMES[id as keyof typeof THEMES] : (pluginThemes[id] ?? customThemes[id])
+  if (found?.mode === mode) return found
+  if (!found && lastApplied?.id === id && lastApplied.theme.mode === mode) return lastApplied.theme
+  return THEMES[DEFAULT_THEME[mode]]
+}
 
 /** `#rrggbb` to an rgb() color with the given 0-1 alpha */
 export function withAlpha(hex: string, alpha: number): string {
@@ -130,8 +87,8 @@ export function withAlpha(hex: string, alpha: number): string {
 
 /** Overrides the Tailwind color tokens, so every bg-card or text-foreground utility follows the theme */
 /** `borderStrength` scales hairlines and input outlines, 0-1 */
-export function applyTheme(id: ThemeId, opacity: number, borderStrength = 1): void {
-  const theme: Theme = THEMES[id]
+export function applyTheme(id: string, theme: Theme, opacity: number, borderStrength = 1): void {
+  localStorage.setItem(LAST_KEY, JSON.stringify({ id, theme }))
   const root = document.documentElement.style
   root.setProperty('--color-background', withAlpha(theme.background, opacity))
   root.setProperty('--color-card', withAlpha(theme.card, opacity))
@@ -151,7 +108,124 @@ export function applyTheme(id: ThemeId, opacity: number, borderStrength = 1): vo
   document.documentElement.dataset.mode = theme.mode
 }
 
-export const themeMode = (id: ThemeId): Theme['mode'] => THEMES[id].mode
+const pierreTheme = (mode: Theme['mode']): string => (mode === 'light' ? 'pierre-light' : 'pierre-dark')
+const registeredSyntax = new Set<string>()
 
-/** Shiki theme matching the app theme, for code outside @pierre/diffs components */
-export const codeTheme = (id: ThemeId): 'pierre-dark' | 'pierre-light' => (THEMES[id].mode === 'light' ? 'pierre-light' : 'pierre-dark')
+/** Shiki theme name for the app theme's code; an embedded VS Code theme registers under its own name on first use */
+export function codeTheme(theme: Theme): string {
+  const { syntax } = theme
+  if (typeof syntax === 'string') return syntax
+  if (!syntax?.name) return pierreTheme(theme.mode)
+  const { name } = syntax
+  if (!registeredSyntax.has(name)) {
+    registeredSyntax.add(name)
+    registerCustomTheme(name, () => Promise.resolve({ ...syntax, name, type: theme.mode }))
+  }
+  return name
+}
+
+const ANSI = ['Black', 'Red', 'Green', 'Yellow', 'Blue', 'Magenta', 'Cyan', 'White'] as const
+
+/** xterm's ANSI colors from the code theme's terminal colors, Pierre's filling in any it lacks */
+export async function terminalPalette(theme: Theme): Promise<Record<string, string>> {
+  const [base, own] = await Promise.all([getResolvedOrResolveTheme(pierreTheme(theme.mode)), getResolvedOrResolveTheme(codeTheme(theme))])
+  const colors: Record<string, string | undefined> = { ...base.colors, ...own.colors }
+  return Object.fromEntries(
+    ANSI.flatMap((name) => [
+      [name.toLowerCase(), colors[`terminal.ansi${name}`]],
+      [`bright${name}`, colors[`terminal.ansiBright${name}`]]
+    ]).filter((entry): entry is [string, string] => entry[1] !== undefined)
+  )
+}
+
+function saveCustomThemes(themes: Record<string, Theme>): void {
+  customThemes = themes
+  localStorage.setItem(CUSTOM_KEY, JSON.stringify(themes))
+  notify()
+}
+
+export const isCustomTheme = (id: string): boolean => Object.hasOwn(customThemes, id)
+
+/** Adds an imported theme and returns its id; ids are never reused, so a stale registered syntax theme can't shadow a new one */
+export function addCustomTheme(theme: Theme): string {
+  const id = `custom-${Date.now().toString(36)}`
+  const syntax = typeof theme.syntax === 'object' ? { ...theme.syntax, name: id } : theme.syntax
+  saveCustomThemes({ ...customThemes, [id]: { ...theme, syntax } })
+  return id
+}
+
+export function removeCustomTheme(id: string): void {
+  const { [id]: _removed, ...rest } = customThemes
+  saveCustomThemes(rest)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** `#rgb`, `#rrggbb` or `#rrggbbaa` as `#rrggbb`; alpha is dropped since surfaces take the window opacity */
+function hex(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return null
+  return value.length === 4 ? `#${[...value.slice(1)].map((digit) => digit + digit).join('')}` : value.slice(0, 7)
+}
+
+const SURFACE_KEYS = ['background', 'card', 'popover', 'foreground', 'mutedForeground', 'primary'] as const
+
+/** The app's own theme shape, as exported or written by hand */
+function ownTheme(json: Record<string, unknown>): Theme | null {
+  if (json.mode !== 'light' && json.mode !== 'dark') return null
+  const colors = SURFACE_KEYS.map((key) => hex(json[key]))
+  if (colors.some((color) => color === null)) return null
+  const [background, card, popover, foreground, mutedForeground, primary] = colors as string[]
+  const sidebar = hex(json.sidebar) ?? undefined
+  const syntax = typeof json.syntax === 'string' || isRecord(json.syntax) ? (json.syntax as Theme['syntax']) : undefined
+  const label = typeof json.label === 'string' && json.label ? json.label : 'Imported'
+  return { label, mode: json.mode, background, card, sidebar, popover, foreground, mutedForeground, primary, syntax }
+}
+
+/** A VS Code color theme: surfaces from its workbench colors, code colors from its token colors */
+function vscodeTheme(json: Record<string, unknown>): Theme | null {
+  const colors = isRecord(json.colors) ? json.colors : {}
+  const pick = (...keys: string[]): string | null => keys.map((key) => hex(colors[key])).find((color) => color !== null) ?? null
+  const background = pick('editor.background')
+  const foreground = pick('editor.foreground', 'foreground')
+  if (!background || !foreground) return null
+  const mode: Theme['mode'] = json.type === 'light' || json.type === 'hc-light' ? 'light' : 'dark'
+  const card = pick('sideBar.background') ?? background
+  return {
+    label: typeof json.name === 'string' && json.name ? json.name : 'Imported',
+    mode,
+    background,
+    card,
+    popover: pick('editorWidget.background', 'dropdown.background') ?? card,
+    foreground,
+    mutedForeground: pick('descriptionForeground', 'editorLineNumber.foreground') ?? foreground,
+    primary: pick('button.background', 'focusBorder', 'textLink.foreground') ?? THEMES[DEFAULT_THEME[mode]].primary,
+    syntax: Array.isArray(json.tokenColors) ? (json as ThemeRegistration) : undefined
+  }
+}
+
+/** VS Code theme files are JSONC: drop comments and trailing commas outside strings */
+const stripJsonc = (text: string): string => text.replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\/|,(?=\s*[}\]])/g, (_match, string?: string) => string ?? '')
+
+/** A theme file, in the app's own shape or a VS Code color theme */
+export function parseThemeFile(text: string): Theme | null {
+  let json: unknown
+  try {
+    json = JSON.parse(stripJsonc(text))
+  } catch {
+    return null
+  }
+  return isRecord(json) ? (ownTheme(json) ?? vscodeTheme(json)) : null
+}
+
+const CUSTOM_KEY = 'themes.custom'
+let customThemes: Record<string, Theme> = ((): Record<string, Theme> => {
+  try {
+    const parsed: unknown = typeof localStorage === 'undefined' ? null : JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? '{}')
+    if (!isRecord(parsed)) return {}
+    return Object.fromEntries(Object.entries(parsed).flatMap(([id, value]) => (isRecord(value) && ownTheme(value) ? [[id, ownTheme(value)!]] : [])))
+  } catch {
+    return {}
+  }
+})()
