@@ -2,6 +2,8 @@
 
 Treeix is an Electron app with a small host and a set of plugins. The host knows about folders, repositories, worktrees, diffs, files and review comments. Everything a user would call a feature - terminals, pull requests, Jira, Confluence, diagrams - is a plugin that the host never imports directly.
 
+Why the larger pieces are built the way they are is recorded in [the decision records](adr/README.md).
+
 ## Processes
 
 ```
