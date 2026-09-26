@@ -12,6 +12,8 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'app.comments', label: 'Agent comments drawer', menuLabel: 'Agent comments', section: 'Go to', keys: key('KeyI', { meta: true }) },
   { id: 'app.search', label: 'Search across projects in scope', menuLabel: 'Search across projects', section: 'Go to', keys: key('KeyF', { meta: true, shift: true }) },
   { id: 'app.back', label: 'Back to the tab, worktree, file and line you were on', menuLabel: 'Back', section: 'Go to', keys: key('Minus', { ctrl: true }) },
+  { id: 'app.nextTab', label: 'Next tab', section: 'Go to', keys: key('Tab', { ctrl: true }) },
+  { id: 'app.previousTab', label: 'Previous tab', section: 'Go to', keys: key('Tab', { ctrl: true, shift: true }) },
   { id: 'app.forward', label: 'Forward again', menuLabel: 'Forward', section: 'Go to', keys: key('Minus', { ctrl: true, shift: true }) },
   // Pages answer to G and a letter; a key of their own is there to be recorded
   { id: 'page.worktrees', label: 'Open worktrees (G W)', menuLabel: 'Worktrees', section: 'Go to', keys: null },

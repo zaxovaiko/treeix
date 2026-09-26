@@ -483,6 +483,13 @@ function App(): React.JSX.Element {
     focusZone(tab === 'terminal' || !(shell.pages[tab]?.list ?? true) ? 'main' : 'list')
   }
 
+  /** ⌃Tab order: the page tabs, then the open documents, wrapping around */
+  const stepTab = (step: number): void => {
+    const order = [...tabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
+    const index = order.indexOf(appTab)
+    goPage(order[(Math.max(index, 0) + (index === -1 && step < 0 ? 0 : step) + order.length) % order.length])
+  }
+
   /** The key after G or ⌘G: a page letter, a workspace number, or H for recently closed sessions */
   const onLeader = (event: KeyboardEvent): void => {
     const digit = event.code.match(/^Digit([1-9])$/)?.[1]
@@ -862,6 +869,8 @@ function App(): React.JSX.Element {
       'app.comments': () => setDrawerOpen(!drawerOpen),
       'app.back': () => goToPlace(-1),
       'app.forward': () => goToPlace(1),
+      'app.nextTab': () => stepTab(1),
+      'app.previousTab': () => stepTab(-1),
       // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
       'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
       'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
@@ -1449,7 +1458,7 @@ function App(): React.JSX.Element {
   ]
 
   const tabClass = (active: boolean): string =>
-    `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs [-webkit-app-region:no-drag] ${
+    `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag] ${
       active ? 'bg-foreground/8 text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
     }`
   // Each project is searched once: in the selected worktree when it belongs to it, otherwise in its main checkout
@@ -1756,9 +1765,12 @@ function App(): React.JSX.Element {
             <Icon name="panel" className="size-3.5" />
           </IconButton>
         </span>
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
         {tabs.map((tab, index) => {
           const letter = leaderOf(tab.id)?.toUpperCase()
-          const keys = [letter && `G ${letter}`, digitLabel('tabs', index + 1)].filter(Boolean).join(', ')
+          const compact = settings.compactTabs && appTab !== tab.id
+          const digitKey = digitLabel('tabs', index + 1)
+          const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
           return (
             <button
               key={tab.id}
@@ -1768,8 +1780,9 @@ function App(): React.JSX.Element {
               className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
             >
               {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
-              {tab.label}
+              {!compact && tab.label}
               {'Badge' in tab && tab.Badge && <tab.Badge />}
+              {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
             </button>
           )
         })}
@@ -1797,21 +1810,30 @@ function App(): React.JSX.Element {
             </button>
           </div>
         ))}
-        <span className="flex-1" />
-        {titleBarItems(false)}
+        <button
+          title={settings.compactTabs ? 'Show every tab name' : 'Show only the active tab name'}
+          aria-pressed={settings.compactTabs}
+          onClick={() => updateSettings({ compactTabs: !settings.compactTabs })}
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
+        >
+          <Icon name="chevron" className={`size-3.5 ${settings.compactTabs ? '' : 'rotate-180'}`} />
+        </button>
+        </div>
         <button
           title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
           onClick={() => setPaletteOpen(true)}
           // A container, so a narrow window shortens the label instead of wrapping it
-          className="@container ml-1 flex h-6 w-60 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+          className="@container mx-1 flex h-6 w-64 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
         >
           <Icon name="search" className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
-            <span className="@max-[14rem]:hidden">Search or run a command</span>
-            <span className="hidden @max-[14rem]:inline">Search</span>
+            <span className="@max-[10rem]:hidden">Search or run a command</span>
+            <span className="hidden @max-[10rem]:inline">Search</span>
           </span>
           <Kbd hint>{actionKeys('app.palette')}</Kbd>
         </button>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">
+        {titleBarItems(false)}
         {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
         {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
           const info = panelInfo(panel)
@@ -1844,6 +1866,7 @@ function App(): React.JSX.Element {
           <Icon name="settings" />
         </IconButton>
         {titleBarItems(true)}
+        </div>
       </div>
       )}
 

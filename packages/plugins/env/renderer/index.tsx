@@ -155,7 +155,7 @@ defineActions([
 ])
 
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'Env', icon: 'braces', order: 60, render: Tab, Badge, panels: ['terminal'] }],
+  tabs: [{ id: TAB_ID, label: 'Env', icon: 'key', order: 60, render: Tab, Badge, panels: ['terminal'] }],
   Root,
   commands,
   Settings: EnvSettings

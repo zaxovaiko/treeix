@@ -3,7 +3,8 @@ import { expect, test } from 'bun:test'
 globalThis.localStorage ??= { getItem: () => null, setItem: () => undefined } as unknown as Storage
 
 test('workspace helpers', async () => {
-  const { initials, inWorkspace, parseWorkspaces, reposOf, suggestWorkspaceName } = await import('./workspaces')
+  const { initials, inWorkspace, parseWorkspaces, reposOf, shades, suggestWorkspaceName } = await import('./workspaces')
+  expect(shades('#4080c0')).toEqual(['#204060', '#306090', '#4080c0', '#70a0d0', '#a0c0e0'])
   expect(suggestWorkspaceName([])).toBe('')
   expect(suggestWorkspaceName(['/p/openora', '/p/betfeel'])).toBe('Openora + Betfeel')
   expect(suggestWorkspaceName(['/p/a', '/p/b', '/p/c', '/p/d'])).toBe('A + B + 2 more')

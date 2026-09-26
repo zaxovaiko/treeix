@@ -5,6 +5,10 @@ export type Workspace = {
   id: string
   name: string
   color: string
+  /** Replaces the initials on the avatar */
+  avatarText?: string
+  /** A small data URL drawn instead of the colour and text */
+  avatarImage?: string
   repoPaths: string[]
   /** Project new terminals open in; unset means the folder holding all the workspace's projects */
   terminalPath?: string
@@ -27,7 +31,7 @@ const isWorkspace = (value: unknown): value is Workspace => {
     ['id', 'name', 'color'].every((key) => typeof candidate[key] === 'string') &&
     Array.isArray(candidate.repoPaths) &&
     candidate.repoPaths.every((path) => typeof path === 'string') &&
-    (candidate.terminalPath === undefined || typeof candidate.terminalPath === 'string')
+    ['terminalPath', 'avatarText', 'avatarImage'].every((key) => candidate[key] === undefined || typeof candidate[key] === 'string')
   )
 }
 
@@ -151,6 +155,17 @@ export function initials(name: string): string {
   const words = name.match(/[\p{L}\p{N}]+/gu) ?? []
   const letters = words.length > 1 ? words.slice(0, 2).map((word) => word[0]) : [...(words[0] ?? '?').slice(0, 2)]
   return letters.join('').toUpperCase()
+}
+
+const SHADE_STEPS = [-0.5, -0.25, 0, 0.25, 0.5]
+
+/** `#rrggbb` mixed towards black (negative steps) and white (positive), darkest first, the colour itself in the middle */
+export function shades(hex: string): string[] {
+  const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16))
+  return SHADE_STEPS.map((step) => {
+    const mixed = channels.map((channel) => Math.round(step < 0 ? channel * (1 + step) : channel + (255 - channel) * step))
+    return `#${mixed.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
+  })
 }
 
 /** Repos of a workspace, or every repo for All projects */

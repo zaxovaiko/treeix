@@ -463,8 +463,8 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
       if (event.type === 'keydown') bridge.send('write', id, lineKey)
       return false
     }
-    // ⌃- and ⌃⇧- are the app's Go Back and Go Forward, not terminal input
-    if (event.ctrlKey && event.code === 'Minus') return false
+    // ⌃- and ⌃⇧- are the app's Go Back and Go Forward, ⌃Tab and ⌃⇧Tab its next and previous tab, not terminal input
+    if (event.ctrlKey && (event.code === 'Minus' || event.code === 'Tab')) return false
     // ⌥ digits pick a pane; the tab and workspace digits are set in Settings
     const { tabs, workspaces } = getSettings().digitShortcuts
     const digitShortcut = (['alt', tabs, workspaces] as const).some((modifier) => digitPressed(event, modifier) !== null)

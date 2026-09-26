@@ -26,6 +26,8 @@ export type Settings = {
   sections: 'expanded' | 'hidden'
   /** A bottom panel sits under the content beside the sidebar, or spans the full width under it */
   bottomPanel: 'content' | 'full'
+  /** Title bar tabs other than the active one show only their icon */
+  compactTabs: boolean
   editorMinimap: boolean
   editorLineNumbers: 'on' | 'relative' | 'off'
   editorWordWrap: boolean
@@ -189,7 +191,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', compactTabs: false, editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -233,7 +235,7 @@ function load(): Settings {
     const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}')
     if (typeof stored !== 'object' || stored === null) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
+    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
@@ -244,6 +246,7 @@ function load(): Settings {
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
       bottomPanel: candidate.bottomPanel === 'full' ? 'full' : 'content',
+      compactTabs: flag('compactTabs'),
       editorMinimap: flag('editorMinimap'),
       editorLineNumbers: candidate.editorLineNumbers === 'relative' || candidate.editorLineNumbers === 'off' ? candidate.editorLineNumbers : 'on',
       editorWordWrap: flag('editorWordWrap'),

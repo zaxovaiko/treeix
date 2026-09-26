@@ -16,6 +16,7 @@ import {
   suggestWorkspaceName,
   useWorkspaces,
   type Workspace,
+  shades,
   WORKSPACE_COLORS
 } from './workspaces'
 
@@ -149,7 +150,7 @@ export function WorkspaceRail({
             ])
           }
         >
-          {initials(workspace.name)}
+          <Avatar workspace={workspace} />
         </Tile>
       ))}
       <button
@@ -177,6 +178,22 @@ export function WorkspaceDialog({
   const { workspaces } = useWorkspaces()
   const [name, setName] = useState(workspace?.name ?? '')
   const [color, setColor] = useState(workspace?.color ?? WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length])
+  // Shades stay those of the colour picked, not of the shade clicked last
+  const [shadeBase, setShadeBase] = useState(color)
+  const pickColor = (next: string): void => {
+    setColor(next)
+    setShadeBase(next)
+  }
+  const [avatarText, setAvatarText] = useState(workspace?.avatarText ?? '')
+  const [avatarImage, setAvatarImage] = useState(workspace?.avatarImage ?? '')
+  const [imageError, setImageError] = useState('')
+  const pickImage = (file: File | undefined): void => {
+    if (!file) return
+    shrinkImage(file).then(
+      (image) => (setAvatarImage(image), setImageError('')),
+      () => setImageError(`${file.name} isn't an image`)
+    )
+  }
   const [selected, setSelected] = useState<string[]>(workspace?.repoPaths ?? [])
   const [terminalPath, setTerminalPath] = useState(workspace?.terminalPath ?? '')
   const [filter, setFilter] = useState('')
@@ -216,6 +233,8 @@ export function WorkspaceDialog({
       id: workspace?.id ?? crypto.randomUUID(),
       name: finalName,
       color,
+      ...(avatarText.trim() ? { avatarText: avatarText.trim() } : {}),
+      ...(avatarImage ? { avatarImage } : {}),
       repoPaths: selected,
       ...(terminalPath && selected.includes(terminalPath) ? { terminalPath } : {})
     }
@@ -235,9 +254,24 @@ export function WorkspaceDialog({
 
         <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-4">
           <div className="flex items-end gap-3">
-            <span style={{ background: color }} className="grid size-11 shrink-0 place-items-center rounded-xl text-base font-bold text-white">
-              {initials(finalName || '?')}
-            </span>
+            <div className="flex shrink-0 flex-col items-center gap-1.5">
+              <label title="Upload an image" style={{ background: color }} className="grid size-11 cursor-pointer place-items-center overflow-hidden rounded-xl text-base font-bold text-white">
+                <Avatar workspace={{ name: finalName || '?', avatarText: avatarText.trim(), avatarImage }} />
+                <input type="file" accept="image/*" aria-label="Avatar image" className="hidden" onChange={(event) => pickImage(event.target.files?.[0])} />
+              </label>
+              <input
+                value={avatarText}
+                onChange={(event) => setAvatarText(event.target.value.slice(0, 3))}
+                aria-label="Avatar text"
+                placeholder={initials(finalName || '?')}
+                className="h-6 w-11 rounded-md border border-input bg-muted text-center text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60"
+              />
+              {avatarImage && (
+                <button onClick={() => setAvatarImage('')} className="text-[11px] text-muted-foreground hover:text-foreground">
+                  Remove
+                </button>
+              )}
+            </div>
             <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs text-muted-foreground">
               Name
               <input
@@ -252,18 +286,42 @@ export function WorkspaceDialog({
             <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
               Colour
               <div className="flex h-8 items-center gap-1.5">
-                {WORKSPACE_COLORS.map((swatch) => (
+                {[...WORKSPACE_COLORS, ...(WORKSPACE_COLORS.includes(shadeBase) ? [] : [shadeBase])].map((swatch) => (
                   <button
                     key={swatch}
                     aria-label={`Colour ${swatch}`}
-                    onClick={() => setColor(swatch)}
+                    onClick={() => pickColor(swatch)}
                     style={{ background: swatch }}
                     className="grid size-5 place-items-center rounded-md text-white"
                   >
                     {color === swatch && <Icon name="check" className="size-3" />}
                   </button>
                 ))}
+                <label title="Any colour or shade" className="grid size-5 cursor-pointer place-items-center rounded-md text-muted-foreground ring-1 ring-border hover:text-foreground">
+                  <Icon name="plus" className="size-3" />
+                  <input type="color" aria-label="Custom colour" value={color} onChange={(event) => pickColor(event.target.value)} className="sr-only" />
+                </label>
               </div>
+              <div className="flex items-center gap-1.5">
+                {shades(shadeBase).map((shade) => (
+                  <button
+                    key={shade}
+                    aria-label={`Shade ${shade}`}
+                    onClick={() => setColor(shade)}
+                    style={{ background: shade }}
+                    className={`size-4 rounded ${color === shade ? 'ring-2 ring-foreground/60' : ''}`}
+                  />
+                ))}
+              </div>
+              <input
+                aria-label="Colour hex"
+                defaultValue={color}
+                key={color}
+                onBlur={(event) => /^#[0-9a-f]{6}$/i.test(event.target.value.trim()) && pickColor(event.target.value.trim().toLowerCase())}
+                onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+                className="h-6 w-20 rounded-md border border-input bg-muted px-1.5 font-mono text-[11px] text-foreground outline-none"
+              />
+              {imageError && <span className="text-[11px] text-destructive">{imageError}</span>}
             </div>
           </div>
 
@@ -383,4 +441,22 @@ export function WorkspaceDialog({
       </div>
     </div>
   )
+}
+
+function Avatar({ workspace }: { workspace: Pick<Workspace, 'name' | 'avatarText' | 'avatarImage'> }): React.JSX.Element {
+  if (workspace.avatarImage) return <img src={workspace.avatarImage} alt="" className="size-full rounded-[inherit] object-cover" />
+  return <>{workspace.avatarText || initials(workspace.name)}</>
+}
+
+const AVATAR_PIXELS = 96
+
+/** Cropped square and scaled down, so a photo doesn't fill localStorage */
+async function shrinkImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file)
+  const side = Math.min(bitmap.width, bitmap.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = AVATAR_PIXELS
+  canvas.getContext('2d')?.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, AVATAR_PIXELS, AVATAR_PIXELS)
+  bitmap.close()
+  return canvas.toDataURL('image/png')
 }
