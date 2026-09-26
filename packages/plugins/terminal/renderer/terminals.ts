@@ -782,6 +782,13 @@ function trimGpu(): void {
   }
 }
 
+/** Terminals with the same options share one glyph atlas; a GPU reset leaves it blank, drawing cell backgrounds without text */
+function redrawGlyphs(): void {
+  for (const id of gpu.keys()) findTerminal(id)?.terminal.clearTextureAtlas()
+}
+// xterm restores its context but keeps the blank atlas; the event doesn't bubble, so it's caught on the way down
+document.addEventListener('webglcontextrestored', () => requestAnimationFrame(redrawGlyphs), true)
+
 function drawWithGpu(session: TerminalSession): void {
   const index = gpuOrder.indexOf(session.id)
   if (index !== -1) gpuOrder.splice(index, 1)
@@ -800,7 +807,12 @@ function drawWithGpu(session: TerminalSession): void {
       if (gpu.get(session.id) !== loading) return
       const webgl = new WebglAddon()
       const release = { dispose: () => webgl.dispose() }
-      webgl.onContextLoss(() => dropGpu(session.id))
+      webgl.onContextLoss(() => {
+        dropGpu(session.id)
+        // The DOM renderer only paints rows that change, so a full-screen TUI like Codex stayed blank until reload
+        session.terminal.refresh(0, session.terminal.rows - 1)
+        redrawGlyphs()
+      })
       session.terminal.loadAddon(webgl)
       gpu.set(session.id, release)
       // The atlas draws on the next frame
