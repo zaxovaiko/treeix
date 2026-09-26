@@ -8,3 +8,5 @@ out
 embedded.provisionprofile
 .env*
 marketing/
+playwright-report/
+test-results/

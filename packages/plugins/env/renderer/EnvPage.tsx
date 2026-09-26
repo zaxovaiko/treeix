@@ -134,8 +134,9 @@ export function EnvPage(): React.JSX.Element {
     const action = actionForEvent(event, ['env.inspector', 'env.comment', 'env.reveal', 'env.rescan'])
     if (action === 'env.inspector' && mode === 'worktree') panels.toggle('inspector')
     else if (action === 'env.comment') commentOnSelected()
-    else if (action === 'env.reveal') rowState.selected && rowState.toggleReveal(rowState.selected)
-    else if (action === 'env.rescan') void rescan(scoped.map(({ worktree }) => worktree.path))
+    else if (action === 'env.reveal') {
+      if (rowState.selected) rowState.toggleReveal(rowState.selected)
+    } else if (action === 'env.rescan') void rescan(scoped.map(({ worktree }) => worktree.path))
     else return false
     return true
   }

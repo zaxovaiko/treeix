@@ -88,8 +88,10 @@ export function CommandPalette({
     else if (up) setActive((active - 1 + results.length) % Math.max(results.length, 1))
     else if (event.key === 'Enter') run(results[active])
     // First Esc clears the query, the next one closes
-    else if (event.key === 'Escape') query ? setQuery('') : close()
-    else return
+    else if (event.key === 'Escape') {
+      if (query) setQuery('')
+      else close()
+    } else return
     event.preventDefault()
   }
 

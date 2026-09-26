@@ -1,0 +1,7 @@
+{
+  "$schema": "./apps/desktop/node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    "no-control-regex": "off",
+    "unicorn/no-useless-spread": "off"
+  }
+}

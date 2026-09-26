@@ -2,6 +2,8 @@
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "include": [
     "electron.vite.config.*",
+    "playwright.config.ts",
+    "e2e/**/*",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",

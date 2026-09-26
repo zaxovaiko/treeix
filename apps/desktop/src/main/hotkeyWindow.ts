@@ -3,6 +3,9 @@ import { carbonModifiers, isShortcut, macKeyCode, toAccelerator } from '../share
 import type { HotkeyOptions } from '../shared/types'
 import { nativeHotkeys, setDockHidden, setSquareCorners } from './macWindow'
 
+// See TREEIX_HEADLESS in index.ts: the window stays hidden
+const HEADLESS = process.env.TREEIX_HEADLESS === '1'
+
 let registered: string | null = null
 let hideOnBlur = true
 /** Hotkey-only mode: the window never turns back into a normal one, so showing it again changes nothing on screen */
@@ -87,10 +90,10 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
   if (options.only !== only) {
     only = options.only
     // Hotkey-only leaves ⌘Tab and the Dock, so the shortcut is the one way in; otherwise it is a regular app again
-    if (process.platform === 'darwin') app.setActivationPolicy(only ? 'accessory' : 'regular')
+    if (process.platform === 'darwin') app.setActivationPolicy(only || HEADLESS ? 'accessory' : 'regular')
     if (only && !summoned) summon(window)
     else if (!only && summoned) restore(window)
-    if (!only) {
+    if (!only && !HEADLESS) {
       window.show()
       window.focus()
     }

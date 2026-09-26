@@ -31,6 +31,9 @@ else if (!app.commandLine.hasSwitch('user-data-dir')) {
   app.setPath('userData', migrateUserData(join(app.getPath('appData'), 'quick-diff'), userData))
 }
 
+// TREEIX_HEADLESS keeps the window hidden and out of the Dock, e.g. for e2e runs that shouldn't take over the screen
+const headless = process.env.TREEIX_HEADLESS === '1'
+
 function createWindow(): void {
   const window = new BrowserWindow({
     width: 1400,
@@ -43,9 +46,10 @@ function createWindow(): void {
     visualEffectState: 'active',
     // macOS otherwise spends the first click on an inactive window just focusing it, so the palette button needed two
     acceptFirstMouse: true,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false, webviewTag: true }
+    // A never-shown window would otherwise be throttled like a background one
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false, webviewTag: true, backgroundThrottling: !headless }
   })
-  window.on('ready-to-show', () => window.show())
+  if (!headless) window.on('ready-to-show', () => window.show())
   enableTextMenu(window.webContents)
   // The built-in browser's pages: our isolation and preload whatever the renderer asked for
   window.webContents.on('will-attach-webview', (_, prefs) => hardenWebview(prefs, join(__dirname, '../preload/browserInject.js')))
@@ -68,6 +72,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  if (headless && process.platform === 'darwin') app.setActivationPolicy('accessory')
   // Packaged builds take the icon from the bundle; dev runs inside the stock Electron app
   if (is.dev) app.dock?.setIcon(join(__dirname, '../../resources/icon.png'))
   configureBrowserSession(session.fromPartition(BROWSER_PARTITION), app.userAgentFallback, app.getName())

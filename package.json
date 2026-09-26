@@ -9,6 +9,8 @@
     "dist:dmg": "bun run --cwd apps/desktop dist:dmg",
     "dist:mas": "bun run --cwd apps/desktop dist:mas",
     "test": "bun run --cwd apps/desktop test",
+    "lint": "bun run --cwd apps/desktop lint",
+    "e2e": "bun run --cwd apps/desktop e2e",
     "typecheck": "bun run --cwd apps/desktop typecheck"
   }
 }
