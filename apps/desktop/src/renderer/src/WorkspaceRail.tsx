@@ -261,7 +261,7 @@ export function WorkspaceDialog({
               </label>
               <input
                 value={avatarText}
-                onChange={(event) => setAvatarText(event.target.value.slice(0, 3))}
+                onChange={(event) => setAvatarText(event.target.value.slice(0, 4))}
                 aria-label="Avatar text"
                 placeholder={initials(finalName || '?')}
                 className="h-6 w-11 rounded-md border border-input bg-muted text-center text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60"
@@ -445,7 +445,9 @@ export function WorkspaceDialog({
 
 function Avatar({ workspace }: { workspace: Pick<Workspace, 'name' | 'avatarText' | 'avatarImage'> }): React.JSX.Element {
   if (workspace.avatarImage) return <img src={workspace.avatarImage} alt="" className="size-full rounded-[inherit] object-cover" />
-  return <>{workspace.avatarText || initials(workspace.name)}</>
+  const text = workspace.avatarText || initials(workspace.name)
+  // Four letters fit the same square a size down
+  return text.length > 3 ? <span className="text-[0.8em] tracking-tight">{text}</span> : <>{text}</>
 }
 
 const AVATAR_PIXELS = 96

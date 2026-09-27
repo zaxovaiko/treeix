@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ConsoleEntry, ElementSelection, NetworkEntry, Vital } from '../shared/types'
-import { consoleComment, elementComment, entryCommentId, networkComment, vitalComment } from './comments'
+import { consoleComment, curlCommand, elementComment, entryCommentId, networkComment, vitalComment } from './comments'
 
 const page = 'http://localhost:3000/pricing'
 
@@ -31,4 +31,13 @@ test('entryCommentId differs per page and per launch, since entry ids restart', 
   const vital: Vital = { kind: 'vital', id: 'v1', name: 'CLS', value: 0.18, element: 'div.plan', detail: '', start: 0, time: 0 }
   expect(entryCommentId(vital, 7)).toMatch(/^browser:[a-z0-9]+:7:vital:v1$/)
   expect(entryCommentId(vital, 7)).not.toBe(entryCommentId(vital, 8))
+})
+
+test('curlCommand quotes values and skips pseudo headers', () => {
+  const entry: NetworkEntry = {
+    kind: 'network', id: '1', method: 'POST', url: 'http://localhost:3000/api?q=1', resourceType: 'Fetch', status: 200, failed: null, mimeType: 'application/json', startedAt: 0, durationMs: 5,
+    requestHeaders: { ':authority': 'localhost', 'content-type': 'application/json' }, responseHeaders: {}, postData: `{"name":"O'Neil"}`
+  }
+  expect(curlCommand(entry)).toBe(`curl 'http://localhost:3000/api?q=1' \\\n  -X POST \\\n  -H 'content-type: application/json' \\\n  --data-raw '{"name":"O'\\''Neil"}'`)
+  expect(curlCommand({ ...entry, method: 'GET', requestHeaders: {}, postData: null })).toBe(`curl 'http://localhost:3000/api?q=1'`)
 })

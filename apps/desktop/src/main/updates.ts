@@ -4,9 +4,10 @@ import type { UpdateStatus } from '../shared/types'
 
 const { autoUpdater } = electronUpdater
 
-/** Checked once shortly after launch, then on this interval while the app stays open */
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+/** Checked shortly after launch, on this interval while the app stays open, and on coming back to the app once the last check is this old */
+const CHECK_INTERVAL_MS = 30 * 60 * 1000
 const FIRST_CHECK_MS = 10_000
+const FOCUS_CHECK_AFTER_MS = 5 * 60 * 1000
 
 let status: UpdateStatus = { current: __APP_VERSION__, phase: 'idle' }
 
@@ -46,13 +47,16 @@ export function setupUpdates(): void {
   // An unreachable GitHub or a build macOS refuses to replace, e.g. one signed ad-hoc
   autoUpdater.on('error', (error) => publish({ phase: 'error', message: error.message }))
 
+  let lastCheck = 0
   const check = async (): Promise<UpdateStatus> => {
     // A download in flight or waiting to install: checking again would restart it
     if (status.phase === 'downloading' || status.phase === 'ready') return status
+    lastCheck = Date.now()
     await autoUpdater.checkForUpdates().catch((error: unknown) => publish({ phase: 'error', message: error instanceof Error ? error.message : String(error) }))
     return status
   }
   ipcMain.handle('updates:check', () => check())
   setTimeout(() => void check(), FIRST_CHECK_MS)
   setInterval(() => void check(), CHECK_INTERVAL_MS)
+  app.on('browser-window-focus', () => Date.now() - lastCheck > FOCUS_CHECK_AFTER_MS && void check())
 }

@@ -65,3 +65,16 @@ export const vitalComment = (vital: Vital, guestId: number, pageUrl: string, wor
   item(entryCommentId(vital, guestId), pageUrl, worktreePath, `Performance: ${vital.name} ${vitalValue(vital)}${vital.start ? ` at ${seconds(vital.start)}` : ''}`,
     [vital.element && `Caused by: ${vital.element}`, vital.detail].filter(Boolean).join('\n')
   )
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`
+
+/** The request as a curl command; HTTP/2 pseudo headers like `:authority` are not real headers and stay out */
+export const curlCommand = (entry: NetworkEntry): string =>
+  [
+    `curl ${shellQuote(entry.url)}`,
+    ...(entry.method === 'GET' ? [] : [`-X ${entry.method}`]),
+    ...Object.entries(entry.requestHeaders)
+      .filter(([name]) => !name.startsWith(':'))
+      .map(([name, value]) => `-H ${shellQuote(`${name}: ${value}`)}`),
+    ...(entry.postData ? [`--data-raw ${shellQuote(entry.postData)}`] : [])
+  ].join(' \\\n  ')

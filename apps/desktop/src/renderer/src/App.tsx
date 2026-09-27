@@ -1780,8 +1780,10 @@ function App(): React.JSX.Element {
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
       {showTitle && (
       <div
-        className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card pr-2 ${chromeless ? 'pl-2' : 'pl-[88px] [-webkit-app-region:drag]'}`}
+        className={`h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 ${shell.zen ? 'flex' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'} ${chromeless ? '' : '[-webkit-app-region:drag]'}`}
       >
+        {/* Grid columns as wide as the right side, traffic lights included, so Run command sits in the middle of the window */}
+        <div className={`flex min-w-0 flex-1 items-center gap-0.5 ${chromeless ? '' : 'pl-[80px]'}`}>
         {!shell.zen && (
         <span className="mr-1">
           <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={shell.rail} onClick={() => toggleShellPanel('rail')}>
@@ -1843,12 +1845,13 @@ function App(): React.JSX.Element {
           <Icon name="chevron" className={`size-3.5 ${settings.compactTabs ? '' : 'rotate-180'}`} />
         </button>
         </div>
+        </div>
         {!shell.zen && (
         <>
         <button
           title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
           onClick={() => setPaletteOpen(true)}
-          className="mx-1 flex h-6 w-40 min-w-24 items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+          className="mx-1 flex h-6 w-40 min-w-24 shrink-0 items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
         >
           <Icon name="search" className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate whitespace-nowrap">Run command</span>

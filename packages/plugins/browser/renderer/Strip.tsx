@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import { createBridge, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { openMenu } from '@treeix/app/contextMenu'
-import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
+import { CopyButton, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import type { ConsoleEntry, NetworkEntry, Vital } from '../shared/types'
-import { consoleComment, entryCommentId, networkComment, seconds, vitalComment } from './comments'
+import { consoleComment, curlCommand, entryCommentId, networkComment, seconds, vitalComment } from './comments'
 import { useEntries } from './entries'
 import type { BrowserTab } from './tabs'
 
@@ -27,6 +27,7 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
   const [open, setOpen] = usePersisted<boolean>('browser.strip', false)
   const [pane, setPane] = usePersisted<Pane>('browser.stripPane', 'console')
   const [all, setAll] = useState(false)
+  const [detailId, setDetailId] = useState<string | null>(null)
   const [height, setHeight] = usePersisted<number>('browser.stripHeight', 144)
   const [width, setWidth] = usePersisted<number>('browser.stripWidth', 420)
   useEffect(() => {
@@ -52,6 +53,7 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
       host.addComment(networkComment(entry, guestId, body, tab.url, worktree))
     }
   }
+  const detail = pane === 'network' ? network.find((entry) => entry.id === detailId) : undefined
   const shownLogs = all ? logs : logs.filter((entry) => entry.level === 'error' || entry.level === 'warning')
   const shownRequests = all ? network : network.filter((entry) => entry.resourceType === 'Fetch' || entry.resourceType === 'XHR' || isProblem(entry))
   const errors = logs.filter((entry) => entry.level === 'error').length
@@ -91,6 +93,7 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
       {paneButton('console', 'Console', errors)}
       {paneButton('network', 'Network')}
       {paneButton('performance', 'Performance')}
+      {host.renderSendButton(worktree, 'pill')}
       {pane !== 'performance' && open && (
         <IconButton label={all ? 'Only problems' : 'Show all'} active={all} onClick={() => setAll(!all)}>
           <Icon name="list" className="size-3.5" />
@@ -120,13 +123,22 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
             <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />
           )}
           <div style={across ? { width, height: '100%' } : { height }} className="overflow-y-auto">
-            {rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
-            {rows
+            {detail && guestId !== null && <RequestDetail entry={detail} guestId={guestId} onClose={() => setDetailId(null)} />}
+            {!detail && rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
+            {!detail &&
+              rows
               .slice()
               .reverse()
               .map(({ entry, cells, bad, warn }) => (
                 <label
                   key={entry.id}
+                  title={entry.kind === 'network' ? 'Click for headers, payload, response and curl' : undefined}
+                  onClick={(event) => {
+                    // A network row opens its details; only its checkbox hands it to the agent
+                    if (entry.kind !== 'network' || event.target instanceof HTMLInputElement) return
+                    event.preventDefault()
+                    setDetailId(entry.id)
+                  }}
                   className="grid cursor-pointer grid-cols-[16px_72px_minmax(0,1fr)_72px_64px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50"
                 >
                   <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
@@ -142,5 +154,82 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
         </div>
       )}
     </>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="border-t border-border px-5 py-2">
+      <div className="mb-1 text-[11px] font-medium text-muted-foreground">{title}</div>
+      {children}
+    </div>
+  )
+}
+
+const pretty = (text: string): string => {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+
+function HeaderList({ values }: { values: Record<string, string> }): React.JSX.Element {
+  const entries = Object.entries(values)
+  if (!entries.length) return <div className="text-muted-foreground">None</div>
+  return (
+    <div className="grid grid-cols-[minmax(120px,auto)_minmax(0,1fr)] gap-x-3 select-text">
+      {entries.map(([name, value]) => (
+        <div key={name} className="contents">
+          <span className="text-muted-foreground">{name}</span>
+          <span className="break-all">{value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** One request in full: headers, what went up, what came back, and the curl to replay it */
+function RequestDetail({ entry, guestId, onClose }: { entry: NetworkEntry; guestId: number; onClose: () => void }): React.JSX.Element {
+  const [body, setBody] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    setBody(undefined)
+    void bridge
+      .invoke<string | null>('responseBody', guestId, entry.id)
+      .catch(() => null)
+      .then(setBody)
+  }, [guestId, entry.id, entry.status])
+  const code = 'max-h-80 overflow-auto rounded bg-muted/50 p-2 whitespace-pre-wrap break-all select-text'
+  return (
+    <div className="font-mono text-[11px]">
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-background px-3 py-1">
+        <IconButton label="Back to requests" onClick={onClose}>
+          <Icon name="arrowLeft" className="size-3.5" />
+        </IconButton>
+        <span className={tone(isProblem(entry))}>{entry.method}</span>
+        <span className="min-w-0 flex-1 truncate select-text" title={entry.url}>
+          {entry.url}
+        </span>
+        <span className={tone(isProblem(entry), entry.status === null)}>{entry.failed ?? entry.status ?? 'pending'}</span>
+        <CopyButton label="Copy as cURL" className="size-3.5" text={() => curlCommand(entry)} />
+      </div>
+      <Section title="cURL">
+        <pre className={code}>{curlCommand(entry)}</pre>
+      </Section>
+      <Section title="Request headers">
+        <HeaderList values={entry.requestHeaders} />
+      </Section>
+      {entry.postData && (
+        <Section title="Request body">
+          <pre className={code}>{pretty(entry.postData)}</pre>
+        </Section>
+      )}
+      <Section title="Response headers">
+        <HeaderList values={entry.responseHeaders} />
+      </Section>
+      <Section title="Response body">
+        {body === undefined ? <div className="text-muted-foreground">Loading…</div> : body ? <pre className={code}>{pretty(body)}</pre> : <div className="text-muted-foreground">Not available</div>}
+      </Section>
+    </div>
   )
 }

@@ -78,9 +78,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd apps/desktop/dist
+          # A draft until every file is up: installed copies see the release only once latest-mac.yml is there
           gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 ||
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --generate-notes
           gh release upload "$GITHUB_REF_NAME" --clobber \
             Treeix-arm64.dmg Treeix-arm64.dmg.blockmap \
             Treeix-*-arm64-mac.zip Treeix-*-arm64-mac.zip.blockmap \
             latest-mac.yml
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

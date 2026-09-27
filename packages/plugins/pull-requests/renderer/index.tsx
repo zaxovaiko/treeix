@@ -153,6 +153,16 @@ function Polling(): null {
   return null
 }
 
+/** How many pull requests the workspace has, on the page tab like the terminal's session count */
+function PullRequestsCount(): React.JSX.Element | null {
+  const { scopeRepoPaths } = useHost()
+  const [, bump] = useReducer((count: number) => count + 1, 0)
+  useEffect(() => onPullRequestsUpdated(bump), [])
+  const count = cachedPullRequests(scopeKeyOf(scopeRepoPaths ?? []))?.pullRequests.length ?? 0
+  if (!count) return null
+  return <span title={`${count} pull request${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">{count}</span>
+}
+
 function PullRequestSettings(): React.JSX.Element {
   const { prFilesView, prPollMinutes } = prSettings.use()
   return (
@@ -203,7 +213,7 @@ const listedCommands = (host: HostApi): Command[] =>
 
 const plugin: RendererPlugin = {
   services: { pullRequests: { open: openPullRequestUrl } },
-  tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'] }],
+  tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'], Badge: PullRequestsCount }],
   Root: Polling,
   Settings: PullRequestSettings,
   commands: (host) => [...pullRequestCommands(host.activeTab === TAB_ID), ...listedCommands(host)],

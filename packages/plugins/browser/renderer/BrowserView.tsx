@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { WebviewTag } from 'electron'
 import { Icon } from '@treeix/app/Icon'
 import { openMenu } from '@treeix/app/contextMenu'
 import { createBridge, useHost } from '@treeix/sdk'
@@ -18,7 +17,6 @@ import { httpProblem, loadError } from './loadErrors'
 const bridge = createBridge('browser')
 
 let focusAddress = (): void => undefined
-let toggleDevtools = (): void => undefined
 
 export function navigate(input: string): void {
   const url = toUrl(input, browserSettings.get().searchEngine)
@@ -43,7 +41,8 @@ export function runBrowserAction(action: BrowserAction): void {
   else if (action === 'forward') page?.goForward()
   else if (action === 'reload') page?.reload()
   else if (action === 'designMode') setDesign(!getDesign().on)
-  else if (action === 'devtools') toggleDevtools()
+  // Always their own window: DevTools docked into a webview stay empty on current Electron
+  else if (action === 'devtools' && tab?.guestId) void bridge.invoke('devtools', tab.guestId)
 }
 
 const EMPTY_PAGE_ROWS = 6
@@ -198,7 +197,7 @@ function TabStrip(): React.JSX.Element {
                 className={`group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs ${tab.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'}`}
               >
                 {group !== undefined && <span className={`size-1.5 shrink-0 rounded-full ${groupColor(group)}`} />}
-                {tab.loading && !tab.favicon ? (
+                {tab.loading ? (
                   <Icon name="loader" className="size-3.5 animate-spin text-muted-foreground" />
                 ) : tab.favicon ? (
                   // A declared icon can 404; the globe stands in rather than a broken image
@@ -246,24 +245,6 @@ function ProfileBadge(): React.JSX.Element | null {
   )
 }
 
-function DevtoolsDock({ guestId }: { guestId: number }): React.JSX.Element {
-  const ref = useRef<WebviewTag | null>(null)
-  useEffect(() => {
-    const dock = ref.current
-    if (!dock) return
-    const ready = (): void => {
-      dock.removeEventListener('dom-ready', ready)
-      void bridge.invoke('devtools', guestId, dock.getWebContentsId())
-    }
-    dock.addEventListener('dom-ready', ready)
-    return () => {
-      dock.removeEventListener('dom-ready', ready)
-      void bridge.invoke('closeDevtools', guestId)
-    }
-  }, [guestId])
-  return <webview ref={ref} src="about:blank" style={{ height: 280, borderTop: '1px solid var(--border)' }} />
-}
-
 export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.Element {
   const host = useHost()
   const { tabs, activeId } = useBrowser()
@@ -272,8 +253,6 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const { ref, shown, elsewhere } = useSlot()
   const input = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<string | null>(null)
-  const [devtools, setDevtools] = usePersisted<'docked' | 'window'>('browser.devtools', 'docked')
-  const [dockOpen, setDockOpen] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const sections = useSuggestions(draft ?? '')
@@ -296,16 +275,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
       input.current?.focus()
       input.current?.select()
     }
-    toggleDevtools = () => {
-      const current = activeTab()
-      if (!current?.guestId) return
-      if (devtools === 'window') void bridge.invoke('devtools', current.guestId, null)
-      else {
-        if (dockOpen) void bridge.invoke('closeDevtools', current.guestId)
-        setDockOpen((open) => !open)
-      }
-    }
-  }, [shown, devtools, dockOpen])
+  }, [shown])
   const [stripSlot, setStripSlot] = useState<HTMLDivElement | null>(null)
   const [stripSide, setStripSide] = usePersisted<StripSide>('browser.stripSide', 'bottom')
   const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
@@ -397,15 +367,8 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         <button
           aria-label="Developer tools"
           title="Developer tools (⌥⌘I)"
-          aria-pressed={dockOpen}
-          className={`${toolButton} ${dockOpen ? 'bg-primary/15 text-primary' : ''}`}
+          className={toolButton}
           onClick={() => runBrowserAction('devtools')}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            const next = devtools === 'docked' ? 'window' : 'docked'
-            setDevtools(next)
-            host.flash(next === 'window' ? 'DevTools open in a window' : 'DevTools dock under the page')
-          }}
         >
           <Icon name="code" className="size-3.5" />
         </button>
@@ -420,7 +383,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
             <Icon name="terminal" className="size-3.5" />
           </button>
         )}
-        {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
+        {place === 'panel' && host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
         {place === 'tab' && <div ref={setStripSlot} className="flex shrink-0 items-center gap-0.5 border-l border-border pl-1" />}
       </div>
       <div className={`flex min-h-0 flex-1 ${{ bottom: 'flex-col', left: 'flex-row-reverse', right: 'flex-row' }[stripSide]}`}>
@@ -464,7 +427,6 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         </div>
         {tab && place === 'tab' && <Strip tab={tab} slot={stripSlot} side={stripSide} onSide={setStripSide} />}
       </div>
-      {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock key={tab.guestId} guestId={tab.guestId} />}
     </div>
   )
 }

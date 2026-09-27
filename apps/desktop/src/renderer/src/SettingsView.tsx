@@ -326,7 +326,7 @@ const SETTINGS: SettingSpec[] = [
     section: 'General',
     card: 'Updates',
     label: 'Version',
-    description: 'Treeix checks GitHub for a new build on launch and every few hours, downloads it in the background, and installs it when you restart.',
+    description: 'Treeix checks GitHub for a new build on launch, every 30 minutes and when you come back to the app, downloads it in the background, and installs it when you restart.',
     Control: function Updates() {
       const status = useUpdates()
       return (

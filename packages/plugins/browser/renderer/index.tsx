@@ -9,7 +9,7 @@ import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
 import { portDetail } from './Suggestions'
 import { toggleStrip } from './Strip'
-import { findTab, getBrowser, openTab, selectTab, setBrowserWorkspace, updateBrowser } from './tabs'
+import { findTab, getBrowser, openTab, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
 import type { Vital } from '../shared/types'
 
@@ -205,12 +205,19 @@ function Root(): React.JSX.Element {
   )
 }
 
+/** The workspace's open pages, on the page tab like the terminal's session count */
+function TabsCount(): React.JSX.Element | null {
+  const count = useBrowser().tabs.filter((tab) => tab.url !== 'about:blank').length
+  if (!count) return null
+  return <span title={`${count} open page${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">{count}</span>
+}
+
 function BrowserPage(): React.JSX.Element {
   return <PageLayout id={TAB_ID} main={<BrowserView place="tab" />} />
 }
 
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'Browser', icon: 'globe', order: 15, render: BrowserPage, panels: ['terminal'] }],
+  tabs: [{ id: TAB_ID, label: 'Browser', icon: 'globe', order: 15, render: BrowserPage, panels: ['terminal'], Badge: TabsCount }],
   panels: [{ id: TAB_ID, label: 'Browser', icon: 'globe', render: () => <BrowserView place="panel" /> }],
   Root,
   onKeyDown: (event, current) => {
