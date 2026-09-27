@@ -73,11 +73,34 @@ type FilePreview = { path: string; line: number | null; root?: string }
 const view = definePluginSettings('terminal', (stored) => ({
   /** The open file in each workspace */
   previews: (typeof stored.previews === 'object' && stored.previews !== null ? stored.previews : {}) as Record<string, FilePreview | null>,
+  /** The files open as tabs in each workspace, the preview being the active one */
+  fileTabs: (typeof stored.fileTabs === 'object' && stored.fileTabs !== null ? stored.fileTabs : {}) as Record<string, FilePreview[]>,
   /** The file preview fills the main zone, the terminals stay alive behind it */
   previewMaximized: stored.previewMaximized === true
 }))
 
-const setPreview = (preview: FilePreview | null): void => view.update({ previews: { ...view.get().previews, [getCurrentWorkspaceId()]: preview } })
+const sameFile = (a: FilePreview, b: FilePreview): boolean => a.path === b.path && a.root === b.root
+
+/** Shows a file, opening a tab for it unless it has one */
+const setPreview = (preview: FilePreview | null): void => {
+  const { previews, fileTabs } = view.get()
+  const workspaceId = getCurrentWorkspaceId()
+  const tabs = fileTabs[workspaceId] ?? []
+  const nextTabs = !preview || tabs.some((tab) => sameFile(tab, preview)) ? tabs : [...tabs, preview]
+  view.update({ previews: { ...previews, [workspaceId]: preview }, fileTabs: { ...fileTabs, [workspaceId]: preview ? nextTabs : [] } })
+}
+
+/** Closes a tab; closing the shown file shows its neighbour */
+const closeFileTab = (file: FilePreview): void => {
+  const { previews, fileTabs } = view.get()
+  const workspaceId = getCurrentWorkspaceId()
+  const tabs = fileTabs[workspaceId] ?? []
+  const index = tabs.findIndex((tab) => sameFile(tab, file))
+  const rest = tabs.filter((_, position) => position !== index)
+  const shown = previews[workspaceId]
+  const nextShown = shown && !sameFile(shown, file) ? shown : (rest[Math.min(index, rest.length - 1)] ?? null)
+  view.update({ previews: { ...previews, [workspaceId]: nextShown }, fileTabs: { ...fileTabs, [workspaceId]: rest } })
+}
 
 /** The ⌘⇧J session switcher, `closed` for G H */
 const dialogs = definePluginSettings('terminal-dialog', () => ({ sessions: null as 'all' | 'closed' | null }))
@@ -126,8 +149,11 @@ const WaitingDot = ({ className }: { className: string }): React.JSX.Element | n
 function TerminalPage(): React.JSX.Element {
   const host = useHost()
   const { tasks, task, sessions, history } = useTaskScope()
-  const { previews, previewMaximized } = view.use()
-  const preview = previews[useWorkspaces().currentId] ?? null
+  const { previews, fileTabs, previewMaximized } = view.use()
+  const { currentId } = useWorkspaces()
+  const preview = previews[currentId] ?? null
+  // Previews saved before tabs existed have no tab of their own
+  const openTabs = fileTabs[currentId]?.length ? fileTabs[currentId] : preview ? [preview] : []
   const [previewWidth, setPreviewWidth] = usePersisted<number>('terminalTab.previewWidth', 560)
   // The file opener is registered once, so it reads the explorer's folder through a ref
   const explorerRoot = useRef(host.explorerRoot)
@@ -162,18 +188,35 @@ function TerminalPage(): React.JSX.Element {
             <aside style={previewMaximized ? undefined : { width: previewWidth }} className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}>
               {!previewMaximized && <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />}
               <MarkdownFoldScope>
-                <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-                  <FileIcon path={preview.path} />
-                  <span className="min-w-0 truncate font-mono text-xs text-foreground/85 select-text" title={preview.path}>
-                    {preview.path}
-                    {preview.line && <span className="text-muted-foreground">:{preview.line}</span>}
-                  </span>
-                  <span className="flex-1" />
+                <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+                  <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+                    {openTabs.map((tab) => {
+                      const name = tab.path.split('/').pop() ?? tab.path
+                      return (
+                        <div
+                          key={`${tab.root ?? ''}:${tab.path}`}
+                          title={tab.path}
+                          onMouseDown={(event) => event.button === 1 && closeFileTab(tab)}
+                          className={`flex h-6 max-w-52 shrink-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-xs ${
+                            sameFile(tab, preview) ? 'bg-foreground/8 text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                          }`}
+                        >
+                          <button onClick={() => setPreview({ ...tab, line: null })} className="flex min-w-0 items-center gap-1.5">
+                            <FileIcon path={tab.path} />
+                            <span className="truncate">{name}</span>
+                          </button>
+                          <button aria-label={`Close ${name}`} onClick={() => closeFileTab(tab)} className="grid size-4 shrink-0 place-items-center rounded hover:bg-accent">
+                            <Icon name="close" className="size-2.5" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
                   {isMarkdownPath(preview.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
                   <IconButton label={previewMaximized ? 'Show the terminals' : 'Fill the page'} active={previewMaximized} onClick={() => view.update({ previewMaximized: !previewMaximized })}>
                     <Icon name={previewMaximized ? 'minimize' : 'maximize'} className="size-3.5" />
                   </IconButton>
-                  <IconButton label="Close preview" onClick={() => setPreview(null)}>
+                  <IconButton label="Close all files" onClick={() => setPreview(null)}>
                     <Icon name="close" className="size-3" />
                   </IconButton>
                 </div>
