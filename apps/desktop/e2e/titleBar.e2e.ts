@@ -18,11 +18,13 @@ test('ctrl+tab cycles the tabs and inactive tabs can show only their icon', asyn
   await page.keyboard.press('Control+Shift+Tab')
   await expect(tab('Worktrees')).toHaveClass(/ring-1/)
 
-  await page.getByRole('button', { name: 'Show only the active tab name' }).click()
+  // Compact is the default: only the active tab carries its name
   await expect(tab('Worktrees')).toContainText('Worktrees')
   await expect(tab('Terminal')).not.toContainText('Terminal')
   await page.getByRole('button', { name: 'Show every tab name' }).click()
   await expect(tab('Terminal')).toContainText('Terminal')
+  await page.getByRole('button', { name: 'Show only the active tab name' }).click()
+  await expect(tab('Terminal')).not.toContainText('Terminal')
 })
 
 test('a workspace takes any hex colour or shade and its own avatar text', async () => {
