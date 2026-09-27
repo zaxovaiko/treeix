@@ -6,7 +6,7 @@ import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscrib
 import { agentOr, getAgent, isAgent, resumeCommandFor, startCommand } from '@treeix/app/agents'
 import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
-import { findFileLinks, findWebLinks } from './fileLinks'
+import { findFileLinks, findIssueLinks, findWebLinks } from './fileLinks'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
@@ -148,6 +148,12 @@ type State = {
 let fileLinkHandler: ((sessionId: string, path: string, line: number | null) => void) | null = null
 export const setFileLinkHandler = (handler: typeof fileLinkHandler): void => {
   fileLinkHandler = handler
+}
+
+/** Jira keys: which projects are real, and opening one; set by the plugin, answering no while the Jira plugin is off */
+let issueLinks: { isProject: (project: string) => boolean; open: (key: string) => void } | null = null
+export const setIssueLinks = (links: typeof issueLinks): void => {
+  issueLinks = links
 }
 
 /** Opens a web address ⌘-clicked in a session, in the app when a plugin knows it, else in the browser */
@@ -416,6 +422,8 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
       const webLinks = findWebLinks(text)
       // A path inside a web address (…/merge_requests/437) belongs to the address
       const fileLinks = findFileLinks(text).filter((file) => !webLinks.some((web) => file.start < web.end && file.end > web.start))
+      const taken = [...webLinks, ...fileLinks]
+      const issues = findIssueLinks(text).filter((issue) => issueLinks?.isProject(issue.project) && !taken.some((link) => issue.start < link.end && issue.end > link.start))
       const range = (start: number, end: number) => ({ start: { x: start + 1, y: row }, end: { x: end, y: row } })
       callback([
         ...fileLinks.map((link) => ({
@@ -424,6 +432,14 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
           decorations: { underline: true, pointerCursor: true },
           activate: (event: MouseEvent) => {
             if (event.metaKey) fileLinkHandler?.(id, link.path, link.line)
+          }
+        })),
+        ...issues.map((link) => ({
+          text: link.key,
+          range: range(link.start, link.end),
+          decorations: { underline: true, pointerCursor: true },
+          activate: (event: MouseEvent) => {
+            if (event.metaKey) issueLinks?.open(link.key)
           }
         })),
         ...webLinks.map((link) => ({

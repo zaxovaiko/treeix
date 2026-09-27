@@ -31,7 +31,7 @@ import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
 import { startRename, TaskList } from './TaskList'
 import { openTab, TaskTerminals } from './TerminalPanel'
-import { resolvePath } from './fileLinks'
+import { findInFiles, resolvePath } from './fileLinks'
 import { NEW_TAB_ACTIONS, unarchived } from './sessionMeta'
 import { type Task, taskOf, uniqueName } from './tasks'
 import { switchTask, taskLabel } from './taskUi'
@@ -56,6 +56,7 @@ import {
   sendText,
   setActiveTab,
   setFileLinkHandler,
+  setIssueLinks,
   setWebLinkHandler,
   splitPane,
   subscribeTerminals,
@@ -248,6 +249,14 @@ const bridge = createBridge('terminal')
  * ⌘-click on a path in a session: shows the file on the Terminal page, with the Files panel on the folder it is in
  * unless that folder is already shown. Relative paths start where the session's shell is now.
  */
+/** Whether a path is a file, a folder, or nothing */
+async function entryAt(absolute: string): Promise<'file' | 'folder' | null> {
+  const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
+  const name = absolute.slice(parent.length + (parent === '/' ? 0 : 1))
+  const entries = await window.api.listDirectory(parent, '')
+  return entries.includes(`${name}/`) ? 'folder' : entries.includes(name) ? 'file' : null
+}
+
 function useFileLinks(): void {
   const host = useHost()
   const showInspector = (): void => {
@@ -257,9 +266,14 @@ function useFileLinks(): void {
     setFileLinkHandler(async (sessionId, path, line) => {
       const session = getTerminals().sessions.find((candidate) => candidate.id === sessionId)
       const cwd = (await bridge.invoke<string | null>('cwd', sessionId).catch(() => null)) ?? session?.worktreePath ?? window.api.home
-      const absolute = resolvePath(path, cwd, window.api.home)
+      const direct = resolvePath(path, cwd, window.api.home)
+      // Agents print paths from the repo root, cut short, or bare names: those are looked up under the shell's folder
+      const directEntry = await entryAt(direct)
+      const found = directEntry || /^[/~]/.test(path) ? null : findInFiles(path, (await window.api.listFiles(cwd).catch(() => ({ files: [] }))).files)
+      if (!directEntry && !found) return
+      const absolute = found ? `${cwd}/${found}` : direct
+      const isFolder = directEntry === 'folder' && !found
       const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
-      const isFolder = (await window.api.listDirectory(parent, '')).includes(`${absolute.slice(parent.length + 1)}/`)
       // Binary and oversized files have no viewer here; the Finder knows what opens them
       if (!isFolder && (await window.api.readFile(absolute, '').catch(() => null)) === null) return window.api.revealInFinder(absolute)
       if (host.activeTab !== TAB_ID) host.setActiveTab(TAB_ID)
@@ -273,6 +287,8 @@ function useFileLinks(): void {
       setPreview({ path: absolute.slice(folder.length + 1), line, root: folder })
     })
   )
+  // Looked up on use: the Jira plugin may load after this one, or be switched off later
+  useEffect(() => setIssueLinks({ isProject: (project) => host.service('jira')?.isProject(project) ?? false, open: (key) => host.service('jira')?.open(key, host) }))
   useEffect(() =>
     setWebLinkHandler(async (url) => {
       const opened = (await host.service('pullRequests')?.open(url, host).catch(() => false)) ?? false

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { findFileLinks, findWebLinks, resolvePath } from './fileLinks'
+import { findFileLinks, findInFiles, findIssueLinks, findWebLinks, resolvePath } from './fileLinks'
 
 const paths = (text: string) => findFileLinks(text).map(({ path, line }) => (line ? `${path}:${line}` : path))
 
@@ -26,4 +26,20 @@ test('findWebLinks finds addresses and leaves closing punctuation out', () => {
   const text = 'MR: https://gitlab.blurify.com/betfeel/betfeel/-/merge_requests/437 (branch), see https://x.dev/a).'
   expect(findWebLinks(text).map((link) => link.url)).toEqual(['https://gitlab.blurify.com/betfeel/betfeel/-/merge_requests/437', 'https://x.dev/a'])
   expect(findWebLinks('no links here')).toEqual([])
+})
+
+test('findFileLinks finds bare file names with code extensions, not domains or versions', () => {
+  expect(paths('Edited pty.ts:42 and README.md, see example.com, v1.2, e.g. node')).toEqual(['pty.ts:42', 'README.md'])
+  expect(paths('in main/pty.ts and ./a/b.ts')).toEqual(['main/pty.ts', './a/b.ts'])
+})
+
+test('findInFiles picks the shortest worktree file ending with the path', () => {
+  const files = ['packages/plugins/terminal/main/pty.ts', 'main/pty.ts.bak', 'x/terminal/main/pty.ts/deep', 'a/main/pty.ts']
+  expect(findInFiles('main/pty.ts', files)).toBe('a/main/pty.ts')
+  expect(findInFiles('./terminal/main/pty.ts', files)).toBe('packages/plugins/terminal/main/pty.ts')
+  expect(findInFiles('nope.ts', files)).toBeNull()
+})
+
+test('findIssueLinks finds Jira keys, not parts of longer words', () => {
+  expect(findIssueLinks('Fixes ABC-12 and X2-7 (see UTF-8, a-ABC-1, ABC-1x)').map((link) => `${link.project}:${link.key}`)).toEqual(['ABC:ABC-12', 'X2:X2-7', 'UTF:UTF-8'])
 })
