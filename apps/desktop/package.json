@@ -1,7 +1,7 @@
 {
   "name": "treeix",
   "productName": "Treeix",
-  "version": "0.5.16",
+  "version": "0.5.17",
   "description": "Your AI workspace. Everything you use daily, in one app: agents, worktrees, diffs, pull requests and tickets.",
   "author": "zaxovaiko",
   "private": true,
