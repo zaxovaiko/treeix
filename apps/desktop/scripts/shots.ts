@@ -11,23 +11,26 @@
 import { realpathSync } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { confluenceState, jiraState } from './shot-fixtures'
+import { confluenceState, ignoreEnvFixtures, jiraState, ORBIT_BILLING_PAGE, writeEnvFixtures, writeLimitFixtures, writePullRequestFixtures } from './shot-fixtures'
 
 const appDir = resolve(import.meta.dir, '..')
 const root = resolve(appDir, '../..')
 // git reports worktrees by their real path, so /tmp/… would not match what the app shows
 const home = realpathSync(process.env.DEMO_HOME ?? '/tmp/treeix-demo')
-const outDir = join(root, 'marketing/shots')
+const outDir = process.env.SHOTS_OUT ?? join(root, 'marketing/shots')
 const port = Number(process.env.SHOTS_PORT ?? 9333)
 const endpoint = `http://127.0.0.1:${port}`
 const argv = process.argv.slice(2)
 /** Opens the app on one scene and leaves it running, to check how a frame looks before shooting it */
 const keepOpen = argv.includes('--open')
 const only = argv.filter((name) => !name.startsWith('--'))
+/** Same title bar in every scene (sessions, comments, usage limits), for shots shown one after another in a video */
+const uniform = argv.includes('--uniform')
 
 const repo = `${home}/code/orbit-web`
 const invoices = `${repo}/.claude/worktrees/feat+usage-invoices`
 const timeout = `${repo}/.claude/worktrees/fix+session-timeout`
+const api = `${home}/code/orbit-api`
 
 const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms))
 
@@ -158,6 +161,24 @@ function terminalState(): Record<string, unknown> {
   }
 }
 
+const comment = (id: string, filePath: string, start: number, end: number, code: string, text: string): Json => ({ id, worktreePath: invoices, filePath, range: { start, end, side: 'additions' }, code, text })
+
+/** What --uniform lays over every scene: the terminal sessions, three queued comments and the usage limits pill */
+function uniformState(state: Record<string, unknown>): Record<string, unknown> {
+  const settings = object(state.settings ?? baseState().settings)
+  return {
+    ...terminalState(),
+    ...state,
+    settings: { ...settings, plugins: { ...object(settings.plugins), 'usage-limits': true } },
+    'plugin.usage-limits.settings': { usageLabel: 'reset' },
+    comments: [
+      ...(baseState().comments as Json[]),
+      comment('c-2', 'src/billing/portal.ts', 30, 36, '+function toInvoice(invoice: Stripe.Invoice): Invoice {', 'Write a unit test for toInvoice, an unpaid invoice included.'),
+      comment('c-3', 'src/billing/invoices.test.ts', 9, 12, "+test('converts cents and keeps unpaid invoices', async () => {", 'Add a refunded invoice, Stripe sends a negative total for it.')
+    ]
+  }
+}
+
 /** The diff renders inside shadow roots, so waits have to walk into them like FileView.findLineElement does */
 const DEEP = `(selector) => {
   const walk = (root) => {
@@ -195,6 +216,14 @@ async function main(): Promise<void> {
   if (busy) throw new Error(`something already listens on ${endpoint}, quit it first`)
   await mkdir(outDir, { recursive: true })
 
+  // The Browser scene's page, where the worktree's dev server would be
+  await writePullRequestFixtures(home, repo, api, invoices)
+  if (uniform) {
+    await writeLimitFixtures(home)
+    await writeEnvFixtures(repo, invoices)
+    await ignoreEnvFixtures(repo)
+  }
+  const devServer = only.length && !only.includes('browser') ? null : Bun.serve({ port: 3000, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
   const child = Bun.spawn([await electronBinary(), appDir, `--remote-debugging-port=${port}`], {
     cwd: appDir,
     env: { ...process.env, HOME: home, PATH: `${home}/bin:${process.env.PATH ?? ''}` },
@@ -206,11 +235,14 @@ async function main(): Promise<void> {
     const cdp = await connect(await pageTarget())
     await cdp('Page.enable')
     await cdp('Runtime.enable')
+    // A locked screen or covered window marks the page hidden, which stops animation frames and every settle with them
+    await cdp('Emulation.setFocusEmulationEnabled', { enabled: true })
     if (!keepOpen) {
       // The whole screen, as a full-screen window would have: Electron has no CDP Browser domain to resize with,
       // and the accessibility route needs a permission a script can't grant itself.
       const display = await cdp('Runtime.evaluate', { expression: '[screen.width, screen.height]', returnByValue: true })
-      const [width, height] = object(display.result).value as [number, number]
+      // SHOTS_SIZE=1428x933 keeps a laptop screen's shots the size of the ones taken on the usual display
+      const [width, height] = process.env.SHOTS_SIZE ? process.env.SHOTS_SIZE.split('x').map(Number) : (object(display.result).value as [number, number])
       await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: false })
     }
     // The scan has to land before anything is seeded: a cold start with no repositories drops the saved worktree
@@ -258,6 +290,8 @@ async function main(): Promise<void> {
     }
     const shot = async (name: string): Promise<void> => {
       await cdp('Page.bringToFront')
+      // A pointer left over from an earlier scene's drag would hover a row and pop a tooltip
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 })
       await settle()
       const result = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
       await Bun.write(join(outDir, `${name}.png`), Buffer.from(String(result.data), 'base64'))
@@ -271,10 +305,23 @@ async function main(): Promise<void> {
       await settle(800)
     }
 
+    /** Drags down the new-side line numbers, as a mouse would, to open a comment on the range */
+    const dragLines = async (from: number, to: number): Promise<void> => {
+      const centre = async (line: number): Promise<[number, number]> =>
+        (await evaluate(`(() => { const cell = [...((${DEEP})('[data-column-number="${line}"]')?.getRootNode()?.querySelectorAll('[data-column-number="${line}"]') ?? [])].at(-1); const box = cell?.getBoundingClientRect(); return box ? [box.x + box.width / 2, box.y + box.height / 2] : [0, 0] })()`)) as [number, number]
+      const [x1, y1] = await centre(from)
+      const [x2, y2] = await centre(to)
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x1, y: y1 })
+      await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: x1, y: y1, button: 'left', clickCount: 1 })
+      for (let step = 1; step <= 5; step++) await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x1, y: y1 + ((y2 - y1) * step) / 5, button: 'left', buttons: 1 })
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x2, y: y2, button: 'left', clickCount: 1 })
+      await settle(500)
+    }
+
     await until(`!!localStorage.getItem('scan.cache')`, 30_000)
 
     const seed = async (state: Record<string, unknown>): Promise<void> => {
-      await evaluate(`(${SEED})(${JSON.stringify(state)})`)
+      await evaluate(`(${SEED})(${JSON.stringify(uniform ? uniformState(state) : state)})`)
       await reload()
     }
 
@@ -330,6 +377,69 @@ async function main(): Promise<void> {
         }
       },
       {
+        name: 'diff',
+        run: async () => {
+          await seed({ ...baseState(), settings: { ...object(baseState().settings), diffStyle: 'unified' } })
+          await openDiff()
+          await dragLines(6, 10)
+          await evaluate(`(() => { const box = (${DEEP})('textarea') ?? document.querySelector('textarea'); box?.focus() })()`)
+          await cdp('Input.insertText', { text: 'Infer this type from the zod schema in lib/schemas instead of writing it by hand.' })
+          await settle(500)
+        }
+      },
+      {
+        name: 'pr',
+        run: async () => {
+          await seed({ ...page('prs'), 'prs.selected@all': `${repo}#482` })
+          await until(`!!document.body.textContent?.includes('Add to agent comments')`, 30_000)
+          await settle(1200)
+        }
+      },
+      {
+        name: 'browser',
+        run: async () => {
+          await seed({ ...page('browser'), 'browser.tabs': { urls: ['http://localhost:3000/billing'], names: [null], active: 0 } })
+          await until(`!!document.querySelector('webview')`)
+          await settle(2500)
+        }
+      },
+      {
+        name: 'envs',
+        run: async () => {
+          await writeEnvFixtures(repo, invoices)
+          await seed(page('env'))
+          await until(`!!document.body.textContent?.includes('STRIPE_SECRET_KEY')`)
+          await settle(800)
+        }
+      },
+      {
+        name: 'limits',
+        run: async () => {
+          await writeLimitFixtures(home)
+          await seed({ ...page('terminal'), settings: { ...object(baseState().settings), plugins: { ...object(object(baseState().settings).plugins), 'usage-limits': true } }, 'plugin.usage-limits.settings': { usageLabel: 'reset' } })
+          await until(`!!document.body.textContent?.includes('wk')`)
+          await settle(2500)
+        }
+      },
+      {
+        name: 'editor',
+        run: async () => {
+          await seed({ ...baseState(), 'app.place@all': { appTab: 'worktrees', selected: invoices, viewer: { path: 'src/billing/portal.ts', line: 27 } } })
+          await until(`!!document.querySelector('.monaco-editor .view-lines')`)
+          await settle(1500)
+        }
+      },
+      {
+        name: 'plugins',
+        run: async () => {
+          await seed(baseState())
+          await evaluate(`document.querySelector('[title^="Settings"]')?.click()`)
+          await until(`!!document.body.innerText.includes('Integrations')`)
+          await clickText('button', 'Plugins')
+          await settle(600)
+        }
+      },
+      {
         name: 'settings',
         run: async () => {
           await seed(baseState())
@@ -365,6 +475,7 @@ async function main(): Promise<void> {
     }
   } finally {
     child.kill()
+    devServer?.stop(true)
   }
 }
 
