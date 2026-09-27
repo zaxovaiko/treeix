@@ -115,7 +115,7 @@ section { padding: clamp(80px, 12vw, 170px) var(--gutter) 0; }
   letter-spacing: -0.045em;
   font-stretch: 90%;
 }
-.headline span { color: var(--add); }
+.headline span { display: block; margin-top: 0.3em; font-size: 0.42em; line-height: 1.05; letter-spacing: -0.03em; text-wrap: balance; color: var(--add); }
 .hero-foot {
   display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between;
   gap: 32px; margin-top: clamp(32px, 4vw, 56px);
