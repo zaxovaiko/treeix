@@ -18,6 +18,7 @@ export function DesignPopover(): React.JSX.Element | null {
   const [error, setError] = useState(false)
   const [withShot, setWithShot] = usePersisted<boolean>('browser.designShot', true)
   const [shot, setShot] = useState<Attachment | null>(null)
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
   const stale = !!selection && selection.tabId !== activeId
   const guestId = tabs.find((candidate) => candidate.id === selection?.tabId)?.guestId ?? null
   // Taken as the element is picked, so the thumbnail shows what the agent will get before the note is written
@@ -33,6 +34,8 @@ export function DesignPopover(): React.JSX.Element | null {
       current = false
     }
   }, [selection, withShot, guestId])
+  // Each picked element opens the card next to it again
+  useEffect(() => setOffset({ x: 0, y: 0 }), [selection])
   // A tab switch or close leaves the selection behind; drop it so it doesn't reappear over the wrong page
   useEffect(() => {
     if (stale) clearSelection()
@@ -48,6 +51,23 @@ export function DesignPopover(): React.JSX.Element | null {
     setError(false)
     clearSelection()
   }
+  // Dragged by any part that isn't a field or button, so it can be moved off what it covers
+  const drag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || (event.target instanceof Element && event.target.closest('textarea, input, button, label'))) return
+    event.preventDefault()
+    const card = event.currentTarget
+    card.setPointerCapture(event.pointerId)
+    const start = { x: event.clientX - offset.x, y: event.clientY - offset.y }
+    const move = (next: PointerEvent): void => setOffset({ x: next.clientX - start.x, y: next.clientY - start.y })
+    const stop = (): void => {
+      card.removeEventListener('pointermove', move)
+      card.removeEventListener('pointerup', stop)
+      card.removeEventListener('pointercancel', stop)
+    }
+    card.addEventListener('pointermove', move)
+    card.addEventListener('pointerup', stop)
+    card.addEventListener('pointercancel', stop)
+  }
   const add = async (): Promise<void> => {
     if (!note.trim()) return setError(true)
     host.addComment(elementComment(value, note.trim(), host.selectedWorktree ?? host.defaultCwd, withShot && shot ? shot : undefined))
@@ -55,7 +75,10 @@ export function DesignPopover(): React.JSX.Element | null {
     close()
   }
   return (
-    <div style={{ position: 'absolute', top, left, width: WIDTH }} className="z-20 rounded-lg border border-border bg-popover p-2 shadow-lg">
+    <div
+      style={{ position: 'absolute', top: top + offset.y, left: left + offset.x, width: WIDTH }}
+      onPointerDown={drag}
+      className="z-20 cursor-grab rounded-lg border border-border bg-popover p-2 shadow-lg">
       <div className="mb-1.5 truncate font-mono text-[11px] text-muted-foreground" title={value.selector}>
         {value.selector}
       </div>
