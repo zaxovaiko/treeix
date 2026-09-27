@@ -2,7 +2,7 @@
   "name": "treeix",
   "productName": "Treeix",
   "version": "0.5.15",
-  "description": "The AI coding workspace: review AI agent changes across git worktrees, pull requests and terminal sessions in one place",
+  "description": "Your AI workspace. Everything you use daily, in one app: agents, worktrees, diffs, pull requests and tickets.",
   "author": "zaxovaiko",
   "private": true,
   "main": "./out/main/index.js",

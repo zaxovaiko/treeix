@@ -1,10 +1,10 @@
 # Treeix
 
-> Treeix is a free, open source (Apache 2.0) AI coding workspace for macOS. It finds every git worktree on your Mac, shows what each AI coding agent (Claude Code, Codex or any CLI agent) changed, and sends your line comments back to the agent session as its next prompt. Pull requests, Jira tickets, Confluence pages, agent terminals, a browser and .env files sit in the same window.
+> Treeix is a free, open source (Apache 2.0) AI workspace for Mac. Your AI workspace: everything you use daily, in one app. It finds every git worktree on your Mac, shows what each AI coding agent (Claude Code, Codex or any CLI agent) changed, and sends your line comments back to the agent session as its next prompt. Pull requests, Jira tickets, Confluence pages, agent terminals, a browser and .env files sit in the same window.
 
 AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is usually spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, the review comments, the pull request and the agent session that produced it on a single screen.
 
-- Platform: macOS 14 or later, Apple silicon. Electron app.
+- Platform: macOS 14 or later, Apple silicon. Signed and notarized by Apple. Electron app.
 - Price: free. No account, no telemetry, no Treeix server. Code stays on the Mac.
 - License: Apache 2.0. Source: https://github.com/zaxovaiko/treeix
 - Works with: Claude Code, OpenAI Codex, any shell or CLI agent, GitHub (gh), GitLab (glab), Jira and Confluence (Atlassian CLI, acli). Each integration is optional.
@@ -41,6 +41,13 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - Do I have to use git worktrees? No. Any repository under the home folder shows up. Worktrees make one agent per branch easy.
 - What do I need installed? Git. Optional: gh or glab for pull requests, claude or codex for agent sessions, acli for Jira and Confluence.
 - Is it really free? Yes, free to download and open source under Apache 2.0.
+
+## Roadmap
+
+- Mobile app, to keep an eye on your agents away from the Mac.
+- A design pass over every screen.
+- History archive: past agent sessions kept, searchable and one click from reopening.
+- Contributions welcome: https://github.com/zaxovaiko/treeix/blob/main/CONTRIBUTING.md
 
 ## Links
 
