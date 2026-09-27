@@ -4,7 +4,9 @@
 
 # Treeix
 
-**Read what your coding agents wrote. Worktrees, diffs, pull requests, tickets and agent terminals in one macOS window.**
+**Your AI workspace. Everything you use daily, in one app.**
+
+Agents, worktrees, diffs, pull requests and tickets in one Mac app, and your review notes go back to the agent as its next prompt.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)](#install)
@@ -88,7 +90,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## Install
 
-Download the DMG from [treeix.dyvertex.com/download](https://treeix.dyvertex.com/download). Apple silicon, macOS 14 or newer.
+Download the DMG from [treeix.dyvertex.com/download](https://treeix.dyvertex.com/download). Apple silicon, macOS 14 or newer, signed and notarized by Apple.
 
 Build it yourself:
 
@@ -119,6 +121,25 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 | [`confluence`](packages/plugins/confluence) | off | Confluence pages, search, page trees, link previews |
 
 Writing one takes a `package.json` and a `renderer/index.tsx`: see [packages/README.md](packages/README.md).
+
+## Roadmap
+
+- **Mobile app.** Keep an eye on your agents when you're away from the Mac.
+- **A proper UI.** A design pass over every screen, so the whole app feels like one product.
+- **History archive.** Past agent sessions kept, searchable and one click from reopening.
+
+Missing something you need? [Open an issue](https://github.com/zaxovaiko/treeix/issues/new) and say what you'd use it for.
+
+## Contributing
+
+Treeix is young and built in the open, so a contribution of any size shows up in the next release.
+
+- **Pick a roadmap item.** Open an issue saying you're on it, so nobody doubles the work.
+- **Write a plugin.** A `package.json` and a `renderer/index.tsx`, see [packages/README.md](packages/README.md).
+- **Tell us where it breaks.** Your agents, your repos and your setup are the best test suite Treeix has.
+- **Star the repo.** It's how other people find it.
+
+Setup, checks and house style are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Development
 
