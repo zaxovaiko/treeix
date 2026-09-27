@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { WebviewTag } from 'electron'
 import { Icon } from '@treeix/app/Icon'
+import { openMenu } from '@treeix/app/contextMenu'
 import { createBridge, useHost } from '@treeix/sdk'
 import { usePersisted } from '@treeix/app/ui'
 import { toUrl } from './address'
 import { getDesign, pageOf, setDesign, useDesign, useSlot } from './pages'
 import { importLabel } from './SettingsPage'
 import { browserSettings } from './settings'
-import { Strip } from './Strip'
+import { Strip, type StripSide } from './Strip'
 import { type Suggestion, SuggestionRow, Suggestions, sectionLabel, useRunning, useSuggestions } from './Suggestions'
-import { activeTab, closeTab, getBrowser, openTab, patchTab, reopenTab, selectTab, tabLabel, updateBrowser, useBrowser } from './tabs'
+import { activeTab, type BrowserTab, closeTab, getBrowser, groupNames, groupTab, moveTab, openTab, patchTab, renameGroup, reopenTab, selectTab, tabLabel, toggleGroup, updateBrowser, useBrowser } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 import type { ImportInfo } from '../shared/types'
 import { httpProblem, loadError } from './loadErrors'
@@ -95,6 +96,140 @@ function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
 
 const toolButton = 'flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
 
+const TAB_DRAG = 'application/x-treeix-browser-tab'
+const GROUP_COLORS = ['bg-sky-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'bg-violet-400', 'bg-teal-400', 'bg-orange-400', 'bg-pink-400']
+const groupColor = (name: string): string => GROUP_COLORS[[...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % GROUP_COLORS.length]
+
+function newGroupName(): string {
+  const taken = new Set(groupNames(getBrowser()))
+  let index = taken.size + 1
+  while (taken.has(`Group ${index}`)) index++
+  return `Group ${index}`
+}
+
+/** An inline name field; Enter or leaving it saves, Escape cancels */
+function NameInput({ value, label, onDone }: { value: string; label: string; onDone: (name: string | null) => void }): React.JSX.Element {
+  return (
+    <input
+      autoFocus
+      defaultValue={value}
+      aria-label={label}
+      onFocus={(event) => event.currentTarget.select()}
+      onBlur={(event) => onDone(event.currentTarget.dataset.cancelled ? null : event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== 'Escape') return
+        if (event.key === 'Escape') event.currentTarget.dataset.cancelled = 'true'
+        event.currentTarget.blur()
+      }}
+      onMouseDown={(event) => event.stopPropagation()}
+      className="h-5 min-w-0 flex-1 rounded bg-foreground/10 px-1 text-xs text-foreground outline-none"
+    />
+  )
+}
+
+/** Browser tabs: drag to reorder or onto a group's chip, right-click to group; a group's chip collapses it */
+function TabStrip(): React.JSX.Element {
+  const state = useBrowser()
+  const { tabs, activeId } = state
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
+  const dropProps = (onDrop: (id: string) => void): React.HTMLAttributes<HTMLElement> => ({
+    onDragOver: (event) => event.dataTransfer.types.includes(TAB_DRAG) && event.preventDefault(),
+    onDrop: (event) => {
+      const id = event.dataTransfer.getData(TAB_DRAG)
+      if (id) onDrop(id)
+    }
+  })
+  const tabMenu = (event: React.MouseEvent, tab: BrowserTab): void =>
+    openMenu(event, [
+      { label: 'Add to new group', run: () => updateBrowser((current) => groupTab(current, tab.id, newGroupName())) },
+      ...groupNames(state)
+        .filter((name) => name !== tab.group)
+        .map((name) => ({ label: `Add to ${name}`, run: () => updateBrowser((current) => groupTab(current, tab.id, name)) })),
+      tab.group !== undefined && { label: 'Remove from group', run: () => updateBrowser((current) => groupTab(current, tab.id, undefined)) },
+      null,
+      { label: 'Rename', run: () => setRenaming(tab.id) },
+      { label: 'Close', run: () => updateBrowser((current) => closeTab(current, tab.id)) }
+    ])
+  const groupMenu = (event: React.MouseEvent, group: string): void =>
+    openMenu(event, [
+      { label: 'Rename group', run: () => setRenamingGroup(group) },
+      { label: 'Ungroup', run: () => updateBrowser((current) => ({ ...current, tabs: current.tabs.map((tab) => (tab.group === group ? { ...tab, group: undefined } : tab)) })) },
+      { label: 'Close group', run: () => updateBrowser((current) => current.tabs.filter((tab) => tab.group === group).reduce((next, tab) => closeTab(next, tab.id), current)) }
+    ])
+  // An empty name goes back to the page's own title
+  const renameTab = (id: string, name: string | null): void => {
+    setRenaming(null)
+    if (name !== null) updateBrowser((current) => patchTab(current, id, { name: name.trim() || undefined }))
+  }
+  const finishGroupRename = (from: string, name: string | null): void => {
+    setRenamingGroup(null)
+    const to = name?.trim()
+    if (to && to !== from) updateBrowser((current) => renameGroup(current, from, to))
+  }
+  return (
+    <>
+      {tabs.map((tab, index) => {
+        const group = tab.group
+        const startsGroup = group !== undefined && tabs[index - 1]?.group !== group
+        const collapsed = group !== undefined && (state.collapsed ?? []).includes(group)
+        return (
+          <Fragment key={tab.id}>
+            {startsGroup && (
+              <button
+                title={`${group}: click to ${collapsed ? 'expand' : 'collapse'}, right-click for more`}
+                onClick={() => updateBrowser((current) => toggleGroup(current, group))}
+                onDoubleClick={() => setRenamingGroup(group)}
+                onContextMenu={(event) => groupMenu(event, group)}
+                {...dropProps((id) => updateBrowser((current) => groupTab(current, id, group)))}
+                className={`ml-1 flex h-5 max-w-32 shrink-0 items-center rounded px-1.5 text-[11px] font-medium text-background ${groupColor(group)}`}
+              >
+                {renamingGroup === group ? <NameInput value={group} label="Group name" onDone={(name) => finishGroupRename(group, name)} /> : <span className="truncate">{group}</span>}
+                {collapsed && <span className="ml-1 tabular-nums opacity-70">{tabs.filter((candidate) => candidate.group === group).length}</span>}
+              </button>
+            )}
+            {!(collapsed && tab.id !== activeId) && (
+              <div
+                draggable={renaming !== tab.id}
+                onDragStart={(event) => event.dataTransfer.setData(TAB_DRAG, tab.id)}
+                {...dropProps((id) => updateBrowser((current) => moveTab(current, id, tab.id)))}
+                onMouseDown={() => updateBrowser((current) => selectTab(current, tab.id))}
+                onContextMenu={(event) => tabMenu(event, tab)}
+                className={`group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs ${tab.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'}`}
+              >
+                {group !== undefined && <span className={`size-1.5 shrink-0 rounded-full ${groupColor(group)}`} />}
+                {tab.loading && !tab.favicon ? (
+                  <Icon name="loader" className="size-3.5 animate-spin text-muted-foreground" />
+                ) : tab.favicon ? (
+                  // A declared icon can 404; the globe stands in rather than a broken image
+                  <img src={tab.favicon} alt="" className="size-3.5" onError={() => updateBrowser((current) => patchTab(current, tab.id, { favicon: null }))} />
+                ) : (
+                  <Icon name="globe" className="size-3.5" />
+                )}
+                {renaming === tab.id ? (
+                  <NameInput value={tabLabel(tab)} label="Tab name" onDone={(name) => renameTab(tab.id, name)} />
+                ) : (
+                  <span title="Double-click to rename, drag to move, right-click to group" onDoubleClick={() => setRenaming(tab.id)} className="min-w-0 flex-1 truncate">
+                    {tabLabel(tab)}
+                  </span>
+                )}
+                <button
+                  aria-label="Close tab"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => updateBrowser((current) => closeTab(current, tab.id))}
+                  className="invisible grid size-4 shrink-0 place-items-center rounded group-hover:visible hover:bg-foreground/10"
+                >
+                  <Icon name="close" className="size-3" />
+                </button>
+              </div>
+            )}
+          </Fragment>
+        )
+      })}
+    </>
+  )
+}
+
 function ProfileBadge(): React.JSX.Element | null {
   const host = useHost()
   const [info, setInfo] = useState<ImportInfo>(null)
@@ -171,63 +306,15 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
       }
     }
   }, [shown, devtools, dockOpen])
-  const [renaming, setRenaming] = useState<string | null>(null)
   const [stripSlot, setStripSlot] = useState<HTMLDivElement | null>(null)
-  // An empty name goes back to the page's own title
-  const renameTab = (id: string, name: string): void => {
-    setRenaming(null)
-    updateBrowser((state) => patchTab(state, id, { name: name.trim() || undefined }))
-  }
+  const [stripSide, setStripSide] = usePersisted<StripSide>('browser.stripSide', 'bottom')
   const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
   const problem = httpProblem(tab?.status ?? null)
   const failure = tab?.error ? loadError(tab.error.code, tab.error.url) : null
   return (
     <div data-browser className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
       <div className="flex h-8 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-1">
-        {tabs.map((candidate) => (
-          <div
-            key={candidate.id}
-            onMouseDown={() => updateBrowser((state) => selectTab(state, candidate.id))}
-            className={`group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs ${candidate.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'}`}
-          >
-            {candidate.loading && !candidate.favicon ? (
-              <Icon name="loader" className="size-3.5 animate-spin text-muted-foreground" />
-            ) : candidate.favicon ? (
-              // A declared icon can 404; the globe stands in rather than a broken image
-              <img src={candidate.favicon} alt="" className="size-3.5" onError={() => updateBrowser((state) => patchTab(state, candidate.id, { favicon: null }))} />
-            ) : (
-              <Icon name="globe" className="size-3.5" />
-            )}
-            {renaming === candidate.id ? (
-              <input
-                autoFocus
-                defaultValue={tabLabel(candidate)}
-                aria-label="Tab name"
-                onFocus={(event) => event.currentTarget.select()}
-                onBlur={(event) => (event.currentTarget.dataset.cancelled ? setRenaming(null) : renameTab(candidate.id, event.currentTarget.value))}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== 'Escape') return
-                  if (event.key === 'Escape') event.currentTarget.dataset.cancelled = 'true'
-                  event.currentTarget.blur()
-                }}
-                onMouseDown={(event) => event.stopPropagation()}
-                className="h-5 min-w-0 flex-1 rounded bg-foreground/10 px-1 text-xs text-foreground outline-none"
-              />
-            ) : (
-              <span title="Double-click to rename" onDoubleClick={() => setRenaming(candidate.id)} className="min-w-0 flex-1 truncate">
-                {tabLabel(candidate)}
-              </span>
-            )}
-            <button
-              aria-label="Close tab"
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => updateBrowser((state) => closeTab(state, candidate.id))}
-              className="invisible grid size-4 shrink-0 place-items-center rounded group-hover:visible hover:bg-foreground/10"
-            >
-              <Icon name="close" className="size-3" />
-            </button>
-          </div>
-        ))}
+        <TabStrip />
         <button aria-label="New tab" title="New tab (⌘T)" className={toolButton} onClick={() => runBrowserAction('newTab')}>
           <Icon name="plus" className="size-3.5" />
         </button>
@@ -336,45 +423,47 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         {host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
         {place === 'tab' && <div ref={setStripSlot} className="flex shrink-0 items-center gap-0.5 border-l border-border pl-1" />}
       </div>
-      <div ref={ref} className="relative min-h-0 flex-1">
-        {elsewhere && (
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-            {place === 'tab' ? 'Showing in the Browser panel' : 'Showing in the Browser tab'}
-          </div>
-        )}
-        {shown && (!tab || tab.url === 'about:blank') && <EmptyPage onOpen={() => runBrowserAction('focusAddress')} />}
-        {shown && tab && tab.url !== 'about:blank' && !tab.committed && !tab.error && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
-            <Icon name="loader" className="size-5 animate-spin" />
-            <span className="max-w-80 truncate font-mono">{tab.url.replace(/^https?:\/\//, '')}</span>
-          </div>
-        )}
-        {shown && tab?.error && failure && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <div className="grid size-12 place-items-center rounded-xl bg-foreground/5 text-muted-foreground">
-              <Icon name={failure.icon} className="size-6" />
+      <div className={`flex min-h-0 flex-1 ${{ bottom: 'flex-col', left: 'flex-row-reverse', right: 'flex-row' }[stripSide]}`}>
+        <div ref={ref} className="relative min-h-0 min-w-0 flex-1">
+          {elsewhere && (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+              {place === 'tab' ? 'Showing in the Browser panel' : 'Showing in the Browser tab'}
             </div>
-            <div>
-              <div className="text-sm font-medium text-foreground">{failure.title}</div>
-              {failure.hint && <div className="mt-1 text-xs text-muted-foreground">{failure.hint}</div>}
-              <div className="mt-2 font-mono text-[11px] text-muted-foreground/70">{tab.error.description}</div>
+          )}
+          {shown && (!tab || tab.url === 'about:blank') && <EmptyPage onOpen={() => runBrowserAction('focusAddress')} />}
+          {shown && tab && tab.url !== 'about:blank' && !tab.committed && !tab.error && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
+              <Icon name="loader" className="size-5 animate-spin" />
+              <span className="max-w-80 truncate font-mono">{tab.url.replace(/^https?:\/\//, '')}</span>
             </div>
-            <button onClick={() => runBrowserAction('reload')} className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs hover:bg-accent">
-              <Icon name="refresh" className="size-3.5" />
-              Reload
-            </button>
-          </div>
-        )}
-        {shown && tab?.crashed && (
-          <div className="relative z-20 flex h-full flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-            This page crashed
-            <button onClick={() => runBrowserAction('reload')} className="rounded border border-border px-2 py-1 hover:bg-accent">
-              Reload
-            </button>
-          </div>
-        )}
+          )}
+          {shown && tab?.error && failure && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <div className="grid size-12 place-items-center rounded-xl bg-foreground/5 text-muted-foreground">
+                <Icon name={failure.icon} className="size-6" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-foreground">{failure.title}</div>
+                {failure.hint && <div className="mt-1 text-xs text-muted-foreground">{failure.hint}</div>}
+                <div className="mt-2 font-mono text-[11px] text-muted-foreground/70">{tab.error.description}</div>
+              </div>
+              <button onClick={() => runBrowserAction('reload')} className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs hover:bg-accent">
+                <Icon name="refresh" className="size-3.5" />
+                Reload
+              </button>
+            </div>
+          )}
+          {shown && tab?.crashed && (
+            <div className="relative z-20 flex h-full flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+              This page crashed
+              <button onClick={() => runBrowserAction('reload')} className="rounded border border-border px-2 py-1 hover:bg-accent">
+                Reload
+              </button>
+            </div>
+          )}
+        </div>
+        {tab && place === 'tab' && <Strip tab={tab} slot={stripSlot} side={stripSide} onSide={setStripSide} />}
       </div>
-      {tab && place === 'tab' && <Strip tab={tab} slot={stripSlot} />}
       {tab?.guestId && place === 'tab' && dockOpen && devtools === 'docked' && <DevtoolsDock key={tab.guestId} guestId={tab.guestId} />}
     </div>
   )

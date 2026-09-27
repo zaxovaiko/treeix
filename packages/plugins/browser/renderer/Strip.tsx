@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createBridge, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
+import { openMenu } from '@treeix/app/contextMenu'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import type { ConsoleEntry, NetworkEntry, Vital } from '../shared/types'
 import { consoleComment, entryCommentId, networkComment, seconds, vitalComment } from './comments'
@@ -10,6 +11,8 @@ import type { BrowserTab } from './tabs'
 
 const bridge = createBridge('browser')
 type Pane = 'console' | 'network' | 'performance'
+export type StripSide = 'bottom' | 'left' | 'right'
+const SIDES: StripSide[] = ['bottom', 'left', 'right']
 
 let toggleShown: (() => void) | null = null
 /** ⌘J: opens or hides the strip on screen; false when none is */
@@ -18,13 +21,14 @@ export const toggleStrip = (): boolean => (toggleShown?.(), toggleShown !== null
 const isProblem = (entry: NetworkEntry): boolean => entry.failed !== null || (entry.status ?? 0) >= 400
 const tone = (bad: boolean, warn = false): string => (bad ? 'text-red-400' : warn ? 'text-amber-400' : 'text-muted-foreground')
 
-/** Console, network and performance of the page; `slot` is where its pane switches render, in the address bar */
-export function Strip({ tab, slot }: { tab: BrowserTab; slot: HTMLElement | null }): React.JSX.Element {
+/** Console, network and performance of the page, docked on `side` of it; `slot` is where its pane switches render, in the address bar */
+export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTMLElement | null; side: StripSide; onSide: (side: StripSide) => void }): React.JSX.Element {
   const host = useHost()
   const [open, setOpen] = usePersisted<boolean>('browser.strip', false)
   const [pane, setPane] = usePersisted<Pane>('browser.stripPane', 'console')
   const [all, setAll] = useState(false)
   const [height, setHeight] = usePersisted<number>('browser.stripHeight', 144)
+  const [width, setWidth] = usePersisted<number>('browser.stripWidth', 420)
   useEffect(() => {
     const toggle = (): void => setOpen(!open)
     toggleShown = toggle
@@ -92,15 +96,30 @@ export function Strip({ tab, slot }: { tab: BrowserTab; slot: HTMLElement | null
           <Icon name="list" className="size-3.5" />
         </IconButton>
       )}
+      {open && (
+        <button
+          title={`Docked ${side}; click to move`}
+          aria-label="Move panel"
+          onClick={(event) => openMenu(event, SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onSide(target) })))}
+          className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Icon name="panel" className={`size-3.5 ${side === 'bottom' ? 'rotate-90 -scale-x-100' : side === 'right' ? '-scale-x-100' : ''}`} />
+        </button>
+      )}
     </>
   )
+  const across = side !== 'bottom'
   return (
     <>
       {slot && createPortal(bar, slot)}
       {open && (
-        <div className="relative shrink-0 border-t border-border">
-          <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />
-          <div style={{ height }} className="overflow-y-auto">
+        <div className={`relative shrink-0 border-border ${{ bottom: 'border-t', left: 'border-r', right: 'border-l' }[side]}`}>
+          {across ? (
+            <ResizeHandle edge={side === 'left' ? 'right' : 'left'} width={width} min={200} max={Math.max(200, window.innerWidth - 320)} onResize={setWidth} />
+          ) : (
+            <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />
+          )}
+          <div style={across ? { width, height: '100%' } : { height }} className="overflow-y-auto">
             {rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
             {rows
               .slice()

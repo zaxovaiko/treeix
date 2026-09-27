@@ -3,7 +3,7 @@ import type { WebviewTag } from 'electron'
 import { createBridge } from '@treeix/sdk'
 import { clearVitals, dropEntries } from './entries'
 import { recordTitle, recordVisit } from './recent'
-import { type BrowserTab, patchTab, updateBrowser, useBrowser } from './tabs'
+import { type BrowserTab, patchPage, useBrowser, useEveryTab } from './tabs'
 import type { ElementSelection } from '../shared/types'
 import { pickWinner } from './slot-winner'
 
@@ -56,7 +56,8 @@ const sameRect = (a: DOMRect | null, b: DOMRect | null): boolean =>
 
 /** Every open page, laid over the shown slot; pages never move in the DOM, so switching tab and panel doesn't reload them */
 export function PageLayer({ children }: { children?: React.ReactNode }): React.JSX.Element {
-  const { tabs, activeId } = useBrowser()
+  const { activeId } = useBrowser()
+  const tabs = useEveryTab()
   const [rect, setRect] = useState<DOMRect | null>(null)
   // Hidden pages keep their last size: shrunk to nothing, every site would lay itself out again on each switch back
   const lastBox = useRef(new DOMRect(0, 0, 0, 0))
@@ -112,7 +113,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
     if (!view) return
     views.set(tab.id, view)
     let guestId: number | null = null
-    const patch = (change: Partial<BrowserTab>): void => updateBrowser((state) => patchTab(state, tab.id, change))
+    const patch = (change: Partial<BrowserTab>): void => patchPage(tab.id, change)
     const history = (): Partial<BrowserTab> => ({ canGoBack: view.canGoBack(), canGoForward: view.canGoForward() })
     const handlers: [string, (event: Event & Record<string, unknown>) => void][] = [
       ['did-start-loading', () => patch({ loading: true, crashed: false })],

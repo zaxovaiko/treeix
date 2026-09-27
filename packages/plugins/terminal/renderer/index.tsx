@@ -307,6 +307,8 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
       orientation={side === 'bottom' ? 'horizontal' : 'vertical'}
       page={false}
       onHide={() => host.hidePanel(TAB_ID)}
+      side={side}
+      onMove={(target) => host.movePanel(TAB_ID, target)}
     />
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { type Command, createBridge, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { BrowserView, runBrowserAction } from './BrowserView'
@@ -9,7 +9,7 @@ import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
 import { portDetail } from './Suggestions'
 import { toggleStrip } from './Strip'
-import { getBrowser, openTab, selectTab, updateBrowser } from './tabs'
+import { findTab, getBrowser, openTab, selectTab, setBrowserWorkspace, updateBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
 import type { Vital } from '../shared/types'
 
@@ -152,11 +152,13 @@ function ServerNotices(): React.JSX.Element | null {
 function Root(): React.JSX.Element {
   const current = useHost()
   host = current
+  // Before paint, so a workspace never flashes the previous one's tabs
+  useLayoutEffect(() => setBrowserWorkspace(current.workspaceId), [current.workspaceId])
   useEffect(() => bridge.on('open', (url) => typeof url === 'string' && openUrl(url)), [])
   useEffect(
     () =>
       onPageMessage((tabId, channel, args) => {
-        const tab = getBrowser().tabs.find((candidate) => candidate.id === tabId)
+        const tab = findTab(tabId)
         if (channel !== 'vital' || !tab?.guestId) return
         const vital = args[0] as Partial<Vital> | undefined
         if (!vital || typeof vital.value !== 'number' || typeof vital.name !== 'string') return

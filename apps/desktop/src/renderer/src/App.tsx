@@ -25,6 +25,7 @@ import { allFolders, ChangedFileList, folderPaths } from './ChangedFiles'
 import { copyText, type MenuEntry, openMenu } from './contextMenu'
 import type { Command } from './CommandPalette'
 import { AgentCommentsDrawer, CommentCard, CommentDraft, CommentsPanel, orderRange, useCodeDrag } from './Comments'
+import { addSent, loadSent, restoreSent, saveSent, type SentBatch } from './sentComments'
 import { type DockSide, DropZones, type PanelId, type PanelInfo, PanelToggle, SIZE_LIMITS, useLayout } from './Dock'
 import { ErrorBoundary } from './ErrorBoundary'
 import { MarkdownFoldScope } from './LazyMarkdown'
@@ -318,6 +319,22 @@ function App(): React.JSX.Element {
   const workspaceViews = useRef(new Map<string, WorkspaceView>())
 
   useEffect(() => localStorage.setItem(COMMENTS_KEY, JSON.stringify(allComments)), [allComments])
+  const [allSent, setAllSent] = useState<SentBatch[]>(loadSent)
+  useEffect(() => saveSent(allSent), [allSent])
+  const sent = allSent.filter((batch) => batch.comments.some(inThisWorkspace))
+  /** Sent comments leave the list; the history keeps them to bring back */
+  const archiveSent = (worktreePath: string, sentComments: ReviewComment[], message: string): void => {
+    const ids = new Set(sentComments.map((comment) => comment.id))
+    setComments((current) => current.filter((comment) => !ids.has(comment.id)))
+    setAllSent((current) => addSent(current, { id: crypto.randomUUID(), sentAt: new Date().toISOString(), worktreePath, message, comments: sentComments }))
+  }
+  const restoreBatch = (id: string): void => {
+    const batch = allSent.find((candidate) => candidate.id === id)
+    if (!batch) return
+    setComments((current) => restoreSent(allSent, current, id).comments)
+    setAllSent((current) => current.filter((candidate) => candidate.id !== id))
+    flash(`Restored ${batch.comments.length} comment${batch.comments.length === 1 ? '' : 's'}`)
+  }
 
   const rescan = (): void => {
     setScanning(true)
@@ -1133,7 +1150,10 @@ function App(): React.JSX.Element {
         prompt={() => promptForComments(pathComments, checkout ? `${branchLabel(checkout)} (${checkout.path})` : worktreePath)}
         variant={variant}
         hotkeys={hotkeys}
-        onDone={onSent}
+        onDone={(message) => {
+          onSent(message)
+          if (!message.startsWith('Copied')) archiveSent(worktreePath, pathComments, message)
+        }}
         onClear={() => {
           if (window.confirm(`Delete ${pathComments.length} comment${pathComments.length === 1 ? '' : 's'} on ${baseName(worktreePath)}?`)) {
             setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
@@ -1318,6 +1338,7 @@ function App(): React.JSX.Element {
       showPanel: (id) => latest.current.dock.show(id),
       hidePanel: (id) => latest.current.dock.hide(id),
       isPanelVisible: (id) => latest.current.dock.isVisible(id),
+      movePanel: (id, side) => latest.current.dock.move(id, side),
       isEnabled: (pluginId) => latest.current.plugins.some(({ manifest }) => manifest.id === pluginId),
       service: findService,
       onSent: (message) => latest.current.onSent(message)
@@ -1827,14 +1848,10 @@ function App(): React.JSX.Element {
         <button
           title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
           onClick={() => setPaletteOpen(true)}
-          // A container, so a narrow window shortens the label instead of wrapping it
-          className="@container mx-1 flex h-6 w-64 min-w-28 items-center gap-2 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+          className="mx-1 flex h-6 w-40 min-w-24 items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
         >
           <Icon name="search" className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-left whitespace-nowrap">
-            <span className="@max-[10rem]:hidden">Search or run a command</span>
-            <span className="hidden @max-[10rem]:inline">Search</span>
-          </span>
+          <span className="min-w-0 truncate whitespace-nowrap">Run command</span>
           <Kbd hint>{actionKeys('app.palette')}</Kbd>
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">
@@ -1956,6 +1973,8 @@ function App(): React.JSX.Element {
           onOpenWorktree={openWorktree}
           onDelete={deleteComment}
           onClearAll={() => window.confirm(`Delete all ${comments.length} agent comments in this workspace?`) && setComments([])}
+          sent={sent}
+          onRestore={restoreBatch}
           onClose={() => setDrawerOpen(false)}
         />
       )}

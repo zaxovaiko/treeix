@@ -7,6 +7,8 @@ import { FileIcon, Icon } from './Icon'
 import { inlineByDefault } from './toolStatus'
 import { LazyMarkdown as Markdown } from './LazyMarkdown'
 import { EmptyState, errorMessage } from './ui'
+import type { SentBatch } from './sentComments'
+import { timeAgo } from './time'
 
 type LinePoint = { lineNumber: number; side?: Side }
 
@@ -453,6 +455,8 @@ export function AgentCommentsDrawer({
   onOpenWorktree,
   onDelete,
   onClearAll,
+  sent,
+  onRestore,
   onClose
 }: {
   comments: ReviewComment[]
@@ -464,6 +468,9 @@ export function AgentCommentsDrawer({
   onOpenWorktree: (worktreePath: string) => void
   onDelete: (comment: ReviewComment) => void
   onClearAll: () => void
+  /** Batches already sent to agents, newest first */
+  sent: SentBatch[]
+  onRestore: (id: string) => void
   onClose: () => void
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -528,7 +535,7 @@ export function AgentCommentsDrawer({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {comments.length === 0 && (
+        {comments.length === 0 && sent.length === 0 && (
           <EmptyState icon="comment" title="No agent comments yet. Press c on a diff line, or a on a pull request thread, ticket or page, to collect it here." />
         )}
         {paths.map((path) => {
@@ -580,6 +587,26 @@ export function AgentCommentsDrawer({
             </section>
           )
         })}
+        {sent.length > 0 && (
+          <section className="mt-3">
+            <div className="px-1.5 pb-1 text-[11px] font-medium text-muted-foreground">Sent</div>
+            {sent.map((batch) => (
+              <div key={batch.id} className="group/sent flex h-8 items-center gap-2 rounded-md px-1.5 text-xs hover:bg-accent">
+                <span className="min-w-0 flex-1 truncate" title={batch.comments.map((comment) => comment.text).join('\n')}>
+                  {batch.message} <span className="text-muted-foreground">· {labelOf(batch.worktreePath)}</span>
+                </span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">{timeAgo(batch.sentAt)}</span>
+                <button
+                  title="Put these comments back on the list"
+                  onClick={() => onRestore(batch.id)}
+                  className="h-6 shrink-0 rounded-md px-2 text-muted-foreground ring-1 ring-border hover:bg-background hover:text-foreground"
+                >
+                  Restore
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
         {(

@@ -47,6 +47,9 @@ import {
   wakeSession
 } from './terminals'
 
+type DockSide = 'left' | 'right' | 'bottom'
+const DOCK_SIDES: DockSide[] = ['bottom', 'left', 'right']
+
 const SESSION_MIME = 'application/x-treeix-session'
 
 /** Dragged panes or tabs carry their session ids, space separated */
@@ -479,6 +482,8 @@ function TabStrip({
   sessions,
   page,
   onHide,
+  side,
+  onMove,
   onGoToFolder
 }: {
   task: Task | null
@@ -487,6 +492,8 @@ function TabStrip({
   sessions: Session[]
   page: boolean
   onHide?: () => void
+  side?: DockSide
+  onMove?: (side: DockSide) => void
   onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
   const panels = usePanels()
@@ -560,6 +567,16 @@ function TabStrip({
           <Icon name="panel" className="size-3.5 -scale-x-100" />
         </button>
       )}
+      {side && onMove && (
+        <button
+          title={`Docked ${side}; click to move`}
+          aria-label="Move terminal panel"
+          onClick={(event) => openMenu(event, DOCK_SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onMove(target) })))}
+          className={stripButton}
+        >
+          <Icon name="panel" className={`size-3.5 ${side === 'bottom' ? 'rotate-90 -scale-x-100' : side === 'right' ? '-scale-x-100' : ''}`} />
+        </button>
+      )}
       {onHide && (
         <button title={`Hide the terminal panel${actionKeys('panel.terminal') ? ` (${actionKeys('panel.terminal')})` : ''}`} aria-label="Hide terminal panel" onClick={onHide} className={stripButton}>
           <Icon name="close" className="size-3.5" />
@@ -616,6 +633,8 @@ export function TaskTerminals({
   orientation,
   page,
   onHide,
+  side,
+  onMove,
   onGoToFolder
 }: {
   task: Task | null
@@ -631,6 +650,9 @@ export function TaskTerminals({
   page: boolean
   /** Closes the panel, when docked */
   onHide?: () => void
+  /** Where the panel is docked, and moving it elsewhere */
+  side?: DockSide
+  onMove?: (side: DockSide) => void
   /** Goes to a folder picked from the group's label, on the Terminal page */
   onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
@@ -651,7 +673,7 @@ export function TaskTerminals({
 
   return (
     <div data-terminal-panes className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} onGoToFolder={onGoToFolder} />
+      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} side={side} onMove={onMove} onGoToFolder={onGoToFolder} />
       {columns.length === 0 ? (
         <EmptyTask task={task} label={label} cwd={cwd} history={history} repos={repos} />
       ) : (
