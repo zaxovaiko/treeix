@@ -25,7 +25,7 @@ async function codexTranscript(id: string): Promise<string | null> {
 const transcriptPath = (ref: TranscriptRef): Promise<string | null> =>
   ref.kind === 'claude' ? claudeTranscript(ref.agentSessionId) : ref.kind === 'codex' ? codexTranscript(ref.agentSessionId) : Promise.resolve(null)
 
-const readTranscript = async (ref: TranscriptRef): Promise<string> => {
+export const readTranscript = async (ref: TranscriptRef): Promise<string> => {
   const path = await transcriptPath(ref)
   return path ? readFile(path, 'utf8').catch(() => '') : ''
 }
@@ -83,4 +83,18 @@ export async function transcriptUsage(ref: TranscriptRef): Promise<SessionUsage 
   const transcript = await readTranscript(ref)
   if (!transcript) return null
   return ref.kind === 'claude' ? claudeUsage(transcript) : codexUsage(transcript)
+}
+
+const texts = (content: unknown, type: string): string[] =>
+  Array.isArray(content) ? content.filter((block) => isRecord(block) && block.type === type && typeof block.text === 'string').map((block) => (block as { text: string }).text) : []
+
+/** The agent's last `count` written replies, oldest first; tool calls and results left out */
+export function lastReplies(kind: string, transcript: string, count: number): string[] {
+  const replies: string[] = []
+  for (const line of transcript.split('\n')) {
+    const entry = parseLine(line)
+    if (kind === 'claude' && entry?.type === 'assistant' && isRecord(entry.message)) replies.push(...texts(entry.message.content, 'text'))
+    if (kind === 'codex' && isRecord(entry?.payload) && entry.payload.type === 'message' && entry.payload.role === 'assistant') replies.push(...texts(entry.payload.content, 'output_text'))
+  }
+  return replies.slice(-count)
 }

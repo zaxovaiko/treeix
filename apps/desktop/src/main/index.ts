@@ -14,6 +14,7 @@ import { closeDocument, completionDetails, completions, diagnostics, hover, navi
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { loadShellPath } from './env'
 import { checkTools, commandExists } from './tools'
+import { installMcp, mcpInstallStatus } from './mcp'
 import { setupUpdates } from './updates'
 import { BROWSER_PARTITION, configureBrowserSession, hardenWebview } from './webviewPolicy'
 
@@ -109,6 +110,8 @@ app.whenReady().then(() => {
   ipcMain.on('closeDocument', (_, worktreePath: string, path: string) => closeDocument(worktreePath, path))
   ipcMain.handle('checkTools', () => checkTools(enabledTools()))
   ipcMain.handle('commandExists', async (_, name: unknown) => (await shellPath, typeof name === 'string' ? commandExists(name) : false))
+  ipcMain.handle('mcpInstallStatus', () => mcpInstallStatus())
+  ipcMain.handle('installMcp', async () => (await shellPath, installMcp()))
   ipcMain.handle('plugins:setEnabled', (_, ids: string[]) => setEnabledPlugins(ids, app.getPath('userData')))
   ipcMain.handle('configureHotkey', (event, options: HotkeyOptions) => {
     const window = BrowserWindow.fromWebContents(event.sender)

@@ -156,7 +156,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
         () => {
           guestId = view.getWebContentsId()
           patch({ guestId })
-          void bridge.invoke('attach', guestId)
+          void bridge.invoke('attach', guestId, tab.id)
           view.send('design', design.on)
         }
       ]

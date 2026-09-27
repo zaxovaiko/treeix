@@ -16,7 +16,7 @@ const MAX_BUFFERED_CHARS = 256_000
 const SPAWN_COLS = 100
 const SPAWN_ROWS = 30
 
-type Entry = { pty: IPty | null; owner: WebContents; meta: string; chunks: string[]; size: number; exitCode: number | null }
+type Entry = { pty: IPty | null; owner: WebContents; meta: string; chunks: string[]; size: number; exitCode: number | null; status?: AgentHookStatus }
 const sessions = new Map<string, Entry>()
 const watchedOwners = new WeakSet<WebContents>()
 const output = coalesceOutput((id, data) => {
@@ -135,9 +135,15 @@ export async function listeningPorts(): Promise<(SessionPortEntry & { cwd: strin
 
 /** What an agent's hooks reported, for the window that owns the session */
 export function reportStatus(id: string, status: AgentHookStatus): void {
-  const owner = sessions.get(id)?.owner
-  if (owner && !owner.isDestroyed()) owner.send('plugin:terminal:status', id, status)
+  const entry = sessions.get(id)
+  if (!entry) return
+  entry.status = status
+  if (!entry.owner.isDestroyed()) entry.owner.send('plugin:terminal:status', id, status)
 }
+
+/** Live sessions as agents see them, with the tail of what each printed */
+export const sessionEntries = (): { id: string; meta: string; alive: boolean; status?: AgentHookStatus; screen: () => string }[] =>
+  [...sessions].map(([id, entry]) => ({ id, meta: entry.meta, alive: entry.pty !== null, status: entry.status, screen: () => entry.chunks.join('') }))
 
 export const writeTerminal = (id: string, data: string): void => sessions.get(id)?.pty?.write(data)
 

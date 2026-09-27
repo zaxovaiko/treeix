@@ -1,9 +1,13 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { SessionUsage, TerminalOptions, TranscriptRef } from '../shared/types'
+import { sessionTools } from './agentTools'
 import { codexConversations } from './codex'
 import { claudeCost, watchStatuses, withStatusHooks } from './hooks'
 import { searchTranscripts, transcriptUsage } from './transcripts'
 import { createTerminal, reportStatus, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
+
+/** Stand-ins for when Treeix's MCP server couldn't start */
+const NO_MCP = { TREEIX_CLAUDE_MCP: '{"mcpServers":{}}', TREEIX_CODEX_MCP: 'mcp_servers.treeix={url="http://127.0.0.1:9/mcp",enabled=false}' }
 
 const plugin: MainPlugin = {
   tools: [
@@ -13,9 +17,9 @@ const plugin: MainPlugin = {
   activate: (context) => {
     const statuses = watchStatuses(reportStatus)
     context.onDispose(() => void statuses.then(({ stop }) => stop()))
-    // Claude sessions start with `claude --settings "$TREEIX_CLAUDE_SETTINGS"`, which needs a value even when no plugin adds settings
+    // Built-in agent commands expand these, so each needs a harmless value when nothing else sets it
     context.handle('create', async (event, options: TerminalOptions) => {
-      const env = { TREEIX_CLAUDE_SETTINGS: '{}', ...(await context.sessionEnv()) }
+      const env = { TREEIX_CLAUDE_SETTINGS: '{}', ...NO_MCP, ...(await context.sessionEnv()) }
       const { folder } = await statuses
       return createTerminal(event.sender, options, { ...env, TREEIX_CLAUDE_SETTINGS: withStatusHooks(env.TREEIX_CLAUDE_SETTINGS), TREEIX_AGENT_STATUS: folder })
     })
@@ -32,6 +36,7 @@ const plugin: MainPlugin = {
       const [usage, costUsd] = await Promise.all([transcriptUsage(ref), statuses.then(({ folder }) => claudeCost(folder, ref.sessionId))])
       return usage && { ...usage, costUsd }
     })
+    sessionTools().forEach(context.mcpTool)
     context.onDispose(killAllTerminals)
   }
 }

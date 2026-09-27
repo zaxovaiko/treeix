@@ -6,6 +6,7 @@ import type { MainPlugin } from '@treeix/sdk/main'
 import type { ImportInfo } from '../shared/types'
 import { importCookies } from './cookies/importer'
 import { listProfiles, profileSource } from './cookies/profiles'
+import { browserTools, registerTab } from './agentTools'
 import { captureElement, responseBody, watchGuest } from './guests'
 import { devServerCommand } from './devServer'
 
@@ -17,10 +18,13 @@ const plugin: MainPlugin = {
   activate: (context) => {
     context.handle('devServerCommand', (_, folder: string) => (typeof folder === 'string' ? devServerCommand(folder) : null))
     // Only pages embedded by the window asking may be wired, so one window can't reach another's pages
-    context.handle('attach', (event, guestId: number) => {
+    context.handle('attach', (event, guestId: number, tabId: unknown) => {
       const guest = webContents.fromId(guestId)
-      if (guest && guest.hostWebContents === event.sender) watchGuest(guest, context)
+      if (!guest || guest.hostWebContents !== event.sender) return
+      watchGuest(guest, context)
+      if (typeof tabId === 'string') registerTab(tabId, guest)
     })
+    browserTools(context).forEach(context.mcpTool)
     context.handle('responseBody', (event, guestId: number, requestId: string) => {
       const guest = webContents.fromId(guestId)
       return guest && guest.hostWebContents === event.sender ? responseBody(guest, requestId) : null

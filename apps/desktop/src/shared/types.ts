@@ -147,6 +147,10 @@ export type Api = {
   checkTools: () => Promise<ToolStatus[]>
   /** Whether a command's first word is on the user's login shell PATH */
   commandExists: (name: string) => Promise<boolean>
+  /** Claude Code and Codex, when set up here, and whether their config reaches Treeix's MCP server */
+  mcpInstallStatus: () => Promise<{ agent: string; state: 'installed' | 'outdated' | 'missing' }[]>
+  /** Adds Treeix's MCP server to Claude Code's and Codex's user config */
+  installMcp: () => Promise<{ installed: string[]; failed: string[] }>
   plugins: {
     /** Tells the main process which plugins are enabled, activating or disposing their main modules */
     setEnabled: (ids: string[]) => Promise<void>

@@ -7,6 +7,12 @@ import { browserAction, forwardsToApp } from '../shared/keys'
 import type { ConsoleEntry, EntryBatch, NetworkEntry } from '../shared/types'
 
 const watched = new WeakSet<WebContents>()
+/** What each page logged, kept here too so agents can read it without the window */
+const logs = new WeakMap<WebContents, { console: ConsoleEntry[]; network: Map<string, NetworkEntry> }>()
+export const guestLog = (guest: WebContents): { console: ConsoleEntry[]; network: NetworkEntry[] } => {
+  const log = logs.get(guest)
+  return { console: log?.console ?? [], network: [...(log?.network.values() ?? [])] }
+}
 const BATCH_MS = 250
 const BODY_LIMIT = 32 * 1024
 const MARGIN = 16
@@ -58,6 +64,8 @@ function capture(guest: WebContents, context: MainContext): void {
   // Read once: a closed page's id throws, and its debugger detach still queues a flush
   const guestId = guest.id
   const requests = new Map<string, NetworkEntry>()
+  const log = { console: [] as ConsoleEntry[], network: requests }
+  logs.set(guest, log)
   let pending: EntryBatch = { guestId, reset: false, console: [], network: [] }
   let timer: NodeJS.Timeout | null = null
   let origin = ''
@@ -74,7 +82,10 @@ function capture(guest: WebContents, context: MainContext): void {
   const onMessage = (_: unknown, method: string, params: unknown): void => {
     const logged: ConsoleEntry | null =
       method === 'Runtime.consoleAPICalled' ? consoleFromApi(params) : method === 'Runtime.exceptionThrown' ? consoleFromException(params) : method === 'Log.entryAdded' ? consoleFromLog(params) : null
-    if (logged) return queue((batch) => ({ ...batch, console: keepLast(batch.console, logged) }))
+    if (logged) {
+      log.console = keepLast(log.console, logged)
+      return queue((batch) => ({ ...batch, console: keepLast(batch.console, logged) }))
+    }
     if (!method.startsWith('Network.')) return
     const request = applyNetworkEvent(requests, method, params)
     if (request) queue((batch) => ({ ...batch, network: keepLast(batch.network.filter((entry) => entry.id !== request.id), request) }))
@@ -95,6 +106,7 @@ function capture(guest: WebContents, context: MainContext): void {
     if (next === origin) return
     origin = next
     requests.clear()
+    log.console = []
     queue(() => ({ guestId, reset: true, console: [], network: [] }))
   })
   guest.debugger.on('detach', () =>

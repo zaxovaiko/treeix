@@ -1887,6 +1887,7 @@ function App(): React.JSX.Element {
           {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
           <Kbd hint>{actionKeys('app.comments')}</Kbd>
         </button>
+        <McpInstallButton flash={flash} />
         <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
           <Icon name="settings" />
         </IconButton>
@@ -2087,3 +2088,26 @@ function App(): React.JSX.Element {
 }
 
 export default App
+
+/** Sets up Treeix's MCP server in Claude Code and Codex for sessions started outside Treeix; its own get it anyway */
+function McpInstallButton({ flash }: { flash: (message: string) => void }): React.JSX.Element | null {
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof window.api.mcpInstallStatus>>>([])
+  const refresh = (): void => void window.api.mcpInstallStatus().then(setStatus, () => setStatus([]))
+  useEffect(refresh, [])
+  if (status.length === 0) return null
+  const pending = status.filter((agent) => agent.state !== 'installed')
+  const install = async (): Promise<void> => {
+    const { installed, failed } = await window.api.installMcp()
+    flash(failed.length ? `Could not set up the Treeix MCP in ${failed.join(' and ')}` : `Treeix MCP set up in ${installed.join(' and ')}`)
+    refresh()
+  }
+  return (
+    <IconButton
+      label={pending.length ? `Set up the Treeix MCP in ${pending.map((agent) => `${agent.agent}${agent.state === 'outdated' ? ' (outdated)' : ''}`).join(' and ')}` : `Treeix MCP is set up in ${status.map((agent) => agent.agent).join(' and ')}`}
+      active={pending.length === 0}
+      onClick={() => void install()}
+    >
+      <Icon name="plug" />
+    </IconButton>
+  )
+}

@@ -15,6 +15,19 @@ export type ToolDefinition = {
   selfUpdate?: string
 }
 
+/** What a tool shows the agent; images are base64 */
+export type McpContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+
+/** A tool agents started by Treeix can call over its MCP server; arguments come from the agent, so `run` checks them */
+export type McpTool = {
+  name: string
+  description: string
+  /** JSON Schema of the arguments */
+  inputSchema: Record<string, unknown>
+  /** Throwing shows the message to the agent as a failed call */
+  run: (args: Record<string, unknown>) => Promise<string | McpContent[]>
+}
+
 export type MainContext = {
   /** Answers `invoke(channel)` from the plugin's renderer module; handlers trust arguments from the app's own renderer */
   handle: <Args extends unknown[]>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => unknown) => void
@@ -30,6 +43,8 @@ export type MainContext = {
   sessionEnv: () => Promise<Record<string, string>>
   /** Runs when the plugin is disabled or the app quits */
   onDispose: (dispose: () => void) => void
+  /** Offers a tool to agent sessions through Treeix's MCP server while the plugin is enabled */
+  mcpTool: (tool: McpTool) => void
   /** An adapter contributed by any enabled plugin */
   chatAdapter: (id: string) => ChatAdapter | null
 }

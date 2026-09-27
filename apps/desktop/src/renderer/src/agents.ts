@@ -23,8 +23,12 @@ export type Agent = {
   chat?: { adapter: string; command: string }
 }
 
-/** The usage-limits plugin fills the variable with its status line bridge; the terminal plugin's main module defaults it to `{}` */
-const CLAUDE = 'claude --settings "$TREEIX_CLAUDE_SETTINGS"'
+/**
+ * The usage-limits plugin fills the settings with its status line bridge, and Treeix's MCP server adds itself; the terminal
+ * plugin's main module gives both harmless defaults. --mcp-config takes several values, so a flag has to follow it.
+ */
+const CLAUDE = 'claude --mcp-config "$TREEIX_CLAUDE_MCP" --settings "$TREEIX_CLAUDE_SETTINGS"'
+const CODEX = 'codex -c "$TREEIX_CODEX_MCP"'
 
 export const BUILTIN_AGENTS = {
   claude: {
@@ -46,10 +50,10 @@ export const BUILTIN_AGENTS = {
     label: 'Codex',
     mark: '◎',
     color: 'var(--color-foreground)',
-    command: 'codex',
+    command: CODEX,
     promptFlag: '',
-    resumeCommand: 'codex resume {id}',
-    resumeLatestCommand: 'codex resume --last',
+    resumeCommand: `${CODEX} resume {id}`,
+    resumeLatestCommand: `${CODEX} resume --last`,
     agent: true,
     chat: { adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' }
   },
@@ -66,7 +70,7 @@ export function getAgents(): Agent[] {
       agent.id === 'claude' && claudeSkipPermissions
         ? skippingPermissions(agent, CLAUDE, '--dangerously-skip-permissions')
         : agent.id === 'codex' && codexSkipPermissions
-          ? skippingPermissions(agent, 'codex', '--dangerously-bypass-approvals-and-sandbox')
+          ? skippingPermissions(agent, CODEX, '--dangerously-bypass-approvals-and-sandbox')
           : agent
     const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? skipped(agent))
     cache = { from: custom, skip, list: [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))] }

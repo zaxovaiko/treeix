@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, typ
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ChatAdapter, MainContext, MainPlugin, ToolDefinition } from '@treeix/sdk/main'
+import { mcpEnv, registerMcpTool } from './mcp'
 import { adaptersOf } from './pluginAdapters'
 
 const modules = import.meta.glob<MainPlugin>('../../../../packages/plugins/*/main/index.ts', { eager: true, import: 'default' })
@@ -14,8 +15,9 @@ const channelOf = (pluginId: string, channel: string): string => `plugin:${plugi
 
 const active = new Map<string, { dispose: () => void }>()
 
+/** Treeix's own MCP server, then whatever enabled plugins add */
 export function sessionEnv(): Promise<Record<string, string>> {
-  const sources = [...active.keys()].flatMap((id) => MAIN_PLUGINS.get(id)?.sessionEnv ?? [])
+  const sources = [mcpEnv, ...[...active.keys()].flatMap((id) => MAIN_PLUGINS.get(id)?.sessionEnv ?? [])]
   return Promise.all(sources.map((source) => source().catch(() => ({})))).then((parts) => Object.assign({}, ...parts))
 }
 
@@ -43,6 +45,7 @@ function activate(pluginId: string, plugin: MainPlugin, userData: string): { dis
     },
     sessionEnv,
     onDispose: (dispose) => disposers.push(dispose),
+    mcpTool: (tool) => disposers.push(registerMcpTool(tool)),
     chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null
   }
   plugin.activate?.(context)

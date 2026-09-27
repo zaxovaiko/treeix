@@ -9,7 +9,7 @@ import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
 import { portDetail } from './Suggestions'
 import { toggleStrip } from './Strip'
-import { findTab, getBrowser, openTab, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
+import { closeTab, findTab, getBrowser, openTab, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
 import type { Vital } from '../shared/types'
 
@@ -40,8 +40,12 @@ const SHORTCUTS: ShortcutInfo[] = (
 ).map(([keys, label]) => ({ keys, label, section: 'Browser' }))
 
 /** Opens a page and brings the browser forward: the panel when it's on screen, else the tab */
-function openUrl(url: string): void {
-  updateBrowser((state) => openTab(state, url))
+function openUrl(url: string, id?: string): void {
+  updateBrowser((state) => openTab(state, url, id))
+  showBrowser()
+}
+
+const showBrowser = (): void => {
   if (host && !host.isPanelVisible(TAB_ID)) host.setActiveTab(TAB_ID)
 }
 
@@ -154,7 +158,18 @@ function Root(): React.JSX.Element {
   host = current
   // Before paint, so a workspace never flashes the previous one's tabs
   useLayoutEffect(() => setBrowserWorkspace(current.workspaceId), [current.workspaceId])
-  useEffect(() => bridge.on('open', (url) => typeof url === 'string' && openUrl(url)), [])
+  // Agents open, show and close tabs by the id main gives them, through Treeix's MCP server
+  useEffect(() => bridge.on('open', (url, id) => typeof url === 'string' && openUrl(url, typeof id === 'string' ? id : undefined)), [])
+  useEffect(
+    () =>
+      bridge.on('show', (id) => {
+        if (typeof id !== 'string') return
+        updateBrowser((state) => selectTab(state, id))
+        showBrowser()
+      }),
+    []
+  )
+  useEffect(() => bridge.on('close', (id) => typeof id === 'string' && updateBrowser((state) => closeTab(state, id))), [])
   useEffect(
     () =>
       onPageMessage((tabId, channel, args) => {

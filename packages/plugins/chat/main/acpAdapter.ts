@@ -1,4 +1,4 @@
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, type Client, type RequestPermissionResponse, type Stream } from '@agentclientprotocol/sdk'
+import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, type Client, type McpServer, type RequestPermissionResponse, type Stream } from '@agentclientprotocol/sdk'
 import type { ChatAdapter, ChatConnection, ChatEvent, ChatOption } from '@treeix/sdk/main'
 import { lstat, readFile, realpath, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
@@ -46,9 +46,11 @@ export function sliceLines(content: string, line: number | null | undefined, lim
     .join('\n')
 }
 
-type ConnectOptions = { cwd: string; resume: string | null; close: () => void; stderrTail?: () => string }
+/** Treeix's own MCP server, from the session environment */
+type TreeixMcp = { url: string; token: string }
+type ConnectOptions = { cwd: string; resume: string | null; close: () => void; stderrTail?: () => string; mcp?: TreeixMcp | null }
 
-export async function connectOverStream(stream: Stream, { cwd, resume, close, stderrTail = () => '' }: ConnectOptions): Promise<ChatConnection> {
+export async function connectOverStream(stream: Stream, { cwd, resume, close, stderrTail = () => '', mcp = null }: ConnectOptions): Promise<ChatConnection> {
   const listeners = new Set<(event: ChatEvent) => void>()
   // Events before the first listener (a loaded session's replay) wait for it, newest kept; options are state and sent on subscribe
   let backlog: ChatEvent[] | null = []
@@ -118,13 +120,15 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
     protocolVersion: PROTOCOL_VERSION,
     clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
   })
+  const mcpServers: McpServer[] =
+    mcp && agentCapabilities?.mcpCapabilities?.http ? [{ type: 'http', name: 'treeix', url: mcp.url, headers: [{ name: 'Authorization', value: `Bearer ${mcp.token}` }] }] : []
   const canLoad = agentCapabilities?.loadSession === true
   const canList = Boolean(agentCapabilities?.sessionCapabilities?.list)
 
   const { sessionId, session } =
     resume && canLoad
-      ? { sessionId: resume, session: await connection.loadSession({ sessionId: resume, cwd, mcpServers: [] }) }
-      : await connection.newSession({ cwd, mcpServers: [] }).then((session) => ({ sessionId: session.sessionId, session }))
+      ? { sessionId: resume, session: await connection.loadSession({ sessionId: resume, cwd, mcpServers }) }
+      : await connection.newSession({ cwd, mcpServers }).then((session) => ({ sessionId: session.sessionId, session }))
   const hasConfigOptions = Boolean(session?.configOptions?.length)
   emit({ type: 'options', options: optionsFrom(session) })
 
@@ -222,7 +226,7 @@ export const acpAdapter: ChatAdapter = {
     })
     const stream = ndJsonStream(Writable.toWeb(child.stdin), fromAgent)
     try {
-      return await Promise.race([connectOverStream(stream, { cwd, resume, close: () => killGroup(child), stderrTail: () => stderr }), failed])
+      return await Promise.race([connectOverStream(stream, { cwd, resume, close: () => killGroup(child), stderrTail: () => stderr, mcp: env.TREEIX_MCP_URL && env.TREEIX_MCP_TOKEN ? { url: env.TREEIX_MCP_URL, token: env.TREEIX_MCP_TOKEN } : null }), failed])
     } catch (error) {
       killGroup(child)
       throw error

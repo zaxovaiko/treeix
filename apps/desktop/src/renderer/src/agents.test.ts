@@ -24,12 +24,12 @@ test('built-in commands keep the behaviour they had when they were hardcoded', a
   await setAgents([])
   const { BUILTIN_AGENTS, startCommand, resumeCommandFor } = await import('./agents')
   const claude = BUILTIN_AGENTS.claude
-  expect(startCommand(claude)).toBe('claude --settings "$TREEIX_CLAUDE_SETTINGS"')
-  expect(startCommand(claude, "'fix the test'", 'abc')).toBe('claude --settings "$TREEIX_CLAUDE_SETTINGS" --session-id abc \'fix the test\'')
+  expect(startCommand(claude)).toBe('claude --mcp-config "$TREEIX_CLAUDE_MCP" --settings "$TREEIX_CLAUDE_SETTINGS"')
+  expect(startCommand(claude, "'fix the test'", 'abc')).toBe('claude --mcp-config "$TREEIX_CLAUDE_MCP" --settings "$TREEIX_CLAUDE_SETTINGS" --session-id abc \'fix the test\'')
   expect(resumeCommandFor(claude, 'abc')).toContain('~/.claude/projects/*/abc.jsonl')
   expect(resumeCommandFor(claude, 'abc')).toContain('--resume abc')
-  expect(resumeCommandFor(claude, null)).toBe('claude --settings "$TREEIX_CLAUDE_SETTINGS"')
-  expect(resumeCommandFor(BUILTIN_AGENTS.codex, null)).toBe('codex resume --last')
+  expect(resumeCommandFor(claude, null)).toBe('claude --mcp-config "$TREEIX_CLAUDE_MCP" --settings "$TREEIX_CLAUDE_SETTINGS"')
+  expect(resumeCommandFor(BUILTIN_AGENTS.codex, null)).toBe('codex -c "$TREEIX_CODEX_MCP" resume --last')
 })
 
 test('a shell session runs the prompt as its command line, or nothing at all', async () => {
@@ -94,11 +94,11 @@ test('the Codex switch skips approvals and the sandbox, resumes included', async
   const { getAgent } = await import('./agents')
   updateSettings({ codexSkipPermissions: true })
   expect(getAgent('codex')).toMatchObject({
-    command: 'codex --dangerously-bypass-approvals-and-sandbox',
-    resumeCommand: 'codex --dangerously-bypass-approvals-and-sandbox resume {id}',
-    resumeLatestCommand: 'codex --dangerously-bypass-approvals-and-sandbox resume --last'
+    command: 'codex -c "$TREEIX_CODEX_MCP" --dangerously-bypass-approvals-and-sandbox',
+    resumeCommand: 'codex -c "$TREEIX_CODEX_MCP" --dangerously-bypass-approvals-and-sandbox resume {id}',
+    resumeLatestCommand: 'codex -c "$TREEIX_CODEX_MCP" --dangerously-bypass-approvals-and-sandbox resume --last'
   })
   expect(getAgent('claude')?.command).not.toContain('--dangerously')
   updateSettings({ codexSkipPermissions: false })
-  expect(getAgent('codex')?.command).toBe('codex')
+  expect(getAgent('codex')?.command).toBe('codex -c "$TREEIX_CODEX_MCP"')
 })
