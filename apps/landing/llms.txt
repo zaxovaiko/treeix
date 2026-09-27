@@ -1,0 +1,57 @@
+# Treeix
+
+> Treeix is a free, open source (Apache 2.0) AI coding workspace for macOS. It finds every git worktree on your Mac, shows what each AI coding agent (Claude Code, Codex or any CLI agent) changed, and sends your line comments back to the agent session as its next prompt. Pull requests, Jira tickets, Confluence pages, agent terminals, a browser and .env files sit in the same window.
+
+AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is usually spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, the review comments, the pull request and the agent session that produced it on a single screen.
+
+- Platform: macOS 14 or later, Apple silicon. Electron app.
+- Price: free. No account, no telemetry, no Treeix server. Code stays on the Mac.
+- License: Apache 2.0. Source: https://github.com/zaxovaiko/treeix
+- Works with: Claude Code, OpenAI Codex, any shell or CLI agent, GitHub (gh), GitLab (glab), Jira and Confluence (Atlassian CLI, acli). Each integration is optional.
+- Made by Dyvertex (https://dyvertex.com), a software house that builds and rescues web apps.
+
+## How it works
+
+1. Pick a worktree: every repository and worktree under the home folder shows up in one sidebar, with a count of changed files and the diff against the base branch, split or unified.
+2. Drag across the lines that need another pass and write a note. Notes keep the file and the line range and wait in a drawer.
+3. Send the queue: the notes go to the Claude Code or Codex session running in that worktree as its next prompt. Only references are sent, the code itself is not copied into the prompt.
+
+## Features
+
+- Agent groups: one group per agent holding its worktree, terminal panes and plan. A badge appears the moment a session waits for an answer.
+- Sessions survive reloads. Closed sessions stay in History; reopening one resumes the same agent conversation.
+- Chat view for Claude, Codex and any agent with a chat command, next to their terminals.
+- Pull requests from GitHub and GitLab with review threads, viewed files, conflicts and CI state. A reviewer's comment becomes an agent task with one click.
+- Jira work items grouped by whose move it is (yours, the reviewer's, blocked), a worktree per ticket, and Confluence pages beside the branch.
+- Built-in Chromium browser with DevTools, console and network capture. Comments on page elements go to the agent like comments on code.
+- Built-in editor for quick fixes; every save keeps a snapshot.
+- Env tab: every .env file across worktrees, which variables are secret, public or exposed to the browser, what is missing or differs from main.
+- Claude and Codex 5-hour and weekly usage limits in the title bar.
+- Claude plans next to the code they describe.
+- Markdown with foldable headings, mermaid diagrams and images from private uploads.
+- Themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized.
+- Keeps the Mac awake while an agent works.
+- Global hotkey brings the window to the front. Keyboard first.
+- Every feature is a plugin that can be switched off in Settings; a disabled plugin does not load its code.
+
+## FAQ
+
+- Does my code leave my machine? No. Treeix runs git, gh, glab, claude and codex locally. There is no Treeix server.
+- Which agents does it work with? Claude Code and Codex, each in its own terminal pane, plus plain shell sessions.
+- Do I have to use git worktrees? No. Any repository under the home folder shows up. Worktrees make one agent per branch easy.
+- What do I need installed? Git. Optional: gh or glab for pull requests, claude or codex for agent sessions, acli for Jira and Confluence.
+- Is it really free? Yes, free to download and open source under Apache 2.0.
+
+## Links
+
+- [Video tour](https://youtu.be/Un4AvXgqtAM): the whole app in 80 seconds
+- [Download the DMG](https://treeix.dyvertex.com/download): latest release for Apple silicon
+- [Source code on GitHub](https://github.com/zaxovaiko/treeix): README, issues, discussions
+- [Releases and changelog](https://github.com/zaxovaiko/treeix/releases)
+- [Plugin docs](https://github.com/zaxovaiko/treeix/blob/main/packages/README.md): how to write a plugin
+- [Architecture](https://github.com/zaxovaiko/treeix/blob/main/docs/architecture.md)
+
+## Optional
+
+- [Privacy](https://treeix.dyvertex.com/privacy)
+- [Dyvertex](https://dyvertex.com): the team behind Treeix

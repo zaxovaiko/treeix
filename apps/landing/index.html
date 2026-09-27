@@ -10,6 +10,14 @@
   <meta property="og:image" content="https://treeix.dyvertex.com/assets/og.png" />
   <meta property="og:url" content="https://treeix.dyvertex.com" />
   <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://treeix.dyvertex.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Treeix" />
+  <meta name="twitter:title" content="Treeix - the AI coding workspace" />
+  <meta name="twitter:description" content="Every worktree, every AI agent session and every pull request in one macOS window." />
+  <meta name="twitter:image" content="https://treeix.dyvertex.com/assets/og.png" />
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Treeix", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 14 or later, Apple silicon", "description": "Treeix is a free, open source AI coding workspace for macOS. It finds every git worktree on your Mac, shows what each Claude Code or Codex agent changed, and sends your line comments back to the agent as its next prompt. GitHub and GitLab pull requests, Jira tickets, Confluence pages, agent terminals, a browser and .env files sit in the same window.", "url": "https://treeix.dyvertex.com", "downloadUrl": "https://treeix.dyvertex.com/download", "image": "https://treeix.dyvertex.com/assets/og.png", "screenshot": "https://treeix.dyvertex.com/assets/hero.webp", "license": "https://www.apache.org/licenses/LICENSE-2.0", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "codeRepository": "https://github.com/zaxovaiko/treeix", "sameAs": ["https://github.com/zaxovaiko/treeix"], "author": {"@type": "Organization", "name": "Dyvertex", "url": "https://dyvertex.com"}}</script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does my code leave my machine?", "acceptedAnswer": {"@type": "Answer", "text": "No. Treeix reads your repositories locally and runs the command line tools you already have: git for diffs, gh and glab for pull requests, claude and codex for sessions. There is no Treeix server."}}, {"@type": "Question", "name": "Which AI agents does it work with?", "acceptedAnswer": {"@type": "Answer", "text": "Claude Code and Codex, each in its own terminal pane. A plain shell session works too, and Treeix still notices when a session is waiting for an answer."}}, {"@type": "Question", "name": "Do I have to use git worktrees?", "acceptedAnswer": {"@type": "Answer", "text": "No. Any repository under your home folder shows up. Worktrees are how Treeix keeps one agent per branch without touching the checkout you are working in, so it makes them easy, but plain repositories are fine."}}, {"@type": "Question", "name": "What do I need installed?", "acceptedAnswer": {"@type": "Answer", "text": "Git, plus whatever the features you use need: gh or glab for pull requests, claude or codex for agent sessions, acli for Jira and Confluence. Each one is optional and its feature stays quiet without it."}}, {"@type": "Question", "name": "Which Macs does it run on?", "acceptedAnswer": {"@type": "Answer", "text": "Apple silicon, macOS 14 or later. The first launch needs Open Anyway under Privacy & Security, because the build is not notarised yet."}}, {"@type": "Question", "name": "Is it really free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Free to download, and the source is public under Apache 2.0. If it saves you an afternoon, open an issue with what you would fix next."}}]}</script>
   <link rel="icon" href="/assets/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -74,7 +82,7 @@
       </div>
 
       <figure class="hero-shot">
-        <img src="/assets/hero.webp" width="2000" height="1307" alt="Treeix showing the diff of the feat/usage-invoices worktree, with a comment being written on lines 5 to 9" />
+        <img src="/assets/hero.webp" width="2000" height="1307" alt="Treeix showing the diff of the feat/usage-invoices worktree, with a comment being written on lines 6 to 10" />
       </figure>
     </section>
 
