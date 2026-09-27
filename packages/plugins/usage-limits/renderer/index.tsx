@@ -1,10 +1,11 @@
 import type { RendererPlugin } from '@treeix/sdk'
-import { Row } from '@treeix/app/settingsUi'
+import { Card, Row } from '@treeix/app/settingsUi'
 import { USAGE_LABELS, UsageLimits, usageSettings } from './UsageLimits'
 
 function UsageSettings(): React.JSX.Element {
   const { usageLabel } = usageSettings.use()
   return (
+    <Card title="Title bar">
     <Row label="Title bar label" description="Claude numbers come from the newest of Claude sessions started here, the Claude desktop app or LimitBar; Codex numbers from its latest session log.">
       <div data-segmented className="flex max-w-full shrink-0 flex-col gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
         {USAGE_LABELS.map(([id, name, example]) => (
@@ -22,6 +23,7 @@ function UsageSettings(): React.JSX.Element {
         ))}
       </div>
     </Row>
+    </Card>
   )
 }
 

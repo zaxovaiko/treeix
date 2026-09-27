@@ -3,6 +3,7 @@ import { lazy, Suspense, useState } from 'react'
 import { ApiToken } from '@treeix/atlassian/renderer/ApiToken'
 import { type RendererPlugin, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
+import { Card } from '@treeix/app/settingsUi'
 import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import type { Page } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
@@ -73,7 +74,11 @@ defineActions([
 const plugin: RendererPlugin = {
   shortcuts: [{ keys: '← →', label: 'Fold / unfold the space', section: 'Confluence', page: TAB_ID }],
   tabs: [{ id: TAB_ID, label: 'Confluence', icon: 'bookOpen', order: 50, render: Tab, panels: ['terminal'] }],
-  Settings: () => <ApiToken bridge={confluenceBridge} purpose="Search, recently viewed pages and images" />,
+  Settings: () => (
+    <Card title="Account">
+      <ApiToken bridge={confluenceBridge} purpose="Search, recently viewed pages and images" />
+    </Card>
+  ),
   linkPreviews: [{ label: 'Confluence', keyOf: (url) => pageOfUrl(url)?.id ?? null, render: PagePreview }]
 }
 

@@ -1,7 +1,7 @@
 import type { IconName } from './Icon'
 import type { LoadedPlugin, PluginEntry } from './plugins'
 
-export type SectionId = 'General' | 'Appearance' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations'
+export type SectionId = 'General' | 'Appearance' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations' | 'Claude' | 'Codex'
 
 /** A page in Settings: one of the fixed sections, or a plugin's own page nested under Plugins */
 export type PageId = SectionId | `plugin:${string}`
@@ -15,9 +15,15 @@ export const SECTIONS: [SectionId, IconName][] = [
   ['Integrations', 'cloudCheck']
 ]
 
+/** Pages for one agent's settings, nested under Integrations */
+const INTEGRATION_PAGES: [SectionId, IconName][] = [
+  ['Claude', 'terminal'],
+  ['Codex', 'terminal']
+]
+
 const PLUGIN_PREFIX = 'plugin:'
 export const pluginPage = (id: string): PageId => `${PLUGIN_PREFIX}${id}`
-export const isPageId = (value: string): value is PageId => value.startsWith(PLUGIN_PREFIX) || SECTIONS.some(([id]) => id === value)
+export const isPageId = (value: string): value is PageId => value.startsWith(PLUGIN_PREFIX) || [...SECTIONS, ...INTEGRATION_PAGES].some(([id]) => id === value)
 export const pluginOf = (page: PageId): string | null => (page.startsWith(PLUGIN_PREFIX) ? page.slice(PLUGIN_PREFIX.length) : null)
 
 export type NavRow = { page: PageId; label: string; icon: IconName; child: boolean }
@@ -31,7 +37,11 @@ export function navRows(plugins: PluginEntry[], loaded: LoadedPlugin[]): NavRow[
   const children = plugins
     .filter(({ manifest }) => withSettings.has(manifest.id))
     .map(({ manifest }): NavRow => ({ page: pluginPage(manifest.id), label: manifest.name, icon: 'plug', child: true }))
-  return SECTIONS.flatMap(([id, icon]): NavRow[] => [{ page: id, label: id, icon, child: false }, ...(id === 'Plugins' ? children : [])])
+  const integrations = INTEGRATION_PAGES.map(([page, icon]): NavRow => ({ page, label: page, icon, child: true }))
+  return SECTIONS.flatMap(([id, icon]): NavRow[] => [
+    { page: id, label: id, icon, child: false },
+    ...(id === 'Plugins' ? children : id === 'Integrations' ? integrations : [])
+  ])
 }
 
 /** A plugin page is the only page that can go missing, when its plugin is switched off while Settings remembers it */

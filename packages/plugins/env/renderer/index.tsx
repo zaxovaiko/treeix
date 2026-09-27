@@ -2,7 +2,7 @@ import { defineActions, key } from '@treeix/shared/keymap'
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { type Command, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
 import { baseName } from '@treeix/app/Sidebar'
-import { Row, Segmented } from '@treeix/app/settingsUi'
+import { Card, Row, Segmented } from '@treeix/app/settingsUi'
 import { errorMessage } from '@treeix/app/ui'
 import { isSecretKind } from '../shared/classify'
 import type { CopyMode } from '../shared/types'
@@ -136,13 +136,13 @@ function EnvSettings(): React.JSX.Element | null {
     envSettings.update({ autoCopy: next })
   }
   return (
-    <>
+    <Card title="Copy on new worktrees">
       {repos.map((repo) => (
         <Row key={repo} label={`New worktrees of ${baseName(repo)}`} description={`Env files from main go into every new worktree of ${repo}`}>
           <Segmented value={autoCopy[repo]} options={COPY_OPTIONS} onChange={(mode) => set(repo, mode)} />
         </Row>
       ))}
-    </>
+    </Card>
   )
 }
 

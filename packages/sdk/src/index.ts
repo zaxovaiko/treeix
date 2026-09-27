@@ -157,7 +157,7 @@ export type RendererPlugin = {
   Root?: ComponentType
   /** Title bar items left of the command palette button, lower order first; `end` ones go after Settings, at the window's right edge */
   titleBar?: { order: number; render: ComponentType; end?: boolean }[]
-  /** Rendered under the plugin's switch in Settings while enabled */
+  /** Rendered under the plugin's switch in Settings while enabled; brings its own `Card`s */
   Settings?: ComponentType
   /** Palette commands, built when the palette opens */
   commands?: (host: HostApi) => Command[]

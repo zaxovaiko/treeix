@@ -18,15 +18,17 @@ test('only a loaded plugin with settings of its own gets a row, in the plugin li
     'Plugins',
     'plugin:pull-requests',
     'plugin:keep-awake',
-    'Integrations'
+    'Integrations',
+    'Claude',
+    'Codex'
   ])
-  expect(rows.filter((row) => row.child).map((row) => row.label)).toEqual(['Pull requests', 'Keep awake'])
+  expect(rows.filter((row) => row.child).map((row) => row.label)).toEqual(['Pull requests', 'Keep awake', 'Claude', 'Codex'])
 })
 
-test('the six sections stand alone when no loaded plugin brings settings', () => {
+test('only the agent pages nest when no loaded plugin brings settings', () => {
   const rows = navRows(PLUGINS, [loaded('terminal', 'Terminal', false)])
-  expect(rows).toHaveLength(6)
-  expect(rows.some((row) => row.child)).toBe(false)
+  expect(rows).toHaveLength(8)
+  expect(rows.filter((row) => row.child).map((row) => row.page)).toEqual(['Claude', 'Codex'])
 })
 
 test('a remembered page falls back to the plugin list once its plugin is switched off', () => {

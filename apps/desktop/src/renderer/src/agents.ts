@@ -57,20 +57,32 @@ export const BUILTIN_AGENTS = {
 } as const satisfies Record<string, Agent>
 
 /** Built-ins first, then the user's; a custom agent sharing a built-in id replaces it in place */
-let cache: { from: Agent[]; skip: boolean; list: Agent[] } | null = null
+let cache: { from: Agent[]; skip: string; list: Agent[] } | null = null
 export function getAgents(): Agent[] {
-  const { customAgents: custom, claudeSkipPermissions: skip } = getSettings()
+  const { customAgents: custom, claudeSkipPermissions, codexSkipPermissions } = getSettings()
+  const skip = `${claudeSkipPermissions}:${codexSkipPermissions}`
   if (cache?.from !== custom || cache.skip !== skip) {
-    const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? (skip && agent.id === 'claude' ? skippingPermissions(agent) : agent))
+    const skipped = (agent: Agent): Agent =>
+      agent.id === 'claude' && claudeSkipPermissions
+        ? skippingPermissions(agent, CLAUDE, '--dangerously-skip-permissions')
+        : agent.id === 'codex' && codexSkipPermissions
+          ? skippingPermissions(agent, 'codex', '--dangerously-bypass-approvals-and-sandbox')
+          : agent
+    const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? skipped(agent))
     cache = { from: custom, skip, list: [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))] }
   }
   return cache.list
 }
 
-/** The built-in Claude with the Settings switch that lets it run every tool without asking */
-const skippingPermissions = (agent: Agent): Agent => {
-  const skipping = (command: string): string => command.replaceAll(CLAUDE, `${CLAUDE} --dangerously-skip-permissions`)
-  return { ...agent, command: agent.command && skipping(agent.command), resumeCommand: agent.resumeCommand && skipping(agent.resumeCommand) }
+/** A built-in agent with the Settings switch that lets it run every tool without asking; `base` is how its commands start */
+const skippingPermissions = (agent: Agent, base: string, flag: string): Agent => {
+  const skipping = (command: string): string => command.replaceAll(base, `${base} ${flag}`)
+  return {
+    ...agent,
+    command: agent.command && skipping(agent.command),
+    resumeCommand: agent.resumeCommand && skipping(agent.resumeCommand),
+    resumeLatestCommand: agent.resumeLatestCommand && skipping(agent.resumeLatestCommand)
+  }
 }
 
 export const getAgent = (id: string): Agent | undefined => getAgents().find((agent) => agent.id === id)

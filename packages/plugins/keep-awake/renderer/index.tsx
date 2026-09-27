@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createBridge, definePluginSettings, type RendererPlugin, useHost } from '@treeix/sdk'
 import { isAgent } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { Row, Switch } from '@treeix/app/settingsUi'
+import { Card, Row, Switch } from '@treeix/app/settingsUi'
 
 /** Agents idle this long before sleep is allowed again */
 const IDLE_MS = 2 * 60_000
@@ -86,12 +86,14 @@ function Indicator(): React.JSX.Element {
 function KeepAwakeSettings(): React.JSX.Element {
   const { keepAwakeLidClosed } = awakeSettings.use()
   return (
-    <Row
-      label="Keep running with the lid closed"
-      description="Asks for your password the first time agents start. Lid-close sleep then stays off until you turn this off or quit Treeix. Watch for heat if the Mac is in a bag."
-    >
-      <Switch checked={keepAwakeLidClosed} label="Keep running with the lid closed" onChange={() => awakeSettings.update({ keepAwakeLidClosed: !keepAwakeLidClosed })} />
-    </Row>
+    <Card title="Lid">
+      <Row
+        label="Keep running with the lid closed"
+        description="Asks for your password the first time agents start. Lid-close sleep then stays off until you turn this off or quit Treeix. Watch for heat if the Mac is in a bag."
+      >
+        <Switch checked={keepAwakeLidClosed} label="Keep running with the lid closed" onChange={() => awakeSettings.update({ keepAwakeLidClosed: !keepAwakeLidClosed })} />
+      </Row>
+    </Card>
   )
 }
 

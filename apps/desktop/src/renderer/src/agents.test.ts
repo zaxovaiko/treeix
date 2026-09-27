@@ -87,3 +87,18 @@ test('an agent that is gone falls back to a neutral row instead of crashing', as
   expect(agentOr('deleted')).toMatchObject({ id: 'deleted', label: 'deleted', command: null, agent: false })
   expect(isAgent('deleted')).toBe(false)
 })
+
+test('the Codex switch skips approvals and the sandbox, resumes included', async () => {
+  await setAgents([])
+  const { updateSettings } = await import('./settings')
+  const { getAgent } = await import('./agents')
+  updateSettings({ codexSkipPermissions: true })
+  expect(getAgent('codex')).toMatchObject({
+    command: 'codex --dangerously-bypass-approvals-and-sandbox',
+    resumeCommand: 'codex --dangerously-bypass-approvals-and-sandbox resume {id}',
+    resumeLatestCommand: 'codex --dangerously-bypass-approvals-and-sandbox resume --last'
+  })
+  expect(getAgent('claude')?.command).not.toContain('--dangerously')
+  updateSettings({ codexSkipPermissions: false })
+  expect(getAgent('codex')?.command).toBe('codex')
+})

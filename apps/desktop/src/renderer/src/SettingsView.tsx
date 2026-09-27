@@ -248,7 +248,7 @@ function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorL
   }
 }
 
-function toggle(key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'agentNotifications', label: string): ComponentType {
+function toggle(key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'codexSkipPermissions' | 'agentNotifications', label: string): ComponentType {
   return function SettingSwitch() {
     const value = useSettings()[key]
     return <Switch checked={value} label={label} onChange={() => updateSettings({ [key]: !value })} />
@@ -315,6 +315,11 @@ function UpdateControl(): React.JSX.Element {
   )
 }
 
+const feedbackUrl = (version: string): string => {
+  const body = `**What happened, or what would you like?**\n\n\n**Steps to reproduce (for a bug)**\n1. \n\n**Expected**\n\n\n---\nTreeix ${version || 'unknown'}, ${navigator.platform}`
+  return `https://github.com/zaxovaiko/treeix/issues/new?${new URLSearchParams({ body })}`
+}
+
 /** Every setting with a row of its own; the command palette lists them too */
 const SETTINGS: SettingSpec[] = [
   {
@@ -329,6 +334,20 @@ const SETTINGS: SettingSpec[] = [
           <span className="truncate text-xs text-muted-foreground">{updateSummary(status)}</span>
           <UpdateControl />
         </div>
+      )
+    }
+  },
+  {
+    section: 'General',
+    card: 'Updates',
+    label: 'Feedback',
+    description: 'Report a bug or suggest an idea as a GitHub issue, with your Treeix version already filled in.',
+    Control: function Feedback() {
+      const { current } = useUpdates()
+      return (
+        <button onClick={() => window.open(feedbackUrl(current))} className="h-7 shrink-0 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent">
+          Send feedback
+        </button>
       )
     }
   },
@@ -470,11 +489,18 @@ const SETTINGS: SettingSpec[] = [
     }
   },
   {
-    section: 'Terminal',
-    card: 'Agent sessions',
+    section: 'Claude',
+    card: 'Sessions',
     label: 'Skip Claude permissions',
     description: 'Starts Claude terminal sessions with --dangerously-skip-permissions, so it runs every tool without asking. Applies to sessions started after the change.',
     Control: toggle('claudeSkipPermissions', 'Skip Claude permissions')
+  },
+  {
+    section: 'Codex',
+    card: 'Sessions',
+    label: 'Skip Codex approvals and sandbox',
+    description: 'Starts Codex terminal sessions with --dangerously-bypass-approvals-and-sandbox, so it runs every command without asking or sandboxing. Applies to sessions started after the change.',
+    Control: toggle('codexSkipPermissions', 'Skip Codex approvals and sandbox')
   },
   {
     section: 'Terminal',
@@ -822,12 +848,14 @@ function PluginPage({ id }: { id: string }): React.JSX.Element {
   if (!manifest) return <EmptyState icon="plug" title={`No installed plugin answers to the id ${id}.`} />
   const chosen = settings.plugins[manifest.id] ?? manifest.enabledByDefault
   return (
-    <Card title={manifest.name}>
-      <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`}>
-        <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
-      </Row>
+    <>
+      <Card title={manifest.name}>
+        <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`}>
+          <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
+        </Row>
+      </Card>
       {PluginSettings && <PluginSettings />}
-    </Card>
+    </>
   )
 }
 
@@ -1084,15 +1112,11 @@ function Page({ id }: { id: PageId }): React.JSX.Element {
 }
 
 /** A plugin's switch already shows under Plugins, so in search results its page contributes only the settings it brings */
-function PluginResults({ page, label }: { page: PageId; label: string }): React.JSX.Element | null {
+function PluginResults({ page }: { page: PageId }): React.JSX.Element | null {
   const { loaded } = usePlugins()
   const id = pluginOf(page)
   const PluginSettings = id ? settingsOf(loaded, id) : undefined
-  return PluginSettings ? (
-    <Card title={label}>
-      <PluginSettings />
-    </Card>
-  ) : null
+  return PluginSettings ? <PluginSettings /> : null
 }
 
 /** A setting the command palette points at: which section it's in, and its row or card label */
@@ -1297,7 +1321,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
                   {needle ? (
                     nav.map((row) =>
                       row.child ? (
-                        <PluginResults key={row.page} page={row.page} label={row.label} />
+                        <PluginResults key={row.page} page={row.page} />
                       ) : (
                         <SearchGroup key={row.page} title={row.label}>
                           <h2 className="mb-3 text-[13px] font-medium">{row.label}</h2>

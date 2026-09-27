@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useReducer } from 'react'
 import { type Command, type DocumentTab, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
-import { Row, Segmented } from '@treeix/app/settingsUi'
+import { Card, Row, Segmented } from '@treeix/app/settingsUi'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage } from '@treeix/app/ui'
 import type { PullRequest } from '../shared/types'
@@ -156,7 +156,7 @@ function Polling(): null {
 function PullRequestSettings(): React.JSX.Element {
   const { prFilesView, prPollMinutes } = prSettings.use()
   return (
-    <>
+    <Card title="Review">
       <Row label="Files" description="Show one changed file at a time, or scroll through every file like GitHub. Files you mark viewed collapse in the scroll; a review opens with every file expanded.">
         <Segmented
           value={prFilesView}
@@ -174,7 +174,7 @@ function PullRequestSettings(): React.JSX.Element {
           onChange={(value) => prSettings.update({ prPollMinutes: POLL_MINUTES.find((minutes) => `${minutes}` === value) ?? 5 })}
         />
       </Row>
-    </>
+    </Card>
   )
 }
 

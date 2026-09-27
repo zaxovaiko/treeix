@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { ApiToken } from '@treeix/atlassian/renderer/ApiToken'
 import { type Command, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
-import { Row } from '@treeix/app/settingsUi'
+import { Card, Row } from '@treeix/app/settingsUi'
 import { UserAvatar } from '@treeix/app/ui'
 import type { WorkItem } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
@@ -57,7 +57,7 @@ function JiraSettings(): React.JSX.Element {
   const [draft, setDraft] = useState(jql)
   useEffect(() => setDraft(jql), [jql])
   return (
-    <>
+    <Card title="Tasks">
       <Row label="Work items" description="JQL for the Tasks tab, without the assignee: the tab's Mine and Anyone switch adds that. Needs the Atlassian CLI signed in: acli jira auth login --web">
         <input
           value={draft}
@@ -68,7 +68,7 @@ function JiraSettings(): React.JSX.Element {
         />
       </Row>
       <ApiToken bridge={jiraBridge} purpose="Screenshots and attachments" />
-    </>
+    </Card>
   )
 }
 
