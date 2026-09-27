@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { copyFile, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -9,6 +9,7 @@ import type { ImportResult } from '../../shared/types'
 import { type ChromiumRow, chromiumCookie, chromiumKey, decryptChromiumValue, metaVersion } from './chromium'
 import { type FirefoxRow, firefoxCookie } from './firefox'
 import { isBlocked, profileSource } from './profiles'
+import { safariCookies } from './safari'
 
 const run = promisify(execFile)
 const BATCH = 200
@@ -79,6 +80,9 @@ function readChromium(db: DatabaseSync, password: string, now: number): (Cookies
   })
 }
 
+const accessHint = (browser: string): string =>
+  browser === 'Safari' ? 'Give Treeix Full Disk Access in System Settings > Privacy & Security, reopen Treeix' : 'Allow Treeix under System Settings > Privacy & Security'
+
 /** Copies another browser's cookies into the built-in browser's session; a one-off copy, not a sync */
 export async function importCookies(key: string, target: Session): Promise<ImportResult> {
   const source = await profileSource(key)
@@ -86,6 +90,7 @@ export async function importCookies(key: string, target: Session): Promise<Impor
   // The browser keeps its database locked while running, so read a copy
   let folder: string | null = null
   try {
+    if (source.kind === 'safari') return { ...(await setAll(target, safariCookies(await readFile(source.cookiesPath), Math.floor(Date.now() / 1000)))), error: null }
     folder = await mkdtemp(join(tmpdir(), 'treeix-cookies-'))
     const copy = join(folder, 'cookies.sqlite')
     await copyFile(source.cookiesPath, copy)
@@ -109,7 +114,7 @@ export async function importCookies(key: string, target: Session): Promise<Impor
     return {
       imported: 0,
       skipped: 0,
-      error: isBlocked(error) ? `macOS blocked access to ${source.browser}. Allow Treeix under System Settings > Privacy & Security, then import again` : `Couldn't read ${source.browser}'s cookies`
+      error: isBlocked(error) ? `macOS blocked access to ${source.browser}. ${accessHint(source.browser)}, then import again` : `Couldn't read ${source.browser}'s cookies`
     }
   } finally {
     if (folder) await rm(folder, { recursive: true, force: true })

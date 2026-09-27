@@ -110,7 +110,7 @@ export function BrowserSettings(): React.JSX.Element {
   }
   return (
     <>
-      <Card title="Browser">
+      <Card title="General">
         <Row label="Open links from terminals here" description="⌘-click on a URL in a session opens it in the Browser tab instead of your default browser">
           <Switch checked={openLinks} label="Open links from terminals here" onChange={() => browserSettings.update({ openLinks: !openLinks })} />
         </Row>
@@ -167,7 +167,10 @@ export function BrowserSettings(): React.JSX.Element {
           </Row>
           {(result || chosenProfile?.blocked) && (
             <div className="px-4 py-2 text-xs text-muted-foreground">
-              {result ?? `macOS blocks reading ${chosenProfile?.browser}. Allow Treeix to access data from other apps in System Settings > Privacy & Security, then import again`}
+              {result ??
+                (chosenProfile?.browser === 'Safari'
+                  ? 'macOS blocks reading Safari. Give Treeix Full Disk Access in System Settings > Privacy & Security, reopen Treeix, then import again'
+                  : `macOS blocks reading ${chosenProfile?.browser}. Allow Treeix to access data from other apps in System Settings > Privacy & Security, then import again`)}
             </div>
           )}
         </Card>

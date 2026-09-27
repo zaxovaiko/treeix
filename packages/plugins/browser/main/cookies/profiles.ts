@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { access, open, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { BrowserProfile } from '../../shared/types'
@@ -18,6 +18,7 @@ const CHROMIUM = [
 export type ProfileSource =
   | { kind: 'chromium'; browser: string; folder: string; name: string; cookiesPath: string; keychain: string }
   | { kind: 'firefox'; browser: 'Firefox'; folder: string; name: string; cookiesPath: string }
+  | { kind: 'safari'; browser: 'Safari'; folder: string; name: string; cookiesPath: string }
 
 type Entry = ProfileSource | BrowserProfile
 
@@ -78,10 +79,21 @@ async function firefoxSources(): Promise<Entry[]> {
   return found
 }
 
+/** Safari's cookies sit in its sandbox container, which macOS only opens with Full Disk Access */
+async function safariSources(): Promise<Entry[]> {
+  const cookiesPath = join(homedir(), 'Library', 'Containers', 'com.apple.Safari', 'Data', 'Library', 'Cookies', 'Cookies.binarycookies')
+  try {
+    await (await open(cookiesPath)).close()
+  } catch (error) {
+    return isBlocked(error) ? [blockedBrowser('Safari')] : []
+  }
+  return [{ kind: 'safari', browser: 'Safari', folder: 'Default', name: 'Default', cookiesPath }]
+}
+
 const isSource = (entry: Entry): entry is ProfileSource => 'cookiesPath' in entry
 const keyOf = (source: ProfileSource): string => `${source.browser}:${source.folder}`
 
-const allEntries = async (): Promise<Entry[]> => [...(await chromiumSources()), ...(await firefoxSources())]
+const allEntries = async (): Promise<Entry[]> => [...(await chromiumSources()), ...(await firefoxSources()), ...(await safariSources())]
 
 /** Installed browsers and their profiles; a browser macOS won't let us read shows up once, blocked */
 export async function listProfiles(): Promise<BrowserProfile[]> {
