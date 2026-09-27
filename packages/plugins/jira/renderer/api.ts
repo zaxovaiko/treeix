@@ -1,5 +1,6 @@
 import { atlassianBridge } from '@treeix/atlassian/renderer/atlassianBridge'
 import { persistentCache } from '@treeix/atlassian/renderer/cache'
+import type { Mention } from '@treeix/atlassian/shared'
 import { definePluginSettings } from '@treeix/sdk'
 import { type Bucket, isBucket } from './buckets'
 import type { Epic, JiraPerson, WorkItem, WorkItemDetail, WorkItemEdit, WorkItemList } from '../shared/types'
@@ -17,11 +18,14 @@ export const jiraApi = {
   detail: (key: string) => jiraBridge.invoke<WorkItemDetail>('detail', key),
   summary: (key: string) => jiraBridge.invoke<WorkItem>('summary', key),
   transition: (key: string, status: string) => jiraBridge.invoke<void>('transition', key, status),
-  comment: (key: string, body: string) => jiraBridge.invoke<void>('comment', key, body),
+  comment: (key: string, body: string, mention: Mention | null) => jiraBridge.invoke<void>('comment', key, body, mention),
+  updateComment: (key: string, id: string, body: string) => jiraBridge.invoke<void>('updateComment', key, id, body),
+  deleteComment: (key: string, id: string) => jiraBridge.invoke<void>('deleteComment', key, id),
   edit: (key: string, changes: WorkItemEdit) => jiraBridge.invoke<void>('edit', key, changes),
   assign: (key: string, accountId: string | null) => jiraBridge.invoke<void>('assign', key, accountId),
   assignable: (key: string, query: string) => jiraBridge.invoke<JiraPerson[]>('assignable', key, query),
   me: () => jiraBridge.invoke<string | null>('me'),
+  projects: () => jiraBridge.invoke<string[]>('projects'),
   /** Keyed by comma-joined project keys, the form the cache needs */
   epics: (projects: string) => jiraBridge.invoke<Epic[]>('epics', projects.split(',').filter(Boolean))
 }

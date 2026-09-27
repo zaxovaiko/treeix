@@ -109,7 +109,29 @@ function ticketCommands(host: HostApi): Command[] {
   }))
 }
 
+declare module '@treeix/sdk' {
+  interface Services {
+    /** Provided by the Jira plugin: `isProject` is false until the project list loads */
+    jira: { isProject: (key: string) => boolean; open: (key: string, host: HostApi) => void }
+  }
+}
+
+let projects = new Set<string>()
+// Once per launch as the plugin loads, so keys link on the first hover; a new project shows after a restart
+void jiraApi.projects().then((keys) => {
+  projects = new Set(keys)
+}, () => undefined)
+
 const plugin: RendererPlugin = {
+  services: {
+    jira: {
+      isProject: (key) => projects.has(key),
+      open: (key, host) => {
+        selection.update({ key })
+        host.setActiveTab(TAB_ID)
+      }
+    }
+  },
   commands: ticketCommands,
   shortcuts: [{ keys: '← →', label: 'Fold / unfold the group', section: 'Tasks', page: TAB_ID }],
   tabs: [{ id: TAB_ID, label: 'Tasks', icon: 'kanban', order: 40, render: TasksTab, panels: ['terminal'] }],

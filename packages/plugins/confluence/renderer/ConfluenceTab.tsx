@@ -10,10 +10,11 @@ import { baseName } from '@treeix/app/Sidebar'
 import { timeAgo } from '@treeix/app/time'
 import { EmptyState, FoldAllButton, IconButton, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
-import type { Page, PageList, PageSummary } from '../shared/types'
+import type { CommentList, Page, PageList, PageSummary } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
 import { withList } from '@treeix/atlassian/renderer/panels'
-import { confluenceApi, openRequest, pageCache, pageOfUrl, recentCache, resolveImage, TTL } from './api'
+import { Comments, commentCount } from '@treeix/atlassian/renderer/Comments'
+import { commentCache, confluenceApi, openRequest, pageCache, pageOfUrl, recentCache, resolveImage, TTL } from './api'
 
 const MAX_OPENED = 20
 /** Pages shown per space before "Show more" */
@@ -78,6 +79,33 @@ type Entry =
 type Section = { title: string; error: string | null; count: number; entries: Entry[] }
 
 
+/** Footer comments; reading them needs the API token, so a failure stays down here instead of hiding the page */
+function PageComments({ page }: { page: Page }): React.JSX.Element {
+  const { value, error, refresh } = useCached<CommentList>(commentCache, page.id, TTL.comments, confluenceApi.comments)
+  const comments = value?.comments ?? []
+  return (
+    <div className="mt-8">
+      <Comments
+        comments={comments}
+        target={page.title}
+        title={
+          <>
+            <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Comments {commentCount(comments) || ''}</h3>
+            {error && <p className="text-xs break-words text-red-400 select-text">{error}</p>}
+          </>
+        }
+        resolveImage={resolveImage}
+        onChanged={refresh}
+        actions={{
+          add: (body, replyTo) => confluenceApi.addComment(page.id, body, replyTo?.id ?? null),
+          edit: (comment, body) => confluenceApi.updateComment(comment.id, body),
+          remove: (comment) => confluenceApi.deleteComment(comment.id)
+        }}
+      />
+    </div>
+  )
+}
+
 function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Page | null; parent: Page | null; error: string | null; onReload: () => void; onAgent: () => void; onCopy: () => void }): React.JSX.Element {
   if (!page) return error ? <EmptyState fill icon="file" title={error} /> : <EmptyState fill title="Loading page..." />
   return (
@@ -132,6 +160,7 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
             </section>
           )}
           <LinkPreviews urls={page.links} exclude={[page.id]} />
+          <PageComments page={page} />
         </article>
       </div>
     </MarkdownFoldScope>

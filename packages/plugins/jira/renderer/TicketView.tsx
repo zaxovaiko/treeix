@@ -9,6 +9,7 @@ import { timeAgo } from '@treeix/app/time'
 import { CopyButton, EmptyState, errorMessage, UserAvatar } from '@treeix/app/ui'
 import type { Repo, Worktree } from '@treeix/shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
+import { Comments } from '@treeix/atlassian/renderer/Comments'
 import type { Epic, JiraPerson, WorkItem, WorkItemDetail } from '../shared/types'
 import { detailCache, jiraApi, resolveImage, selection, TTL } from './api'
 import { branchFor, isBranchFor } from './branch'
@@ -176,50 +177,6 @@ export function useTicket(
       else host.flash(`No Jira link for ${item.key}`)
     }
   }
-}
-
-/** Writes a comment on the work item; Jira takes it as plain text */
-function CommentBox({ itemKey, onPosted }: { itemKey: string; onPosted: () => void }): React.JSX.Element {
-  const host = useHost()
-  const [body, setBody] = useState('')
-  const [sending, setSending] = useState(false)
-  const send = (): void => {
-    if (!body.trim() || sending) return
-    setSending(true)
-    jiraApi
-      .comment(itemKey, body.trim())
-      .then(
-        () => {
-          setBody('')
-          host.flash(`Commented on ${itemKey}`)
-          onPosted()
-        },
-        (reason: unknown) => host.flash(errorMessage(reason))
-      )
-      .finally(() => setSending(false))
-  }
-  return (
-    <div className="rounded-lg border border-border px-3 py-2">
-      <textarea
-        id={COMMENT_INPUT}
-        value={body}
-        onChange={(event) => setBody(event.target.value)}
-        onKeyDown={(event) => (event.metaKey || event.ctrlKey) && event.key === 'Enter' && send()}
-        placeholder={`Comment on ${itemKey}`}
-        rows={body ? 4 : 1}
-        className="w-full resize-none bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70"
-      />
-      {body && (
-        <div className="mt-1 flex items-center gap-2">
-          <span className="flex-1 text-[11px] text-muted-foreground">Plain text</span>
-          <button onClick={send} disabled={sending} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
-            {sending ? 'Sending...' : 'Comment'}
-            <Kbd hint>⌘↵</Kbd>
-          </button>
-        </div>
-      )}
-    </div>
-  )
 }
 
 /** The title, edited in place: Enter saves, Escape puts it back, and either returns focus to where e was pressed */
@@ -561,20 +518,19 @@ export function TicketMain({
           {detail && <LabelEditor labels={ticket.labels} onAdd={ticket.addLabel} onRemove={ticket.removeLabel} />}
           {detail && <LinkPreviews urls={detail.links} exclude={[item.key]} />}
           {detail && (
-            <section className="flex flex-col gap-2">
-              <SectionTitle>Comments {detail.comments.length || ''}</SectionTitle>
-              {detail.comments.map((comment, index) => (
-                <div key={`${comment.created}:${index}`} className="rounded-lg border border-border bg-card px-4 py-3">
-                  <div className="mb-1.5 flex min-w-0 items-center gap-2 text-xs">
-                    <UserAvatar name={comment.author} url={comment.authorAvatar} size="size-5" />
-                    <span className="truncate font-medium">{comment.author}</span>
-                    <span className="shrink-0 text-muted-foreground">{timeAgo(comment.created)} ago</span>
-                  </div>
-                  <Markdown resolveImage={resolveImage}>{comment.body}</Markdown>
-                </div>
-              ))}
-              <CommentBox key={item.key} itemKey={item.key} onPosted={ticket.reload} />
-            </section>
+            <Comments
+              comments={detail.comments}
+              target={item.key}
+              inputId={COMMENT_INPUT}
+              title={<SectionTitle>Comments {detail.comments.length || ''}</SectionTitle>}
+              resolveImage={resolveImage}
+              onChanged={ticket.reload}
+              actions={{
+                add: (body, replyTo) => jiraApi.comment(item.key, body, replyTo?.authorId ? { id: replyTo.authorId, name: replyTo.author } : null),
+                edit: (comment, body) => jiraApi.updateComment(item.key, comment.id, body),
+                remove: (comment) => jiraApi.deleteComment(item.key, comment.id)
+              }}
+            />
           )}
         </div>
       </div>

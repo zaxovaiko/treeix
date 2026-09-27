@@ -1,3 +1,5 @@
+import type { AtlassianComment } from '@treeix/atlassian/shared'
+
 export type WorkItem = {
   key: string
   summary: string
@@ -32,7 +34,6 @@ export type JiraPerson = { accountId: string; name: string; avatar: string | nul
 /** What the detail pane can change through acli; description isn't here because acli would flatten its formatting */
 export type WorkItemEdit = { summary?: string; type?: string; addLabels?: string[]; removeLabels?: string[] }
 
-export type WorkItemComment = { author: string; authorAvatar: string | null; created: string; body: string }
 
 export type WorkItemDetail = WorkItem & {
   /** Markdown; attachment images point at IMAGE_HOST sources the renderer loads through the plugin */
@@ -42,7 +43,7 @@ export type WorkItemDetail = WorkItem & {
   labels: string[]
   /** The epic or parent item this one belongs to */
   parent: { key: string; summary: string; type: string } | null
-  comments: WorkItemComment[]
+  comments: AtlassianComment[]
   /** Every URL in the description and comments, for link previews */
   links: string[]
 }

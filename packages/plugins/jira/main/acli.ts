@@ -1,6 +1,9 @@
-import { adfToMarkdown } from '@treeix/atlassian/main/adf'
+import { adfToMarkdown, textToAdf } from '@treeix/atlassian/main/adf'
 import { acli, atlassianSite, failure, run } from '@treeix/atlassian/main/cli'
-import { IMAGE_HOST, type Json, object, orNull, text } from '@treeix/atlassian/shared'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { IMAGE_HOST, type Json, type Mention, object, orNull, text } from '@treeix/atlassian/shared'
 import type { Epic, WorkItem, WorkItemDetail, WorkItemEdit, WorkItemList } from '../shared/types'
 
 const LIST_LIMIT = 200
@@ -85,7 +88,14 @@ export async function workItemDetail(key: string): Promise<WorkItemDetail> {
     reporterAvatar: avatarOf(fields.reporter),
     parent: parentOf(fields.parent),
     labels: Array.isArray(fields.labels) ? fields.labels.filter((label): label is string => typeof label === 'string') : [],
-    comments: comments.map((comment) => ({ author: text(object(comment.author).displayName), authorAvatar: avatarOf(comment.author), created: text(comment.created), body: adfToMarkdown(comment.body, context) })),
+    comments: comments.map((comment) => ({
+      id: text(comment.id),
+      author: text(object(comment.author).displayName),
+      authorAvatar: avatarOf(comment.author),
+      authorId: orNull(text(object(comment.author).accountId)),
+      created: text(comment.created),
+      body: adfToMarkdown(comment.body, context)
+    })),
     links: [...links]
   }
 }
@@ -130,6 +140,12 @@ export async function openEpics(projects: string[]): Promise<Epic[]> {
   return result
 }
 
+/** Keys of the projects the user can see, so terminals link only real work item keys */
+export async function projectKeys(): Promise<string[]> {
+  const raw = await acli(['jira', 'project', 'list', '--paginate', '--json'])
+  return (Array.isArray(raw) ? raw : []).map((project) => text(object(project).key)).filter((key) => PROJECT_KEY.test(key))
+}
+
 /** Your own display name, for the Mine filter; acli only reports the account email */
 export async function currentUserName(): Promise<string | null> {
   const raw = await acli(['jira', 'workitem', 'search', '--jql', 'assignee = currentUser() ORDER BY updated DESC', '--fields', 'assignee', '--limit', '1', '--json'])
@@ -143,8 +159,35 @@ export async function workItemSummary(key: string): Promise<WorkItem> {
   return toWorkItem(raw, host)
 }
 
-export async function commentOnWorkItem(key: string, body: string): Promise<void> {
-  await run(['jira', 'workitem', 'comment', 'create', '--key', key, '--body', body]).catch((reason: unknown) => {
+/** acli reads ADF bodies from a file */
+async function withAdfFile(body: string, mention: Mention | null, use: (file: string) => Promise<unknown>): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), 'treeix-comment-'))
+  const file = join(dir, 'body.json')
+  try {
+    await writeFile(file, JSON.stringify(textToAdf(body, mention)))
+    await use(file)
+  } catch (reason) {
+    throw new Error(failure(reason))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+const COMMENT_ID = /^\d+$/
+const checkedCommentId = (id: string): string => {
+  if (!COMMENT_ID.test(id)) throw new Error(`Not a comment id: ${id}`)
+  return id
+}
+
+/** A reply is a new comment that mentions who it answers, since Jira comments have no threads */
+export const commentOnWorkItem = (key: string, body: string, mention: Mention | null): Promise<void> =>
+  withAdfFile(body, mention, (file) => run(['jira', 'workitem', 'comment', 'create', '--key', checkedKey(key), '--body-file', file]))
+
+export const updateComment = (key: string, id: string, body: string): Promise<void> =>
+  withAdfFile(body, null, (file) => run(['jira', 'workitem', 'comment', 'update', '--key', checkedKey(key), '--id', checkedCommentId(id), '--body-adf', file]))
+
+export async function deleteComment(key: string, id: string): Promise<void> {
+  await run(['jira', 'workitem', 'comment', 'delete', '--key', checkedKey(key), '--id', checkedCommentId(id)]).catch((reason: unknown) => {
     throw new Error(failure(reason))
   })
 }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { adfToMarkdown, confluencePageOf } from './adf'
+import { adfToMarkdown, confluencePageOf, textToAdf } from './adf'
 
 const p = (...content: unknown[]) => ({ type: 'paragraph', content })
 const t = (text: string, marks: unknown[] = []) => ({ type: 'text', text, marks })
@@ -53,4 +53,15 @@ test('adfToMarkdown keeps blocks apart and renders marks, lists, tasks, tables, 
 test('confluencePageOf reads the page id and title', () => {
   expect(confluencePageOf('https://x.atlassian.net/wiki/spaces/Betfeel/pages/76120081/Wallet+Balance+Management')).toEqual({ id: '76120081', title: 'Wallet Balance Management' })
   expect(confluencePageOf('https://x.atlassian.net/browse/BF-1')).toBeNull()
+})
+
+test('textToAdf splits paragraphs and lines and leads with the mention', () => {
+  expect(textToAdf('one\ntwo\n\nthree', { id: 'a1', name: 'Ann' })).toEqual({
+    type: 'doc',
+    version: 1,
+    content: [
+      { type: 'paragraph', content: [{ type: 'mention', attrs: { id: 'a1', text: '@Ann' } }, { type: 'text', text: ' ' }, { type: 'text', text: 'one' }, { type: 'hardBreak' }, { type: 'text', text: 'two' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'three' }] }
+    ]
+  })
 })

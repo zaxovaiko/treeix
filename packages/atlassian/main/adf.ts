@@ -165,3 +165,13 @@ export function convert(raw: unknown, context: AdfContext): string {
 }
 
 export const adfToMarkdown = (raw: unknown, context: AdfContext): string => convert(raw, context).replace(/\n{3,}/g, '\n\n').trim()
+
+/** Plain text as an ADF document: blank lines split paragraphs, single newlines break lines; a mention leads when given */
+export function textToAdf(body: string, mention: { id: string; name: string } | null = null): Json {
+  const paragraphs = body.split(/\n{2,}/).map((block) => ({
+    type: 'paragraph',
+    content: block.split('\n').flatMap((line, index): Json[] => [...(index ? [{ type: 'hardBreak' }] : []), ...(line ? [{ type: 'text', text: line }] : [])])
+  }))
+  if (mention) paragraphs[0].content.unshift({ type: 'mention', attrs: { id: mention.id, text: `@${mention.name}` } }, { type: 'text', text: ' ' })
+  return { type: 'doc', version: 1, content: paragraphs }
+}

@@ -36,13 +36,19 @@ export const atlassianSite = (): Promise<string | null> => {
 }
 export const signedInEmail = (): Promise<string | null> => run(['jira', 'auth', 'status']).then(parseEmail, () => null)
 
-/** REST call for what acli can't do (search, attachments); needs the API token */
-export async function restFetch(path: string, credentials: Credentials | null): Promise<Response> {
+/** REST call for what acli can't do (search, attachments, Confluence comments); needs the API token */
+export async function restFetch(path: string, credentials: Credentials | null, init: { method?: string; json?: unknown } = {}): Promise<Response> {
   if (!credentials) throw new Error('Needs an Atlassian API token. Add one in Settings → Plugins.')
   const host = await atlassianSite()
   if (!host) throw new Error('Sign in with acli jira auth login --web first')
   const response = await fetch(`https://${host}${path}`, {
-    headers: { Authorization: `Basic ${Buffer.from(`${credentials.email}:${credentials.token}`).toString('base64')}`, Accept: 'application/json, */*' }
+    method: init.method,
+    body: init.json === undefined ? undefined : JSON.stringify(init.json),
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${credentials.email}:${credentials.token}`).toString('base64')}`,
+      Accept: 'application/json, */*',
+      ...(init.json === undefined ? {} : { 'Content-Type': 'application/json' })
+    }
   })
   if (response.status === 401 || response.status === 403) throw new Error('Atlassian refused the API token. Check it in Settings → Plugins.')
   if (!response.ok) throw new Error(`Atlassian answered ${response.status}`)
