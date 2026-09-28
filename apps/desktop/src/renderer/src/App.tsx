@@ -1277,8 +1277,7 @@ function App(): React.JSX.Element {
     )
 
   const activePage = openDocTab?.parent ?? appTab
-  // Zen keeps the title bar for its tabs alone
-  const showTitle = shell.title
+  const showTitle = shell.title && !shell.zen
   // Shown even with no workspace yet: its + is where the first one is made
   const showRail = shell.rail && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
@@ -1409,7 +1408,7 @@ function App(): React.JSX.Element {
       ] as const
     ).map(([panel, label]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut: actionKeys(`panel.${panel}`) || undefined, run: () => toggleShellPanel(panel) })),
     { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: actionKeys('app.comments') || undefined, run: () => setDrawerOpen(true) },
-    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone and its tabs', icon: 'maximize', shortcut: actionKeys('shell.zen') || undefined, run: toggleZen },
+    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone', icon: 'maximize', shortcut: actionKeys('shell.zen') || undefined, run: toggleZen },
     { id: 'shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'keyboard', shortcut: actionKeys('app.shortcuts') || undefined, run: () => setSheetOpen(true) },
     { id: 'changed', group: 'Actions', label: 'Toggle changed files', icon: 'list', shortcut: actionKeys('wt.changedFiles') || undefined, run: () => setFilesOpen(!filesOpen) },
     ...panelIds.flatMap((id): Command[] => {
@@ -1780,17 +1779,15 @@ function App(): React.JSX.Element {
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
       {showTitle && (
       <div
-        className={`h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 ${shell.zen ? 'flex' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'} ${chromeless ? '' : '[-webkit-app-region:drag]'}`}
+        className={`h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] ${chromeless ? '' : '[-webkit-app-region:drag]'}`}
       >
         {/* Grid columns as wide as the right side, traffic lights included, so Run command sits in the middle of the window */}
         <div className={`flex min-w-0 flex-1 items-center gap-0.5 ${chromeless ? '' : 'pl-[80px]'}`}>
-        {!shell.zen && (
         <span className="mr-1">
           <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={shell.rail} onClick={() => toggleShellPanel('rail')}>
             <Icon name="panel" className="size-3.5" />
           </IconButton>
         </span>
-        )}
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
         {tabs.map((tab, index) => {
           const letter = leaderOf(tab.id)?.toUpperCase()
@@ -1846,8 +1843,6 @@ function App(): React.JSX.Element {
         </button>
         </div>
         </div>
-        {!shell.zen && (
-        <>
         <button
           title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
           onClick={() => setPaletteOpen(true)}
@@ -1893,8 +1888,6 @@ function App(): React.JSX.Element {
         </IconButton>
         {titleBarItems(true)}
         </div>
-        </>
-        )}
       </div>
       )}
 
