@@ -158,9 +158,9 @@ function PullRequestsCount(): React.JSX.Element | null {
   const { scopeRepoPaths } = useHost()
   const [, bump] = useReducer((count: number) => count + 1, 0)
   useEffect(() => onPullRequestsUpdated(bump), [])
-  const count = cachedPullRequests(scopeKeyOf(scopeRepoPaths ?? []))?.pullRequests.length ?? 0
+  const count = cachedPullRequests(scopeKeyOf(scopeRepoPaths ?? []))?.pullRequests.filter((pr) => pr.state === 'open').length ?? 0
   if (!count) return null
-  return <span title={`${count} pull request${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">{count}</span>
+  return <span title={`${count} open pull request${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">{count}</span>
 }
 
 function PullRequestSettings(): React.JSX.Element {
