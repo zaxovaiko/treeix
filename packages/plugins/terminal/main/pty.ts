@@ -16,7 +16,7 @@ const MAX_BUFFERED_CHARS = 256_000
 const SPAWN_COLS = 100
 const SPAWN_ROWS = 30
 
-type Entry = { pty: IPty | null; owner: WebContents; meta: string; chunks: string[]; size: number; exitCode: number | null; status?: AgentHookStatus }
+type Entry = { pty: IPty | null; owner: WebContents; meta: string; chunks: string[]; size: number; exitCode: number | null; status?: AgentHookStatus; bracketedPaste: boolean }
 const sessions = new Map<string, Entry>()
 const watchedOwners = new WeakSet<WebContents>()
 const output = coalesceOutput((id, data) => {
@@ -64,7 +64,7 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
     }
   })
   const moved = folder === cwd ? '' : `\x1b[33m${cwd} no longer exists, so this session opened in ${folder}\x1b[0m\r\n`
-  const entry: Entry = { pty, owner, meta, chunks: moved ? [moved] : [], size: moved.length, exitCode: null }
+  const entry: Entry = { pty, owner, meta, chunks: moved ? [moved] : [], size: moved.length, exitCode: null, bracketedPaste: false }
   sessions.set(id, entry)
   if (moved) output.push(id, moved)
   killSessionsWithWindow(owner)
@@ -72,6 +72,9 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
     // Append-only with an occasional trim: slicing a 256k string on every chunk showed up in main-process profiles
     entry.chunks.push(data)
     entry.size += data.length
+    const on = data.lastIndexOf('\x1b[?2004h')
+    const off = data.lastIndexOf('\x1b[?2004l')
+    if (on !== off) entry.bracketedPaste = on > off
     if (entry.size > MAX_BUFFERED_CHARS * 2) {
       const kept = entry.chunks.join('').slice(-MAX_BUFFERED_CHARS)
       entry.chunks = [kept]
@@ -146,6 +149,12 @@ export const sessionEntries = (): { id: string; meta: string; alive: boolean; st
   [...sessions].map(([id, entry]) => ({ id, meta: entry.meta, alive: entry.pty !== null, status: entry.status, screen: () => entry.chunks.join('') }))
 
 export const writeTerminal = (id: string, data: string): void => sessions.get(id)?.pty?.write(data)
+
+/** Bracketed paste only when the program asked for it; others (bash 3.2) would get the markers as typed text */
+export function pasteTerminal(id: string, text: string): void {
+  const entry = sessions.get(id)
+  entry?.pty?.write(entry.bracketedPaste ? `\x1b[200~${text}\x1b[201~` : text)
+}
 
 export function resizeTerminal(id: string, cols: number, rows: number): void {
   if (cols > 0 && rows > 0) sessions.get(id)?.pty?.resize(cols, rows)

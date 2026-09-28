@@ -1,6 +1,6 @@
 import type { McpTool } from '@treeix/sdk/main'
 import { readTranscript, lastReplies } from './transcripts'
-import { listeningPorts, sessionEntries, writeTerminal } from './pty'
+import { listeningPorts, pasteTerminal, sessionEntries, writeTerminal } from './pty'
 
 const SCREEN_LINES = 60
 /** Lets the agent's input box take the pasted prompt before Enter sends it */
@@ -82,7 +82,7 @@ export function sessionTools(): McpTool[] {
         if (!session.alive) throw new Error('That session has exited')
         if (typeof args.text !== 'string' || !args.text) throw new Error('text is required')
         // Bracketed paste keeps newlines in the message instead of sending it line by line
-        writeTerminal(session.id, `\x1b[200~${args.text}\x1b[201~`)
+        pasteTerminal(session.id, args.text)
         await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
         writeTerminal(session.id, '\r')
         return `Sent to ${session.id}`

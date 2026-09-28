@@ -960,7 +960,8 @@ export function sendText(id: string, text: string, submit: boolean): void {
   }
   const write = (): void => {
     userInput(id, text)
-    bridge.send('write', id, `\x1b[200~${text}\x1b[201~`)
+    const bracketed = findTerminal(id)?.terminal.modes.bracketedPasteMode ?? true
+    bridge.send('write', id, bracketed ? `\x1b[200~${text}\x1b[201~` : text)
     if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
   }
   if (findSession(id)?.status === 'dormant') {
