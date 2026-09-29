@@ -86,7 +86,7 @@ export function groupPullRequests(pullRequests: PullRequest[]): PullRequestGroup
   return groups.filter((group) => group.pullRequests.length > 0)
 }
 
-const REVIEW_MARKS: Record<Exclude<ReviewStatus['state'], 'unreviewed'>, { label: string; className: string; icon?: 'check' | 'alert' | 'comment' }> = {
+export const REVIEW_MARKS: Record<Exclude<ReviewStatus['state'], 'unreviewed'>, { label: string; className: string; icon?: 'check' | 'alert' | 'comment' }> = {
   requested: { label: 'Review requested', className: 'bg-amber-400/15 text-amber-400' },
   approved: { label: 'Approved', className: 'bg-emerald-400/12 text-emerald-400', icon: 'check' },
   changes: { label: 'Changes requested', className: 'bg-red-400/12 text-red-400', icon: 'alert' },

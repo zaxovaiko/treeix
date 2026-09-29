@@ -2,7 +2,26 @@ import { type FilterGroup, FilterSearch as GenericFilterSearch, type FilterToken
 import { Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
 import type { PullRequest } from '../shared/types'
-import { prefix, ProviderMark, UserAvatar } from './pullRequestUtils'
+import { prefix, ProviderMark, REVIEW_MARKS, UserAvatar } from './pullRequestUtils'
+
+type ReviewKey = keyof typeof REVIEW_MARKS
+
+/** Someone asking for changes outranks your own state, as it blocks the merge */
+const reviewOf = (pr: PullRequest): ReviewKey | null =>
+  pr.review?.changesRequested ? 'changes' : pr.review && pr.review.state !== 'unreviewed' ? pr.review.state : null
+const isReviewKey = (value: string): value is ReviewKey => Object.hasOwn(REVIEW_MARKS, value)
+
+const COMMENT_BUCKETS = [
+  { max: 0, label: 'No comments' },
+  { max: 5, label: '1-5 comments' },
+  { max: 20, label: '6-20 comments' },
+  { max: Infinity, label: 'Over 20 comments' }
+] as const
+// Lists cached by an older version have no count, hence the ??
+const commentBucket = (pr: PullRequest): string | null => {
+  const count = pr.commentCount ?? null
+  return count === null ? null : (COMMENT_BUCKETS.find((bucket) => count <= bucket.max)?.label ?? null)
+}
 
 export type PullRequestFilter = FilterToken
 
@@ -15,6 +34,14 @@ const GROUPS: FilterGroup<PullRequest>[] = [
     labelOf: baseName,
     mark: (_value, sample) => (sample ? <ProviderMark provider={sample.provider} className="size-3.5" /> : null)
   },
+  {
+    kind: 'review',
+    label: 'Review',
+    valueOf: reviewOf,
+    labelOf: (value) => (isReviewKey(value) ? REVIEW_MARKS[value].label : value),
+    mark: (value) => <Icon name={(isReviewKey(value) && REVIEW_MARKS[value].icon) || 'eye'} className="size-3.5 text-muted-foreground" />
+  },
+  { kind: 'comments', label: 'Comments', valueOf: commentBucket, mark: () => <Icon name="comment" className="size-3.5 text-muted-foreground" /> },
   { kind: 'branch', label: 'Target branches', valueOf: (pr) => pr.targetBranch, mark: () => <Icon name="branch" className="size-3.5 text-muted-foreground" /> },
   {
     kind: 'text',
@@ -38,5 +65,5 @@ export function FilterSearch({
   filters: PullRequestFilter[]
   onChange: (filters: PullRequestFilter[]) => void
 }): React.JSX.Element {
-  return <GenericFilterSearch items={pullRequests} groups={GROUPS} tokens={filters} onChange={onChange} placeholder="Search, or filter by person, repository, branch" />
+  return <GenericFilterSearch items={pullRequests} groups={GROUPS} tokens={filters} onChange={onChange} placeholder="Search, or filter by person, repository, review, comments, branch" />
 }
