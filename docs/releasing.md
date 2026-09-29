@@ -1,6 +1,8 @@
 # Releasing
 
-A `v*` tag runs `.github/workflows/release.yml`, which builds, signs, notarizes and publishes the GitHub release.
+Every push to `main` that touches the app runs `.github/workflows/release.yml`, which picks the next patch version,
+builds, signs, notarizes and publishes the GitHub release, tagging the pushed commit. For a minor or major, set it in
+`apps/desktop/package.json` and push; the workflow ships that version as is.
 That release is also the update feed: `latest-mac.yml` next to the zip is what the app reads.
 
 ## In-app updates
@@ -60,7 +62,7 @@ with the certificate's, so its own import always fails (`security set-key-partit
    sh apps/desktop/scripts/signing-secrets.sh notary ~/Downloads/AuthKey_ABC123.p8 ABC123 <issuer-uuid>
    ```
 
-3. Tag and push. Notarization adds a few minutes to the run.
+3. Push to `main`. Notarization adds a few minutes to the run.
 
 Locally the same build is:
 

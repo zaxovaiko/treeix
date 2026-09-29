@@ -1,11 +1,19 @@
 name: Release
 
+# Every push to main that touches the app ships a patch release. The tag is created by the release itself,
+# so tags don't trigger this workflow, and pushes made with GITHUB_TOKEN never trigger workflows at all
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths-ignore: ['apps/landing/**', 'docs/**', 'marketing/**', '.claude/**', '**.md']
 
 permissions:
   contents: write
+
+# Queued, never cancelled: each run has to see the tag the previous one created
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   dmg:
@@ -13,14 +21,26 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Check the tag matches the app version
+      # A version bumped by hand in package.json (a minor or major) ships as is; otherwise the patch after the
+      # latest tag. The bump lives only in this build, main is never committed to
+      - name: Pick the version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version=$(bun --print "require('./apps/desktop/package.json').version")
-          test "$tag" = "$version" || { echo "tag $GITHUB_REF_NAME does not match apps/desktop/package.json $version"; exit 1; }
+          pinned=$(bun --print "require('./apps/desktop/package.json').version")
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          if [ -z "$(git tag -l "v$pinned")" ]; then
+            version="$pinned"
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            version="$major.$minor.$((patch + 1))"
+          fi
+          npm version --no-git-tag-version --prefix apps/desktop "$version" > /dev/null
+          echo "TAG=v$version" >> "$GITHUB_ENV"
+          echo "Releasing v$version"
 
       - run: bun install
 
@@ -79,10 +99,11 @@ jobs:
         run: |
           cd apps/desktop/dist
           # A draft until every file is up: installed copies see the release only once latest-mac.yml is there
-          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 ||
-            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" --clobber \
+          # The tag is created on this commit when the draft is published
+          gh release view "$TAG" > /dev/null 2>&1 ||
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          gh release upload "$TAG" --clobber \
             Treeix-arm64.dmg Treeix-arm64.dmg.blockmap \
             Treeix-*-arm64-mac.zip Treeix-*-arm64-mac.zip.blockmap \
             latest-mac.yml
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          gh release edit "$TAG" --draft=false --latest

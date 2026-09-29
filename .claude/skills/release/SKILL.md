@@ -1,35 +1,37 @@
 ---
 name: release
-description: Cut a Treeix release - bump the version, tag it, push, and watch GitHub Actions build and publish the DMG. Use on "cut a release", "ship a new version", "release 0.2.0", "publish a build", "/release".
+description: Cut a Treeix release - every push to main ships a patch; bump package.json for a minor or major, push, and watch GitHub Actions build and publish the DMG. Use on "cut a release", "ship a new version", "release 0.2.0", "publish a build", "/release".
 ---
 
 # Cut a release
 
-`.github/workflows/release.yml` builds and publishes on any `v*` tag. Your job is the bump, the tag, and watching the run.
+`.github/workflows/release.yml` ships a release on every push to `main` that touches the app (landing, docs,
+marketing, `.claude` and markdown-only pushes are skipped). A patch needs nothing but the push. Your job is a
+minor or major bump when asked, and watching the run.
 
-## Before tagging
+## Before pushing
 
-1. Working tree clean and on `main`, with `origin/main` already up to date. If not, stop and say so.
+1. Working tree clean and on `main`. If not, stop and say so.
 2. `bun run typecheck && bun test` pass locally. The workflow runs both, so a failure here is a failed release, not a surprise.
 
-## Bump and tag
+## Minor or major
 
-The tag must equal `apps/desktop/package.json` `version` with a `v` in front, or the workflow fails its first check on purpose.
+The workflow ships `apps/desktop/package.json` `version` as is when no tag has it yet; otherwise it releases the
+patch after the latest tag. It never commits the bump, so `package.json` lags behind patch releases on purpose.
 
 ```sh
-# <version> is bare, e.g. 0.2.0
-bun --print "1" >/dev/null                        # sanity: bun is on PATH
+# <version> is bare, e.g. 0.6.0
 npm version --no-git-tag-version --prefix apps/desktop <version>
 git commit -am "chore: release v<version>"
-git tag v<version>
 ```
 
-Ask before `git push`, every time, including the tag:
+Ask before `git push`, every time:
 
 ```sh
 git push origin main
-git push origin v<version>
 ```
+
+The release creates the tag itself; never push a `v*` tag by hand, nothing listens for it.
 
 ## Watch the run
 
@@ -43,7 +45,7 @@ The release ends up with `Treeix-arm64.dmg` and the matching `.zip` attached. Th
 
 ## When it fails
 
-- **Version mismatch** - the tag and `apps/desktop/package.json` disagree. Delete the tag (`git push origin :v<version>`), fix, tag again.
+- **Wrong version** - a tag was pushed by hand or a bump in `package.json` went backwards. Delete the stray tag (`git push origin :v<version>`) and push again.
 - **`node-gyp` on the runner** - the native `mac-window` module needs Xcode command line tools; the `macos-14` image has them. A failure here is usually a dependency bump, not the runner.
 - **Release already exists** - `gh release create` refuses to overwrite. Delete the release and the tag before retrying.
 
