@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { type ChildProcess, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { ToolStatus } from '../shared/types'
 import type { ToolDefinition } from '@treeix/sdk/main'
@@ -6,6 +6,17 @@ import { withoutAgentVariables } from './env'
 
 const exec = promisify(execFile)
 const TIMEOUT_MS = 15_000
+
+/** Checks still running when the app quits would outlive it, e.g. a CLI that never answers */
+const running = new Set<ChildProcess>()
+process.on('exit', () => running.forEach((child) => child.kill()))
+
+/** The user's login shell, so results match what terminal sessions find on PATH */
+function loginShell(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  const call = exec(process.env.SHELL ?? '/bin/zsh', args, { timeout: TIMEOUT_MS, env: withoutAgentVariables(process.env) })
+  running.add(call.child)
+  return call.finally(() => running.delete(call.child))
+}
 
 type Tool = ToolDefinition
 
@@ -35,10 +46,7 @@ async function latestRelease({ releases }: Tool): Promise<string> {
 /** Same login shell as terminal sessions, so the result matches what sessions will find on PATH */
 async function inLoginShell(command: string): Promise<{ output: string; failed: boolean }> {
   try {
-    const { stdout, stderr } = await exec(process.env.SHELL ?? '/bin/zsh', ['-lc', command], {
-      timeout: TIMEOUT_MS,
-      env: withoutAgentVariables(process.env)
-    })
+    const { stdout, stderr } = await loginShell(['-lc', command])
     return { output: `${stdout}\n${stderr}`, failed: false }
   } catch (reason: unknown) {
     const stream = (key: 'stdout' | 'stderr'): string => (reason instanceof Error && key in reason ? String(Reflect.get(reason, key)) : '')
@@ -79,7 +87,7 @@ export async function commandExists(name: string): Promise<boolean> {
   if (!isSafeCommandName(name)) return false
   try {
     // The name reaches the shell as $1, never interpolated into the command string, so it can't inject
-    await exec(process.env.SHELL ?? '/bin/zsh', ['-lc', 'command -v -- "$1"', '_', name], { timeout: TIMEOUT_MS, env: withoutAgentVariables(process.env) })
+    await loginShell(['-lc', 'command -v -- "$1"', '_', name])
     return true
   } catch {
     return false
