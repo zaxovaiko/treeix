@@ -207,7 +207,7 @@ export function JiraTasks(): React.JSX.Element {
         'jira.comment': () => focusDetailField(COMMENT_INPUT),
         'jira.worktree': ticket.openWorktree,
         'jira.newWorktree': ticket.newWorktree,
-        'jira.agentComments': ticket.addToComments,
+        'jira.agentComments': () => ticket.addToComments(),
         'jira.open': ticket.openInBrowser,
         'jira.copyBranch': ticket.copyBranch,
         'jira.type': () => setPicker('type')

@@ -3,7 +3,7 @@ import { acli, atlassianSite, failure, run } from '@treeix/atlassian/main/cli'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { IMAGE_HOST, type Json, type Mention, object, orNull, text } from '@treeix/atlassian/shared'
+import { type AtlassianComment, IMAGE_HOST, type Json, type Mention, object, orNull, text } from '@treeix/atlassian/shared'
 import type { Epic, WorkItem, WorkItemDetail, WorkItemEdit, WorkItemList } from '../shared/types'
 
 const LIST_LIMIT = 200
@@ -88,16 +88,36 @@ export async function workItemDetail(key: string): Promise<WorkItemDetail> {
     reporterAvatar: avatarOf(fields.reporter),
     parent: parentOf(fields.parent),
     labels: Array.isArray(fields.labels) ? fields.labels.filter((label): label is string => typeof label === 'string') : [],
-    comments: comments.map((comment) => ({
-      id: text(comment.id),
-      author: text(object(comment.author).displayName),
-      authorAvatar: avatarOf(comment.author),
-      authorId: orNull(text(object(comment.author).accountId)),
-      created: text(comment.created),
-      body: adfToMarkdown(comment.body, context)
-    })),
+    comments: threadComments(
+      comments.map((comment) => ({
+        id: text(comment.id),
+        author: text(object(comment.author).displayName),
+        authorAvatar: avatarOf(comment.author),
+        authorId: orNull(text(object(comment.author).accountId)),
+        created: text(comment.created),
+        body: adfToMarkdown(comment.body, context),
+        replies: []
+      }))
+    ),
     links: [...links]
   }
+}
+
+/**
+ * Jira has no threads, so a comment opening with a mention of an earlier commenter nests under the thread
+ * of that person's latest comment, one level deep like Confluence
+ */
+export function threadComments(comments: AtlassianComment[]): AtlassianComment[] {
+  const roots: AtlassianComment[] = []
+  const threadOf = new Map<string, AtlassianComment>()
+  for (const comment of comments) {
+    const answered = [...threadOf.keys()].filter((name) => comment.body.startsWith(`@${name}`)).sort((a, b) => b.length - a.length)[0]
+    const thread = answered ? threadOf.get(answered) : undefined
+    if (thread) thread.replies?.push(comment)
+    else roots.push(comment)
+    threadOf.set(comment.author, thread ?? comment)
+  }
+  return roots
 }
 
 export function parentOf(raw: unknown): WorkItemDetail['parent'] {

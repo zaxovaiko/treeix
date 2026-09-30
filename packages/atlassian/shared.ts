@@ -13,7 +13,7 @@ export const object = (value: unknown): Json => (isJson(value) ? value : {})
 export const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 export const orNull = (value: string): string | null => value || null
 
-/** A Jira or Confluence comment; Jira has no threads, so its replies stay empty */
+/** A Jira or Confluence comment; Jira has no threads, so its replies are guessed from leading mentions */
 export type AtlassianComment = {
   id: string
   author: string

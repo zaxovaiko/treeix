@@ -9,7 +9,8 @@ import { timeAgo } from '@treeix/app/time'
 import { CopyButton, EmptyState, errorMessage, UserAvatar } from '@treeix/app/ui'
 import type { Repo, Worktree } from '@treeix/shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
-import { Comments } from '@treeix/atlassian/renderer/Comments'
+import { Comments, commentCount } from '@treeix/atlassian/renderer/Comments'
+import type { AtlassianComment } from '@treeix/atlassian/shared'
 import type { Epic, JiraPerson, WorkItem, WorkItemDetail } from '../shared/types'
 import { detailCache, jiraApi, resolveImage, selection, TTL } from './api'
 import { branchFor, isBranchFor } from './branch'
@@ -145,11 +146,13 @@ export function useTicket(
     newWorktree,
     /** The worktree already made for the item, else a new one */
     openWorktree: (): void => (linked[0] ? host.openWorktree(linked[0].worktree.path) : newWorktree()),
-    addToComments: (): void => {
+    myName,
+    /** The item, or one of its comments, as a reference in the agent comments */
+    addToComments: (comment?: AtlassianComment): void => {
       // The item's worktree, the selected one when it is among them
       const worktreePath = (linked.find(({ worktree }) => worktree.path === host.selectedWorktree) ?? linked[0])?.worktree.path ?? host.selectedWorktree
       if (!worktreePath) return host.flash('Select a worktree first')
-      const filePath = `${item.key} ${item.summary}`
+      const filePath = comment ? `${item.key} comment by ${comment.author} ${comment.id}` : `${item.key} ${item.summary}`
       if (host.comments.some((comment) => comment.worktreePath === worktreePath && comment.filePath === filePath)) {
         return host.flash(`${item.key} is already in the comments on ${baseName(worktreePath)}`)
       }
@@ -161,12 +164,14 @@ export function useTicket(
         code: '',
         // The reference alone keeps the prompt short and never goes stale; the description rides along for
         // agents on a machine without acli, which is what decides the default in the comments drawer
-        text: `Jira ${item.key}${item.url ? ` ${item.url}` : ''}`,
-        body: [item.summary, detail?.description].filter(Boolean).join('\n\n'),
+        text: comment
+          ? `Jira ${item.key} comment ${comment.id} by ${comment.author}${item.url ? ` ${item.url}?focusedCommentId=${comment.id}` : ''}`
+          : `Jira ${item.key}${item.url ? ` ${item.url}` : ''}`,
+        body: comment ? comment.body : [item.summary, detail?.description].filter(Boolean).join('\n\n'),
         tool: 'acli',
         kind: 'reference'
       })
-      host.flash(`Added ${item.key} to comments on ${baseName(worktreePath)}`)
+      host.flash(`Added ${comment ? `${comment.author}'s comment` : item.key} to comments on ${baseName(worktreePath)}`)
     },
     copyBranch: (): void => {
       copyText(branchFor(item))
@@ -432,7 +437,7 @@ export function TicketMain({
                 onOpenChange={(open) => (!open ? setPicker(null) : ticket.linked.length > 0 ? setPicker('repo') : ticket.newWorktree())}
                 onPick={(id) => (id.startsWith('open:') ? host.openWorktree(id.slice('open:'.length)) : ticket.createWorktree(id.slice('new:'.length)))}
               />
-              <button onClick={ticket.addToComments} title="Add to agent comments (a)" className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
+              <button onClick={() => ticket.addToComments()} title="Add to agent comments (a)" className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
                 <Icon name="comment" className="size-3.5" />
                 To agent
                 <Kbd hint>a</Kbd>
@@ -522,7 +527,9 @@ export function TicketMain({
               comments={detail.comments}
               target={item.key}
               inputId={COMMENT_INPUT}
-              title={<SectionTitle>Comments {detail.comments.length || ''}</SectionTitle>}
+              title={<SectionTitle>Comments {commentCount(detail.comments) || ''}</SectionTitle>}
+              isMine={(comment) => comment.author === ticket.myName}
+              onAgent={ticket.addToComments}
               resolveImage={resolveImage}
               onChanged={ticket.reload}
               actions={{

@@ -11,7 +11,15 @@ export type CommentActions = {
   remove: (comment: AtlassianComment) => Promise<void>
 }
 
-type Shared = { actions: CommentActions; resolveImage: (src: string) => Promise<string> | null; onChanged: () => void }
+type Shared = {
+  actions: CommentActions
+  resolveImage: (src: string) => Promise<string> | null
+  onChanged: () => void
+  /** Whether edit and delete show; everyone's when absent */
+  isMine?: (comment: AtlassianComment) => boolean
+  /** Queues the comment for an agent */
+  onAgent?: (comment: AtlassianComment) => void
+}
 
 /** Comments and every reply under them */
 export const commentCount = (comments: AtlassianComment[]): number => comments.reduce((total, comment) => total + 1 + commentCount(comment.replies ?? []), 0)
@@ -80,8 +88,10 @@ function CommentBox({
 
 const ACTION = 'rounded px-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40'
 
-function CommentCard({ comment, actions, resolveImage, onChanged }: Shared & { comment: AtlassianComment }): React.JSX.Element {
+function CommentCard({ comment, ...shared }: Shared & { comment: AtlassianComment }): React.JSX.Element {
+  const { actions, resolveImage, onChanged, isMine, onAgent } = shared
   const host = useHost()
+  const mine = isMine?.(comment) ?? true
   const [mode, setMode] = useState<'view' | 'edit' | 'reply'>('view')
   const [removing, setRemoving] = useState(false)
   // Saving plain text over an attachment image would leave a dead placeholder link in its place
@@ -109,15 +119,24 @@ function CommentCard({ comment, actions, resolveImage, onChanged }: Shared & { c
           {/* Comments cached before ids were kept can't be changed until the item reloads */}
           {comment.id && mode === 'view' && (
             <span className="flex shrink-0 gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+              {onAgent && (
+                <button onClick={() => onAgent(comment)} className={ACTION}>
+                  Add to agent
+                </button>
+              )}
               <button onClick={() => setMode('reply')} className={ACTION}>
                 Reply
               </button>
-              <button onClick={() => setMode('edit')} disabled={hasImages} title={hasImages ? 'Has images, which editing here would drop' : undefined} className={ACTION}>
-                Edit
-              </button>
-              <button onClick={remove} disabled={removing} className={ACTION}>
-                {removing ? 'Deleting...' : 'Delete'}
-              </button>
+              {mine && (
+                <>
+                  <button onClick={() => setMode('edit')} disabled={hasImages} title={hasImages ? 'Has images, which editing here would drop' : undefined} className={ACTION}>
+                    Edit
+                  </button>
+                  <button onClick={remove} disabled={removing} className={ACTION}>
+                    {removing ? 'Deleting...' : 'Delete'}
+                  </button>
+                </>
+              )}
             </span>
           )}
         </div>
@@ -129,7 +148,7 @@ function CommentCard({ comment, actions, resolveImage, onChanged }: Shared & { c
       </div>
       {(comment.replies?.length || mode === 'reply') && (
         <div className="ml-6 flex flex-col gap-2">
-          {comment.replies?.map((reply) => <CommentCard key={reply.id} comment={reply} actions={actions} resolveImage={resolveImage} onChanged={onChanged} />)}
+          {comment.replies?.map((reply) => <CommentCard key={reply.id} comment={reply} {...shared} />)}
           {mode === 'reply' && <CommentBox placeholder={`Reply to ${comment.author}`} label="Reply" onSubmit={(body) => actions.add(body, comment).then(done)} onCancel={() => setMode('view')} />}
         </div>
       )}
