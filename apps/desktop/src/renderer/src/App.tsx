@@ -1,5 +1,5 @@
 import { type DiffLineAnnotation, PatchDiff } from '@pierre/diffs/react'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   type Attachment,
   extractLines,
@@ -47,6 +47,7 @@ import { menuActions, registerActionRunner, runAction, subscribeRunners } from '
 import { inlineByDefault, refreshToolStatus } from './toolStatus'
 import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
 import { WORKTREE_ACTIONS } from './actions'
+import { arrangeTabs, moveTab, type TabSide } from './titleBarTabs'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
 
@@ -58,6 +59,8 @@ const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.inc
 const DEFAULT_TAB = 'terminal'
 /** Where Worktrees sits among the plugin tabs */
 const WORKTREES_ORDER = 30
+/** Page tabs dragged in the title bar carry their id */
+const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
 
 /** A browser comment's page, in the built-in browser when it's enabled */
 function openPage(url: string): void {
@@ -251,8 +254,11 @@ function App(): React.JSX.Element {
   const [docTabs, setDocTabs] = useState<DocumentTab[]>([])
   const { loaded: plugins, ready: pluginsReady } = usePlugins()
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
-  /** The title bar row: Worktrees sits among the plugin tabs, all in `order` */
-  const tabs = [{ id: 'worktrees', label: 'Worktrees', icon: 'branch' as const, order: WORKTREES_ORDER }, ...pluginTabs].sort((a, b) => a.order - b.order)
+  /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, left side first */
+  const tabSides = arrangeTabs([{ id: 'worktrees', label: 'Worktrees', icon: 'branch' as const, order: WORKTREES_ORDER }, ...pluginTabs].sort((a, b) => a.order - b.order), settings.titleBarTabs)
+  const tabs = [...tabSides.left, ...tabSides.right]
+  const [draggingTab, setDraggingTab] = useState(false)
+  const [tabDrop, setTabDrop] = useState<{ side: TabSide; beforeId: string | null } | null>(null)
   // Settings and document tabs stay single; a split page whose plugin was turned off just closes
   const splitPage = splitTab !== appTab && !shell.zen ? tabs.find((tab) => tab.id === splitTab) : undefined
   const splitPluginTab = pluginTabs.find((tab) => tab.id === splitPage?.id)
@@ -1478,6 +1484,73 @@ function App(): React.JSX.Element {
     )
   ]
 
+  const tabDropAt = (event: React.DragEvent<HTMLElement>, side: TabSide): { side: TabSide; beforeId: string | null } => {
+    const before = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-page-tab]')].find((tab) => {
+      const box = tab.getBoundingClientRect()
+      return event.clientX < box.left + box.width / 2
+    })
+    return { side, beforeId: before?.dataset.pageTab ?? null }
+  }
+  const endTabDrag = (): void => {
+    setDraggingTab(false)
+    setTabDrop(null)
+  }
+  /** A side of the title bar that takes dragged page tabs; it lets the window be dragged by it only while no tab is */
+  const tabDropProps = (side: TabSide): React.HTMLAttributes<HTMLDivElement> => ({
+    onDragOver: (event) => {
+      if (!event.dataTransfer.types.includes(PAGE_TAB_MIME)) return
+      event.preventDefault()
+      const next = tabDropAt(event, side)
+      // From the latest state: a dragleave between the zone's children may have just cleared it
+      setTabDrop((current) => (current?.side === next.side && current.beforeId === next.beforeId ? current : next))
+    },
+    onDragLeave: (event) => {
+      if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setTabDrop(null)
+    },
+    onDrop: (event) => {
+      const id = event.dataTransfer.getData(PAGE_TAB_MIME)
+      if (!id) return
+      event.preventDefault()
+      const { beforeId } = tabDropAt(event, side)
+      updateSettings({ titleBarTabs: moveTab({ left: tabSides.left.map((tab) => tab.id), right: tabSides.right.map((tab) => tab.id) }, id, side, beforeId) })
+      endTabDrag()
+    }
+  })
+  const tabDropMark = <span className="relative h-5 w-0 shrink-0"><span className="absolute inset-y-0 -left-px w-0.5 rounded-full bg-foreground/60" /></span>
+  const tabDropZone = (side: TabSide): string => (draggingTab ? `[-webkit-app-region:no-drag] rounded-md outline-1 outline-border outline-dashed ${tabDrop?.side === side ? 'bg-foreground/5' : ''}` : '')
+  const pageTab = (tab: (typeof tabs)[number], side: TabSide): React.ReactNode => {
+    const index = tabs.indexOf(tab)
+    const letter = leaderOf(tab.id)?.toUpperCase()
+    const compact = settings.compactTabs && appTab !== tab.id
+    const digitKey = digitLabel('tabs', index + 1)
+    const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
+    return (
+      <Fragment key={tab.id}>
+        {tabDrop?.side === side && tabDrop.beforeId === tab.id && tabDropMark}
+        <button
+          data-page-tab={tab.id}
+          title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag to reorder or move to the other side`}
+          draggable
+          // No state updates in dragstart: React re-rendering there makes Chromium cancel the drag
+          onDragStart={(event) => {
+            event.dataTransfer.setData(PAGE_TAB_MIME, tab.id)
+            event.dataTransfer.effectAllowed = 'move'
+            setTimeout(() => setDraggingTab(true))
+          }}
+          onDragEnd={endTabDrag}
+          onClick={() => goPage(tab.id)}
+          onContextMenu={(event) => pageTabMenu(event, tab)}
+          className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
+        >
+          {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
+          {!compact && tab.label}
+          {'Badge' in tab && tab.Badge && <tab.Badge />}
+          {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
+        </button>
+      </Fragment>
+    )
+  }
+
   const tabClass = (active: boolean): string =>
     `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag] ${
       active ? 'bg-foreground/8 text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -1788,27 +1861,9 @@ function App(): React.JSX.Element {
             <Icon name="panel" className="size-3.5" />
           </IconButton>
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
-        {tabs.map((tab, index) => {
-          const letter = leaderOf(tab.id)?.toUpperCase()
-          const compact = settings.compactTabs && appTab !== tab.id
-          const digitKey = digitLabel('tabs', index + 1)
-          const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
-          return (
-            <button
-              key={tab.id}
-              title={keys ? `${tab.label} (${keys})` : tab.label}
-              onClick={() => goPage(tab.id)}
-              onContextMenu={(event) => pageTabMenu(event, tab)}
-              className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
-            >
-              {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
-              {!compact && tab.label}
-              {'Badge' in tab && tab.Badge && <tab.Badge />}
-              {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
-            </button>
-          )
-        })}
+        <div {...tabDropProps('left')} className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone('left')}`}>
+        {tabSides.left.map((tab) => pageTab(tab, 'left'))}
+        {tabDrop?.side === 'left' && tabDrop.beforeId === null && tabDropMark}
         {docTabs.map((tab) => (
           <div
             key={tab.key}
@@ -1853,6 +1908,10 @@ function App(): React.JSX.Element {
           <Kbd hint>{actionKeys('app.palette')}</Kbd>
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">
+        <div {...tabDropProps('right')} className={`flex h-7 min-w-0 flex-1 items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone('right')}`}>
+          {tabSides.right.map((tab) => pageTab(tab, 'right'))}
+          {tabDrop?.side === 'right' && tabDrop.beforeId === null && tabDropMark}
+        </div>
         {titleBarItems(false)}
         {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
         {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
