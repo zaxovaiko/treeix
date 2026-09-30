@@ -5,7 +5,8 @@ import { Icon } from './Icon'
 import { digitLabel } from './settings'
 import { baseName } from './Sidebar'
 import { Kbd, type ListRowProps, type SessionSummary, useListNav, useShell, useZone, Zone } from '@treeix/sdk'
-import { isAgent } from './agents'
+import { type Activity, ActivityMark, NEWS } from './activity'
+import { activityOf } from './sessionUi'
 import { useSessions } from './plugins'
 import {
   deleteWorkspace,
@@ -20,11 +21,8 @@ import {
   WORKSPACE_COLORS
 } from './workspaces'
 
-function activityOf(sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): 'input' | 'running' | null {
-  const mine = sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces))
-  if (mine.some((session) => session.status === 'input')) return 'input'
-  return mine.some((session) => session.status === 'running' && isAgent(session.kind)) ? 'running' : null
-}
+const workspaceActivity = (sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): Activity =>
+  activityOf(sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces)))
 
 function Tile({
   active,
@@ -40,7 +38,7 @@ function Tile({
 }: {
   active: boolean
   title: string
-  activity: 'input' | 'running' | null
+  activity: Activity
   color?: string
   onClick: () => void
   onContextMenu?: (event: React.MouseEvent) => void
@@ -62,10 +60,10 @@ function Tile({
         }`}
       >
         {children}
-        {activity && (
-          <span
-            className={`absolute -top-0.5 -right-0.5 size-2 rounded-full ring-2 ring-card ${activity === 'input' ? 'bg-amber-400' : 'bg-emerald-400'}`}
-          />
+        {NEWS.includes(activity) && (
+          <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-card">
+            <ActivityMark activity={activity} className="size-2" />
+          </span>
         )}
       </span>
       {leaderKey && (
@@ -133,7 +131,7 @@ export function WorkspaceRail({
           active={currentId === workspace.id}
           title={`${workspace.name} · ${workspace.repoPaths.map(baseName).join(', ') || 'no projects'}${index < 9 ? ` (${[`G ${index + 1}`, digitLabel('workspaces', index + 1)].filter(Boolean).join(', ')})` : ''}`}
           color={workspace.color}
-          activity={activityOf(sessions, workspace, repos, workspaces)}
+          activity={workspaceActivity(sessions, workspace, repos, workspaces)}
           onClick={() => onSwitch(workspace.id)}
           drag={dragProps(workspace, index)}
           cursor={zone === 'rail' ? nav.rowProps(index) : undefined}

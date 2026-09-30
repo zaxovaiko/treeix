@@ -20,7 +20,8 @@ export const usageLabel = ({ input, output, cached, costUsd }: SessionUsage): st
   [`${tokens(input)} in`, `${tokens(output)} out`, cached > 0 && `${tokens(cached)} cached`, costUsd !== undefined && `$${costUsd.toFixed(2)}`].filter(Boolean).join(' · ')
 
 const GROUPS = [
-  ['input', 'Needs input'],
+  ['input', 'Needs you'],
+  ['done', 'Finished, not seen yet'],
   ['running', 'Working'],
   ['idle', 'Idle'],
   ['closed', 'Recently closed']

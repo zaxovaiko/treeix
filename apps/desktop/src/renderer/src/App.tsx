@@ -13,7 +13,8 @@ import {
   type ReviewComment
 } from '../../shared/comments'
 import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
-import { getAgents, isAgent } from './agents'
+import { getAgents } from './agents'
+import { activityOf } from './sessionUi'
 import { keptPages, keyboardPage, visitedIn } from './keepAlive'
 import { CleanupDialog } from './CleanupDialog'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
@@ -1089,11 +1090,9 @@ function App(): React.JSX.Element {
   }
   const fileComments = worktreeComments.filter((comment) => !comment.kind && comment.filePath === file?.path)
 
-  const activity: Record<string, 'input' | 'running'> = {}
-  for (const session of sessions) {
-    if (session.status === 'input') activity[session.worktreePath] = 'input'
-    else if (session.status === 'running' && isAgent(session.kind)) activity[session.worktreePath] ??= 'running'
-  }
+  const activity = Object.fromEntries(
+    [...new Set(sessions.map((session) => session.worktreePath))].map((path) => [path, activityOf(sessions.filter((session) => session.worktreePath === path))])
+  )
 
   const deleteComment = (comment: ReviewComment): void =>
     setComments(comments.filter((candidate) => candidate.id !== comment.id))

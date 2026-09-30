@@ -4,13 +4,21 @@ import { openMenu } from '@treeix/app/contextMenu'
 import { worktreeLabel } from '@treeix/app/sessionUi'
 import { usePersisted } from '@treeix/app/ui'
 import { agentOr, isAgent } from '@treeix/app/agents'
+import { type Activity, ActivityMark } from '@treeix/app/activity'
 import { useHost, useListNav } from '@treeix/sdk'
 import { type Task, taskPanes } from './tasks'
-import { NameInput, renaming, startRename, StatusMark, switchTask, taskLabel, taskStatus } from './taskUi'
+import { NameInput, renaming, startRename, switchTask, taskLabel, taskStatus } from './taskUi'
 import { ClosedSessions, openTab } from './TerminalPanel'
 import { type ClosedSession, deleteTask, renameTask, type Session } from './terminals'
 
 /** Tasks of the workspace with what their sessions need; j/k move, ⏎ goes to the task's terminal, e or double-click renames */
+/** The group's pill counts the agents in its most pressing state */
+const COUNTED: Partial<Record<Activity, { label: string; className: string }>> = {
+  input: { label: 'waiting for you', className: 'bg-amber-400/15 text-amber-400' },
+  done: { label: 'finished, not seen yet', className: 'bg-blue-400/15 text-blue-400' },
+  running: { label: 'working', className: 'bg-emerald-400/10 text-emerald-400' }
+}
+
 export function TaskList({
   tasks,
   current,
@@ -48,8 +56,9 @@ export function TaskList({
         {tasks.map((task, row) => {
           const status = taskStatus(task, sessions)
           const panes = taskPanes(task)
-          const count = status === 'idle' ? 0 : sessions.filter((session) => panes.includes(session.id) && session.status === status).length
           const agentsHere = sessions.filter((session) => panes.includes(session.id) && isAgent(session.kind))
+          const counted = COUNTED[status]
+          const count = counted ? agentsHere.filter((session) => session.status === status).length : 0
           const agents = agentsHere.length
           const firstAgent = agents > 0 ? agentOr(agentsHere[0].kind) : null
           const selected = task.id === current?.id
@@ -72,7 +81,7 @@ export function TaskList({
             >
               {/* Fixed height, so the hover buttons don't make the row grow */}
               <div className="flex h-5 min-w-0 items-center gap-2">
-                <StatusMark status={status} />
+                <ActivityMark activity={status} />
                 {renamingId === task.id ? (
                   <NameInput value={taskLabel(task, repos)} label="Group name" onSave={(name) => name !== task.name && renameTask(task.id, name)} onDone={(input) => input.closest<HTMLElement>('[data-task-list]')?.focus()} />
                 ) : (
@@ -105,11 +114,8 @@ export function TaskList({
                     </span>
                   </>
                 )}
-                {count > 0 && (
-                  <span
-                    title={`${count} ${status === 'input' ? 'waiting for input' : 'working'}`}
-                    className={`shrink-0 rounded-full px-1.5 text-[10.5px] leading-4 font-medium tabular-nums ${status === 'input' ? 'bg-amber-400/15 text-amber-400' : 'bg-emerald-400/10 text-emerald-400'}`}
-                  >
+                {counted && count > 0 && (
+                  <span title={`${count} ${counted.label}`} className={`shrink-0 rounded-full px-1.5 text-[10.5px] leading-4 font-medium tabular-nums ${counted.className}`}>
                     {count}
                   </span>
                 )}

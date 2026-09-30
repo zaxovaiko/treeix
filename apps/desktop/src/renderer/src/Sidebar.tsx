@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { focusZone, isPageKey, useListNav, useZone, type ZoneId } from '@treeix/sdk'
 import type { Branch, Repo, Worktree } from '../../shared/types'
 import { copyText } from './contextMenu'
+import { type Activity, ActivityMark, NEWS } from './activity'
 import { Icon } from './Icon'
 import { groupOpen, toggleIn, useSettings } from './settings'
 import { EmptyState, FoldAllButton, IconButton, Popup, readStored, usePersisted } from './ui'
@@ -77,7 +78,7 @@ export function Sidebar({
   scanning: boolean
   selected: string | null
   /** Agent session state per worktree path, shown as a dot */
-  activity: Record<string, 'input' | 'running'>
+  activity: Record<string, Activity>
   onSelect: (worktreePath: string) => void
   onRescan: () => void
   onRepoMenu: (event: React.MouseEvent, repo: Repo) => void
@@ -299,9 +300,7 @@ export function Sidebar({
             <Icon name={worktree.path === row.repo.path ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
             <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/85'}`}>{branchLabel(worktree)}</span>
             {worktree.changedFiles > 0 && <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>}
-            {state && (
-              <span title={state === 'input' ? 'An agent needs input' : 'An agent is running'} className={`size-1.5 shrink-0 rounded-full ${state === 'input' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-            )}
+            {state && NEWS.includes(state) && <ActivityMark activity={state} className="size-2" />}
           </span>
           <span className="w-full truncate pl-5 text-[10.5px] text-muted-foreground">{worktree.path === row.repo.path ? 'main worktree' : baseName(worktree.path)}</span>
         </button>

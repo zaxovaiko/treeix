@@ -6,6 +6,7 @@ import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscrib
 import { agentOr, getAgent, isAgent, resumeCommandFor, startCommand } from '@treeix/app/agents'
 import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
+import { agentState, agentStatus } from './agentStatus'
 import { findFileLinks, findIssueLinks, findWebLinks } from './fileLinks'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
@@ -101,12 +102,14 @@ function applyTerminalSettings(): void {
 
 /** What each agent session last reported through its hooks, see the terminal plugin's main hooks */
 const hookStatus = new Map<string, AgentHookStatus>()
+/** Turns that ended since the last status check, which a turn shorter than a check would otherwise slip past */
+const finishedTurns = new Set<string>()
 bridge.on('status', (id, status) => {
   if (typeof id !== 'string' || (status !== 'input' && status !== 'working' && status !== 'done')) return
   const previous = hookStatus.get(id)
   hookStatus.set(id, status)
-  // Claude's idle reminder a minute after its turn ended says nothing new
-  if (status === 'done' || (status === 'input' && previous !== 'done' && previous !== 'input')) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
+  if (status === 'done') finishedTurns.add(id)
+  if (status === 'done' || (status === 'input' && previous !== 'input')) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
 })
 
 /**
@@ -114,7 +117,11 @@ bridge.on('status', (id, status) => {
  * so a key pressed while the agent waits counts as the answer
  */
 function userInput(id: string, data: string): void {
-  if (hookStatus.get(id) === 'input' && !isTerminalReply(data)) hookStatus.set(id, 'working')
+  const hooked = hookStatus.get(id)
+  if (isTerminalReply(data) || hooked === undefined || hooked === 'done') return
+  // Esc or ⌃C interrupts Claude or declines what it asked, and no hook reports that its turn ended
+  if (data === '\x1b' || data === '\x03') hookStatus.set(id, 'done')
+  else if (hooked === 'input') hookStatus.set(id, 'working')
 }
 
 /** A system notification while the window is in the background; clicking it shows the session */
@@ -126,9 +133,6 @@ function notifyAgent(id: string, what: string): void {
 }
 
 const ACTIVE_WINDOW_MS = 2000
-// ponytail: screen-scraped prompt detection, switch to Claude Code hooks if it misfires
-const WAITING_FOR_INPUT =
-  /Do you want to|❯\s*1\.\s*Yes|Yes, and don't ask|\[y\/n\]|\(y\/n\)|Allow command|Would you like to run|Press Enter to continue/i
 
 /** A closed session, kept so it can be started again; agent sessions resume their conversation, in their task when it still exists */
 export type ClosedSession = SessionMeta & { id: string; endedAt: number; taskId?: string }
@@ -298,12 +302,16 @@ function visibleScreen(terminal: Terminal): string {
 const PLAN_PATH = /\.claude\/plans\/([\w.-]+\.md)/g
 const printedPlan = (screen: string, current: string | null): string | null => [...screen.matchAll(PLAN_PATH)].at(-1)?.[1] ?? current
 
+/** On screen in the focused window, so a finished turn there needs no mark */
+const isShown = (session: TerminalSession): boolean => document.hasFocus() && (session.terminal.element?.offsetWidth ?? 0) > 0
+
 function detectStatus(session: TerminalSession, screen: string): SessionStatus {
   if (session.status === 'exited' || session.status === 'dormant') return session.status
-  // Claude reports through its hooks; agents without them, or sessions started before, are read off the screen
-  const hooked = hookStatus.get(session.id)
-  if (isAgent(session.kind) && (hooked ? hooked === 'input' : WAITING_FOR_INPUT.test(screen))) return 'input'
-  return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
+  // A shell is busy while it prints; an agent's TUI redraws while it waits, so agents go by what they report or show
+  if (!isAgent(session.kind)) return Date.now() - session.lastOutput < ACTIVE_WINDOW_MS ? 'running' : 'idle'
+  const finished = finishedTurns.delete(session.id)
+  const state = agentState(hookStatus.get(session.id), session.kind === 'claude', screen)
+  return agentStatus(session.status, state, finished, isShown(session))
 }
 
 setInterval(() => {
@@ -910,6 +918,7 @@ export function killSession(id: string): void {
     if (session.status !== 'dormant') bridge.send('kill', id)
     dropGpu(id)
     hookStatus.delete(id)
+    finishedTurns.delete(id)
     session.terminal.dispose()
   }
   const taskId = taskOf(state.tasks, id)?.id

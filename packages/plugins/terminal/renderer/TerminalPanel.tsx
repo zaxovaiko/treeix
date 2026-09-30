@@ -5,7 +5,8 @@ import { actionKeys, shortcutOf } from '@treeix/shared/keymap'
 import { toAccelerator } from '@treeix/shared/shortcut'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
-import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
+import { ActivityMark } from '@treeix/app/activity'
+import { activityOf, KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { agentOr, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
@@ -15,8 +16,8 @@ import { errorMessage, ResizeGrip } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { type DropEdge, edgeAt } from './paneLayout'
-import { activeTabOf, aggregateStatus, type Task, type TerminalTab, tabPanes } from './tasks'
-import { NameInput, renaming, startRename, StatusMark } from './taskUi'
+import { activeTabOf, type Task, type TerminalTab, tabPanes } from './tasks'
+import { NameInput, renaming, startRename } from './taskUi'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
   archiveClosedSession,
@@ -358,7 +359,7 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
   // A split tab's panes rename in their own headers
   const editing = renamingId === shown.id && panes.length === 1
   const active = tab.id === activeTabOf(task)?.id
-  const status = aggregateStatus(sessions.filter((session) => panes.includes(session.id)).map((session) => session.status))
+  const activity = activityOf(sessions.filter((session) => panes.includes(session.id)))
   // ⌘9 is the last tab, like browsers
   const digit = index === count - 1 && index >= 8 ? 9 : index < 8 ? index + 1 : null
   return (
@@ -410,7 +411,7 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
               {panes.length}
             </span>
           )}
-          {status !== 'idle' && <StatusMark status={status} />}
+          {activity !== 'none' && <ActivityMark activity={activity} />}
           {digit && <span data-key-hint="" className="shrink-0 text-[10.5px] text-muted-foreground/60">⌘{digit}</span>}
         </button>
       )}

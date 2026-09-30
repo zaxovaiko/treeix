@@ -72,8 +72,11 @@ export type PanelContribution = {
 
 /** An agent id, open because users define their own in Settings; the table of known ids is `@treeix/app/agents` */
 export type SessionKind = string
-/** `dormant`: restored after a relaunch but not started yet; it starts once shown, revealed or sent text */
-export type SessionStatus = 'running' | 'input' | 'idle' | 'exited' | 'dormant'
+/**
+ * `input`: an agent asks a question or for permission; `done`: an agent finished its turn and it has not been on screen since;
+ * `dormant`: restored after a relaunch but not started yet; it starts once shown, revealed or sent text
+ */
+export type SessionStatus = 'running' | 'input' | 'done' | 'idle' | 'exited' | 'dormant'
 
 /** What the app knows about a terminal or agent session, without the terminal itself */
 export type SessionSummary = {

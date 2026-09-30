@@ -1,4 +1,3 @@
-import type { SessionStatus } from '@treeix/sdk'
 import { type DropEdge, MAX_PANES, neighborPane, type PaneLayout, placePane, remapPanes, removePane } from './paneLayout'
 
 /** A tab of a task: terminals split in columns, and the one last focused */
@@ -16,7 +15,6 @@ export type Task = {
   activeTab: string | null
 }
 
-export type TaskStatus = 'input' | 'running' | 'idle'
 
 export const tabPanes = (tab: TerminalTab): string[] => tab.layout.flat()
 export const taskPanes = (task: Task): string[] => task.tabs.flatMap(tabPanes)
@@ -30,8 +28,6 @@ export function shownPanes(tasks: Task[], selected: Record<string, string>, work
   return tab ? tabPanes(tab) : []
 }
 
-/** Needs input wins over working, working over idle */
-export const aggregateStatus = (statuses: SessionStatus[]): TaskStatus => (statuses.includes('input') ? 'input' : statuses.includes('running') ? 'running' : 'idle')
 
 export function newTask(fields: Pick<Task, 'workspaceId' | 'worktreePath'> & Partial<Pick<Task, 'name'>>): Task {
   return { id: crypto.randomUUID(), name: '', tabs: [], activeTab: null, ...fields }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { addTab, aggregateStatus, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskPanes, tasksFromSessions, uniqueName } from './tasks'
+import { addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskPanes, tasksFromSessions, uniqueName } from './tasks'
 
 const task = (...sessions: string[]) => sessions.reduce(addTab, newTask({ workspaceId: 'w', worktreePath: '/repo' }))
 
@@ -38,10 +38,7 @@ test('sessions from before tasks group into one task per worktree, in shown orde
   expect(parseTasks([{ id: 1 }, null])).toEqual([])
 })
 
-test('status and unique names', () => {
-  expect(aggregateStatus(['idle', 'running', 'input'])).toBe('input')
-  expect(aggregateStatus(['exited', 'running'])).toBe('running')
-  expect(aggregateStatus([])).toBe('idle')
+test('unique names', () => {
   expect(uniqueName('repo · dev', [])).toBe('repo · dev')
   expect(uniqueName('repo · dev', ['repo · dev', 'repo · dev 2'])).toBe('repo · dev 3')
 })

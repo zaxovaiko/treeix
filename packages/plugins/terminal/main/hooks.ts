@@ -12,6 +12,16 @@ const report = (status: AgentHookStatus): { hooks: { type: 'command'; command: s
   hooks: [{ type: 'command', command: `[ -n "$TREEIX_SESSION_ID" ] && printf ${status} > "$TREEIX_AGENT_STATUS/$TREEIX_SESSION_ID" 2>/dev/null; true` }]
 })
 
+/** Tools that wait for the user, a question or a plan to approve, report input; the rest report work. The tool's JSON comes on stdin */
+const toolReport = {
+  hooks: [
+    {
+      type: 'command',
+      command: `[ -n "$TREEIX_SESSION_ID" ] && { if grep -Eq '"tool_name": ?"(AskUserQuestion|ExitPlanMode)"'; then printf input; else printf working; fi > "$TREEIX_AGENT_STATUS/$TREEIX_SESSION_ID"; } 2>/dev/null; true`
+    }
+  ]
+}
+
 /** Claude settings with hooks that report when it needs the user (a permission prompt or idle question), works again, or ends its turn */
 export function withStatusHooks(settings: string): string {
   let parsed: Record<string, unknown> = {}
@@ -22,7 +32,14 @@ export function withStatusHooks(settings: string): string {
     // Unreadable settings from a plugin still get the hooks
   }
   const working = report('working')
-  const hooks = { Notification: [report('input')], UserPromptSubmit: [working], PreToolUse: [{ matcher: '*', ...working }], PostToolUse: [{ matcher: '*', ...working }], Stop: [report('done')] }
+  const hooks = {
+    // Not idle_prompt: Claude's reminder a minute after its turn ended is no question
+    Notification: [{ matcher: 'permission_prompt|elicitation_dialog', ...report('input') }],
+    UserPromptSubmit: [working],
+    PreToolUse: [{ matcher: '*', ...toolReport }],
+    PostToolUse: [{ matcher: '*', ...working }],
+    Stop: [report('done')]
+  }
   return JSON.stringify({ ...parsed, hooks })
 }
 
