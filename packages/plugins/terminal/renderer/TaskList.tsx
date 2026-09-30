@@ -1,51 +1,14 @@
-import { useRef } from 'react'
 import type { Repo } from '@treeix/shared/types'
 import { Icon } from '@treeix/app/Icon'
 import { openMenu } from '@treeix/app/contextMenu'
 import { worktreeLabel } from '@treeix/app/sessionUi'
 import { usePersisted } from '@treeix/app/ui'
 import { agentOr, isAgent } from '@treeix/app/agents'
-import { definePluginSettings, useHost, useListNav } from '@treeix/sdk'
+import { useHost, useListNav } from '@treeix/sdk'
 import { type Task, taskPanes } from './tasks'
-import { StatusMark, switchTask, taskLabel, taskStatus } from './taskUi'
+import { NameInput, renaming, startRename, StatusMark, switchTask, taskLabel, taskStatus } from './taskUi'
 import { ClosedSessions, openTab } from './TerminalPanel'
 import { type ClosedSession, deleteTask, renameTask, type Session } from './terminals'
-
-/** The task whose name is being edited in place */
-const renaming = definePluginSettings('terminal-rename', () => ({ id: null as string | null }))
-export const startRename = (id: string): void => renaming.update({ id })
-
-/** Edits the name in place: ⏎ or leaving saves, esc cancels; focus goes back to the list */
-function NameInput({ task, placeholder }: { task: Task; placeholder: string }): React.JSX.Element {
-  // Unmounting may blur the input after ⏎ or esc already finished
-  const finished = useRef(false)
-  const done = (name: string | null): void => {
-    if (finished.current) return
-    finished.current = true
-    renaming.update({ id: null })
-    if (name !== null && name !== task.name) renameTask(task.id, name)
-  }
-  return (
-    <input
-      autoFocus
-      defaultValue={task.name || placeholder}
-      aria-label="Group name"
-      onFocus={(event) => event.currentTarget.select()}
-      onBlur={(event) => done(event.currentTarget.value.trim())}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== 'Escape') return
-        event.preventDefault()
-        event.stopPropagation()
-        const list = event.currentTarget.closest<HTMLElement>('[data-task-list]')
-        done(event.key === 'Enter' ? event.currentTarget.value.trim() : null)
-        list?.focus()
-      }}
-      onClick={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-      className="h-5 min-w-0 flex-1 rounded bg-foreground/10 px-1 text-xs text-foreground outline-none"
-    />
-  )
-}
 
 /** Tasks of the workspace with what their sessions need; j/k move, ⏎ goes to the task's terminal, e or double-click renames */
 export function TaskList({
@@ -111,7 +74,7 @@ export function TaskList({
               <div className="flex h-5 min-w-0 items-center gap-2">
                 <StatusMark status={status} />
                 {renamingId === task.id ? (
-                  <NameInput task={task} placeholder={taskLabel(task, repos)} />
+                  <NameInput value={taskLabel(task, repos)} label="Group name" onSave={(name) => name !== task.name && renameTask(task.id, name)} onDone={(input) => input.closest<HTMLElement>('[data-task-list]')?.focus()} />
                 ) : (
                   <>
                     <span className={`min-w-0 truncate text-xs ${selected ? 'font-medium text-foreground' : 'text-foreground/80'}`}>{taskLabel(task, repos)}</span>

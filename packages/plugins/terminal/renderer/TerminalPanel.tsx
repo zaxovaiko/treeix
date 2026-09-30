@@ -16,7 +16,7 @@ import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, aggregateStatus, type Task, type TerminalTab, tabPanes } from './tasks'
-import { StatusMark } from './taskUi'
+import { NameInput, renaming, startRename, StatusMark } from './taskUi'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
   archiveClosedSession,
@@ -33,6 +33,7 @@ import {
   otherView,
   pasteClipboard,
   placePane,
+  renameSession,
   restoreClosedSession,
   selectAllTerminal,
   setActiveTab,
@@ -133,12 +134,17 @@ const sessionEntries = (session: Session, task: Task | null, flash: (message: st
   },
   otherView(session) === 'chat' && { label: 'Open as chat', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
   otherView(session) === 'terminal' && { label: 'Open in terminal', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
+  { label: 'Rename…', run: () => startRename(session.id) },
   null,
   { label: 'Copy working directory', run: () => copyText(session.worktreePath) },
   { label: 'Reveal in Finder', run: () => window.api.revealInFinder(session.worktreePath) },
   null,
   { label: 'Close session', accelerator: 'CmdOrCtrl+W', run: () => killSession(session.id) }
 ]
+
+const SessionNameInput = ({ session }: { session: Session }): React.JSX.Element => (
+  <NameInput value={session.title} label="Tab name" onSave={(name) => renameSession(session.id, name)} onDone={focusShown} />
+)
 
 const MIN_PANE_PX = 80
 
@@ -210,6 +216,7 @@ function TerminalPane({
   horizontal: boolean
 }): React.JSX.Element {
   const host = useHost()
+  const { id: renamingId } = renaming.use()
   const hostRef = useRef<HTMLDivElement>(null)
   const [dropEdge, setDropEdge] = useState<DropEdge | null>(null)
   const edgeOf = (event: React.DragEvent): DropEdge => {
@@ -275,14 +282,20 @@ function TerminalPane({
       {/* A lone pane goes without: its tab carries the title, close, menu and dragging */}
       {framed && (
         <div
-          draggable
+          draggable={renamingId !== session.id}
           onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, session.id)}
           onContextMenu={(event) => openMenu(event, sessionEntries(session, task, host.flash))}
           className={`flex h-7 shrink-0 cursor-grab items-center gap-2 border-b border-border bg-card px-2 active:cursor-grabbing ${active ? 'text-foreground' : 'text-foreground/60'}`}
         >
           <Icon name="grip" className="-mx-1 size-3 shrink-0 text-muted-foreground/50" />
           <KindBadge kind={session.kind} />
-          <span className={`min-w-0 truncate text-xs ${active ? 'font-medium' : ''}`}>{session.title}</span>
+          {renamingId === session.id ? (
+            <SessionNameInput session={session} />
+          ) : (
+            <span onDoubleClick={() => startRename(session.id)} className={`min-w-0 truncate text-xs ${active ? 'font-medium' : ''}`}>
+              {session.title}
+            </span>
+          )}
           {session.view === 'chat' && <ChatBadge kind={session.kind} />}
           {task?.worktreePath !== session.worktreePath && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>}
           <span className="flex-1" />
@@ -337,13 +350,16 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
   const shown = sessions.find((session) => session.id === tab.focus) ?? sessions.find((session) => session.id === panes[0])
   if (!shown) return null
   const [dropping, setDropping] = useState(false)
+  const { id: renamingId } = renaming.use()
+  // A split tab's panes rename in their own headers
+  const editing = renamingId === shown.id && panes.length === 1
   const active = tab.id === activeTabOf(task)?.id
   const status = aggregateStatus(sessions.filter((session) => panes.includes(session.id)).map((session) => session.status))
   // ⌘9 is the last tab, like browsers
   const digit = index === count - 1 && index >= 8 ? 9 : index < 8 ? index + 1 : null
   return (
     <div
-      draggable
+      draggable={!editing}
       onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, panes.join(' '))}
       onContextMenu={(event) => openMenu(event, sessionEntries(shown, task, host.flash))}
       onDragOver={(event) => {
@@ -365,26 +381,35 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
       }}
       className={`group/tab flex h-6 max-w-56 min-w-0 shrink-0 items-center rounded-md text-xs ${active || dropping ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
     >
-      <button
-        title={`${shown.title}${digit ? ` (⌘${digit} in a terminal)` : ''}`}
-        onClick={() => {
-          setActiveTab(task.id, tab.id)
-          focusShown()
-        }}
-        className="flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2"
-      >
-        <KindBadge kind={shown.kind} />
-        <span className="min-w-0 truncate">{shown.title}</span>
-        {shown.view === 'chat' && <ChatBadge kind={shown.kind} />}
-        {panes.length > 1 && (
-          <span title={`${panes.length} panes`} className="flex shrink-0 items-center gap-0.5 text-[10.5px] text-muted-foreground tabular-nums">
-            <Icon name="splitRight" className="size-3" />
-            {panes.length}
-          </span>
-        )}
-        {status !== 'idle' && <StatusMark status={status} />}
-        {digit && <span data-key-hint="" className="shrink-0 text-[10.5px] text-muted-foreground/60">⌘{digit}</span>}
-      </button>
+      {editing ? (
+        // Beside the button, not in it: a space typed inside a button presses it
+        <span className="flex h-6 min-w-0 items-center gap-1.5 pr-1 pl-2">
+          <KindBadge kind={shown.kind} />
+          <SessionNameInput session={shown} />
+        </span>
+      ) : (
+        <button
+          title={`${shown.title}${digit ? ` (⌘${digit} in a terminal)` : ''}`}
+          onDoubleClick={() => startRename(shown.id)}
+          onClick={() => {
+            setActiveTab(task.id, tab.id)
+            focusShown()
+          }}
+          className="flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2"
+        >
+          <KindBadge kind={shown.kind} />
+          <span className="min-w-0 truncate">{shown.title}</span>
+          {shown.view === 'chat' && <ChatBadge kind={shown.kind} />}
+          {panes.length > 1 && (
+            <span title={`${panes.length} panes`} className="flex shrink-0 items-center gap-0.5 text-[10.5px] text-muted-foreground tabular-nums">
+              <Icon name="splitRight" className="size-3" />
+              {panes.length}
+            </span>
+          )}
+          {status !== 'idle' && <StatusMark status={status} />}
+          {digit && <span data-key-hint="" className="shrink-0 text-[10.5px] text-muted-foreground/60">⌘{digit}</span>}
+        </button>
+      )}
       <button
         title="Close tab; its sessions go to History"
         aria-label="Close tab"

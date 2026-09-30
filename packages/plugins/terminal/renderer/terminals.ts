@@ -337,6 +337,10 @@ export function createTask(name: string, worktreePath: string): string {
   return task.id
 }
 
+/** An empty name hands naming back to the program */
+export const renameSession = (id: string, title: string): void =>
+  update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title: title || session.title, renamed: title !== '' } : session)) })
+
 export const renameTask = (id: string, name: string): void => setTasks(mapTask(id, (task) => ({ ...task, name })))
 
 /** Ends the task's sessions, which stay in the history, and forgets the task; asks first when processes are running, since shells and dev servers can't be resumed */
@@ -500,7 +504,8 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
   // Programs name their window (Claude Code: the conversation topic, zsh themes: command or folder); that names the session
   terminal.onTitleChange((raw) => {
     const title = terminalTitle(raw)
-    if (title && findSession(id)?.title !== title) update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)) })
+    const current = findSession(id)
+    if (title && !current?.renamed && current?.title !== title) update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)) })
   })
   const status: SessionStatus = dormant ? 'dormant' : exitCode === null ? 'running' : 'exited'
   const session: TerminalSession = { ...meta, view: 'terminal', id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false, planName: null }
@@ -512,7 +517,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
 const spawnSession = (meta: SessionMeta, command: string | undefined, id?: string, size = SPAWN_SIZE): Promise<string> =>
   bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), id })
 
-const metaOf = ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId, view }: SessionMeta): SessionMeta => ({ worktreePath, kind, title, startedAt, workspaceId, agentSessionId, view })
+const metaOf = ({ worktreePath, kind, title, renamed, startedAt, workspaceId, agentSessionId, view }: SessionMeta): SessionMeta => ({ worktreePath, kind, title, renamed, startedAt, workspaceId, agentSessionId, view })
 
 function newMeta(worktreePath: string, kind: SessionKind, view: SessionView): SessionMeta {
   const same = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind && session.view === view).length

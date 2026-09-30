@@ -14,6 +14,8 @@ export type SessionMeta = {
   /** Agent conversation id: chosen at start for terminals, given by the agent for chats; a relaunch resumes exactly it */
   agentSessionId: string | null
   view: SessionView
+  /** Named by the user, so the program's own titles no longer replace it */
+  renamed?: boolean
   /** Hidden from History */
   archived?: boolean
 }
