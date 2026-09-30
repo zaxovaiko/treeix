@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import { app } from 'electron'
 import { withoutAgentVariables } from './env'
 import type { McpContent, McpTool } from '@treeix/sdk/main'
+import { isJson } from '../shared/json'
 
 /** Newest first; an agent asking for one of these gets it back, anything else gets the newest */
 const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
@@ -34,13 +35,11 @@ export function registerMcpTool(tool: McpTool): () => void {
 type Request = { id?: string | number | null; method?: unknown; params?: unknown }
 type Reply = { result: unknown } | { error: { code: number; message: string } }
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-
 async function callTool(params: Record<string, unknown>): Promise<{ content: McpContent[]; isError?: boolean }> {
   const tool = tools.get(String(params.name))
   if (!tool) return { content: [{ type: 'text', text: `No tool named ${String(params.name)}; the plugin that offers it may be off` }], isError: true }
   try {
-    const result = await tool.run(isObject(params.arguments) ? params.arguments : {})
+    const result = await tool.run(isJson(params.arguments) ? params.arguments : {})
     return { content: typeof result === 'string' ? [{ type: 'text', text: result }] : result }
   } catch (reason) {
     return { content: [{ type: 'text', text: reason instanceof Error ? reason.message : String(reason) }], isError: true }
@@ -50,7 +49,7 @@ async function callTool(params: Record<string, unknown>): Promise<{ content: Mcp
 /** One JSON-RPC message; null for notifications, which get no answer */
 export async function answer(request: Request): Promise<Reply | null> {
   if (request.id === undefined || request.id === null) return null
-  const params = isObject(request.params) ? request.params : {}
+  const params = isJson(request.params) ? request.params : {}
   switch (request.method) {
     case 'initialize': {
       const asked = String(params.protocolVersion)
@@ -127,7 +126,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   } catch {
     return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Not JSON' } })
   }
-  if (!isObject(message)) return send(400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batches are not supported' } })
+  if (!isJson(message)) return send(400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batches are not supported' } })
   const reply = await answer(message)
   if (!reply) return send(202)
   send(200, { jsonrpc: '2.0', id: message.id, ...reply })

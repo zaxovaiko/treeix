@@ -7,10 +7,7 @@ export type CredentialsStatus = { email: string | null; hasToken: boolean }
 
 export type Credentials = { email: string; token: string }
 
-export type Json = Record<string, unknown>
-export const isJson = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value)
-export const object = (value: unknown): Json => (isJson(value) ? value : {})
-export const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+export { type Json, isJson, object, text } from '@treeix/shared/json'
 export const orNull = (value: string): string | null => value || null
 
 /** A Jira or Confluence comment; Jira has no threads, so its replies are guessed from leading mentions */

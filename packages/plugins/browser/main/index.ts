@@ -1,6 +1,7 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
+import { readJsonFile } from '@treeix/host/paths'
 import { join } from 'node:path'
-import { session, webContents } from 'electron'
+import { type IpcMainInvokeEvent, session, type WebContents, webContents } from 'electron'
 import { BROWSER_PARTITION } from '@treeix/host/webviewPolicy'
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { ImportInfo } from '../shared/types'
@@ -14,28 +15,33 @@ const isImportInfo = (value: unknown): value is ImportInfo =>
   value === null ||
   (typeof value === 'object' && 'browser' in value && typeof value.browser === 'string' && 'profile' in value && typeof value.profile === 'string' && 'at' in value && typeof value.at === 'number')
 
+/** Only pages embedded by the window asking may be reached, so one window can't reach another's pages */
+function ownGuest(event: IpcMainInvokeEvent, guestId: number): WebContents | null {
+  const guest = webContents.fromId(guestId)
+  return guest && guest.hostWebContents === event.sender ? guest : null
+}
+
 const plugin: MainPlugin = {
   activate: (context) => {
     context.handle('devServerCommand', (_, folder: string) => (typeof folder === 'string' ? devServerCommand(folder) : null))
-    // Only pages embedded by the window asking may be wired, so one window can't reach another's pages
     context.handle('attach', (event, guestId: number, tabId: unknown) => {
-      const guest = webContents.fromId(guestId)
-      if (!guest || guest.hostWebContents !== event.sender) return
+      const guest = ownGuest(event, guestId)
+      if (!guest) return
       watchGuest(guest, context)
       if (typeof tabId === 'string') registerTab(tabId, guest)
     })
     browserTools(context).forEach(context.mcpTool)
     context.handle('responseBody', (event, guestId: number, requestId: string) => {
-      const guest = webContents.fromId(guestId)
-      return guest && guest.hostWebContents === event.sender ? responseBody(guest, requestId) : null
+      const guest = ownGuest(event, guestId)
+      return guest && responseBody(guest, requestId)
     })
     context.handle('capture', (event, guestId: number, rect: { x: number; y: number; width: number; height: number }, viewport: { width: number; height: number }) => {
-      const guest = webContents.fromId(guestId)
-      return guest && guest.hostWebContents === event.sender ? captureElement(guest, rect, viewport) : null
+      const guest = ownGuest(event, guestId)
+      return guest && captureElement(guest, rect, viewport)
     })
     context.handle('devtools', (event, guestId: number) => {
-      const guest = webContents.fromId(guestId)
-      if (!guest || guest.hostWebContents !== event.sender) return
+      const guest = ownGuest(event, guestId)
+      if (!guest) return
       if (guest.isDevToolsOpened()) guest.closeDevTools()
       else guest.openDevTools({ mode: 'detach' })
     })
@@ -54,12 +60,8 @@ const plugin: MainPlugin = {
       return result
     })
     context.handle('importInfo', async (): Promise<ImportInfo> => {
-      try {
-        const info: unknown = JSON.parse(await readFile(infoPath(), 'utf8'))
-        return isImportInfo(info) ? info : null
-      } catch {
-        return null
-      }
+      const info = await readJsonFile(infoPath())
+      return isImportInfo(info) ? info : null
     })
     context.handle('clearData', async () => {
       const browser = session.fromPartition(BROWSER_PARTITION)

@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { errorMessage } from '@treeix/shared/errors'
+import { list } from '@treeix/shared/json'
+import { readStored } from '@treeix/app/storage'
 
 export type Entry<T> = { value: T; fetchedAt: number }
 
@@ -23,15 +26,7 @@ export type Cache<T> = {
 /** Survives restarts, so a tab opens on what it showed last time while fresh data loads behind it */
 export function persistentCache<T>(name: string, max = MAX_ENTRIES): Cache<T> {
   const key = `cache.${name}`
-  const load = (): Map<string, Entry<T>> => {
-    try {
-      const stored: unknown = JSON.parse(localStorage.getItem(key) ?? '[]')
-      return new Map(Array.isArray(stored) ? stored.filter((entry): entry is [string, Entry<T>] => Array.isArray(entry) && typeof entry[0] === 'string' && isEntry(entry[1])) : [])
-    } catch {
-      return new Map()
-    }
-  }
-  const entries = load()
+  const entries = new Map(list(readStored(key), (entry): entry is [string, Entry<T>] => Array.isArray(entry) && typeof entry[0] === 'string' && isEntry(entry[1])))
   const save = (): void => {
     const kept = trimEntries([...entries], max)
     entries.clear()
@@ -100,7 +95,7 @@ export function useCached<T>(cache: Cache<T>, id: string, ttlMs: number, load: (
           if (!cancelled) setState({ id, value, fetchedAt: Date.now() })
         },
         (reason: unknown) => {
-          if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
+          if (!cancelled) setError(errorMessage(reason))
         }
       )
       .finally(() => {

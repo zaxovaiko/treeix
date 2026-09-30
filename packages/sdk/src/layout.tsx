@@ -2,6 +2,8 @@ import { createContext, type CSSProperties, type ReactNode, useContext, useEffec
 import { Icon } from '@treeix/app/Icon'
 import { ResizeHandle } from '@treeix/app/ui'
 import { HostContext } from './index'
+import { isJson, object } from '@treeix/shared/json'
+import { readStored } from '@treeix/app/storage'
 
 /**
  * Focus zones, v3's keyboard model: the window is split into zones that F6 cycles through, the focused one framed.
@@ -37,26 +39,18 @@ const DEFAULT_PAGE: PagePanels = { list: true, inspector: true, listWidth: null,
 
 function loadPanels(): StoredPanels {
   const defaults: StoredPanels = { rail: true, title: true, pages: {} }
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(PANELS_KEY) ?? 'null')
-    if (typeof stored !== 'object' || stored === null) return defaults
-    const record = stored as Record<string, unknown>
-    const flag = (value: unknown, fallback: boolean): boolean => (typeof value === 'boolean' ? value : fallback)
-    const width = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
-    const pages = typeof record.pages === 'object' && record.pages !== null ? Object.entries(record.pages as Record<string, unknown>) : []
-    return {
-      rail: flag(record.rail, defaults.rail),
-      title: flag(record.title, defaults.title),
-      pages: Object.fromEntries(
-        pages.flatMap(([page, value]) => {
-          if (typeof value !== 'object' || value === null) return []
-          const prefs = value as Record<string, unknown>
-          return [[page, { list: flag(prefs.list, true), inspector: flag(prefs.inspector, true), listWidth: width(prefs.listWidth), inspectorWidth: width(prefs.inspectorWidth) }]]
-        })
+  const record = readStored(PANELS_KEY)
+  if (!isJson(record)) return defaults
+  const flag = (value: unknown, fallback: boolean): boolean => (typeof value === 'boolean' ? value : fallback)
+  const width = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+  return {
+    rail: flag(record.rail, defaults.rail),
+    title: flag(record.title, defaults.title),
+    pages: Object.fromEntries(
+      Object.entries(object(record.pages)).flatMap(([page, prefs]) =>
+        isJson(prefs) ? [[page, { list: flag(prefs.list, true), inspector: flag(prefs.inspector, true), listWidth: width(prefs.listWidth), inspectorWidth: width(prefs.inspectorWidth) }]] : []
       )
-    }
-  } catch {
-    return defaults
+    )
   }
 }
 
@@ -343,6 +337,21 @@ export function isPageKey(event: KeyboardEvent): boolean {
   if (state.zone !== 'list' && state.zone !== 'main' && state.zone !== 'inspector') return false
   const target = event.target instanceof Element ? event.target : null
   return !target || target === document.body || target.closest('[data-zone]') !== null
+}
+
+/** Window keys for a page; a page kept mounted off screen only gets them while they are its own. Returning true takes the key */
+export function usePageKeys(page: string, onKey: (event: KeyboardEvent) => boolean): void {
+  const latest = useRef(onKey)
+  latest.current = onKey
+  const mine = useRef(false)
+  mine.current = useContext(HostContext)?.keyboardPage === page
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void => {
+      if (mine.current && latest.current(event)) event.preventDefault()
+    }
+    window.addEventListener('keydown', listener)
+    return () => window.removeEventListener('keydown', listener)
+  }, [])
 }
 
 /** Marks a list row, and the one under the cursor */

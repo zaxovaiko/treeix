@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { Branch, CodeLocation, FilePatch, SearchMatch, SearchOptions, SearchResult, Repo, Worktree, WorktreeFiles } from '../shared/types'
+import { insideWorktree } from './paths'
 
 const exec = promisify(execFile)
 const MAX_DEPTH = 6
@@ -143,10 +144,7 @@ export function splitPatch(patch: string): FilePatch[] {
 }
 
 export async function diff(worktreePath: string): Promise<FilePatch[]> {
-  const hasHead = await git(worktreePath, ['rev-parse', '--verify', 'HEAD']).then(
-    () => true,
-    () => false
-  )
+  const hasHead = await succeeds(worktreePath, ['rev-parse', '--verify', 'HEAD'])
   const tracked = hasHead ? await git(worktreePath, ['diff', 'HEAD', '--no-color']) : ''
   const untrackedList = await git(worktreePath, ['ls-files', '--others', '--exclude-standard'])
   const untracked = await Promise.all(
@@ -312,9 +310,15 @@ export async function listBranches(repoPath: string): Promise<Branch[]> {
   return branches
 }
 
-export async function createBranch(repoPath: string, name: string, base: string): Promise<void> {
+/** The branch name as git normalizes it; throws for one git would reject */
+async function branchName(repoPath: string, name: string): Promise<string> {
   const checked = (await git(repoPath, ['check-ref-format', '--branch', name]).catch(() => '')).trim()
   if (!checked || checked.startsWith('-')) throw new Error(`"${name}" is not a valid branch name`)
+  return checked
+}
+
+export async function createBranch(repoPath: string, name: string, base: string): Promise<void> {
+  const checked = await branchName(repoPath, name)
   if (base.startsWith('-')) throw new Error(`"${base}" is not a valid base`)
   await git(repoPath, ['branch', '--no-track', checked, base])
 }
@@ -336,8 +340,7 @@ export function addWorktree(repoPath: string, branch: string, base?: string): Pr
 }
 
 async function createWorktree(repoPath: string, branch: string, base?: string): Promise<string> {
-  const name = (await git(repoPath, ['check-ref-format', '--branch', branch]).catch(() => '')).trim()
-  if (!name || name.startsWith('-')) throw new Error(`"${branch}" is not a valid branch name`)
+  const name = await branchName(repoPath, branch)
   const existing = parseWorktreeList(await git(repoPath, ['worktree', 'list', '--porcelain'])).find((worktree) => worktree.branch === name)
   if (existing) return existing.path
   const path = worktreeDir(repoPath, name)
@@ -365,8 +368,7 @@ export async function removeWorktree(worktreePath: string, force: boolean): Prom
 
 /** Restores a tracked file to HEAD or deletes an untracked one */
 export async function discardChanges(worktreePath: string, filePath: string): Promise<void> {
-  const absolute = resolve(worktreePath, filePath)
-  if (relative(worktreePath, absolute).startsWith('..')) throw new Error('File is outside the worktree')
+  insideWorktree(worktreePath, filePath)
   const tracked = await succeeds(worktreePath, ['ls-files', '--error-unmatch', '--', filePath])
   if (tracked) await git(worktreePath, ['restore', '--source=HEAD', '--staged', '--worktree', '--', filePath])
   else await git(worktreePath, ['clean', '-f', '--', filePath])

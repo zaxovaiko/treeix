@@ -4,7 +4,7 @@ import type { HistoryEntry } from '../../shared/types'
 import { codeThemeOptions, diffBackground } from './FileView'
 import { Icon } from './Icon'
 import { baseName } from './Sidebar'
-import { EmptyState, errorMessage } from './ui'
+import { Dialog, EmptyState, errorMessage } from './ui'
 
 const timeLabel = (at: number): string =>
   new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -60,61 +60,56 @@ export function HistoryDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[8vh] backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        onClick={(event) => event.stopPropagation()}
-        className="flex h-[76vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl"
-      >
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs text-muted-foreground">
-          <span>
-            Edit history of <span className="font-mono text-foreground">{path}</span>
-          </span>
-          <span className="flex-1" />
-          {error && <span className="text-red-400">{error}</span>}
-          <button
-            onClick={restore}
-            disabled={snapshot === null}
-            className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:opacity-40"
-          >
-            Restore this version
-          </button>
-          <button onClick={onClose} aria-label="Close" className="grid size-7 place-items-center rounded-md hover:bg-accent">
-            <Icon name="close" className="size-3" />
-          </button>
+    <Dialog onClose={onClose} offset="pt-[8vh]" className="flex h-[76vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs text-muted-foreground">
+        <span>
+          Edit history of <span className="font-mono text-foreground">{path}</span>
+        </span>
+        <span className="flex-1" />
+        {error && <span className="text-red-400">{error}</span>}
+        <button
+          onClick={restore}
+          disabled={snapshot === null}
+          className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:opacity-40"
+        >
+          Restore this version
+        </button>
+        <button onClick={onClose} aria-label="Close" className="grid size-7 place-items-center rounded-md hover:bg-accent">
+          <Icon name="close" className="size-3" />
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1">
+        <div className="w-60 shrink-0 overflow-y-auto border-r border-border p-1">
+          {entries?.length === 0 && <p className="px-3 py-6 text-center text-xs text-muted-foreground">No earlier versions yet. Snapshots are taken while you edit here, at most one a minute.</p>}
+          {entries?.map((entry) => (
+            <button
+              key={entry.id}
+              onClick={() => setSelected(entry.id)}
+              className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[12.5px] ${
+                entry.id === selected ? 'bg-foreground/[.08] text-foreground' : 'text-foreground/75 hover:bg-accent'
+              }`}
+            >
+              <span className="flex-1">{timeLabel(entry.savedAt)}</span>
+              <span className="text-[11px] text-muted-foreground tabular-nums">{(entry.bytes / 1024).toFixed(1)} KB</span>
+            </button>
+          ))}
         </div>
-        <div className="flex min-h-0 flex-1">
-          <div className="w-60 shrink-0 overflow-y-auto border-r border-border p-1">
-            {entries?.length === 0 && <p className="px-3 py-6 text-center text-xs text-muted-foreground">No earlier versions yet. Snapshots are taken while you edit here, at most one a minute.</p>}
-            {entries?.map((entry) => (
-              <button
-                key={entry.id}
-                onClick={() => setSelected(entry.id)}
-                className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[12.5px] ${
-                  entry.id === selected ? 'bg-foreground/[.08] text-foreground' : 'text-foreground/75 hover:bg-accent'
-                }`}
-              >
-                <span className="flex-1">{timeLabel(entry.savedAt)}</span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{(entry.bytes / 1024).toFixed(1)} KB</span>
-              </button>
-            ))}
-          </div>
-          <div className="min-w-0 flex-1 overflow-auto">
-            {snapshot === null || current === null ? (
-              <EmptyState fill title={entries === null || selected ? 'Loading...' : 'Pick a version'} />
-            ) : snapshot === current ? (
-              <EmptyState fill title="Same as the current file" />
-            ) : (
-              <MultiFileDiff
-                oldFile={{ name: path, contents: snapshot, cacheKey: `history:${worktreePath}:${path}:${selected}` }}
-                newFile={{ name: path, contents: current, cacheKey: `history-current:${worktreePath}:${path}:${current.length}` }}
-                className="block"
-                style={diffBackground()}
-                options={{ ...codeThemeOptions(), diffStyle: 'unified' }}
-              />
-            )}
-          </div>
+        <div className="min-w-0 flex-1 overflow-auto">
+          {snapshot === null || current === null ? (
+            <EmptyState fill title={entries === null || selected ? 'Loading...' : 'Pick a version'} />
+          ) : snapshot === current ? (
+            <EmptyState fill title="Same as the current file" />
+          ) : (
+            <MultiFileDiff
+              oldFile={{ name: path, contents: snapshot, cacheKey: `history:${worktreePath}:${path}:${selected}` }}
+              newFile={{ name: path, contents: current, cacheKey: `history-current:${worktreePath}:${path}:${current.length}` }}
+              className="block"
+              style={diffBackground()}
+              options={{ ...codeThemeOptions(), diffStyle: 'unified' }}
+            />
+          )}
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

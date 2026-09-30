@@ -1,7 +1,5 @@
-type Json = Record<string, unknown>
-const isJson = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value)
-const object = (value: unknown): Json => (isJson(value) ? value : {})
-const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+import { type Json, isJson, object, text } from '@treeix/shared/json'
+
 const children = (node: Json): unknown[] => (Array.isArray(node.content) ? node.content : [])
 
 export type AdfContext = {

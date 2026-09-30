@@ -1,4 +1,6 @@
 import { getResolvedOrResolveTheme, registerCustomTheme, type ThemeRegistration } from '@pierre/diffs'
+import { isJson, object } from '../../shared/json'
+import { readStored } from './storage'
 
 export type Theme = {
   label: string
@@ -63,12 +65,8 @@ export const allThemes = (): [string, Theme][] => [...Object.entries(THEMES), ..
 const LAST_KEY = 'theme.last'
 /** The last theme painted, so a plugin theme shows at startup before its plugin has loaded */
 const lastApplied = ((): { id: string; theme: Theme } | null => {
-  try {
-    const parsed: unknown = typeof localStorage === 'undefined' ? null : JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null')
-    return typeof parsed === 'object' && parsed !== null && 'id' in parsed && 'theme' in parsed ? (parsed as { id: string; theme: Theme }) : null
-  } catch {
-    return null
-  }
+  const parsed = readStored(LAST_KEY)
+  return isJson(parsed) && 'id' in parsed && 'theme' in parsed ? (parsed as { id: string; theme: Theme }) : null
 })()
 
 /** A theme by id; one whose plugin is off (or not loaded yet) falls back to the built-in theme of that mode */
@@ -159,10 +157,6 @@ export function removeCustomTheme(id: string): void {
   saveCustomThemes(rest)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 /** `#rgb`, `#rrggbb` or `#rrggbbaa` as `#rrggbb`; alpha is dropped since surfaces take the window opacity */
 function hex(value: unknown): string | null {
   if (typeof value !== 'string' || !/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return null
@@ -178,14 +172,14 @@ function ownTheme(json: Record<string, unknown>): Theme | null {
   if (colors.some((color) => color === null)) return null
   const [background, card, popover, foreground, mutedForeground, primary] = colors as string[]
   const sidebar = hex(json.sidebar) ?? undefined
-  const syntax = typeof json.syntax === 'string' || isRecord(json.syntax) ? (json.syntax as Theme['syntax']) : undefined
+  const syntax = typeof json.syntax === 'string' || isJson(json.syntax) ? (json.syntax as Theme['syntax']) : undefined
   const label = typeof json.label === 'string' && json.label ? json.label : 'Imported'
   return { label, mode: json.mode, background, card, sidebar, popover, foreground, mutedForeground, primary, syntax }
 }
 
 /** A VS Code color theme: surfaces from its workbench colors, code colors from its token colors */
 function vscodeTheme(json: Record<string, unknown>): Theme | null {
-  const colors = isRecord(json.colors) ? json.colors : {}
+  const colors = isJson(json.colors) ? json.colors : {}
   const pick = (...keys: string[]): string | null => keys.map((key) => hex(colors[key])).find((color) => color !== null) ?? null
   const background = pick('editor.background')
   const foreground = pick('editor.foreground', 'foreground')
@@ -216,16 +210,10 @@ export function parseThemeFile(text: string): Theme | null {
   } catch {
     return null
   }
-  return isRecord(json) ? (ownTheme(json) ?? vscodeTheme(json)) : null
+  return isJson(json) ? (ownTheme(json) ?? vscodeTheme(json)) : null
 }
 
 const CUSTOM_KEY = 'themes.custom'
-let customThemes: Record<string, Theme> = ((): Record<string, Theme> => {
-  try {
-    const parsed: unknown = typeof localStorage === 'undefined' ? null : JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? '{}')
-    if (!isRecord(parsed)) return {}
-    return Object.fromEntries(Object.entries(parsed).flatMap(([id, value]) => (isRecord(value) && ownTheme(value) ? [[id, ownTheme(value)!]] : [])))
-  } catch {
-    return {}
-  }
-})()
+let customThemes: Record<string, Theme> = Object.fromEntries(
+  Object.entries(object(readStored(CUSTOM_KEY))).flatMap(([id, value]) => (isJson(value) && ownTheme(value) ? [[id, ownTheme(value)!]] : []))
+)

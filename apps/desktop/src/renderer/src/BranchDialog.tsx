@@ -6,7 +6,7 @@ import { baseName, branchAge } from './Sidebar'
 import { Kbd, type SessionKind } from '@treeix/sdk'
 import { type Agent, useAgents } from './agents'
 import { useService } from './plugins'
-import { errorMessage, Popup, usePersisted } from './ui'
+import { Dialog, errorMessage, Popup, usePersisted } from './ui'
 import { raceBranches } from './worktreePlans'
 
 /** Several agents race on the same prompt, each in a worktree of its own named after it */
@@ -157,98 +157,97 @@ export function BranchDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[14vh] backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') onClose()
-          if (event.key === 'Enter' && event.metaKey) submit()
-        }}
-        className="w-[480px] max-w-[92vw] rounded-xl border border-border bg-popover p-4 shadow-2xl shadow-black/60 backdrop-blur-2xl"
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="min-w-0 truncate text-sm font-medium">
-            {worktree ? 'New worktree' : 'New branch'} in {baseName(repo.path)}
-          </h2>
-          <span className="flex-1" />
-          <Kbd hint>esc</Kbd>
-        </div>
-
-        <label className="mt-3 block text-xs text-muted-foreground">Branch</label>
-        <BranchCombobox autoFocus value={name} onChange={setName} branches={branches ?? []} placeholder="feat/my-branch" onSubmit={submit} />
-        <p className="mt-1 h-4 text-[11px] text-muted-foreground">
-          {existing ? `Exists${existing.remote ? ' on origin' : ''}, will be checked out` : name.trim() ? 'New branch' : ''}
-        </p>
-
-        {!existing && (
-          <>
-            <label className="mt-2 block text-xs text-muted-foreground">Start from</label>
-            <BranchCombobox value={base} onChange={setBase} branches={branches ?? []} placeholder="dev" onSubmit={submit} />
-          </>
-        )}
-
-        <button onClick={() => setWorktree(!worktree)} className="mt-4 flex w-full items-center gap-2.5 text-left text-[13px]">
-          <span className={`grid size-4 place-items-center rounded ${worktree ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
-            {worktree && <Icon name="check" className="size-3" />}
-          </span>
-          Check out in a new worktree
-          <span className="text-xs text-muted-foreground">.claude/worktrees</span>
-        </button>
-
-        {worktree && sessionsAvailable && (
-          <div className="mt-3 flex items-center gap-1.5">
-            <span className="mr-1 text-xs text-muted-foreground">Then open</span>
-            {[null, ...agents].map((agent: Agent | null) => (
-              <button
-                key={agent?.id ?? 'none'}
-                onClick={() => (agent ? toggleAgent(agent.id) : setChosen(''))}
-                className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ${
-                  (agent ? sessions.includes(agent.id) : sessions.length === 0) ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
-                }`}
-              >
-                {agent ? (
-                  <>
-                    <KindBadge kind={agent.id} />
-                    {agent.label}
-                  </>
-                ) : (
-                  'Nothing'
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {worktree && sessions.length > 0 && (
-          <>
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              rows={3}
-              placeholder={sessions.length > 1 ? 'Prompt every agent gets, optional' : 'Prompt, optional'}
-              className="mt-3 w-full resize-none rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
-            />
-            {sessions.length > 1 && name.trim() && (
-              <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                {raceBranches(localName(name.trim()), sessions)
-                  .map(({ branch }) => branch)
-                  .join(', ')}
-              </p>
-            )}
-          </>
-        )}
-
-        {error && <p className="mt-3 text-xs break-words text-red-400 select-text">{error}</p>}
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-            Cancel
-          </button>
-          <button onClick={submit} disabled={!name.trim() || busy || (!worktree && Boolean(existing))} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
-            {busy ? 'Creating…' : worktree ? (sessions.length > 1 ? `Create ${sessions.length} worktrees` : 'Create worktree') : existing ? 'Branch exists' : 'Create branch'}
-            <Kbd hint>⌘⏎</Kbd>
-          </button>
-        </div>
+    <Dialog
+      onClose={onClose}
+      offset="pt-[14vh]"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') onClose()
+        if (event.key === 'Enter' && event.metaKey) submit()
+      }}
+      className="w-[480px] max-w-[92vw] p-4"
+    >
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 truncate text-sm font-medium">
+          {worktree ? 'New worktree' : 'New branch'} in {baseName(repo.path)}
+        </h2>
+        <span className="flex-1" />
+        <Kbd hint>esc</Kbd>
       </div>
-    </div>
+
+      <label className="mt-3 block text-xs text-muted-foreground">Branch</label>
+      <BranchCombobox autoFocus value={name} onChange={setName} branches={branches ?? []} placeholder="feat/my-branch" onSubmit={submit} />
+      <p className="mt-1 h-4 text-[11px] text-muted-foreground">
+        {existing ? `Exists${existing.remote ? ' on origin' : ''}, will be checked out` : name.trim() ? 'New branch' : ''}
+      </p>
+
+      {!existing && (
+        <>
+          <label className="mt-2 block text-xs text-muted-foreground">Start from</label>
+          <BranchCombobox value={base} onChange={setBase} branches={branches ?? []} placeholder="dev" onSubmit={submit} />
+        </>
+      )}
+
+      <button onClick={() => setWorktree(!worktree)} className="mt-4 flex w-full items-center gap-2.5 text-left text-[13px]">
+        <span className={`grid size-4 place-items-center rounded ${worktree ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
+          {worktree && <Icon name="check" className="size-3" />}
+        </span>
+        Check out in a new worktree
+        <span className="text-xs text-muted-foreground">.claude/worktrees</span>
+      </button>
+
+      {worktree && sessionsAvailable && (
+        <div className="mt-3 flex items-center gap-1.5">
+          <span className="mr-1 text-xs text-muted-foreground">Then open</span>
+          {[null, ...agents].map((agent: Agent | null) => (
+            <button
+              key={agent?.id ?? 'none'}
+              onClick={() => (agent ? toggleAgent(agent.id) : setChosen(''))}
+              className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ${
+                (agent ? sessions.includes(agent.id) : sessions.length === 0) ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
+              }`}
+            >
+              {agent ? (
+                <>
+                  <KindBadge kind={agent.id} />
+                  {agent.label}
+                </>
+              ) : (
+                'Nothing'
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {worktree && sessions.length > 0 && (
+        <>
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            rows={3}
+            placeholder={sessions.length > 1 ? 'Prompt every agent gets, optional' : 'Prompt, optional'}
+            className="mt-3 w-full resize-none rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
+          />
+          {sessions.length > 1 && name.trim() && (
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+              {raceBranches(localName(name.trim()), sessions)
+                .map(({ branch }) => branch)
+                .join(', ')}
+            </p>
+          )}
+        </>
+      )}
+
+      {error && <p className="mt-3 text-xs break-words text-red-400 select-text">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2">
+        <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+          Cancel
+        </button>
+        <button onClick={submit} disabled={!name.trim() || busy || (!worktree && Boolean(existing))} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+          {busy ? 'Creating…' : worktree ? (sessions.length > 1 ? `Create ${sessions.length} worktrees` : 'Create worktree') : existing ? 'Branch exists' : 'Create branch'}
+          <Kbd hint>⌘⏎</Kbd>
+        </button>
+      </div>
+    </Dialog>
   )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Row } from '@treeix/app/settingsUi'
+import { errorMessage } from '@treeix/shared/errors'
 import type { CredentialsStatus } from '../shared'
 import type { AtlassianBridge } from './atlassianBridge'
 
@@ -19,7 +20,7 @@ export function ApiToken({ bridge, purpose }: { bridge: AtlassianBridge; purpose
     setError(null)
     bridge.saveCredentials(credentials).then(
       () => (setToken(''), load()),
-      (reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))
+      (reason: unknown) => setError(errorMessage(reason))
     )
   }
   return (

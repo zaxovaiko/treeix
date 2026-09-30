@@ -1,12 +1,14 @@
 import { adfToMarkdown } from '@treeix/atlassian/main/adf'
-import { type AtlassianComment, IMAGE_HOST, isJson, object, orNull, text } from '@treeix/atlassian/shared'
+import { type AtlassianComment, IMAGE_HOST, object, orNull, text } from '@treeix/atlassian/shared'
+import { list, parseJson } from '@treeix/shared/json'
 
-function parseAdf(value: unknown): unknown {
-  try {
-    return typeof value === 'string' ? JSON.parse(value) : value
-  } catch {
-    return null
-  }
+/** A page or comment body, whose ADF comes as a JSON string, as markdown; images are the page's attachments */
+export function bodyMarkdown(body: unknown, pageId: string, onLink?: (url: string) => void): string {
+  const value = object(object(body).atlas_doc_format).value
+  return adfToMarkdown(typeof value === 'string' ? parseJson(value) : value, {
+    mediaSource: (attrs) => `${IMAGE_HOST}/confluence/${pageId}/${encodeURIComponent(text(attrs.id))}`,
+    onLink
+  })
 }
 
 /** v1 content results with history and ancestors, nested under the comment each one answers */
@@ -15,7 +17,7 @@ export function toCommentTree(raw: unknown, pageId: string, host: string | null)
   const roots: AtlassianComment[] = []
   const byId = new Map<string, AtlassianComment>()
   const parents = new Map<string, string>()
-  for (const result of Array.isArray(results) ? results.filter(isJson) : []) {
+  for (const result of list(results)) {
     const author = object(object(result.history).createdBy)
     const avatar = text(object(author.profilePicture).path)
     const comment: AtlassianComment = {
@@ -24,13 +26,11 @@ export function toCommentTree(raw: unknown, pageId: string, host: string | null)
       authorAvatar: avatar.startsWith('http') ? avatar : avatar && host ? `https://${host}${avatar}` : null,
       authorId: orNull(text(author.accountId)),
       created: text(object(result.history).createdDate),
-      body: adfToMarkdown(parseAdf(object(object(result.body).atlas_doc_format).value), {
-        mediaSource: (attrs) => `${IMAGE_HOST}/confluence/${pageId}/${encodeURIComponent(text(attrs.id))}`
-      }),
+      body: bodyMarkdown(result.body, pageId),
       replies: []
     }
     byId.set(comment.id, comment)
-    const parent = (Array.isArray(result.ancestors) ? result.ancestors.filter(isJson) : []).filter((ancestor) => ancestor.type === 'comment').at(-1)
+    const parent = list(result.ancestors).filter((ancestor) => ancestor.type === 'comment').at(-1)
     if (parent) parents.set(comment.id, text(parent.id))
   }
   for (const comment of byId.values()) {

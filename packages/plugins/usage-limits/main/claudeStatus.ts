@@ -1,6 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { isJson } from '@treeix/shared/json'
+import { readJsonFile } from '@treeix/host/paths'
 
 type StatusLine = { command: string; padding: number | null }
 
@@ -28,11 +30,9 @@ fi
 `
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-
 /** The status line from the user's Claude Code settings, which the bridge keeps showing */
 export function userStatusLine(settings: unknown): StatusLine | null {
-  const statusLine = isRecord(settings) && isRecord(settings.statusLine) ? settings.statusLine : null
+  const statusLine = isJson(settings) && isJson(settings.statusLine) ? settings.statusLine : null
   if (!statusLine || typeof statusLine.command !== 'string' || !statusLine.command.trim()) return null
   return { command: statusLine.command, padding: typeof statusLine.padding === 'number' ? statusLine.padding : null }
 }
@@ -49,14 +49,7 @@ export async function setUpClaudeStatus(folder: string): Promise<() => Promise<R
 }
 
 async function sessionEnv(script: string): Promise<Record<string, string>> {
-  const text = await readFile(join(homedir(), '.claude', 'settings.json'), 'utf8').catch(() => null)
-  let settings: unknown = null
-  try {
-    settings = text === null ? null : JSON.parse(text)
-  } catch {
-    settings = null
-  }
-  const previous = userStatusLine(settings)
+  const previous = userStatusLine(await readJsonFile(join(homedir(), '.claude', 'settings.json')))
   const chained = previous && !previous.command.includes(script) ? previous : null
   return {
     TREEIX_CLAUDE_SETTINGS: JSON.stringify({ statusLine: { type: 'command', command: shellQuote(script), padding: chained?.padding ?? 0 } }),

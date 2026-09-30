@@ -9,6 +9,7 @@ import { MarkdownFoldsContext } from './LazyMarkdown'
 import { Expandable } from './Lightbox'
 import { remarkSections } from './markdownSections'
 import { usePlugins } from './plugins'
+import { errorMessage } from './ui'
 
 // Headings become sections the reader can fold; the sanitizer has to let those through
 const SCHEMA = {
@@ -116,11 +117,7 @@ function ResolvedImage({ src, alt, resolve }: { src: string; alt: string; resolv
     let cancelled = false
     pending.then(
       (loaded) => !cancelled && setState({ src: loaded }),
-      (reason: unknown) =>
-        !cancelled &&
-        setState({
-          error: reason instanceof Error ? reason.message : String(reason)
-        })
+      (reason: unknown) => !cancelled && setState({ error: errorMessage(reason) })
     )
     return () => {
       cancelled = true

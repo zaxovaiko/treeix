@@ -8,7 +8,7 @@ import { Icon } from './Icon'
 import { CodeEditor, type CodeEditorHandle } from './monaco/CodeEditor'
 import { EditorComments, useEditorNavigation } from './monaco/comments'
 import { normalizeEol } from './monaco/text'
-import { EmptyState } from './ui'
+import { EmptyState, errorMessage } from './ui'
 
 import { activeTheme, codeThemes, getSettings } from './settings'
 import { withAlpha } from './themes'
@@ -175,7 +175,7 @@ function TextFileView({
         onSaved?.()
       },
       (reason: unknown) => {
-        const message = reason instanceof Error ? reason.message : String(reason)
+        const message = errorMessage(reason)
         if (message.includes('SAVE_CONFLICT')) return void checkDiskRef.current()
         setStatus('failed')
         setSaveError(message)
@@ -265,6 +265,16 @@ function TextFileView({
     ...comments.map((comment) => ({ lineNumber: comment.range.end, metadata: { commentId: comment.id } })),
     ...(draft ? [{ lineNumber: draft.end, metadata: { commentId: null } }] : [])
   ]
+  const draftCard = draft && (
+    <CommentDraft
+      label={`Comment on line ${rangeLabel(draft)}`}
+      onCancel={() => setDraft(null)}
+      onSave={(text, attachments) => {
+        onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
+        setDraft(null)
+      }}
+    />
+  )
   const zones = editable
     ? [
         ...comments.map((comment) => ({ line: comment.range.end, key: comment.id, node: <CommentCard comment={comment} onDelete={() => onDeleteComment(comment)} /> })),
@@ -273,16 +283,7 @@ function TextFileView({
               {
                 line: draft.end,
                 key: 'draft',
-                node: (
-                  <CommentDraft
-                    label={`Comment on line ${rangeLabel(draft)}`}
-                    onCancel={() => setDraft(null)}
-                    onSave={(text, attachments) => {
-                      onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
-                      setDraft(null)
-                    }}
-                  />
-                )
+                node: draftCard
               }
             ]
           : [])
@@ -404,16 +405,7 @@ function TextFileView({
               renderAnnotation={({ metadata }) => {
                 const comment = comments.find((candidate) => candidate.id === metadata.commentId)
                 if (comment) return <CommentCard comment={comment} onDelete={() => onDeleteComment(comment)} />
-                return draft ? (
-                  <CommentDraft
-                    label={`Comment on line ${rangeLabel(draft)}`}
-                    onCancel={() => setDraft(null)}
-                    onSave={(text, attachments) => {
-                      onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
-                      setDraft(null)
-                    }}
-                  />
-                ) : null
+                return draftCard
               }}
               options={{
                 ...codeThemeOptions(),

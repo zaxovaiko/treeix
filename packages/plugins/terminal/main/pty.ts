@@ -104,14 +104,10 @@ export function listTerminals(owner: WebContents): LiveTerminal[] {
 }
 
 /** Where the session's shell is now, after any cd; null once it exited */
-export function terminalCwd(id: string): Promise<string | null> {
+export async function terminalCwd(id: string): Promise<string | null> {
   const pid = sessions.get(id)?.pty?.pid
-  if (!pid) return Promise.resolve(null)
-  return new Promise((resolve) => {
-    execFile('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], (error, stdout) => {
-      resolve(error ? null : (stdout.split('\n').find((line) => line.startsWith('n'))?.slice(1) ?? null))
-    })
-  })
+  if (!pid) return null
+  return parseCwds(await run('/usr/sbin/lsof', ['-w', '-a', '-p', String(pid), '-d', 'cwd', '-Fpn']).catch(() => '')).get(pid) ?? null
 }
 
 /** stdout even when the command exits non-zero with output: lsof does when some files can't be read */

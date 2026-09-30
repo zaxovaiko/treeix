@@ -52,5 +52,4 @@ export type WorkItemList = {
   items: WorkItem[]
   /** Keys of the items in an open sprint; null when the sprint lookup failed, e.g. no boards */
   sprintKeys: string[] | null
-  error: string | null
 }

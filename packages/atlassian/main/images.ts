@@ -1,4 +1,5 @@
-import { IMAGE_HOST, type ImageResult, isJson } from '../shared'
+import { IMAGE_HOST, type ImageResult, object } from '../shared'
+import { list } from '@treeix/shared/json'
 import { restFetch } from './cli'
 import { loadCredentials } from './credentials'
 
@@ -8,7 +9,7 @@ const cache = new Map<string, string>()
 async function confluenceDownloadLink(pageId: string, fileId: string): Promise<string> {
   const response = await restFetch(`/wiki/api/v2/pages/${pageId}/attachments?limit=250`, await loadCredentials())
   const body: unknown = await response.json()
-  const results = isJson(body) && Array.isArray(body.results) ? body.results.filter(isJson) : []
+  const results = list(object(body).results)
   const attachment = results.find((candidate) => candidate.fileId === fileId)
   if (!attachment || typeof attachment.downloadLink !== 'string') throw new Error('The image is no longer attached to the page')
   return `/wiki${attachment.downloadLink}`

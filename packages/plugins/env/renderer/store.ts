@@ -1,5 +1,4 @@
-import { useSyncExternalStore } from 'react'
-import { createBridge, definePluginSettings, type HostApi } from '@treeix/sdk'
+import { createBridge, createStore, definePluginSettings, type HostApi } from '@treeix/sdk'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import type { Repo, Worktree } from '@treeix/shared/types'
 import type { Annotation, CopyMode, EnvEdit, Usage, WorktreeEnv } from '../shared/types'
@@ -19,27 +18,10 @@ export const envApi = {
   onChanged: (listener: (worktreePath: string) => void) => bridge.on('changed', (path) => typeof path === 'string' && listener(path))
 }
 
-/** A value held in memory only: env values and unsaved edits never go to localStorage */
-function memoryStore<T>(initial: T): { get: () => T; set: (next: T) => void; use: () => T } {
-  let value = initial
-  const listeners = new Set<() => void>()
-  const subscribe = (listener: () => void): (() => void) => {
-    listeners.add(listener)
-    return () => listeners.delete(listener)
-  }
-  return {
-    get: () => value,
-    set: (next) => {
-      value = next
-      listeners.forEach((listener) => listener())
-    },
-    use: () => useSyncExternalStore(subscribe, () => value)
-  }
-}
-
+// Held in memory only: env values and unsaved edits never go to localStorage
 /** Scans by worktree path */
-export const envs = memoryStore<ReadonlyMap<string, WorktreeEnv>>(new Map())
-export const scanning = memoryStore(false)
+export const envs = createStore<ReadonlyMap<string, WorktreeEnv>>(new Map())
+export const scanning = createStore(false)
 
 /** Rescans the given worktrees and keeps what is known about the others */
 export async function rescan(paths: string[]): Promise<void> {
@@ -54,7 +36,7 @@ export async function rescan(paths: string[]): Promise<void> {
 }
 
 /** Unsaved values by editKey */
-export const pending = memoryStore<ReadonlyMap<string, EnvEdit>>(new Map())
+export const pending = createStore<ReadonlyMap<string, EnvEdit>>(new Map())
 export const editKey = (worktreePath: string, file: string, name: string): string => `${worktreePath}|${file}|${name}`
 
 export function setPending(edit: EnvEdit, original: string | null): void {

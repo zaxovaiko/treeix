@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { isString, list } from '@treeix/shared/json'
 
 export type BrowserTab = {
   id: string
@@ -106,11 +107,11 @@ type SavedTabs = { urls: string[]; names: (string | null)[]; groups: (string | n
 function fromSaved(saved: unknown): BrowserState {
   if (typeof saved !== 'object' || saved === null) return EMPTY
   const { urls, active, names, groups, collapsed } = saved as { urls?: unknown; active?: unknown; names?: unknown; groups?: unknown; collapsed?: unknown }
-  const list = Array.isArray(urls) ? urls.filter((url): url is string => typeof url === 'string') : []
+  const savedUrls = list(urls, isString)
   const textAt = (values: unknown, index: number): string | undefined => (Array.isArray(values) && typeof values[index] === 'string' ? values[index] : undefined)
-  const tabs = list.map((url, index) => ({ ...newTab(url, crypto.randomUUID()), name: textAt(names, index), group: textAt(groups, index) }))
+  const tabs = savedUrls.map((url, index) => ({ ...newTab(url, crypto.randomUUID()), name: textAt(names, index), group: textAt(groups, index) }))
   const index = typeof active === 'number' ? active : 0
-  const collapsedGroups = Array.isArray(collapsed) ? collapsed.filter((name): name is string => typeof name === 'string') : []
+  const collapsedGroups = list(collapsed, isString)
   return { tabs, activeId: tabs[index]?.id ?? tabs[0]?.id ?? null, closed: [], collapsed: collapsedGroups }
 }
 

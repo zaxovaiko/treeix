@@ -13,15 +13,11 @@ const checkedId = (id: string): string => {
 
 // ponytail: first 250 footer comments, page through _links.next if pages outgrow that
 export async function pageComments(pageId: string): Promise<CommentList> {
-  try {
-    const [response, host] = await Promise.all([
-      restFetch(`/wiki/rest/api/content/${checkedId(pageId)}/child/comment?location=footer&depth=all&limit=250&expand=body.atlas_doc_format,history,ancestors`, await loadCredentials()),
-      atlassianSite()
-    ])
-    return { comments: toCommentTree(await response.json(), pageId, host), error: null }
-  } catch (reason) {
-    return { comments: [], error: reason instanceof Error ? reason.message : String(reason) }
-  }
+  const [response, host] = await Promise.all([
+    restFetch(`/wiki/rest/api/content/${checkedId(pageId)}/child/comment?location=footer&depth=all&limit=250&expand=body.atlas_doc_format,history,ancestors`, await loadCredentials()),
+    atlassianSite()
+  ])
+  return { comments: toCommentTree(await response.json(), pageId, host) }
 }
 
 const adfBody = (body: string): { representation: string; value: string } => ({ representation: 'atlas_doc_format', value: JSON.stringify(textToAdf(body)) })

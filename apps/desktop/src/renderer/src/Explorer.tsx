@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getShell, isPageKey, useListNav, type ZoneId } from '@treeix/sdk'
 import type { WorktreeFiles } from '../../shared/types'
 import { FileIcon, Icon } from './Icon'
-import { EmptyState, FoldAllButton, usePersisted } from './ui'
+import { EmptyState, FoldAllButton, IconButton, usePersisted } from './ui'
 import { workspaceKey } from './workspaces'
 
 type TreeNode = { name: string; path: string; dirs: TreeNode[]; files: string[] }
@@ -223,12 +223,12 @@ export function Explorer({
         {canFoldAll && <FoldAllButton anyOpen={anyOpen} groups="folders" onClick={foldAll} />}
         {onCreate && (
           <>
-            <button title="New file" onClick={() => onCreate('file', '')} className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <IconButton label="New file" onClick={() => onCreate('file', '')}>
               <Icon name="filePlus" className="size-3.5" />
-            </button>
-            <button title="New folder" onClick={() => onCreate('folder', '')} className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            </IconButton>
+            <IconButton label="New folder" onClick={() => onCreate('folder', '')}>
               <Icon name="folderPlus" className="size-3.5" />
-            </button>
+            </IconButton>
           </>
         )}
       </div>

@@ -10,6 +10,7 @@ import { CopyButton, EmptyState, errorMessage, UserAvatar } from '@treeix/app/ui
 import type { Repo, Worktree } from '@treeix/shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
 import { Comments, commentCount } from '@treeix/atlassian/renderer/Comments'
+import { addReference } from '@treeix/atlassian/renderer/reference'
 import type { AtlassianComment } from '@treeix/atlassian/shared'
 import type { Epic, JiraPerson, WorkItem, WorkItemDetail } from '../shared/types'
 import { detailCache, jiraApi, resolveImage, selection, TTL } from './api'
@@ -156,22 +157,20 @@ export function useTicket(
       if (host.comments.some((comment) => comment.worktreePath === worktreePath && comment.filePath === filePath)) {
         return host.flash(`${item.key} is already in the comments on ${baseName(worktreePath)}`)
       }
-      host.addComment({
-        id: crypto.randomUUID(),
+      addReference(
+        host,
         worktreePath,
-        filePath,
-        range: { start: 0, end: 0 },
-        code: '',
-        // The reference alone keeps the prompt short and never goes stale; the description rides along for
-        // agents on a machine without acli, which is what decides the default in the comments drawer
-        text: comment
-          ? `Jira ${item.key} comment ${comment.id} by ${comment.author}${item.url ? ` ${item.url}?focusedCommentId=${comment.id}` : ''}`
-          : `Jira ${item.key}${item.url ? ` ${item.url}` : ''}`,
-        body: comment ? comment.body : [item.summary, detail?.description].filter(Boolean).join('\n\n'),
-        tool: 'acli',
-        kind: 'reference'
-      })
-      host.flash(`Added ${comment ? `${comment.author}'s comment` : item.key} to comments on ${baseName(worktreePath)}`)
+        {
+          filePath,
+          // The reference alone keeps the prompt short and never goes stale; the description rides along for
+          // agents on a machine without acli, which is what decides the default in the comments drawer
+          text: comment
+            ? `Jira ${item.key} comment ${comment.id} by ${comment.author}${item.url ? ` ${item.url}?focusedCommentId=${comment.id}` : ''}`
+            : `Jira ${item.key}${item.url ? ` ${item.url}` : ''}`,
+          body: comment ? comment.body : [item.summary, detail?.description].filter(Boolean).join('\n\n')
+        },
+        comment ? `${comment.author}'s comment` : item.key
+      )
     },
     copyBranch: (): void => {
       copyText(branchFor(item))

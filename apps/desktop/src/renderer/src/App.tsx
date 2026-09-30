@@ -36,7 +36,7 @@ import { Explorer, FolderExplorer } from './Explorer'
 import { matcherFor } from './searchMatcher'
 import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindForKey, useSymbolNavigation } from './codeNavigation'
 import { codeThemeOptions, diffBackground, FileView, findLineElement } from './FileView'
-import { FileIcon, Icon } from './Icon'
+import { FileIcon, Icon, type IconName } from './Icon'
 import { findService, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
@@ -53,6 +53,7 @@ import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updat
 import { UpdateBanner } from './updates'
 
 import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
+import { isJson, list, object } from '../../shared/json'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
@@ -75,8 +76,8 @@ type SavedPlace = { appTab: string; selected: string | null; viewer: { path: str
 /** Where a workspace was left: its tab, worktree and open file */
 function readPlace(workspaceId: string): SavedPlace {
   const stored = readStored(workspaceKey('app.place', workspaceId))
-  const record = typeof stored === 'object' && stored !== null ? (stored as Record<string, unknown>) : {}
-  const viewer = typeof record.viewer === 'object' && record.viewer !== null ? (record.viewer as Record<string, unknown>) : null
+  const record = object(stored)
+  const viewer = isJson(record.viewer) ? record.viewer : null
   return {
     appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : DEFAULT_TAB,
     selected: typeof record.selected === 'string' ? record.selected : null,
@@ -125,12 +126,8 @@ const isRepoList = (value: unknown): value is Repo[] =>
 
 /** Last scan, so the sidebar paints instantly while a fresh scan walks the disk */
 function loadScanCache(): Repo[] | null {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(SCAN_KEY) ?? 'null')
-    return isRepoList(stored) ? stored : null
-  } catch {
-    return null
-  }
+  const stored = readStored(SCAN_KEY)
+  return isRepoList(stored) ? stored : null
 }
 
 type WorktreeData = { patches: FilePatch[]; files: WorktreeFiles }
@@ -145,14 +142,7 @@ const samePatches = (a: FilePatch[], b: FilePatch[]): boolean =>
   a.length === b.length && a.every((patch, index) => patch.path === b[index].path && patch.patch === b[index].patch)
 const sameFiles = (a: WorktreeFiles, b: WorktreeFiles): boolean => sameList(a.files, b.files) && sameList(a.ignored, b.ignored)
 
-function loadComments(): ReviewComment[] {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(COMMENTS_KEY) ?? '[]')
-    return Array.isArray(stored) ? stored.filter(isReviewComment) : []
-  } catch {
-    return []
-  }
-}
+const loadComments = (): ReviewComment[] => list(readStored(COMMENTS_KEY), isReviewComment)
 
 const annotationSide = (range: LineRange): 'deletions' | 'additions' => range.endSide ?? range.side ?? 'additions'
 /** The one-line range of a patch row, on the side it shows */
@@ -449,6 +439,11 @@ function App(): React.JSX.Element {
     setTimeout(() => setNotice(null), 2500)
   }
 
+  /** Asks first; a failed task shows in the flash */
+  const confirmRun = (message: string, task: () => Promise<unknown>, done: () => void): void => {
+    if (window.confirm(message)) task().then(done).catch((reason: unknown) => flash(errorMessage(reason)))
+  }
+
   /** Opens files where the active tab shows them, otherwise in the worktree view */
   const openFile = (path: string, line: number | null): void => (fileOpeners.current.get(appTab) ?? ((next, nextLine) => setViewer({ path: next, line: nextLine })))(path, line)
 
@@ -623,11 +618,10 @@ function App(): React.JSX.Element {
       !branch.remote && {
         label: branch.merged ? 'Delete merged branch…' : 'Delete branch…',
         run: () => {
-          if (!window.confirm(`Delete branch ${branch.name}?\n\nGit refuses if it has commits that are not merged anywhere.`)) return
-          window.api
-            .deleteBranch(repo.path, branch.name)
-            .then(() => (flash(`Deleted branch ${branch.name}`), rescan()))
-            .catch((reason: unknown) => flash(errorMessage(reason)))
+          confirmRun(`Delete branch ${branch.name}?\n\nGit refuses if it has commits that are not merged anywhere.`, () => window.api.deleteBranch(repo.path, branch.name), () => {
+            flash(`Deleted branch ${branch.name}`)
+            rescan()
+          })
         }
       }
     ])
@@ -635,15 +629,11 @@ function App(): React.JSX.Element {
   const removeWorktree = (worktree: Worktree): void => {
     const dirty = worktree.changedFiles > 0
     const warning = dirty ? `\n\nIt has ${worktree.changedFiles} uncommitted changes that will be lost.` : ''
-    if (!window.confirm(`Remove worktree ${branchLabel(worktree)}?${warning}\n\nThe branch itself is kept.`)) return
-    window.api
-      .removeWorktree(worktree.path, dirty)
-      .then(() => {
-        if (selected === worktree.path) setSelected(null)
-        flash(`Removed worktree ${branchLabel(worktree)}`)
-        rescan()
-      })
-      .catch((reason: unknown) => flash(errorMessage(reason)))
+    confirmRun(`Remove worktree ${branchLabel(worktree)}?${warning}\n\nThe branch itself is kept.`, () => window.api.removeWorktree(worktree.path, dirty), () => {
+      if (selected === worktree.path) setSelected(null)
+      flash(`Removed worktree ${branchLabel(worktree)}`)
+      rescan()
+    })
   }
 
   const sessionEntries = (cwd: string): MenuEntry[] =>
@@ -731,17 +721,13 @@ function App(): React.JSX.Element {
     })
 
   const trash = (worktreePath: string, path: string): void => {
-    if (!window.confirm(`Move ${path} to the Trash?`)) return
-    window.api
-      .trashPath(worktreePath, path)
-      .then(() => {
-        flash(`Moved ${baseName(path)} to the Trash`)
-        const removed = (tab: string): boolean => tab === path || tab.startsWith(`${path}/`)
-        setEditorTabs((tabs) => tabs.filter((tab) => !removed(tab)))
-        if (viewer && removed(viewer.path)) setViewer(null)
-        loadWorktree(worktreePath)
-      })
-      .catch((reason: unknown) => flash(errorMessage(reason)))
+    confirmRun(`Move ${path} to the Trash?`, () => window.api.trashPath(worktreePath, path), () => {
+      flash(`Moved ${baseName(path)} to the Trash`)
+      const removed = (tab: string): boolean => tab === path || tab.startsWith(`${path}/`)
+      setEditorTabs((tabs) => tabs.filter((tab) => !removed(tab)))
+      if (viewer && removed(viewer.path)) setViewer(null)
+      loadWorktree(worktreePath)
+    })
   }
 
   /** New, rename and trash entries for a file or folder ('' is the worktree root) */
@@ -754,14 +740,10 @@ function App(): React.JSX.Element {
   ]
 
   const discardFile = (worktreePath: string, path: string): void => {
-    if (!window.confirm(`Discard all changes to ${path}?\n\nUntracked files are deleted. This cannot be undone.`)) return
-    window.api
-      .discardChanges(worktreePath, path)
-      .then(() => {
-        flash(`Discarded changes to ${baseName(path)}`)
-        loadWorktree(worktreePath)
-      })
-      .catch((reason: unknown) => flash(errorMessage(reason)))
+    confirmRun(`Discard all changes to ${path}?\n\nUntracked files are deleted. This cannot be undone.`, () => window.api.discardChanges(worktreePath, path), () => {
+      flash(`Discarded changes to ${baseName(path)}`)
+      loadWorktree(worktreePath)
+    })
   }
 
   const changedFileMenu = (event: React.MouseEvent, path: string): void => {
@@ -1135,6 +1117,10 @@ function App(): React.JSX.Element {
     }
   }
 
+  const clearCommentsOn = (worktreePath: string, count: number): void => {
+    if (window.confirm(`Delete ${count} comment${count === 1 ? '' : 's'} on ${baseName(worktreePath)}?`)) setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
+  }
+
   const onSent = (message: string): void => {
     flash(message)
     if (message.startsWith('Copied')) return
@@ -1159,11 +1145,7 @@ function App(): React.JSX.Element {
           onSent(message)
           if (!message.startsWith('Copied')) archiveSent(worktreePath, pathComments, message)
         }}
-        onClear={() => {
-          if (window.confirm(`Delete ${pathComments.length} comment${pathComments.length === 1 ? '' : 's'} on ${baseName(worktreePath)}?`)) {
-            setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
-          }
-        }}
+        onClear={() => clearCommentsOn(worktreePath, pathComments.length)}
       />
     )
   }
@@ -1175,11 +1157,7 @@ function App(): React.JSX.Element {
       <CommentsPanel
         comments={pathComments}
         footer={commentsSendButton(worktreePath, 'panel')}
-        onClear={() => {
-          if (window.confirm(`Delete ${pathComments.length} comment${pathComments.length === 1 ? '' : 's'} on ${baseName(worktreePath)}?`)) {
-            setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
-          }
-        }}
+        onClear={() => clearCommentsOn(worktreePath, pathComments.length)}
         onOpen={(comment) => (comment.kind === 'browser' ? openPage(comment.filePath) : open(comment.filePath))}
         onDelete={deleteComment}
         onUpdate={(next) => setComments(comments.map((comment) => (comment.id === next.id ? next : comment)))}
@@ -1617,15 +1595,7 @@ function App(): React.JSX.Element {
           ))}
         </div>
         {worktree && (
-          <button
-            title="Terminal in this worktree (t)"
-            onClick={() => openTerminal(worktree.path)}
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
-          >
-            <Icon name="terminal" className="size-3" />
-            Terminal
-            <Kbd hint>t</Kbd>
-          </button>
+          <HintButton title="Terminal in this worktree (t)" icon="terminal" label="Terminal" hint="t" onClick={() => openTerminal(worktree.path)} />
         )}
         <IconButton label={`Toggle changed files (${actionKeys('wt.changedFiles')})`} active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           <Icon name="list" />
@@ -1699,14 +1669,7 @@ function App(): React.JSX.Element {
                         </div>
                         <CopyButton label="Copy path (y)" text={() => `${worktree.path}/${viewer.path}`} />
                         {changedPaths.has(viewer.path) && (
-                          <button
-                            title="Back to the diff (esc)"
-                            onClick={() => showDiff(viewer.path)}
-                            className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
-                          >
-                            Diff
-                            <Kbd hint>esc</Kbd>
-                          </button>
+                          <HintButton title="Back to the diff (esc)" label="Diff" hint="esc" onClick={() => showDiff(viewer.path)} />
                         )}
                         {isMarkdownPath(viewer.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
                         <IconButton label="Close all files" onClick={() => (setEditorTabs([]), setViewer(null))}>
@@ -1742,15 +1705,7 @@ function App(): React.JSX.Element {
                         <span className="min-w-2 flex-1" />
                         {isMarkdownPath(file.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
                         {/* The diff is for reading and commenting; editing happens in the file itself */}
-                        <button
-                          title="Open the file to edit (o)"
-                          onClick={() => setViewer({ path: file.path, line: cursorFileLine() })}
-                          className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
-                        >
-                          <Icon name="pencil" className="size-3" />
-                          Edit
-                          <Kbd hint>o</Kbd>
-                        </button>
+                        <HintButton title="Open the file to edit (o)" icon="pencil" label="Edit" hint="o" onClick={() => setViewer({ path: file.path, line: cursorFileLine() })} />
                       </div>
                       {markdownPreview && isMarkdownPath(file.path) ? (
                         <div className="min-h-0 flex-1 overflow-auto">
@@ -2160,5 +2115,16 @@ function McpInstallButton({ flash }: { flash: (message: string) => void }): Reac
     >
       <Icon name="plug" />
     </IconButton>
+  )
+}
+
+/** A small outlined action that shows its shortcut */
+function HintButton({ title, icon, label, hint, onClick }: { title: string; icon?: IconName; label: string; hint: string; onClick: () => void }): React.JSX.Element {
+  return (
+    <button title={title} onClick={onClick} className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
+      {icon && <Icon name={icon} className="size-3" />}
+      {label}
+      <Kbd hint>{hint}</Kbd>
+    </button>
   )
 }

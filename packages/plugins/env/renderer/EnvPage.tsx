@@ -1,6 +1,6 @@
 import { actionForEvent, matchesAction } from '@treeix/shared/keymap'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { isPageKey, Kbd, PageLayout, useHost, useListNav, usePanels } from '@treeix/sdk'
+import { useEffect, useMemo, useState } from 'react'
+import { isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { baseName, branchLabel, ZoneHeader } from '@treeix/app/Sidebar'
 import { EmptyState, IconButton, usePersisted } from '@treeix/app/ui'
@@ -8,7 +8,7 @@ import { workspaceKey } from '@treeix/app/workspaces'
 import { issuesOf, issueSummary, issueTone, type Place, placesByName, worstKind } from './model'
 import { KindIcon, ToggleButton, VarName } from './parts'
 import { SaveReview } from './SaveReview'
-import { editKey, envApi, envs, openRequest, pending, rescan, scanning, type ScopedWorktree, scopedWorktrees } from './store'
+import { editKey, envApi, envs, openRequest, pending, rescan, scanning, type ScopedWorktree, scopedWorktrees, TAB_ID } from './store'
 import { VariableMain } from './VariableView'
 import { FreshMain, Inspector, type RowState, type Target, WorktreeMain, worktreeRows } from './WorktreeView'
 
@@ -124,8 +124,7 @@ export function EnvPage(): React.JSX.Element {
     else if (mode === 'variable' && selected) setComposing({ key: selected, prefill: '' })
   }
 
-  const onKey = useRef<(event: KeyboardEvent) => boolean>(() => false)
-  onKey.current = (event) => {
+  const onKey = (event: KeyboardEvent): boolean => {
     if (matchesAction(event, 'env.save')) {
       if (edits.size) setReviewing(true)
       return true
@@ -140,13 +139,7 @@ export function EnvPage(): React.JSX.Element {
     else return false
     return true
   }
-  useEffect(() => {
-    const listener = (event: KeyboardEvent): void => {
-      if (!reviewing && onKey.current(event)) event.preventDefault()
-    }
-    window.addEventListener('keydown', listener)
-    return () => window.removeEventListener('keydown', listener)
-  }, [reviewing])
+  usePageKeys(TAB_ID, (event) => !reviewing && onKey(event))
 
   const repoPaths = [...new Set(worktreeEntries.map(({ repo }) => repo.path))]
   let position = -1

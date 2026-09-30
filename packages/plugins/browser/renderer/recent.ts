@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { list, parseJson } from '@treeix/shared/json'
 
 export type RecentPage = { url: string; title: string }
 
@@ -8,14 +9,7 @@ const KEY = 'browser.recent'
 const isRecentPage = (value: unknown): value is RecentPage =>
   typeof value === 'object' && value !== null && 'url' in value && 'title' in value && typeof value.url === 'string' && typeof value.title === 'string'
 
-export function parseRecent(raw: string | null): RecentPage[] {
-  try {
-    const parsed: unknown = JSON.parse(raw ?? '[]')
-    return Array.isArray(parsed) ? (parsed as unknown[]).filter(isRecentPage).slice(0, RECENT_LIMIT) : []
-  } catch {
-    return []
-  }
-}
+export const parseRecent = (raw: string | null): RecentPage[] => list(parseJson(raw), isRecentPage).slice(0, RECENT_LIMIT)
 
 /** Newest first, one entry per URL, web pages only */
 export function withVisit(list: RecentPage[], url: string): RecentPage[] {

@@ -5,6 +5,8 @@ import type { NavigationKind } from '../../shared/types'
 import type { Agent } from './agents'
 import { codeTheme, DEFAULT_THEME, resolveTheme, subscribeThemes, type Theme } from './themes'
 import { parseTabLayout, type TabLayout } from './titleBarTabs'
+import { isJson, object } from '../../shared/json'
+import { readStored } from './storage'
 
 export type Settings = {
   /** Plugins switched on or off in Settings, by id; absent ones follow their manifest's default */
@@ -113,7 +115,7 @@ function parseHotkey(value: unknown): Shortcut | null {
   return typeof value === 'string' && value in PRESET_HOTKEYS ? PRESET_HOTKEYS[value] : DEFAULTS.hotkey
 }
 function parseNavigationKeys(value: unknown): Settings['navigationKeys'] {
-  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const stored = object(value)
   const pick = (kind: NavigationKind): Shortcut | null => {
     const candidate = stored[kind]
     return candidate === null || isShortcut(candidate) ? candidate : DEFAULTS.navigationKeys[kind]
@@ -126,19 +128,19 @@ export type DigitTarget = 'tabs' | 'workspaces'
 const isDigitModifier = (value: unknown): value is DigitModifier => typeof value === 'string' && value in DIGIT_MODIFIERS
 
 function parseKeymap(value: unknown): Settings['keymap'] {
-  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const stored = object(value)
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, Shortcut | null] => entry[1] === null || isShortcut(entry[1])))
 }
 
 export function parseAgentViews(value: unknown): Settings['agentViews'] {
-  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const stored = object(value)
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, 'chat' | 'terminal'] => entry[1] === 'chat' || entry[1] === 'terminal'))
 }
 
 export const parseChatThinking = (value: unknown): Settings['chatThinking'] => (value === 'expanded' || value === 'hidden' ? value : 'collapsed')
 
 function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
-  const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const stored = object(value)
   const pick = (target: DigitTarget): DigitModifier => {
     const candidate = stored[target]
     return isDigitModifier(candidate) ? candidate : DEFAULTS.digitShortcuts[target]
@@ -237,8 +239,8 @@ export function parseCustomAgents(value: unknown): Agent[] {
 
 function load(): Settings {
   try {
-    const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}')
-    if (typeof stored !== 'object' || stored === null) return DEFAULTS
+    const stored = readStored(KEY)
+    if (!isJson(stored)) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
     const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
     const workers = candidate.highlightWorkers

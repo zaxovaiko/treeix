@@ -1,5 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
+import { parseJson } from '../shared/json'
+
+/** A JSON file's contents, or null when missing or malformed */
+export const readJsonFile = async (path: string): Promise<unknown> => parseJson(await readFile(path, 'utf8').catch(() => null))
 
 /** Absolute path of `filePath` inside the worktree; throws for anything that escapes it */
 export function insideWorktree(worktreePath: string, filePath: string): string {

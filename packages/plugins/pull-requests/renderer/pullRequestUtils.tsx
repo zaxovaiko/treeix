@@ -5,7 +5,8 @@ export { timeAgo, untilLabel } from '@treeix/app/time'
 export { UserAvatar } from '@treeix/app/ui'
 
 export const pullRequestKey = (pr: PullRequest): string => `${pr.repoPath}#${pr.number}`
-export const prefix = (pr: PullRequest): string => (pr.provider === 'github' ? '#' : '!')
+/** `#12` on GitHub, `!12` on GitLab */
+export const prLabel = (pr: PullRequest): string => `${pr.provider === 'github' ? '#' : '!'}${pr.number}`
 
 export const STATE_STYLE: Record<PullRequestState | 'draft', { label: string; className: string }> = {
   open: { label: 'Open', className: 'bg-emerald-400/12 text-emerald-400' },
@@ -28,7 +29,7 @@ export function threadUrl(pr: PullRequest, thread: ReviewThread): string {
 export function threadReference(pr: PullRequest, thread: ReviewThread): string {
   const where = thread.path ? `${thread.path}${thread.line ? `:${thread.line}${thread.side === 'deletions' ? ' (old)' : ''}` : ''}` : 'conversation'
   const author = thread.comments[0] ? ` by @${thread.comments[0].author}` : ''
-  return `${pr.provider === 'github' ? 'PR' : 'MR'} ${prefix(pr)}${pr.number} ${pr.url} review thread${author} on ${where}: ${threadUrl(pr, thread)}`
+  return `${pr.provider === 'github' ? 'PR' : 'MR'} ${prLabel(pr)} ${pr.url} review thread${author} on ${where}: ${threadUrl(pr, thread)}`
 }
 
 export const markdownBase = (pr: PullRequest): string | undefined => (pr.provider === 'gitlab' ? pr.url.split('/-/')[0] : undefined)

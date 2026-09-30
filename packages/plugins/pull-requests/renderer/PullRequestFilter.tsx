@@ -2,7 +2,7 @@ import { type FilterGroup, FilterSearch as GenericFilterSearch, type FilterToken
 import { Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
 import type { PullRequest } from '../shared/types'
-import { prefix, ProviderMark, REVIEW_MARKS, UserAvatar } from './pullRequestUtils'
+import { prLabel, ProviderMark, REVIEW_MARKS, UserAvatar } from './pullRequestUtils'
 
 type ReviewKey = keyof typeof REVIEW_MARKS
 
@@ -48,7 +48,7 @@ const GROUPS: FilterGroup<PullRequest>[] = [
     label: 'Text',
     valueOf: () => null,
     mark: () => <Icon name="search" className="size-3 text-muted-foreground" />,
-    freeText: (pr, needle) => `${prefix(pr)}${pr.number} ${pr.title} ${pr.sourceBranch} ${pr.author}`.toLowerCase().includes(needle)
+    freeText: (pr, needle) => `${prLabel(pr)} ${pr.title} ${pr.sourceBranch} ${pr.author}`.toLowerCase().includes(needle)
   }
 ]
 

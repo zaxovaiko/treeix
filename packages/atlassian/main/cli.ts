@@ -11,16 +11,17 @@ export const failure = (reason: unknown): string => {
   return (stderr || (reason instanceof Error ? reason.message : String(reason))).split('\n')[0]
 }
 
-export const run = async (args: string[]): Promise<string> => (await exec('acli', args, { timeout: TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 })).stdout
+/** acli's output; rejects with acli's own message */
+export async function run(args: string[]): Promise<string> {
+  try {
+    return (await exec('acli', args, { timeout: TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 })).stdout
+  } catch (reason) {
+    throw new Error(failure(reason))
+  }
+}
 
-/** acli with --json output parsed; rejects with acli's own message */
-export const acli = (args: string[]): Promise<unknown> =>
-  run(args).then(
-    (stdout) => JSON.parse(stdout),
-    (reason: unknown) => {
-      throw new Error(failure(reason))
-    }
-  )
+/** acli with --json output parsed */
+export const acli = async (args: string[]): Promise<unknown> => JSON.parse(await run(args))
 
 /** The signed-in site from `acli jira auth status`, e.g. team.atlassian.net; JSON from acli only links internal hosts */
 export const parseSite = (status: string): string | null => status.match(/Site:\s*(\S+)/)?.[1] ?? null

@@ -2,6 +2,7 @@ import { access, readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { SessionUsage, TranscriptRef } from '../shared/types'
+import { isJson } from '@treeix/shared/json'
 
 const claudeProjects = (): string => join(homedir(), '.claude', 'projects')
 const codexSessions = (): string => join(homedir(), '.codex', 'sessions')
@@ -38,13 +39,12 @@ export async function searchTranscripts(query: string, refs: TranscriptRef[]): P
   return hits.filter((id) => id !== null)
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
 
 function parseLine(line: string): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(line)
-    return isRecord(value) ? value : null
+    return isJson(value) ? value : null
   } catch {
     return null
   }
@@ -57,7 +57,7 @@ export function claudeUsage(transcript: string): SessionUsage {
   for (const line of transcript.split('\n')) {
     if (!line.includes('"usage"')) continue
     const message = parseLine(line)?.message
-    if (!isRecord(message) || !isRecord(message.usage) || typeof message.id !== 'string' || seen.has(message.id)) continue
+    if (!isJson(message) || !isJson(message.usage) || typeof message.id !== 'string' || seen.has(message.id)) continue
     seen.add(message.id)
     usage.input += count(message.usage.input_tokens) + count(message.usage.cache_creation_input_tokens)
     usage.cached += count(message.usage.cache_read_input_tokens)
@@ -72,8 +72,8 @@ export function codexUsage(transcript: string): SessionUsage {
     .split('\n')
     .findLast((line) => line.includes('"total_token_usage"'))
   const payload = last ? parseLine(last)?.payload : null
-  const info = isRecord(payload) && isRecord(payload.info) ? payload.info : null
-  const total = info && isRecord(info.total_token_usage) ? info.total_token_usage : null
+  const info = isJson(payload) && isJson(payload.info) ? payload.info : null
+  const total = info && isJson(info.total_token_usage) ? info.total_token_usage : null
   if (!total) return { input: 0, output: 0, cached: 0 }
   const cached = count(total.cached_input_tokens)
   return { input: count(total.input_tokens) - cached, cached, output: count(total.output_tokens) }
@@ -86,15 +86,15 @@ export async function transcriptUsage(ref: TranscriptRef): Promise<SessionUsage 
 }
 
 const texts = (content: unknown, type: string): string[] =>
-  Array.isArray(content) ? content.filter((block) => isRecord(block) && block.type === type && typeof block.text === 'string').map((block) => (block as { text: string }).text) : []
+  Array.isArray(content) ? content.filter((block) => isJson(block) && block.type === type && typeof block.text === 'string').map((block) => (block as { text: string }).text) : []
 
 /** The agent's last `count` written replies, oldest first; tool calls and results left out */
 export function lastReplies(kind: string, transcript: string, count: number): string[] {
   const replies: string[] = []
   for (const line of transcript.split('\n')) {
     const entry = parseLine(line)
-    if (kind === 'claude' && entry?.type === 'assistant' && isRecord(entry.message)) replies.push(...texts(entry.message.content, 'text'))
-    if (kind === 'codex' && isRecord(entry?.payload) && entry.payload.type === 'message' && entry.payload.role === 'assistant') replies.push(...texts(entry.payload.content, 'output_text'))
+    if (kind === 'claude' && entry?.type === 'assistant' && isJson(entry.message)) replies.push(...texts(entry.message.content, 'text'))
+    if (kind === 'codex' && isJson(entry?.payload) && entry.payload.type === 'message' && entry.payload.role === 'assistant') replies.push(...texts(entry.payload.content, 'output_text'))
   }
   return replies.slice(-count)
 }

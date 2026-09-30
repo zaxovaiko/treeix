@@ -258,6 +258,26 @@ export function createBridge(pluginId: string): {
   }
 }
 
+export type Store<T> = { get: () => T; set: (next: T) => void; use: () => T }
+
+/** A value React components can follow; keep it immutable, since a new value is what rerenders them */
+export function createStore<T>(initial: T): Store<T> {
+  let value = initial
+  const listeners = new Set<() => void>()
+  const subscribe = (listener: () => void): (() => void) => {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  }
+  return {
+    get: () => value,
+    set: (next) => {
+      value = next
+      listeners.forEach((listener) => listener())
+    },
+    use: () => useSyncExternalStore(subscribe, () => value)
+  }
+}
+
 /**
  * Settings owned by a plugin, stored apart from the app's. Before anything is stored, `parse` sees the app's
  * settings object, so values from when the feature was built in carry over.
@@ -276,19 +296,13 @@ export function definePluginSettings<T extends object>(
     }
   }
   const storage = typeof localStorage === 'undefined' ? null : localStorage
-  let current = parse(read(storage?.getItem(key) ?? null) ?? read(storage?.getItem('settings') ?? null) ?? {})
-  const listeners = new Set<() => void>()
-  const subscribe = (listener: () => void): (() => void) => {
-    listeners.add(listener)
-    return () => listeners.delete(listener)
-  }
+  const store = createStore(parse(read(storage?.getItem(key) ?? null) ?? read(storage?.getItem('settings') ?? null) ?? {}))
   return {
-    get: () => current,
+    get: store.get,
     update: (patch) => {
-      current = { ...current, ...patch }
-      storage?.setItem(key, JSON.stringify(current))
-      listeners.forEach((listener) => listener())
+      store.set({ ...store.get(), ...patch })
+      storage?.setItem(key, JSON.stringify(store.get()))
     },
-    use: () => useSyncExternalStore(subscribe, () => current)
+    use: store.use
   }
 }

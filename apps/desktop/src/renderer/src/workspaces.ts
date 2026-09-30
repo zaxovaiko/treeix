@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { Repo } from '../../shared/types'
+import { isString, list, parseJson } from '../../shared/json'
 
 export type Workspace = {
   id: string
@@ -35,23 +36,7 @@ const isWorkspace = (value: unknown): value is Workspace => {
   )
 }
 
-export function parseWorkspaces(raw: string | null): Workspace[] {
-  try {
-    const stored: unknown = JSON.parse(raw ?? '[]')
-    return Array.isArray(stored) ? stored.filter(isWorkspace) : []
-  } catch {
-    return []
-  }
-}
-
-function parseRecentIds(raw: string | null): string[] {
-  try {
-    const stored: unknown = JSON.parse(raw ?? '[]')
-    return Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
+export const parseWorkspaces = (raw: string | null): Workspace[] => list(parseJson(raw), isWorkspace)
 
 function load(): State {
   // Absent in bun tests that import this module before stubbing storage
@@ -61,7 +46,7 @@ function load(): State {
   return {
     workspaces,
     currentId: workspaces.some((workspace) => workspace.id === currentId) ? (currentId ?? ALL_PROJECTS) : (workspaces[0]?.id ?? ALL_PROJECTS),
-    recentIds: parseRecentIds(localStorage.getItem(RECENT_KEY))
+    recentIds: list(parseJson(localStorage.getItem(RECENT_KEY)), isString)
   }
 }
 

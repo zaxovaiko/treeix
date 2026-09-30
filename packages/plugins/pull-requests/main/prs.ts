@@ -5,18 +5,13 @@ import type { FilePatch } from '@treeix/shared/types'
 import type { ConflictResult, ImageResult, Person, Provider, PullRequest, Pipeline, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
+import { type Json, isJson, list, object, text } from '@treeix/shared/json'
 
 const exec = promisify(execFile)
 const LIST_LIMIT = 50
 const CLI_TIMEOUT_MS = 60_000
 
-type Json = Record<string, unknown>
-
-const isJson = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value)
-const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 const numberOrNull = (value: unknown): number | null => (typeof value === 'number' ? value : null)
-const object = (value: unknown): Json => (isJson(value) ? value : {})
-const list = (value: unknown): Json[] => (Array.isArray(value) ? value.filter(isJson) : [])
 
 function failureMessage(reason: unknown): string {
   const stderr = isJson(reason) ? text(reason.stderr).trim() : ''
@@ -54,6 +49,27 @@ async function remoteOf(repoPath: string): Promise<Remote | null> {
   const url = await run('git', ['remote', 'get-url', 'origin'], repoPath).catch(() => '')
   return parseRemote(url)
 }
+
+async function requireRemote(repoPath: string): Promise<Remote> {
+  const remote = await remoteOf(repoPath)
+  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  return remote
+}
+
+/** Rethrows a CLI failure as its first line */
+async function cli<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action()
+  } catch (reason) {
+    throw new Error(failureMessage(reason))
+  }
+}
+
+/** A merge request note; GitLab's quick actions (`/assign`, `/request_review`) go through one too */
+const gitlabNote = (repoPath: string, number: number, body: string): Promise<string> =>
+  runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body })
+
+const githubPullRequestNode = (raw: unknown): Json => object(object(object(object(raw).data).repository).pullRequest)
 
 const GITLAB_STATES: Record<string, PullRequestState> = { opened: 'open', merged: 'merged', closed: 'closed', locked: 'closed' }
 
@@ -128,7 +144,7 @@ const REVIEW_QUERY = `query($q: String!) {
   }
 }`
 
-const REVIEW_STATES: Record<string, ReviewStatus['state']> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes', COMMENTED: 'commented' }
+const REVIEW_STATES: Record<string, 'approved' | 'changes' | 'commented'> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes', COMMENTED: 'commented' }
 
 /** Conversation comments plus review threads per PR number, from REVIEW_QUERY's response */
 export function githubCommentCounts(raw: unknown): Map<number, number> {
@@ -278,16 +294,15 @@ const toComment = (id: string, user: unknown, body: unknown, createdAt: unknown,
 type ThreadState = { resolveId: string; resolved: boolean }
 
 /** Resolved state of review threads keyed by their root comment id; REST review comments don't carry it */
-const REVIEWER_STATES: Record<string, Reviewer['state']> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes', COMMENTED: 'commented' }
 
 /** Pending requests first, then everyone who reviewed; the author never counts as a reviewer */
 export function githubReviewers(raw: unknown): Reviewer[] {
-  const pr = object(object(object(object(raw).data).repository).pullRequest)
+  const pr = githubPullRequestNode(raw)
   const author = text(object(pr.author).login)
   const reviewers = new Map<string, Reviewer>()
   for (const review of list(object(pr.latestReviews).nodes)) {
     const login = text(object(review.author).login)
-    const state = REVIEWER_STATES[text(review.state)]
+    const state = REVIEW_STATES[text(review.state)]
     if (login && login !== author && state) reviewers.set(login, { login, avatarUrl: text(object(review.author).avatarUrl) || null, state })
   }
   for (const request of list(object(pr.reviewRequests).nodes)) {
@@ -299,18 +314,18 @@ export function githubReviewers(raw: unknown): Reviewer[] {
 }
 
 export function githubMyReview(raw: unknown): PullRequestDetail['myReview'] {
-  const state = text(object(object(object(object(object(raw).data).repository).pullRequest).viewerLatestReview).state)
+  const state = text(object(githubPullRequestNode(raw).viewerLatestReview).state)
   return state === 'APPROVED' ? 'approved' : state === 'CHANGES_REQUESTED' ? 'changes' : null
 }
 
 /** Files the viewer marked as viewed, from the same pull request query */
 export const githubViewedFiles = (raw: unknown): string[] =>
-  list(object(object(object(object(object(raw).data).repository).pullRequest).files).nodes)
+  list(object(githubPullRequestNode(raw).files).nodes)
     .filter((file) => file.viewerViewedState === 'VIEWED')
     .map((file) => text(file.path))
 
 export function githubThreadStates(raw: unknown): Map<number, ThreadState> {
-  const threads = object(object(object(object(object(raw).data).repository).pullRequest).reviewThreads).nodes
+  const threads = object(githubPullRequestNode(raw).reviewThreads).nodes
   const states = new Map<number, ThreadState>()
   for (const thread of list(threads)) {
     const rootId = numberOrNull(object(list(object(thread.comments).nodes)[0]).databaseId)
@@ -434,8 +449,7 @@ export function githubFilesToPatches(files: Json[]): FilePatch[] {
 export async function filesChangedBetween(pullRequest: PullRequest, from: string, to: string): Promise<string[]> {
   const { repoPath } = pullRequest
   if (!/^[0-9a-f]{7,64}$/.test(from) || !/^[0-9a-f]{7,64}$/.test(to)) throw new Error('Not a commit')
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(repoPath)
   if (remote.provider === 'github') {
     const compare = await runJson('gh', ['api', '--hostname', remote.host, `repos/${remote.slug}/compare/${from}...${to}`], repoPath)
     return list(object(compare).files).map((file) => text(file.filename))
@@ -491,14 +505,13 @@ export async function failedJobLogs(pullRequest: PullRequest): Promise<{ name: s
 
 export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullRequestDetail> {
   const { repoPath, number } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(repoPath)
 
   if (remote.provider === 'github') {
     const repo = `${remote.host}/${remote.slug}`
     const pages = (path: string): Promise<Json[]> =>
       runJson('gh', ['api', '--hostname', remote.host, '--paginate', '--slurp', path], repoPath).then((result) =>
-        Array.isArray(result) ? result.flatMap(list) : []
+        Array.isArray(result) ? result.flatMap((page) => list(page)) : []
       )
     // The diff endpoint refuses PRs over 300 files; the files API goes to 3000 with per-file patches
     const patches = run('gh', ['pr', 'diff', `${number}`, '-R', repo, '--color=never'], repoPath).then(splitPatch, () =>
@@ -532,7 +545,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
       // ponytail: first 100 files only, paginate when PRs get bigger
       viewedFiles: extra === null ? null : githubViewedFiles(extra),
       reviewers: githubReviewers(extra),
-      assignees: list(object(object(object(object(object(extra).data).repository).pullRequest).assignees).nodes).map((user) => ({ login: text(user.login), avatarUrl: text(user.avatarUrl) || null })),
+      assignees: list(object(githubPullRequestNode(extra).assignees).nodes).map((user) => ({ login: text(user.login), avatarUrl: text(user.avatarUrl) || null })),
       myReview: githubMyReview(extra),
       viewer: text(object(object(object(extra).data).viewer).login) || null,
       headSha: text(object(view).headRefOid) || null
@@ -566,17 +579,12 @@ const gitlabPerson = (user: Json): Person => ({ login: text(user.username), avat
 /** GitLab lists assigned reviewers and, separately, who approved */
 export function gitlabReviewers(request: unknown, approvals: unknown): Reviewer[] {
   const approved = new Set(list(object(approvals).approved_by).map((entry) => text(object(entry.user).username)))
-  return list(object(request).reviewers).map((user) => ({
-    login: text(user.username),
-    avatarUrl: text(user.avatar_url) || null,
-    state: approved.has(text(user.username)) ? ('approved' as const) : ('requested' as const)
-  }))
+  return list(object(request).reviewers).map((user) => ({ ...gitlabPerson(user), state: approved.has(text(user.username)) ? 'approved' : 'requested' }))
 }
 
 export async function commentOnPullRequest(pullRequest: PullRequest, comment: PullRequestComment): Promise<void> {
   const { repoPath, number } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(repoPath)
   const { body, threadId, path, line, side } = comment
 
   if (remote.provider === 'github') {
@@ -638,8 +646,7 @@ export async function reactToPullRequestComment(pullRequest: PullRequest, commen
   const { repoPath, number } = pullRequest
   const [kind, id] = commentId.split(':')
   if (!/^\d+$/.test(id ?? '') || !REACTIONS.includes(reaction)) throw new Error('Invalid reaction target')
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(repoPath)
   if (remote.provider === 'github') {
     const endpoint = kind === 'review' ? `pulls/comments/${id}/reactions` : `issues/comments/${id}/reactions`
     await runWithBody('gh', ['api', '--hostname', remote.host, '-X', 'POST', `repos/${remote.slug}/${endpoint}`], repoPath, {
@@ -666,8 +673,7 @@ function gitlabUser(repoPath: string): Promise<string | null> {
 async function commentEndpoint(pullRequest: PullRequest, commentId: string): Promise<{ command: 'gh' | 'glab'; args: string[] }> {
   const [kind, id] = commentId.split(':')
   if (!/^\d+$/.test(id ?? '')) throw new Error('Invalid comment')
-  const remote = await remoteOf(pullRequest.repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(pullRequest.repoPath)
   if (remote.provider === 'github') {
     return { command: 'gh', args: ['api', '--hostname', remote.host, `repos/${remote.slug}/${kind === 'review' ? 'pulls' : 'issues'}/comments/${id}`] }
   }
@@ -677,17 +683,13 @@ async function commentEndpoint(pullRequest: PullRequest, commentId: string): Pro
 export async function editPullRequestComment(pullRequest: PullRequest, commentId: string, body: string): Promise<void> {
   const { command, args } = await commentEndpoint(pullRequest, commentId)
   const [api, ...rest] = args
-  await runWithBody(command, [api, '-X', command === 'gh' ? 'PATCH' : 'PUT', ...rest], pullRequest.repoPath, { body }).catch((reason: unknown) => {
-    throw new Error(failureMessage(reason))
-  })
+  await cli(() => runWithBody(command, [api, '-X', command === 'gh' ? 'PATCH' : 'PUT', ...rest], pullRequest.repoPath, { body }))
 }
 
 export async function deletePullRequestComment(pullRequest: PullRequest, commentId: string): Promise<void> {
   const { command, args } = await commentEndpoint(pullRequest, commentId)
   const [api, ...rest] = args
-  await run(command, [api, '-X', 'DELETE', ...rest], pullRequest.repoPath).catch((reason: unknown) => {
-    throw new Error(failureMessage(reason))
-  })
+  await cli(() => run(command, [api, '-X', 'DELETE', ...rest], pullRequest.repoPath))
 }
 
 /** A file as it is on the pull request's source branch, e.g. to preview its markdown */
@@ -706,8 +708,7 @@ export async function pullRequestFile(pullRequest: PullRequest, filePath: string
 export async function setThreadResolved(pullRequest: PullRequest, thread: ReviewThread, resolved: boolean): Promise<void> {
   const { repoPath, number } = pullRequest
   if (!thread.resolveId) throw new Error('This thread cannot be resolved')
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(repoPath)
   if (remote.provider === 'github') {
     const mutation = resolved ? 'resolveReviewThread' : 'unresolveReviewThread'
     const query = `mutation($id: ID!) { ${mutation}(input: { threadId: $id }) { thread { isResolved } } }`
@@ -725,7 +726,7 @@ export async function setFileViewed(pullRequest: PullRequest, filePath: string, 
   const [owner, name] = remote.slug.split('/')
   const idQuery = 'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } } }'
   const ids = await runJson('gh', ['api', 'graphql', '--hostname', remote.host, '-f', `query=${idQuery}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${number}`], repoPath)
-  const pullRequestId = text(object(object(object(object(ids).data).repository).pullRequest).id)
+  const pullRequestId = text(githubPullRequestNode(ids).id)
   const mutation = viewed ? 'markFileAsViewed' : 'unmarkFileAsViewed'
   const query = `mutation($id: ID!, $path: String!) { ${mutation}(input: { pullRequestId: $id, path: $path }) { clientMutationId } }`
   await run('gh', ['api', 'graphql', '--hostname', remote.host, '-f', `query=${query}`, '-f', `id=${pullRequestId}`, '-f', `path=${filePath}`], repoPath)
@@ -761,9 +762,8 @@ export async function pullRequestImage(pullRequest: PullRequest, source: string)
  */
 export async function mergePullRequest(pullRequest: PullRequest, method: MergeMethod, deleteBranch: boolean): Promise<void> {
   const { repoPath, number, sourceBranch } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
-  try {
+  const remote = await requireRemote(repoPath)
+  await cli(async () => {
     if (remote.provider === 'github') {
       await run('gh', ['api', '--hostname', remote.host, '-X', 'PUT', `repos/${remote.slug}/pulls/${number}/merge`, '-f', `merge_method=${method}`], repoPath)
       if (deleteBranch) await run('gh', ['api', '--hostname', remote.host, '-X', 'DELETE', `repos/${remote.slug}/git/refs/heads/${sourceBranch.split('/').map(encodeURIComponent).join('/')}`], repoPath)
@@ -771,62 +771,52 @@ export async function mergePullRequest(pullRequest: PullRequest, method: MergeMe
     }
     const how = method === 'squash' ? ['--squash'] : method === 'rebase' ? ['--rebase'] : []
     await run('glab', ['mr', 'merge', String(number), '--yes', '--auto-merge=false', ...how, ...(deleteBranch ? ['--remove-source-branch'] : [])], repoPath)
-  } catch (reason) {
-    throw new Error(failureMessage(reason))
-  }
+  })
 }
 
 /** Approves, or requests changes with `body` explaining why */
 export async function submitReview(pullRequest: PullRequest, verdict: ReviewVerdict, body: string): Promise<void> {
   const { repoPath, number } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
-  try {
+  const remote = await requireRemote(repoPath)
+  await cli(async () => {
     if (remote.provider === 'github') {
       await run('gh', ['pr', 'review', String(number), verdict === 'approve' ? '--approve' : '--request-changes', ...(body ? ['--body', body] : [])], repoPath)
     } else if (verdict === 'approve') {
       await run('glab', ['mr', 'approve', String(number)], repoPath)
     } else {
       // No REST endpoint sets the reviewer state; the quick action does, as the web UI's "Request changes" does
-      await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `${body}\n\n/submit_review requested_changes` })
+      await gitlabNote(repoPath, number, `${body}\n\n/submit_review requested_changes`)
     }
-  } catch (reason) {
-    throw new Error(failureMessage(reason))
-  }
+  })
 }
 
 /** Marks a draft ready for review, or turns it back into a draft */
 export async function setDraft(pullRequest: PullRequest, draft: boolean): Promise<void> {
   const { repoPath, number } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
-  try {
+  const remote = await requireRemote(repoPath)
+  await cli(async () => {
     if (remote.provider === 'github') await run('gh', ['pr', 'ready', String(number), '-R', `${remote.host}/${remote.slug}`, ...(draft ? ['--undo'] : [])], repoPath)
     else await run('glab', ['mr', 'update', String(number), draft ? '--draft' : '--ready'], repoPath)
-  } catch (reason) {
-    throw new Error(failureMessage(reason))
-  }
+  })
 }
 
 export async function requestReview(pullRequest: PullRequest, login: string): Promise<void> {
   const { repoPath, number } = pullRequest
   if (!/^[\w.-]+$/.test(login)) throw new Error(`Invalid reviewer name: ${login}`)
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
+  const remote = await requireRemote(repoPath)
   if (remote.provider === 'github') {
     await runWithBody('gh', ['api', '--hostname', remote.host, '-X', 'POST', `repos/${remote.slug}/pulls/${number}/requested_reviewers`], repoPath, { reviewers: [login] })
     return
   }
   // GitLab has no re-request endpoint; the quick action in a note does it, as the web UI's button does
-  await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `/request_review @${login}` })
+  await gitlabNote(repoPath, number, `/request_review @${login}`)
 }
 
 /** People who can be assigned; ponytail: first 100, search the provider if projects outgrow it */
 export async function assignableUsers(pullRequest: PullRequest): Promise<Person[]> {
   const { repoPath } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
-  try {
+  const remote = await requireRemote(repoPath)
+  return cli(async () => {
     if (remote.provider === 'github') {
       const users = await runJson('gh', ['api', '--hostname', remote.host, `repos/${remote.slug}/assignees?per_page=100`], repoPath)
       return list(users).map((user) => ({ login: text(user.login), avatarUrl: text(user.avatar_url) || null }))
@@ -834,39 +824,31 @@ export async function assignableUsers(pullRequest: PullRequest): Promise<Person[
     // Inherited group members can be assigned too; `members` alone lists only the project's own
     const users = await runJson('glab', ['api', 'projects/:id/members/all?per_page=100&state=active'], repoPath)
     return list(users).map(gitlabPerson)
-  } catch (reason) {
-    throw new Error(failureMessage(reason))
-  }
+  })
 }
 
 export async function setAssigned(pullRequest: PullRequest, login: string, assigned: boolean): Promise<void> {
   const { repoPath, number } = pullRequest
   if (!/^[\w.-]+$/.test(login)) throw new Error(`Invalid user name: ${login}`)
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
-  try {
+  const remote = await requireRemote(repoPath)
+  await cli(async () => {
     if (remote.provider === 'github') {
       await runWithBody('gh', ['api', '--hostname', remote.host, '-X', assigned ? 'POST' : 'DELETE', `repos/${remote.slug}/issues/${number}/assignees`], repoPath, { assignees: [login] })
       return
     }
     // The quick action takes a username, the REST update wants the full list of user ids
-    await runWithBody('glab', ['api', '-X', 'POST', `projects/:id/merge_requests/${number}/notes`], repoPath, { body: `/${assigned ? 'assign' : 'unassign'} @${login}` })
-  } catch (reason) {
-    throw new Error(failureMessage(reason))
-  }
+    await gitlabNote(repoPath, number, `/${assigned ? 'assign' : 'unassign'} @${login}`)
+  })
 }
 
 /** Closes without merging; the branch stays */
 export async function closePullRequest(pullRequest: PullRequest): Promise<void> {
   const { repoPath, number } = pullRequest
-  const remote = await remoteOf(repoPath)
-  if (!remote) throw new Error('Repository has no GitHub or GitLab remote')
-  try {
+  const remote = await requireRemote(repoPath)
+  await cli(async () => {
     if (remote.provider === 'github') await run('gh', ['pr', 'close', String(number), '-R', `${remote.host}/${remote.slug}`], repoPath)
     else await run('glab', ['mr', 'close', String(number)], repoPath)
-  } catch (reason) {
-    throw new Error(failureMessage(reason))
-  }
+  })
 }
 
 /** `git merge-tree --name-only` output: the tree id, then each conflicted path (once per stage), then a blank line */

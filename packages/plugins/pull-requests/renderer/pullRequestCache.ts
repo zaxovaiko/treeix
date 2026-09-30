@@ -1,5 +1,7 @@
 import type { PullRequest, PullRequestList } from '../shared/types'
 import { api } from './api'
+import { list } from '@treeix/shared/json'
+import { readStored } from '@treeix/app/storage'
 
 const STORAGE_KEY = 'prs.cache'
 /** Scopes kept on disk; older ones are dropped so storage stays small */
@@ -12,13 +14,7 @@ const inFlight = new Map<string, Promise<PullRequestList>>()
 const listeners = new Set<(scopeKey: string) => void>()
 
 function loadStored(): [string, Entry][] {
-  if (typeof localStorage === 'undefined') return []
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-    return Array.isArray(stored) ? stored.filter((entry): entry is [string, Entry] => Array.isArray(entry) && typeof entry[0] === 'string') : []
-  } catch {
-    return []
-  }
+  return list(readStored(STORAGE_KEY), (entry): entry is [string, Entry] => Array.isArray(entry) && typeof entry[0] === 'string')
 }
 
 export const scopeKeyOf = (repoPaths: string[]): string => repoPaths.join('\n')

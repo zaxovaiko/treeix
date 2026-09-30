@@ -15,18 +15,9 @@ export const TTL = { page: 30 * 60_000, recent: 10 * 60_000, comments: 5 * 60_00
 
 export const confluenceApi = {
   page: (id: string) => confluenceBridge.invoke<Page>('page', id),
-  // A failed lookup shouldn't be cached over the last good list
-  recent: () =>
-    confluenceBridge.invoke<PageList>('recent').then((list) => {
-      if (list.error) throw new Error(list.error)
-      return list
-    }),
+  recent: () => confluenceBridge.invoke<PageList>('recent'),
   search: (texts: string[], spaces: string[]) => confluenceBridge.invoke<PageList>('search', texts, spaces),
-  comments: (pageId: string) =>
-    confluenceBridge.invoke<CommentList>('comments', pageId).then((list) => {
-      if (list.error) throw new Error(list.error)
-      return list
-    }),
+  comments: (pageId: string) => confluenceBridge.invoke<CommentList>('comments', pageId),
   addComment: (pageId: string, body: string, parentId: string | null) => confluenceBridge.invoke<void>('addComment', pageId, body, parentId),
   updateComment: (id: string, body: string) => confluenceBridge.invoke<void>('updateComment', id, body),
   deleteComment: (id: string) => confluenceBridge.invoke<void>('deleteComment', id)

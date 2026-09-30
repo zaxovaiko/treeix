@@ -9,12 +9,7 @@ export const jiraBridge = atlassianBridge('jira')
 export const resolveImage = jiraBridge.resolveImage
 
 export const jiraApi = {
-  // acli failures come back as an error field; throwing keeps them out of the cache
-  search: (jql: string) =>
-    jiraBridge.invoke<WorkItemList>('search', jql).then((list) => {
-      if (list.error) throw new Error(list.error)
-      return list
-    }),
+  search: (jql: string) => jiraBridge.invoke<WorkItemList>('search', jql),
   detail: (key: string) => jiraBridge.invoke<WorkItemDetail>('detail', key),
   summary: (key: string) => jiraBridge.invoke<WorkItem>('summary', key),
   transition: (key: string, status: string) => jiraBridge.invoke<void>('transition', key, status),

@@ -1,27 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 
-/** A stored JSON value, or null when missing or unreadable; callers narrow it */
-export function readStored(key: string): unknown {
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? 'null')
-  } catch {
-    return null
-  }
-}
+import { errorMessage } from '../../shared/errors'
+import { readStored } from './storage'
+
+export { readStored }
 
 export function usePersisted<T extends string | number | boolean | null>(key: string, initial: T): [T, (value: T) => void] {
   const [value, setValue] = useState<T>(() => {
     // A nullable default (e.g. a selection that starts unset) accepts a stored string alongside null itself
     const matches = (candidate: unknown): candidate is T =>
       initial === null ? candidate === null || typeof candidate === 'string' : typeof candidate === typeof initial
-    try {
-      const stored: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
-      return matches(stored) ? stored : initial
-    } catch {
-      return initial
-    }
+    const stored = readStored(key)
+    return matches(stored) ? stored : initial
   })
   const persist = (next: T): void => {
     localStorage.setItem(key, JSON.stringify(next))
@@ -79,19 +71,55 @@ export function ResizeGrip({ across }: { across: boolean }): React.JSX.Element {
   )
 }
 
-/** Copies text and swaps its icon for a check so the click visibly landed */
-export function CopyButton({ text, label = 'Copy', className = 'size-3' }: { text: () => string; label?: string; className?: string }): React.JSX.Element {
+/** Focuses a popup menu's first item when it opens; j k and arrows then move between items, esc closes it, and its keys stay inside */
+export function useMenuKeys(open: boolean, close: () => void, selector = 'button'): { ref: React.RefObject<HTMLDivElement | null>; onKeyDown: (event: React.KeyboardEvent) => void } {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (open) ref.current?.querySelector('button')?.focus()
+  }, [open])
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    event.stopPropagation()
+    const items = [...(ref.current?.querySelectorAll<HTMLElement>(selector) ?? [])]
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
+    if (step) {
+      event.preventDefault()
+      items[(at + step + items.length) % items.length]?.focus()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      close()
+    }
+  }
+  return { ref, onKeyDown }
+}
+
+/** A panel over a dimmed backdrop; a click outside closes it, Escape is up to the caller */
+export function Dialog({ onClose, offset, className, children, ...panel }: { onClose: () => void; offset: string; className: string; children: React.ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, 'className' | 'onClick'>): React.JSX.Element {
+  return (
+    <div className={`fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-[2px] ${offset}`} onClick={onClose}>
+      <div {...panel} onClick={(event) => event.stopPropagation()} className={`rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl ${className}`}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** True for a moment after `copy` writes to the clipboard, for a check icon that shows the click landed */
+export function useCopied(): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     if (!copied) return
     const timer = setTimeout(() => setCopied(false), 1500)
     return () => clearTimeout(timer)
   }, [copied])
+  return [copied, (text) => void navigator.clipboard.writeText(text).then(() => setCopied(true))]
+}
+
+/** Copies text and swaps its icon for a check so the click visibly landed */
+export function CopyButton({ text, label = 'Copy', className = 'size-3' }: { text: () => string; label?: string; className?: string }): React.JSX.Element {
+  const [copied, copy] = useCopied()
   return (
-    <IconButton
-      label={copied ? 'Copied' : label}
-      onClick={() => navigator.clipboard.writeText(text()).then(() => setCopied(true))}
-    >
+    <IconButton label={copied ? 'Copied' : label} onClick={() => copy(text())}>
       <Icon name={copied ? 'check' : 'copy'} className={`${className} ${copied ? 'text-emerald-400' : ''}`} />
     </IconButton>
   )
@@ -131,9 +159,7 @@ export function FoldAllButton({ anyOpen, groups = 'groups', shortcut = 'z', onCl
   )
 }
 
-/** IPC rejections arrive wrapped as "Error invoking remote method 'x': Error: message" */
-export const errorMessage = (reason: unknown): string =>
-  String(reason).replace(/^Error: /, '').replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+export { errorMessage }
 
 const TOOLTIP_DELAY_MS = 350
 const SHORTCUT_SUFFIX = /^(.*?)\s*\(([⌘⇧⌥⌃][^)]*)\)$/
@@ -383,32 +409,30 @@ export function TextPrompt({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-[2px] pt-[18vh]" onClick={onClose}>
-      <div onClick={(event) => event.stopPropagation()} className="w-[440px] max-w-[90vw] rounded-xl border border-border bg-popover backdrop-blur-2xl p-4 shadow-2xl shadow-black/60">
-        <h2 className="text-sm font-medium">{title}</h2>
-        {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
-        <input
-          autoFocus
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') submit()
-            if (event.key === 'Escape') onClose()
-          }}
-          placeholder={placeholder}
-          className="mt-3 h-8 w-full rounded-md border border-input bg-muted px-2.5 font-mono text-[13px] outline-none placeholder:text-muted-foreground/70"
-        />
-        {error && <p className="mt-2 text-xs break-words text-red-400 select-text">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-            Cancel
-          </button>
-          <button onClick={submit} disabled={!value.trim() || busy} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
-            {busy ? 'Working...' : confirmLabel}
-          </button>
-        </div>
+    <Dialog onClose={onClose} offset="pt-[18vh]" className="w-[440px] max-w-[90vw] p-4">
+      <h2 className="text-sm font-medium">{title}</h2>
+      {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
+      <input
+        autoFocus
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
+          if (event.key === 'Escape') onClose()
+        }}
+        placeholder={placeholder}
+        className="mt-3 h-8 w-full rounded-md border border-input bg-muted px-2.5 font-mono text-[13px] outline-none placeholder:text-muted-foreground/70"
+      />
+      {error && <p className="mt-2 text-xs break-words text-red-400 select-text">{error}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+          Cancel
+        </button>
+        <button onClick={submit} disabled={!value.trim() || busy} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+          {busy ? 'Working...' : confirmLabel}
+        </button>
       </div>
-    </div>
+    </Dialog>
   )
 }
 

@@ -1,6 +1,8 @@
-import { access, readFile } from 'node:fs/promises'
+import { access } from 'node:fs/promises'
+import { readJsonFile } from '@treeix/host/paths'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
+import { object } from '@treeix/shared/json'
 
 const SCRIPTS = ['dev', 'start', 'serve']
 const LOCKFILES: [string, string][] = [
@@ -12,8 +14,8 @@ const LOCKFILES: [string, string][] = [
 
 /** `pnpm run dev` for the first dev-like script in package.json, with the package manager its lockfile names */
 export function devCommand(packageJson: unknown, lockfiles: string[]): string | null {
-  const scripts = typeof packageJson === 'object' && packageJson !== null && 'scripts' in packageJson ? packageJson.scripts : null
-  const script = SCRIPTS.find((name) => typeof scripts === 'object' && scripts !== null && name in scripts)
+  const scripts = object(object(packageJson).scripts)
+  const script = SCRIPTS.find((name) => name in scripts)
   if (!script) return null
   const manager = LOCKFILES.find(([file]) => lockfiles.includes(file))?.[1] ?? 'npm'
   return `${manager} run ${script}`
@@ -32,14 +34,8 @@ const freePort = (): Promise<number> =>
 
 /** The command that starts the folder's dev server on a free port; PORT is honored by Next, Nuxt, Remix, Astro and most Node servers */
 export async function devServerCommand(folder: string): Promise<string | null> {
-  const text = await readFile(join(folder, 'package.json'), 'utf8').catch(() => null)
-  if (text === null) return null
-  let packageJson: unknown = null
-  try {
-    packageJson = JSON.parse(text)
-  } catch {
-    return null
-  }
+  const packageJson = await readJsonFile(join(folder, 'package.json'))
+  if (packageJson === null) return null
   const present = await Promise.all(LOCKFILES.map(([file]) => access(join(folder, file)).then(() => file, () => null)))
   const command = devCommand(packageJson, present.filter((file) => file !== null))
   return command && `PORT=${await freePort()} ${command}`

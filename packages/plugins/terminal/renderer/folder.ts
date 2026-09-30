@@ -1,73 +1,36 @@
-import { useSyncExternalStore } from 'react'
-import type { HostApi } from '@treeix/sdk'
+import { createStore, type HostApi } from '@treeix/sdk'
+import { readStored } from '@treeix/app/storage'
+import { isString, list, stringValues } from '@treeix/shared/json'
 
 /** The folder picked on the Terminal page, per workspace; new groups and tabs start there instead of the app's default */
 const KEY = 'terminal.folders'
 const RECENT_KEY = 'terminal.recentFolders'
 const RECENT_LIMIT = 5
 
-const readRecord = (key: string): Record<string, string> => {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
-    return typeof stored === 'object' && stored !== null && !Array.isArray(stored)
-      ? Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
-      : {}
-  } catch {
-    return {}
-  }
-}
-
-const readList = (key: string): string[] => {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
-    return Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-let picked = readRecord(KEY)
-let recent = readList(RECENT_KEY)
-const listeners = new Set<() => void>()
+const folders = createStore({ picked: stringValues(readStored(KEY)), recent: list(readStored(RECENT_KEY), isString) })
 
 export function setPickedFolder(workspaceId: string, path: string | null): void {
-  const { [workspaceId]: _, ...rest } = picked
-  picked = path ? { ...rest, [workspaceId]: path } : rest
-  if (path) recent = [path, ...recent.filter((item) => item !== path)].slice(0, RECENT_LIMIT)
+  const { [workspaceId]: _, ...rest } = folders.get().picked
+  const picked = path ? { ...rest, [workspaceId]: path } : rest
+  const { recent } = folders.get()
+  folders.set({ picked, recent: path ? [path, ...recent.filter((item) => item !== path)].slice(0, RECENT_LIMIT) : recent })
   localStorage.setItem(KEY, JSON.stringify(picked))
-  localStorage.setItem(RECENT_KEY, JSON.stringify(recent))
-  listeners.forEach((listener) => listener())
+  localStorage.setItem(RECENT_KEY, JSON.stringify(folders.get().recent))
 }
 
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-export const pickedFolder = (workspaceId: string): string | null => picked[workspaceId] ?? null
-export const recentFolders = (): string[] => recent
+export const pickedFolder = (workspaceId: string): string | null => folders.get().picked[workspaceId] ?? null
+export const recentFolders = (): string[] => folders.get().recent
 
 /** Where terminals start: the picked folder, else the app's default */
 export const terminalCwd = (host: HostApi): string => pickedFolder(host.workspaceId) ?? host.defaultCwd
 
 /** Rerenders on a pick; returns the folder terminals start in */
 export function useTerminalCwd(host: HostApi): string {
-  useSyncExternalStore(subscribe, () => picked)
+  folders.use()
   return terminalCwd(host)
 }
 
 // Open from the folder button or ⌘⇧P, so the key can open the dropdown the page draws
-let pickerOpen = false
-const openListeners = new Set<() => void>()
-export function setFolderPickerOpen(open: boolean): void {
-  pickerOpen = open
-  openListeners.forEach((listener) => listener())
-}
-export const useFolderPickerOpen = (): boolean =>
-  useSyncExternalStore(
-    (listener) => {
-      openListeners.add(listener)
-      return () => openListeners.delete(listener)
-    },
-    () => pickerOpen
-  )
+const pickerOpen = createStore(false)
+export const setFolderPickerOpen = pickerOpen.set
+export const useFolderPickerOpen = pickerOpen.use

@@ -1,4 +1,6 @@
 import { isReviewComment, type ReviewComment } from '../../shared/comments'
+import { list } from '../../shared/json'
+import { readStored } from './storage'
 
 /** Comments taken off the list when they went to an agent, kept so they can be brought back */
 export type SentBatch = { id: string; sentAt: string; worktreePath: string; message: string; comments: ReviewComment[] }
@@ -12,14 +14,7 @@ const isSentBatch = (value: unknown): value is SentBatch => {
   return typeof batch.id === 'string' && typeof batch.sentAt === 'string' && typeof batch.worktreePath === 'string' && typeof batch.message === 'string' && Array.isArray(batch.comments) && batch.comments.every(isReviewComment)
 }
 
-export function loadSent(): SentBatch[] {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '[]')
-    return Array.isArray(stored) ? stored.filter(isSentBatch) : []
-  } catch {
-    return []
-  }
-}
+export const loadSent = (): SentBatch[] => list(readStored(KEY), isSentBatch)
 
 export const saveSent = (batches: SentBatch[]): void => localStorage.setItem(KEY, JSON.stringify(batches))
 

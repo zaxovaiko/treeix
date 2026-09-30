@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type AtlassianComment, IMAGE_HOST, type Json, type Mention, object, orNull, text } from '@treeix/atlassian/shared'
+import { isString, list } from '@treeix/shared/json'
 import type { Epic, WorkItem, WorkItemDetail, WorkItemEdit, WorkItemList } from '../shared/types'
 
 const LIST_LIMIT = 200
@@ -48,20 +49,16 @@ export function sprintJql(jql: string): string {
 }
 
 export async function searchWorkItems(jql: string): Promise<WorkItemList> {
-  try {
-    const [raw, sprint, host] = await Promise.all([
-      acli(['jira', 'workitem', 'search', '--jql', jql, '--fields', SEARCH_FIELDS, '--limit', `${LIST_LIMIT}`, '--json']),
-      // `--fields key` alone prints nulls, so status rides along
-      acli(['jira', 'workitem', 'search', '--jql', sprintJql(jql), '--fields', 'key,status', '--limit', `${LIST_LIMIT}`, '--json']).catch(() => null),
-      atlassianSite()
-    ])
-    // acli prints null when nothing matches
-    const issues = Array.isArray(raw) ? raw : []
-    const sprintKeys = sprint === null ? null : Array.isArray(sprint) ? sprint.map((issue) => text(object(issue).key)) : []
-    return { items: issues.map((issue) => toWorkItem(issue, host)), sprintKeys, error: null }
-  } catch (reason) {
-    return { items: [], sprintKeys: null, error: failure(reason) }
-  }
+  const [raw, sprint, host] = await Promise.all([
+    acli(['jira', 'workitem', 'search', '--jql', jql, '--fields', SEARCH_FIELDS, '--limit', `${LIST_LIMIT}`, '--json']),
+    // `--fields key` alone prints nulls, so status rides along
+    acli(['jira', 'workitem', 'search', '--jql', sprintJql(jql), '--fields', 'key,status', '--limit', `${LIST_LIMIT}`, '--json']).catch(() => null),
+    atlassianSite()
+  ])
+  // acli prints null when nothing matches
+  const issues = Array.isArray(raw) ? raw : []
+  const sprintKeys = sprint === null ? null : Array.isArray(sprint) ? sprint.map((issue) => text(object(issue).key)) : []
+  return { items: issues.map((issue) => toWorkItem(issue, host)), sprintKeys }
 }
 
 export async function workItemDetail(key: string): Promise<WorkItemDetail> {
@@ -87,7 +84,7 @@ export async function workItemDetail(key: string): Promise<WorkItemDetail> {
     reporter: orNull(text(object(fields.reporter).displayName)),
     reporterAvatar: avatarOf(fields.reporter),
     parent: parentOf(fields.parent),
-    labels: Array.isArray(fields.labels) ? fields.labels.filter((label): label is string => typeof label === 'string') : [],
+    labels: list(fields.labels, isString),
     comments: threadComments(
       comments.map((comment) => ({
         id: text(comment.id),
@@ -207,9 +204,7 @@ export const updateComment = (key: string, id: string, body: string): Promise<vo
   withAdfFile(body, null, (file) => run(['jira', 'workitem', 'comment', 'update', '--key', checkedKey(key), '--id', checkedCommentId(id), '--body-adf', file]))
 
 export async function deleteComment(key: string, id: string): Promise<void> {
-  await run(['jira', 'workitem', 'comment', 'delete', '--key', checkedKey(key), '--id', checkedCommentId(id)]).catch((reason: unknown) => {
-    throw new Error(failure(reason))
-  })
+  await run(['jira', 'workitem', 'comment', 'delete', '--key', checkedKey(key), '--id', checkedCommentId(id)])
 }
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]*-\d+$/
@@ -228,20 +223,14 @@ export async function editWorkItem(key: string, changes: WorkItemEdit): Promise<
     ...(labels(changes.removeLabels) ? ['--remove-labels', labels(changes.removeLabels)] : [])
   ]
   if (args.length === 0) return
-  await run(['jira', 'workitem', 'edit', '--key', checkedKey(key), ...args, '--yes']).catch((reason: unknown) => {
-    throw new Error(failure(reason))
-  })
+  await run(['jira', 'workitem', 'edit', '--key', checkedKey(key), ...args, '--yes'])
 }
 
 /** `accountId` null removes the assignee; '@me' is you */
 export async function assignWorkItem(key: string, accountId: string | null): Promise<void> {
-  await run(['jira', 'workitem', 'assign', '--key', checkedKey(key), ...(accountId ? ['--assignee', accountId] : ['--remove-assignee']), '--yes']).catch((reason: unknown) => {
-    throw new Error(failure(reason))
-  })
+  await run(['jira', 'workitem', 'assign', '--key', checkedKey(key), ...(accountId ? ['--assignee', accountId] : ['--remove-assignee']), '--yes'])
 }
 
 export async function transitionWorkItem(key: string, status: string): Promise<void> {
-  await run(['jira', 'workitem', 'transition', '--key', key, '--status', status, '--yes']).catch((reason: unknown) => {
-    throw new Error(failure(reason))
-  })
+  await run(['jira', 'workitem', 'transition', '--key', checkedKey(key), '--status', status, '--yes'])
 }

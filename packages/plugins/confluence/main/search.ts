@@ -1,10 +1,11 @@
-import { isJson, object, orNull, text } from '@treeix/atlassian/shared'
+import { object, orNull, text } from '@treeix/atlassian/shared'
+import { list } from '@treeix/shared/json'
 import type { PageSummary } from '../shared/types'
 
 /** Search results from the REST API, which acli has no command for */
 export function toPageSummaries(raw: unknown): PageSummary[] {
   const results = object(raw).results
-  return (Array.isArray(results) ? results.filter(isJson) : []).map((result) => ({
+  return list(results).map((result) => ({
     id: text(object(result.content).id),
     title: text(object(result.content).title) || text(result.title),
     space: orNull(text(object(result.resultGlobalContainer).title)),

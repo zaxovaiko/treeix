@@ -16,16 +16,17 @@ import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } fr
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { CommentDraft, orderRange } from '@treeix/app/Comments'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
-import { ConflictMark, groupPullRequests, PipelineDot, PipelineLink, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prefix, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
+import { ConflictMark, groupPullRequests, PipelineDot, PipelineLink, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prLabel, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
 import { FilterSearch, matchesFilters, parseFilters, type PullRequestFilter } from './PullRequestFilter'
 import { usePullRequestKeys } from './keys'
 import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
-import { EmptyState, errorMessage, FoldAllButton, IconButton, Popup, readStored, ResizeHandle, TextPrompt, usePersisted } from '@treeix/app/ui'
+import { EmptyState, errorMessage, FoldAllButton, IconButton, Popup, readStored, ResizeHandle, TextPrompt, useCopied, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import { type Command, focusZone, getShell, type IconName, isTyping, Kbd, ListToggle, PageLayout, togglePanel, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
+import { isJson, isString, list as jsonList, parseJson } from '@treeix/shared/json'
 
 // ponytail: keeps the most recently loaded details, which carry every patch; raise if reopening older PRs refetches too often
 const MAX_CACHED_DETAILS = 30
@@ -145,14 +146,7 @@ const SectionLabel = ({ children, open, onToggle }: { children: React.ReactNode;
     <div className={SECTION_LABEL}>{children}</div>
   )
 
-function parseFolded(json: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
+const parseFolded = (json: string): string[] => jsonList(parseJson(json), isString)
 
 export function PullRequestsView({
   repoPaths,
@@ -262,7 +256,7 @@ export function PullRequestsView({
             null,
             { label: 'Copy link', run: () => copyText(pr.url) },
             { label: 'Copy branch name', run: () => copyText(pr.sourceBranch) },
-            { label: `Copy ${prefix(pr)}${pr.number}`, run: () => copyText(`${prefix(pr)}${pr.number}`) },
+            { label: `Copy ${prLabel(pr)}`, run: () => copyText(`${prLabel(pr)}`) },
             null,
             { label: `Filter by ${pr.author}`, run: () => addFilter({ kind: 'author', value: pr.author }) },
             { label: `Filter by ${baseName(pr.repoPath)}`, run: () => addFilter({ kind: 'repo', value: pr.repoPath }) }
@@ -273,8 +267,7 @@ export function PullRequestsView({
         <div className="flex min-w-0 items-center gap-2">
           <ProviderMark provider={pr.provider} className="size-3.5" />
           <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-            {prefix(pr)}
-            {pr.number}
+            {prLabel(pr)}
           </span>
           <span title={pr.title} className={`min-w-0 flex-1 truncate text-[12.5px] ${settled ? '' : 'font-medium'}`}>
             {pr.title}
@@ -513,16 +506,11 @@ function Reactions({ pr, comment }: { pr: PullRequest; comment: ThreadComment })
 
 /** A branch name that copies itself when clicked */
 function BranchCopy({ branch }: { branch: string }): React.JSX.Element {
-  const [copied, setCopied] = useState(false)
-  useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 1500)
-    return () => clearTimeout(timer)
-  }, [copied])
+  const [copied, copy] = useCopied()
   return (
     <button
       title={copied ? 'Copied' : `Copy ${branch}`}
-      onClick={() => navigator.clipboard.writeText(branch).then(() => setCopied(true))}
+      onClick={() => copy(branch)}
       className="group/branch flex max-w-full min-w-0 items-center gap-1.5 rounded bg-foreground/[.06] px-1.5 font-mono text-[11px] text-foreground/80 hover:bg-foreground/10"
     >
       <span className="truncate">{branch}</span>
@@ -561,11 +549,7 @@ function ReviewerRow({ reviewer, pr, onRequested, onError }: { reviewer: Reviewe
     })
   }
   return (
-    <div className="flex h-7 min-w-0 items-center gap-2 px-3 text-xs">
-      <UserAvatar name={reviewer.login} url={reviewer.avatarUrl} size="size-4" />
-      <span title={reviewer.login} className="min-w-0 flex-1 truncate">
-        {reviewer.login}
-      </span>
+    <PersonRow person={reviewer}>
       <span className={`shrink-0 text-[11px] ${look.className}`}>{look.label}</span>
       {state !== 'requested' && (
         <button
@@ -576,21 +560,29 @@ function ReviewerRow({ reviewer, pr, onRequested, onError }: { reviewer: Reviewe
           <Icon name="refresh" className="size-3" />
         </button>
       )}
-    </div>
+    </PersonRow>
   )
 }
 
-function AssigneeRow({ person, onRemove }: { person: Person; onRemove: () => void }): React.JSX.Element {
+function PersonRow({ person, children }: { person: Person; children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="flex h-7 min-w-0 items-center gap-2 px-3 text-xs">
       <UserAvatar name={person.login} url={person.avatarUrl} size="size-4" />
       <span title={person.login} className="min-w-0 flex-1 truncate">
         {person.login}
       </span>
+      {children}
+    </div>
+  )
+}
+
+function AssigneeRow({ person, onRemove }: { person: Person; onRemove: () => void }): React.JSX.Element {
+  return (
+    <PersonRow person={person}>
       <button onClick={onRemove} title={`Unassign ${person.login}`} className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
         <Icon name="close" className="size-3" />
       </button>
-    </div>
+    </PersonRow>
   )
 }
 
@@ -860,12 +852,8 @@ function useScopedState<T>(scope: string, initial: T): [T, React.Dispatch<React.
 type Visit = { head: string; previous: string | null }
 
 function readVisit(key: string): Visit | null {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
-    return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'head') === 'string' ? (value as Visit) : null
-  } catch {
-    return null
-  }
+  const value = readStored(key)
+  return isJson(value) && typeof value.head === 'string' ? (value as Visit) : null
 }
 
 /** Files that changed since the head seen at the previous visit; null on a first visit or when nothing moved */
@@ -1024,12 +1012,7 @@ export function PullRequestDetailView({
   useEffect(() => {
     if (!detail) return
     if (detail.viewedFiles) return setViewed(new Set(detail.viewedFiles))
-    try {
-      const stored: unknown = JSON.parse(localStorage.getItem(localViewedKey) ?? '[]')
-      setViewed(new Set(Array.isArray(stored) ? stored.filter((path): path is string => typeof path === 'string') : []))
-    } catch {
-      setViewed(new Set())
-    }
+    setViewed(new Set(jsonList(readStored(localViewedKey), isString)))
   }, [detail])
 
   const openFile = (path: string): void => {
@@ -1260,6 +1243,7 @@ export function PullRequestDetailView({
 
   // GitHub refuses reviews of your own pull request; the list knows it's yours before the detail has loaded
   const own = detail?.viewer ? detail.viewer === pr.author : pr.review?.state === 'yours'
+  const refreshScope = (): void => void refreshPullRequests(host.scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined)
   // Draft flips show straight away and go back if the provider refuses
   const [draftNow, setDraftNow] = useScopedState<boolean | null>(pr.url, null)
   useEffect(() => setDraftNow(null), [pr.draft])
@@ -1267,7 +1251,7 @@ export function PullRequestDetailView({
   const setDraftState = (draft: boolean): void => {
     setDraftNow(draft)
     api.setDraft(pr, draft).then(
-      () => void refreshPullRequests(host.scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined),
+      refreshScope,
       (failure: unknown) => {
         setDraftNow(null)
         setError(`${draft ? 'Not converted to draft' : 'Not marked ready for review'}: ${errorMessage(failure)}`)
@@ -1296,10 +1280,10 @@ export function PullRequestDetailView({
   }
   const [closing, setClosing] = useScopedState(pr.url, false)
   const close = (): void => {
-    if (closing || !window.confirm(`Close ${prefix(pr)}${pr.number} without merging?`)) return
+    if (closing || !window.confirm(`Close ${prLabel(pr)} without merging?`)) return
     setClosing(true)
     api.close(pr).then(
-      () => void refreshPullRequests(host.scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined),
+      refreshScope,
       (failure: unknown) => setError(`Not closed: ${errorMessage(failure)}`)
     ).finally(() => setClosing(false))
   }
@@ -1330,10 +1314,10 @@ export function PullRequestDetailView({
       .merge(pr, chosen, deleteBranch)
       .then(
         () => {
-          host.flash(`Merged ${prefix(pr)}${pr.number} into ${pr.targetBranch}`)
+          host.flash(`Merged ${prLabel(pr)} into ${pr.targetBranch}`)
           void load().catch(() => undefined)
           // The list moves it to Merged
-          void refreshPullRequests(host.scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined)
+          refreshScope()
         },
         (failure: unknown) => setError(`Not merged: ${errorMessage(failure)}`)
       )
@@ -1363,7 +1347,7 @@ export function PullRequestDetailView({
   }, [draftOpen, confirmMerge, deleteBranch, merging])
 
   const pickerCommands = (): Command[] => {
-    const title = `${prefix(pr)}${pr.number}`
+    const title = `${prLabel(pr)}`
     if (picker === 'files') {
       return patches.map((patch) => ({ id: patch.path, group: 'Files', label: baseName(patch.path), detail: patch.path, filePath: patch.path, run: () => openFile(patch.path) }))
     }
@@ -1404,7 +1388,7 @@ export function PullRequestDetailView({
   const worktree = (): void => {
     if (local) onOpenWorktree(local)
     else if (pr.state === 'open') onCreateWorktree(pr)
-    else host.flash(`${prefix(pr)}${pr.number} is ${pr.state}, its branch may be gone`)
+    else host.flash(`${prLabel(pr)} is ${pr.state}, its branch may be gone`)
   }
   const openInBrowser = (): void => void window.open(pr.url)
   const copyLink = (): void => {
@@ -1486,6 +1470,24 @@ export function PullRequestDetailView({
       setFileCommentPath(null)
       backToMain()
     }
+    // A whole-file comment has no range; a line comment posts at the range's last line
+    const reviewDraft = (label: string, placeholder: string, range: LineRange | null, close: () => void): React.JSX.Element => (
+      <CommentDraft
+        label={`${label} · posts to ${providerName(pr)}`}
+        placeholder={placeholder}
+        submitLabel={`Comment on ${providerName(pr)}`}
+        allowAttachments={false}
+        onCancel={close}
+        alternative={{
+          label: 'Add to agent comments',
+          onSave: (text) => {
+            onAddNote(pr, patch, range, text)
+            close()
+          }
+        }}
+        onSave={(body) => post({ body, path: patch.path, ...(range && { line: range.end, side: range.endSide ?? range.side }) }).then(close)}
+      />
+    )
     return (
       <MarkdownFoldScope key={patch.path}>
         <section data-file-path={patch.path} onPointerEnter={() => setPointerPath(patch.path)} className={allFiles ? 'border-b border-border' : ''}>
@@ -1534,21 +1536,7 @@ export function PullRequestDetailView({
           </div>
           {fileCommentPath === patch.path && (
             <div className="p-3">
-              <CommentDraft
-                label={`Comment on ${baseName(patch.path)} · posts to ${providerName(pr)}`}
-                placeholder="Write a comment about the whole file"
-                submitLabel={`Comment on ${providerName(pr)}`}
-                allowAttachments={false}
-                onCancel={closeFileComment}
-                alternative={{
-                  label: 'Add to agent comments',
-                  onSave: (text) => {
-                    onAddNote(pr, patch, null, text)
-                    closeFileComment()
-                  }
-                }}
-                onSave={(body) => post({ body, path: patch.path }).then(closeFileComment)}
-              />
+              {reviewDraft(`Comment on ${baseName(patch.path)}`, 'Write a comment about the whole file', null, closeFileComment)}
             </div>
           )}
           {/* Whole-file threads have no line to anchor to, so they sit above the diff */}
@@ -1579,21 +1567,7 @@ export function PullRequestDetailView({
                 if (thread) return <div className="mx-3 my-2">{threadCard(thread, false)}</div>
                 return fileDraft ? (
                   <div className="mx-3 my-2">
-                    <CommentDraft
-                      label={`Comment on line ${fileDraft.end} · posts to ${providerName(pr)}`}
-                      placeholder="Write a review comment"
-                      submitLabel={`Comment on ${providerName(pr)}`}
-                      allowAttachments={false}
-                      onCancel={closeDraft}
-                      alternative={{
-                        label: 'Add to agent comments',
-                        onSave: (text) => {
-                          onAddNote(pr, patch, fileDraft, text)
-                          closeDraft()
-                        }
-                      }}
-                      onSave={(body) => post({ body, path: patch.path, line: fileDraft.end, side: fileDraft.endSide ?? fileDraft.side }).then(closeDraft)}
-                    />
+                    {reviewDraft(`Comment on line ${fileDraft.end}`, 'Write a review comment', fileDraft, closeDraft)}
                   </div>
                 ) : null
               }}
@@ -1630,8 +1604,7 @@ export function PullRequestDetailView({
           {baseName(pr.repoPath)}
         </span>
         <span className="shrink-0 font-mono">
-          {prefix(pr)}
-          {pr.number}
+          {prLabel(pr)}
         </span>
         <StateBadge pr={isDraft === pr.draft ? pr : { ...pr, draft: isDraft }} />
         <ReviewMark review={pr.review} />
@@ -1979,7 +1952,7 @@ export function PullRequestDetailView({
         defaults={view === 'files' ? { inspector: false } : undefined}
         list={list}
         main={
-          <ErrorBoundary label={`${prefix(pr)}${pr.number}`} resetKey={pr.url}>
+          <ErrorBoundary label={`${prLabel(pr)}`} resetKey={pr.url}>
             {main}
           </ErrorBoundary>
         }

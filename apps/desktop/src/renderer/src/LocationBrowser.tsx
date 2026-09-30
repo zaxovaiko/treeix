@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SearchMatch, SearchOptions, SearchResult } from '../../shared/types'
 import { ancestorFolders, buildFolderTree, type FolderNode } from './fileTree'
 import { FileIcon, Icon } from './Icon'
-import { activeTheme } from './settings'
+import { activeTheme, toggleIn } from './settings'
 import { baseName } from './Sidebar'
 import { codeTheme } from './themes'
-import { errorMessage, usePersisted } from './ui'
+import { errorMessage, FoldAllButton, usePersisted } from './ui'
 import { matcherFor } from './searchMatcher'
 import { workspaceKey } from './workspaces'
 
@@ -90,13 +90,6 @@ type Item =
   | { type: 'folder'; key: string; name: string; title: string; depth: number; count: number }
   | { type: 'group'; key: string; inFile: SearchMatch[]; depth: number }
   | { type: 'row'; location: SearchMatch; depth: number }
-
-const toggleKey = (set: Set<string>, key: string): Set<string> => {
-  const next = new Set(set)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  return next
-}
 
 const groupKey = (location: SearchMatch): string => `${location.worktreePath}\0${location.path}`
 
@@ -259,16 +252,7 @@ export function LocationsDialog({
       >
         <div className="flex min-h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs text-muted-foreground">
           {header}
-          {locations.length > 0 && (
-            <button
-              title={allExpanded ? 'Collapse all' : 'Expand all'}
-              aria-label={allExpanded ? 'Collapse all' : 'Expand all'}
-              onClick={() => setExpanded(allExpanded ? new Set() : allKeys)}
-              className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground"
-            >
-              <Icon name={allExpanded ? 'collapseAll' : 'expandAll'} className="size-3.5" />
-            </button>
-          )}
+          {locations.length > 0 && <FoldAllButton anyOpen={allExpanded} groups="results" shortcut={null} onClick={() => setExpanded(allExpanded ? new Set() : allKeys)} />}
           <span className="shrink-0 text-[11px]">↑↓ to move · ↵ to open</span>
           <button onClick={onClose} aria-label="Close" className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent">
             <Icon name="close" className="size-3" />
@@ -291,7 +275,7 @@ export function LocationsDialog({
                       key={item.key}
                       title={item.title}
                       style={{ ...style, paddingLeft: 6 + item.depth * 12 }}
-                      onClick={() => setExpanded((previous) => toggleKey(previous, item.key))}
+                      onClick={() => setExpanded((previous) => toggleIn(previous, item.key))}
                       className="flex h-7 items-center gap-1.5 rounded-md pr-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                     >
                       <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
@@ -309,7 +293,7 @@ export function LocationsDialog({
                       key={item.key}
                       title={path}
                       style={{ ...style, paddingLeft: 6 + item.depth * 12 }}
-                      onClick={() => setExpanded((previous) => toggleKey(previous, item.key))}
+                      onClick={() => setExpanded((previous) => toggleIn(previous, item.key))}
                       className="flex h-7 items-center gap-1.5 rounded-md pr-1.5 text-left text-xs hover:bg-accent"
                     >
                       <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground ${open ? 'rotate-90' : ''}`} />

@@ -1,20 +1,21 @@
 import { actionForEvent, matchesAction } from '@treeix/shared/keymap'
-import { useEffect, useRef, useState } from 'react'
-import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
+import { useEffect, useState } from 'react'
+import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav, usePageKeys, usePanels, useZone } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
 import { type FilterGroup, FilterSearch, type FilterToken, matchesTokens, parseTokens } from '@treeix/app/FilterSearch'
 import { Icon } from '@treeix/app/Icon'
 import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
-import { baseName } from '@treeix/app/Sidebar'
 import { timeAgo } from '@treeix/app/time'
-import { EmptyState, FoldAllButton, IconButton, usePersisted } from '@treeix/app/ui'
+import { EmptyState, errorMessage, FoldAllButton, IconButton, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import type { CommentList, Page, PageList, PageSummary } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
 import { withList } from '@treeix/atlassian/renderer/panels'
 import { Comments, commentCount } from '@treeix/atlassian/renderer/Comments'
+import { addReference } from '@treeix/atlassian/renderer/reference'
 import { commentCache, confluenceApi, openRequest, pageCache, pageOfUrl, recentCache, resolveImage, TTL } from './api'
+import { isJson, isString, list, parseJson } from '@treeix/shared/json'
 
 const MAX_OPENED = 20
 /** Pages shown per space before "Show more" */
@@ -35,34 +36,11 @@ const FILTER_GROUPS: FilterGroup<Known>[] = [
 ]
 const FILTER_KINDS = FILTER_GROUPS.map((group) => group.kind)
 
-function readJson(json: string): unknown {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
-}
-
 /** A pasted page URL or id, which opens the page instead of searching */
 const directId = (text: string): string | null => pageOfUrl(text)?.id ?? (/^\d{4,}$/.test(text) ? text : null)
 
-function parseStrings(json: string): string[] {
-  try {
-    const value: unknown = JSON.parse(json)
-    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function parseOpened(json: string): PageSummary[] {
-  try {
-    const value: unknown = JSON.parse(json)
-    return Array.isArray(value) ? value.filter((entry): entry is PageSummary => typeof entry === 'object' && entry !== null && typeof entry.id === 'string' && typeof entry.title === 'string') : []
-  } catch {
-    return []
-  }
-}
+const parseStrings = (json: string): string[] => list(parseJson(json), isString)
+const parseOpened = (json: string): PageSummary[] => list(parseJson(json), (entry): entry is PageSummary => isJson(entry) && typeof entry.id === 'string' && typeof entry.title === 'string')
 
 /** Pages of one space together, spaces in alphabetical order with unknown ones last */
 function bySpace(list: PageSummary[]): [string, PageSummary[]][] {
@@ -176,11 +154,11 @@ export function ConfluenceTab(): React.JSX.Element {
   const panels = usePanels()
   const { zone } = useZone()
   const [filtersJson, setFiltersJson] = usePersisted<string>(workspaceKey('confluence.filters'), '[]')
-  const filters = parseTokens(readJson(filtersJson), FILTER_KINDS)
+  const filters = parseTokens(parseJson(filtersJson), FILTER_KINDS)
   const valuesOf = (kind: string): string[] => filters.filter((filter) => filter.kind === kind).map((filter) => filter.value)
   const texts = valuesOf('text')
   const spaceFilters = valuesOf('space')
-  const [results, setResults] = useState<PageList | null>(null)
+  const [results, setResults] = useState<{ pages: PageSummary[]; error: string | null } | null>(null)
   const { value: recent, error: recentError, loading: recentLoading, refresh: reloadRecent } = useCached<PageList>(recentCache, 'recent', TTL.recent, confluenceApi.recent)
   const [selectedId, setSelectedId] = usePersisted<string>(workspaceKey('confluence.selected'), '')
   const [openedJson, setOpenedJson] = usePersisted<string>(workspaceKey('confluence.opened'), '[]')
@@ -231,7 +209,10 @@ export function ConfluenceTab(): React.JSX.Element {
   useEffect(() => {
     if (!searchKey) return setResults(null)
     let current = true
-    void confluenceApi.search(texts, spaceFilters).then((list) => current && setResults(list))
+    confluenceApi.search(texts, spaceFilters).then(
+      (list) => current && setResults({ ...list, error: null }),
+      (reason: unknown) => current && setResults({ pages: [], error: errorMessage(reason) })
+    )
     return () => {
       current = false
     }
@@ -284,19 +265,8 @@ export function ConfluenceTab(): React.JSX.Element {
     if (!shownPage) return
     const worktreePath = host.selectedWorktree
     if (!worktreePath) return host.flash('Select a worktree first')
-    host.addComment({
-      id: crypto.randomUUID(),
-      worktreePath,
-      filePath: `Confluence: ${shownPage.title}`,
-      range: { start: 0, end: 0 },
-      code: '',
-      // The reference alone keeps the prompt short; the page text rides along for machines without acli
-      text: `Confluence "${shownPage.title}" ${shownPage.url}`,
-      body: shownPage.body,
-      tool: 'acli',
-      kind: 'reference'
-    })
-    host.flash(`Added ${shownPage.title} to comments on ${baseName(worktreePath)}`)
+    // The reference alone keeps the prompt short
+    addReference(host, worktreePath, { filePath: `Confluence: ${shownPage.title}`, text: `Confluence "${shownPage.title}" ${shownPage.url}`, body: shownPage.body }, shownPage.title)
   }
 
   const search: PageAction = {
@@ -327,8 +297,7 @@ export function ConfluenceTab(): React.JSX.Element {
   const anySpaceOpen = spaceKeys.some((key) => !collapsedSpaces.includes(key))
   const foldAll = (): void => setCollapsedJson(JSON.stringify(anySpaceOpen ? [...new Set([...collapsedSpaces, ...spaceKeys])] : collapsedSpaces.filter((key) => !spaceKeys.includes(key))))
 
-  const onKey = useRef<(event: KeyboardEvent) => boolean>(() => false)
-  onKey.current = (event) => {
+  const onKey = (event: KeyboardEvent): boolean => {
     if (zone === 'list' && matchesAction(event, 'confluence.fold') && spaceKeys.length > 1) {
       foldAll()
       return true
@@ -345,16 +314,7 @@ export function ConfluenceTab(): React.JSX.Element {
     run?.()
     return run !== undefined
   }
-  // The page keeps this listener while it sits off screen, so it only acts when the keys are its own
-  const ownsKeys = useRef(false)
-  ownsKeys.current = host.keyboardPage === 'confluence'
-  useEffect(() => {
-    const listener = (event: KeyboardEvent): void => {
-      if (ownsKeys.current && isPageKey(event) && onKey.current(event)) event.preventDefault()
-    }
-    window.addEventListener('keydown', listener)
-    return () => window.removeEventListener('keydown', listener)
-  }, [])
+  usePageKeys('confluence', (event) => isPageKey(event) && onKey(event))
 
   const row = (entry: Entry, index: number): React.JSX.Element => {
     if (entry.kind === 'space') {

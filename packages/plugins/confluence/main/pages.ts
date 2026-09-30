@@ -1,8 +1,9 @@
-import { adfToMarkdown } from '@treeix/atlassian/main/adf'
 import { acli, restFetch } from '@treeix/atlassian/main/cli'
 import { loadCredentials } from '@treeix/atlassian/main/credentials'
-import { IMAGE_HOST, isJson, object, orNull, text } from '@treeix/atlassian/shared'
+import { object, orNull, text } from '@treeix/atlassian/shared'
+import { list } from '@treeix/shared/json'
 import type { Page, PageList, Space } from '../shared/types'
+import { bodyMarkdown } from './commentTree'
 import { searchCql, toPageSummaries } from './search'
 
 const RESULT_LIMIT = 40
@@ -14,7 +15,7 @@ export const spaceNames = (): Promise<Map<string, Space>> => {
     .then((raw) => {
       const results = object(raw).results
       return new Map(
-        (Array.isArray(results) ? results.filter(isJson) : []).map((space) => [text(space.id), { id: text(space.id), key: text(space.key), name: text(space.name) }])
+        list(results).map((space) => [text(space.id), { id: text(space.id), key: text(space.key), name: text(space.name) }])
       )
     })
     .catch(() => {
@@ -29,13 +30,6 @@ export async function pageView(id: string): Promise<Page> {
     acli(['confluence', 'page', 'view', '--id', id, '--body-format', 'atlas_doc_format', '--include-direct-children', '--json']).then(object),
     spaceNames()
   ])
-  const value = object(object(raw.body).atlas_doc_format).value
-  let adf: unknown = null
-  try {
-    adf = typeof value === 'string' ? JSON.parse(value) : value
-  } catch {
-    adf = null
-  }
   const links = new Set<string>()
   const pageLinks = object(raw._links)
   const children = object(raw.directChildren).results
@@ -44,25 +38,17 @@ export async function pageView(id: string): Promise<Page> {
     title: text(raw.title),
     space: knownSpaces.get(text(raw.spaceId))?.name ?? null,
     url: `${text(pageLinks.base)}${text(pageLinks.webui)}`,
-    // Confluence images are page attachments, looked up by file id when shown
-    body: adfToMarkdown(adf, {
-      mediaSource: (attrs) => `${IMAGE_HOST}/confluence/${id}/${encodeURIComponent(text(attrs.id))}`,
-      onLink: (url) => void links.add(url)
-    }),
+    body: bodyMarkdown(raw.body, id, (url) => void links.add(url)),
     parentId: orNull(text(raw.parentId)),
-    children: (Array.isArray(children) ? children.filter(isJson) : []).filter((child) => child.type === 'page').map((child) => ({ id: text(child.id), title: text(child.title) })),
+    children: list(children).filter((child) => child.type === 'page').map((child) => ({ id: text(child.id), title: text(child.title) })),
     updatedAt: orNull(text(object(raw.version).createdAt)),
     links: [...links]
   }
 }
 
 async function cqlSearch(cql: string): Promise<PageList> {
-  try {
-    const response = await restFetch(`/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=${RESULT_LIMIT}`, await loadCredentials())
-    return { pages: toPageSummaries(await response.json()), error: null }
-  } catch (reason) {
-    return { pages: [], error: reason instanceof Error ? reason.message : String(reason) }
-  }
+  const response = await restFetch(`/wiki/rest/api/search?cql=${encodeURIComponent(cql)}&limit=${RESULT_LIMIT}`, await loadCredentials())
+  return { pages: toPageSummaries(await response.json()) }
 }
 
 export const recentPages = (): Promise<PageList> => cqlSearch('type = page AND id in recentlyViewedContent(40)')

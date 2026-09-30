@@ -14,6 +14,8 @@ import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
 import { isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
+import { isJson, isString, list, object, stringValues } from '@treeix/shared/json'
+import { readStored } from '@treeix/app/storage'
 
 export { type SessionKind, type SessionStatus, type SessionView }
 
@@ -185,12 +187,8 @@ function parseClosedSession(value: unknown): ClosedSession | null {
 }
 
 function loadHistory(): ClosedSession[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.map(parseClosedSession).filter((entry) => entry !== null) : []
-  } catch {
-    return []
-  }
+  const parsed = readStored(HISTORY_KEY)
+  return Array.isArray(parsed) ? parsed.map(parseClosedSession).filter((entry) => entry !== null) : []
 }
 
 let state: State = { sessions: [], tasks: [], selected: {}, zoomed: null, history: loadHistory() }
@@ -201,6 +199,9 @@ const PENDING_SESSIONS = 20
 const PENDING_CHARS = 256_000
 
 const notify = (): void => listeners.forEach((listener) => listener())
+
+const patchSession = (id: string, patch: Partial<Pick<Session, 'title' | 'agentSessionId' | 'status'>>): void =>
+  update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, ...patch } : session)) })
 
 function update(next: Partial<State>): void {
   state = { ...state, ...next }
@@ -447,32 +448,19 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
       const fileLinks = findFileLinks(text).filter((file) => !webLinks.some((web) => file.start < web.end && file.end > web.start))
       const taken = [...webLinks, ...fileLinks]
       const issues = findIssueLinks(text).filter((issue) => issueLinks?.isProject(issue.project) && !taken.some((link) => issue.start < link.end && issue.end > link.start))
-      const range = (start: number, end: number) => ({ start: { x: start + 1, y: row }, end: { x: end, y: row } })
+      // ⌘-click opens, like in other terminals
+      const toLink = ({ start, end }: { start: number; end: number }, open: () => void) => ({
+        text: text.slice(start, end),
+        range: { start: { x: start + 1, y: row }, end: { x: end, y: row } },
+        decorations: { underline: true, pointerCursor: true },
+        activate: (event: MouseEvent) => {
+          if (event.metaKey) open()
+        }
+      })
       callback([
-        ...fileLinks.map((link) => ({
-          text: text.slice(link.start, link.end),
-          range: range(link.start, link.end),
-          decorations: { underline: true, pointerCursor: true },
-          activate: (event: MouseEvent) => {
-            if (event.metaKey) fileLinkHandler?.(id, link.path, link.line)
-          }
-        })),
-        ...issues.map((link) => ({
-          text: link.key,
-          range: range(link.start, link.end),
-          decorations: { underline: true, pointerCursor: true },
-          activate: (event: MouseEvent) => {
-            if (event.metaKey) issueLinks?.open(link.key)
-          }
-        })),
-        ...webLinks.map((link) => ({
-          text: link.url,
-          range: range(link.start, link.end),
-          decorations: { underline: true, pointerCursor: true },
-          activate: (event: MouseEvent) => {
-            if (event.metaKey) webLinkHandler?.(link.url)
-          }
-        }))
+        ...fileLinks.map((link) => toLink(link, () => fileLinkHandler?.(id, link.path, link.line))),
+        ...issues.map((link) => toLink(link, () => issueLinks?.open(link.key))),
+        ...webLinks.map((link) => toLink(link, () => webLinkHandler?.(link.url)))
       ])
     }
   })
@@ -513,7 +501,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
   terminal.onTitleChange((raw) => {
     const title = terminalTitle(raw)
     const current = findSession(id)
-    if (title && !current?.renamed && current?.title !== title) update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)) })
+    if (title && !current?.renamed && current?.title !== title) patchSession(id, { title })
   })
   const status: SessionStatus = dormant ? 'dormant' : exitCode === null ? 'running' : 'exited'
   const session: TerminalSession = { ...meta, view: 'terminal', id, status, exitCode, lastOutput: Date.now(), terminal, fit, element, opened: false, planName: null }
@@ -556,7 +544,7 @@ async function learnCodexConversation(id: string): Promise<void> {
     const found = await bridge.invoke<{ id: string }[]>('codexConversations', session.worktreePath, session.startedAt - 5000).catch(() => [])
     const taken = new Set(state.sessions.map((candidate) => candidate.agentSessionId))
     const conversation = found.find((candidate) => !taken.has(candidate.id))
-    if (conversation) return update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, agentSessionId: conversation.id } : candidate)) })
+    if (conversation) return patchSession(id, { agentSessionId: conversation.id })
   }
 }
 
@@ -604,33 +592,18 @@ type Saved = { sessions: (SessionMeta & { id: string })[]; layout: PaneLayout }
 const TASKS_KEY = 'terminals.tasks'
 
 function loadTasks(): { tasks: Task[]; selected: Record<string, string> } | null {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(TASKS_KEY) ?? 'null')
-    if (typeof parsed !== 'object' || parsed === null) return null
-    const { tasks, selected } = parsed as Record<string, unknown>
-    const picks = typeof selected === 'object' && selected !== null ? Object.entries(selected).filter((entry): entry is [string, string] => typeof entry[1] === 'string') : []
-    return { tasks: parseTasks(tasks), selected: Object.fromEntries(picks) }
-  } catch {
-    return null
-  }
+  const parsed = readStored(TASKS_KEY)
+  return isJson(parsed) ? { tasks: parseTasks(parsed.tasks), selected: stringValues(parsed.selected) } : null
 }
 
 function loadSaved(): Saved {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(SAVED_KEY) ?? 'null')
-    if (typeof parsed !== 'object' || parsed === null) return { sessions: [], layout: [] }
-    const { sessions, layout } = parsed as Partial<Saved>
-    return {
-      sessions: Array.isArray(sessions)
-        ? sessions.flatMap((session) => {
-            const meta = parseMeta(session)
-            return meta && typeof session.id === 'string' ? [{ ...meta, id: session.id }] : []
-          })
-        : [],
-      layout: Array.isArray(layout) ? layout.filter((column) => Array.isArray(column) && column.every((id) => typeof id === 'string')) : []
-    }
-  } catch {
-    return { sessions: [], layout: [] }
+  const { sessions, layout } = object(readStored(SAVED_KEY))
+  return {
+    sessions: list(sessions).flatMap((session) => {
+      const meta = parseMeta(session)
+      return meta && typeof session.id === 'string' ? [{ ...meta, id: session.id }] : []
+    }),
+    layout: list(layout, (column): column is string[] => Array.isArray(column) && column.every(isString))
   }
 }
 
@@ -665,7 +638,7 @@ const spawnTerminal = (session: TerminalSession): Promise<void> =>
     const { id } = session
     // Closed while starting: killSession had no process to end yet
     if (!findSession(id)) return bridge.send('kill', id)
-    update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, status: 'running' } : candidate)) })
+    patchSession(id, { status: 'running' })
     fitSession(id)
   })
 
@@ -679,14 +652,14 @@ function connectChat(session: ChatSession): Promise<void> | null {
   followChats(chat)
   const { id } = session
   connecting.add(id)
-  update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, status: 'running' } : candidate)) })
+  patchSession(id, { status: 'running' })
   return chat
     .start(id, { agent: agent.id, adapter: agent.chat.adapter, command: agent.chat.command, cwd: session.worktreePath, resume: session.agentSessionId })
     .then(
       (agentSessionId) => {
         // Closed while connecting
         if (!findSession(id)) return chat.stop(id)
-        update({ sessions: state.sessions.map((candidate) => (candidate.id === id ? { ...candidate, agentSessionId } : candidate)) })
+        patchSession(id, { agentSessionId })
       },
       // The chat shows why, with Retry
       () => undefined
@@ -905,6 +878,15 @@ const setHistory = (history: ClosedSession[]): void => {
   update({ history: kept })
 }
 
+/** Ends a terminal's process and frees what it held */
+function endTerminal(session: TerminalSession): void {
+  if (session.status !== 'dormant') bridge.send('kill', session.id)
+  dropGpu(session.id)
+  hookStatus.delete(session.id)
+  finishedTurns.delete(session.id)
+  session.terminal.dispose()
+}
+
 /** Ends the process and moves the session to the history */
 export function killSession(id: string): void {
   const session = findSession(id)
@@ -914,13 +896,7 @@ export function killSession(id: string): void {
     const chat = findService('chat')
     chat?.stop(id)
     chat?.forget(id)
-  } else {
-    if (session.status !== 'dormant') bridge.send('kill', id)
-    dropGpu(id)
-    hookStatus.delete(id)
-    finishedTurns.delete(id)
-    session.terminal.dispose()
-  }
+  } else endTerminal(session)
   const taskId = taskOf(state.tasks, id)?.id
   update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), tasks: removeSession(state.tasks, id), zoomed: state.zoomed === id ? null : state.zoomed })
   setHistory([{ id, ...metaOf(session), taskId, endedAt: Date.now() }, ...state.history])
@@ -1091,9 +1067,7 @@ export async function switchView(id: string): Promise<void> {
     await openSession(next, meta, '', null)
     chat.stop(id)
   } else {
-    if (session.status !== 'dormant') bridge.send('kill', id)
-    dropGpu(id)
-    session.terminal.dispose()
+    endTerminal(session)
     next = crypto.randomUUID()
     openChat(next, { ...metaOf(session), view: 'chat' })
   }

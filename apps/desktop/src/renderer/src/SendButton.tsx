@@ -7,7 +7,7 @@ import { agentOr, isAgent, useAgents } from './agents'
 import type { SessionKind, SessionSummary as Session } from '@treeix/sdk'
 import { useService, useSessions } from './plugins'
 import { inWorkspace, useWorkspaces } from './workspaces'
-import { Popup, usePersisted } from './ui'
+import { Popup, useMenuKeys, usePersisted } from './ui'
 
 const lastTargets = new Map<string, string>()
 
@@ -106,24 +106,7 @@ export function SendButton({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [hotkeys])
-  const menuRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (menuOpen) menuRef.current?.querySelector('button')?.focus()
-  }, [menuOpen])
-  /** j k and arrows move between the menu's items, esc closes it; its keys stay inside */
-  const onMenuKey = (event: React.KeyboardEvent): void => {
-    event.stopPropagation()
-    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('button, input') ?? [])]
-    const at = items.indexOf(document.activeElement as HTMLElement)
-    const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
-    if (step) {
-      event.preventDefault()
-      items[(at + step + items.length) % items.length]?.focus()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      closeMenu()
-    }
-  }
+  const { ref: menuRef, onKeyDown: onMenuKey } = useMenuKeys(menuOpen, closeMenu, 'button, input')
 
   const alive = sessions.filter((session) => session.status !== 'exited')
   const here = alive.filter((session) => session.worktreePath === worktreePath)

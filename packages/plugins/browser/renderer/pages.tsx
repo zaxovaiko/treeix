@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { WebviewTag } from 'electron'
-import { createBridge } from '@treeix/sdk'
+import { createBridge, createStore } from '@treeix/sdk'
 import { clearVitals, dropEntries } from './entries'
 import { recordTitle, recordVisit } from './recent'
 import { type BrowserTab, patchPage, useBrowser, useEveryTab } from './tabs'
@@ -157,7 +157,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
           guestId = view.getWebContentsId()
           patch({ guestId })
           void bridge.invoke('attach', guestId, tab.id)
-          view.send('design', design.on)
+          view.send('design', getDesign().on)
         }
       ]
     ]
@@ -183,26 +183,15 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
 }
 
 type Design = { on: boolean; selection: { tabId: string; value: ElementSelection } | null }
-let design: Design = { on: false, selection: null }
-const designListeners = new Set<() => void>()
-const setDesignState = (next: Design): void => {
-  design = next
-  designListeners.forEach((listener) => listener())
-}
-export const useDesign = (): Design =>
-  useSyncExternalStore(
-    (listener) => {
-      designListeners.add(listener)
-      return () => designListeners.delete(listener)
-    },
-    () => design
-  )
-export const getDesign = (): Design => design
+const designStore = createStore<Design>({ on: false, selection: null })
+const setDesignState = designStore.set
+export const useDesign = designStore.use
+export const getDesign = designStore.get
 
 /** Design mode applies to every open page, so switching tabs keeps it */
 export function setDesign(on: boolean): void {
   views.forEach((view) => view.send('design', on))
-  setDesignState({ on, selection: on ? design.selection : null })
+  setDesignState({ on, selection: on ? getDesign().selection : null })
 }
 
 function isSelection(value: unknown): value is ElementSelection {
@@ -212,7 +201,7 @@ function isSelection(value: unknown): value is ElementSelection {
 
 onPageMessage((tabId, channel, args) => {
   if (channel === 'design-exit') setDesign(false)
-  if (channel === 'selection' && isSelection(args[0])) setDesignState({ ...design, selection: { tabId, value: args[0] } })
+  if (channel === 'selection' && isSelection(args[0])) setDesignState({ ...getDesign(), selection: { tabId, value: args[0] } })
 })
 
-export const clearSelection = (): void => setDesignState({ ...design, selection: null })
+export const clearSelection = (): void => setDesignState({ ...getDesign(), selection: null })

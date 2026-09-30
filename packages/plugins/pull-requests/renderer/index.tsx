@@ -3,12 +3,13 @@ import { type Command, type DocumentTab, type HostApi, type RendererPlugin, useH
 import { Card, Row, Segmented } from '@treeix/app/settingsUi'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage } from '@treeix/app/ui'
+import type { ReviewComment } from '@treeix/shared/comments'
 import type { PullRequest } from '../shared/types'
 import { api, POLL_MINUTES, prSettings } from './api'
 import { cachedPullRequests, findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
 import { pullRequestCommands } from './keys'
 import type { DetailProps } from './PullRequests'
-import { localWorktreeFor, prefix, ProviderMark, pullRequestKey, threadReference } from './pullRequestUtils'
+import { localWorktreeFor, prLabel, ProviderMark, pullRequestKey, threadReference } from './pullRequestUtils'
 
 // The views pull in diffs, markdown and filters, so they load when the tab first opens
 const PullRequestsView = lazy(() => import('./PullRequests').then((module) => ({ default: module.PullRequestsView })))
@@ -19,9 +20,16 @@ const TAB_ID = 'prs'
 /** A pull request's local worktree on its branch, else the repository checkout */
 const checkoutOf = (host: HostApi, pr: PullRequest): string => localWorktreeFor(host.repos, pr) ?? pr.repoPath
 
+const NO_RANGE = { start: 0, end: 0 }
+
 /** Callbacks both views take, bound to the host */
 function useViewProps(): DetailProps {
   const host = useHost()
+  const addForAgent = (pr: PullRequest, comment: Omit<ReviewComment, 'id' | 'worktreePath' | 'code'>, added = 'Added'): void => {
+    const worktreePath = checkoutOf(host, pr)
+    host.addComment({ id: crypto.randomUUID(), worktreePath, code: '', ...comment })
+    host.flash(`${added} to comments on ${baseName(worktreePath)}`)
+  }
   return {
     repos: host.repos,
     diffStyle: host.diffStyle,
@@ -30,53 +38,28 @@ function useViewProps(): DetailProps {
     onOpenWorktree: host.openWorktree,
     // A reference only: the agent reads the thread and the code itself
     onAddToComments: (pr, thread) => {
-      const worktreePath = checkoutOf(host, pr)
       const line = thread.line ?? 0
-      host.addComment({
-        id: crypto.randomUUID(),
-        worktreePath,
+      addForAgent(pr, {
         filePath: thread.path ?? `${pr.provider === 'github' ? 'PR #' : 'MR !'}${pr.number} conversation`,
-        range: thread.path ? { start: line, end: line, side: thread.side } : { start: 0, end: 0 },
-        code: '',
+        range: thread.path ? { start: line, end: line, side: thread.side } : NO_RANGE,
         text: threadReference(pr, thread),
         kind: 'reference'
       })
-      host.flash(`Added to comments on ${baseName(worktreePath)}`)
     },
-    onAddNote: (pr, patch, range, text) => {
-      const worktreePath = checkoutOf(host, pr)
-      host.addComment({
-        id: crypto.randomUUID(),
-        worktreePath,
-        filePath: patch.path,
-        range: range ?? { start: 0, end: 0 },
-        code: '',
-        text: text.trim()
-      })
-      host.flash(`Added to comments on ${baseName(worktreePath)}`)
-    },
+    onAddNote: (pr, patch, range, text) => addForAgent(pr, { filePath: patch.path, range: range ?? NO_RANGE, text: text.trim() }),
     // Just the path: the agent reads the file itself
-    onAddFile: (pr, patch) => {
-      const worktreePath = checkoutOf(host, pr)
-      host.addComment({ id: crypto.randomUUID(), worktreePath, filePath: patch.path, range: { start: 0, end: 0 }, code: '', text: '' })
-      host.flash(`Added ${baseName(patch.path)} to comments on ${baseName(worktreePath)}`)
-    },
+    onAddFile: (pr, patch) => addForAgent(pr, { filePath: patch.path, range: NO_RANGE, text: '' }, `Added ${baseName(patch.path)}`),
     // The log tail goes along: the agent may not have the CLI or access to the CI
     onAddPipelineFailure: async (pr) => {
-      const worktreePath = checkoutOf(host, pr)
       host.flash('Fetching the failed jobs...')
       const jobs = await api.failedJobs(pr).catch((reason: unknown) => (host.flash(errorMessage(reason)), null))
       if (!jobs) return
       const logs = jobs.map((job) => `${job.name}:\n${fenced(job.log || '(no log)')}`)
-      host.addComment({
-        id: crypto.randomUUID(),
-        worktreePath,
-        filePath: pr.pipeline?.url ?? pr.url,
-        range: { start: 0, end: 0 },
-        code: '',
-        text: [`The pipeline of ${prefix(pr)}${pr.number} failed. Find the cause and fix it.`, ...logs].join('\n\n')
-      })
-      host.flash(`Added ${jobs.length === 1 ? 'the failed job' : `${jobs.length} failed jobs`} to comments on ${baseName(worktreePath)}`)
+      addForAgent(
+        pr,
+        { filePath: pr.pipeline?.url ?? pr.url, range: NO_RANGE, text: [`The pipeline of ${prLabel(pr)} failed. Find the cause and fix it.`, ...logs].join('\n\n') },
+        `Added ${jobs.length === 1 ? 'the failed job' : `${jobs.length} failed jobs`}`
+      )
     },
     onCreateWorktree: (pr) => {
       host.flash(`Creating worktree for ${pr.sourceBranch}...`)
@@ -111,8 +94,7 @@ const detailTab = (pr: PullRequest): DocumentTab => ({
     <>
       <ProviderMark provider={pr.provider} className="size-3.5" />
       <span className="font-mono text-muted-foreground">
-        {prefix(pr)}
-        {pr.number}
+        {prLabel(pr)}
       </span>
     </>
   ),
@@ -205,7 +187,7 @@ const listedCommands = (host: HostApi): Command[] =>
   (cachedPullRequests(scopeKeyOf(host.scopeRepoPaths ?? []))?.pullRequests ?? []).map((pr) => ({
     id: `pr:${pr.url}`,
     group: 'Pull requests',
-    label: `${prefix(pr)}${pr.number} ${pr.title}`,
+    label: `${prLabel(pr)} ${pr.title}`,
     detail: `${baseName(pr.repoPath)} · ${pr.author} · ${pr.state}`,
     icon: 'pullRequest',
     run: () => host.openTab(detailTab(pr))

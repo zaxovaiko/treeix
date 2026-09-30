@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { actionKeys } from '../../shared/keymap'
 import { Icon, type IconName } from './Icon'
 import { Popup } from './ui'
+import { readStored } from './storage'
 
 /** Panels come from plugins, like the terminal */
 export type PanelId = string
@@ -43,12 +44,8 @@ function isLayout(value: unknown): value is Layout {
 
 // The terminal panel starts closed; starting a session opens it, and it closes again when the last one exits
 function loadLayout(): Layout {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? 'null')
-    return isLayout(stored) ? stored : DEFAULT_LAYOUT
-  } catch {
-    return DEFAULT_LAYOUT
-  }
+  const stored = readStored(LAYOUT_KEY)
+  return isLayout(stored) ? stored : DEFAULT_LAYOUT
 }
 
 /**

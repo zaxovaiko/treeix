@@ -1,3 +1,5 @@
+import { isString, list, object } from '../../shared/json'
+
 /** Page tab ids on each side of the title bar, in order */
 export type TabLayout = { left: string[]; right: string[] }
 export type TabSide = keyof TabLayout
@@ -20,8 +22,7 @@ export function moveTab(arranged: TabLayout, id: string, side: TabSide, beforeId
 
 export const parseTabLayout = (value: unknown): TabLayout => {
   const ids = (key: TabSide): string[] => {
-    const list: unknown = typeof value === 'object' && value !== null && key in value ? (value as Record<TabSide, unknown>)[key] : []
-    return Array.isArray(list) ? list.filter((id): id is string => typeof id === 'string') : []
+    return list(object(value)[key], isString)
   }
   return { left: ids('left'), right: ids('right') }
 }

@@ -1,8 +1,10 @@
 import { type FSWatcher, mkdirSync, unwatchFile, watch, watchFile } from 'node:fs'
-import { open, readdir, readFile, stat } from 'node:fs/promises'
+import { open, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { AgentLimits, LimitWindow, UsageLimits } from '../shared/types'
+import { isJson } from '@treeix/shared/json'
+import { readJsonFile } from '@treeix/host/paths'
 
 // LimitBar's Claude Code status line bridge caches the subscription windows here
 const CLAUDE_LIMITS = join(homedir(), 'Library', 'Application Support', 'LimitBar', 'claude', 'latest.json')
@@ -14,8 +16,6 @@ const TAIL_BYTES = 256 * 1024
 const FIVE_HOURS_MIN = 300
 const WEEK_MIN = 10_080
 
-type Json = Record<string, unknown>
-const isJson = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value)
 const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
 /** A window whose reset time has passed starts over at 0% */
@@ -89,19 +89,9 @@ export function parseCodexLimits(lines: string[], now = Date.now()): AgentLimits
   return null
 }
 
-async function readJson(path: string): Promise<unknown> {
-  const text = await readFile(path, 'utf8').catch(() => null)
-  if (text === null) return null
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
-}
-
 /** Treeix's status line bridge, LimitBar's cache and the Claude desktop app; whichever saw usage last */
 async function readClaude(statusFile: string): Promise<AgentLimits | null> {
-  const [status, modified, limitBar, desktop] = await Promise.all([readJson(statusFile), stat(statusFile).catch(() => null), readJson(CLAUDE_LIMITS), readJson(CLAUDE_DESKTOP_USAGE)])
+  const [status, modified, limitBar, desktop] = await Promise.all([readJsonFile(statusFile), stat(statusFile).catch(() => null), readJsonFile(CLAUDE_LIMITS), readJsonFile(CLAUDE_DESKTOP_USAGE)])
   return newestLimits([modified ? parseStatusLineLimits(status, modified.mtimeMs) : null, parseClaudeLimits(limitBar), parseDesktopUsage(desktop)])
 }
 

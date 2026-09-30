@@ -1,6 +1,6 @@
 import { actionForEvent } from '@treeix/shared/keymap'
-import { useEffect, useRef, useState } from 'react'
-import { focusZone, isPageKey, Kbd, PageLayout, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
+import { useEffect, useState } from 'react'
+import { focusZone, isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels, useZone } from '@treeix/sdk'
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { EmptyState, FoldAllButton, IconButton, UserAvatar, usePersisted } from '@treeix/app/ui'
@@ -16,6 +16,7 @@ import { epicCache, jiraApi, jiraSettings, LIST_LIMIT, listCache, ME, meCache, o
 import { BugPill, EpicChip, EpicProgress, isBug, PriorityMark, StatusPill, TypeMark } from './marks'
 import { type Bucket, BUCKETS, bucketOf, epicIndex, groupByEpic, isItemSort, projectOf, SORTS, sortItems } from './buckets'
 import { COMMENT_INPUT, LABEL_INPUT, type PickerId, type StatusOption, TicketMain, useTicket } from './TicketView'
+import { isString, list, parseJson } from '@treeix/shared/json'
 
 /** Returns false when it couldn't act, so the key goes on unhandled */
 type KeyRun = () => boolean | void
@@ -75,7 +76,7 @@ export function JiraTasks(): React.JSX.Element {
   const { zone } = useZone()
   const { value: myName } = useCached<string | null>(meCache, 'me', TTL.me, jiraApi.me)
   const [filtersJson, setFiltersJson] = usePersisted<string>(workspaceKey('jira.filters'), JSON.stringify(DEFAULT_FILTERS))
-  const filters = parseTokens(readJson(filtersJson), FILTER_KINDS)
+  const filters = parseTokens(parseJson(filtersJson), FILTER_KINDS)
   const setFilters = (next: FilterToken[]): void => setFiltersJson(JSON.stringify(next))
   const assignees = filters.filter((filter) => filter.kind === 'assignee').map((filter) => filter.value)
   // Only your own items need the narrower query; any other person means fetching everyone's and filtering here
@@ -218,8 +219,7 @@ export function JiraTasks(): React.JSX.Element {
   useEffect(() => {
     if (!panels.list && picker === 'sort') setPicker(null)
   }, [panels.list])
-  const onKey = useRef<(event: KeyboardEvent) => boolean>(() => false)
-  onKey.current = (event) => {
+  const onKey = (event: KeyboardEvent): boolean => {
     const entry = entries[cursor]
     const listKeys: Record<string, KeyRun> = {
       'jira.search': () => withList(panels, FILTER_ID, () => document.querySelector<HTMLInputElement>(`#${FILTER_ID} input`)?.focus()),
@@ -237,16 +237,7 @@ export function JiraTasks(): React.JSX.Element {
     const run = id ? (listKeys[id] ?? ticketKeys[id]) : undefined
     return run !== undefined && run() !== false
   }
-  // The page keeps this listener while it sits off screen, so it only acts when the keys are its own
-  const ownsKeys = useRef(false)
-  ownsKeys.current = host.keyboardPage === 'tasks'
-  useEffect(() => {
-    const listener = (event: KeyboardEvent): void => {
-      if (ownsKeys.current && isPageKey(event) && onKey.current(event)) event.preventDefault()
-    }
-    window.addEventListener('keydown', listener)
-    return () => window.removeEventListener('keydown', listener)
-  }, [])
+  usePageKeys('tasks', (event) => isPageKey(event) && onKey(event))
 
   const showAssignee = !mine
   const row = (item: WorkItem, index: number): React.JSX.Element => {
@@ -445,19 +436,4 @@ export function JiraTasks(): React.JSX.Element {
   )
 }
 
-function readJson(json: string): unknown {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
-}
-
-function parseList(json: string): string[] {
-  try {
-    const value: unknown = JSON.parse(json)
-    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
-  } catch {
-    return []
-  }
-}
+const parseList = (json: string): string[] => list(parseJson(json), isString)

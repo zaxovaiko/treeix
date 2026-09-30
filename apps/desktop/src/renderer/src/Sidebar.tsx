@@ -5,7 +5,7 @@ import { copyText } from './contextMenu'
 import { type Activity, ActivityMark, NEWS } from './activity'
 import { Icon } from './Icon'
 import { groupOpen, toggleIn, useSettings } from './settings'
-import { EmptyState, FoldAllButton, IconButton, Popup, readStored, usePersisted } from './ui'
+import { EmptyState, FoldAllButton, IconButton, Popup, readStored, useMenuKeys, usePersisted } from './ui'
 import { workspaceKey } from './workspaces'
 
 export const baseName = (path: string): string => path.split('/').pop() ?? path
@@ -107,28 +107,12 @@ export function Sidebar({
 
   const [folderOpen, setFolderOpen] = useState(false)
   const folderAnchor = useRef<HTMLDivElement>(null)
-  const folderMenu = useRef<HTMLDivElement>(null)
   const closeFolders = (): void => {
     setFolderOpen(false)
     folderAnchor.current?.querySelector('button')?.focus()
   }
   // Focus moves into the popup, or its keys never fire and j/k walk the worktree list behind it
-  useEffect(() => {
-    if (folderOpen) folderMenu.current?.querySelector('button')?.focus()
-  }, [folderOpen])
-  const onFolderKey = (event: React.KeyboardEvent): void => {
-    event.stopPropagation()
-    const items = [...(folderMenu.current?.querySelectorAll<HTMLElement>('button') ?? [])]
-    const at = items.indexOf(document.activeElement as HTMLElement)
-    const step = event.key === 'j' || event.key === 'ArrowDown' ? 1 : event.key === 'k' || event.key === 'ArrowUp' ? -1 : 0
-    if (step) {
-      event.preventDefault()
-      items[(at + step + items.length) % items.length]?.focus()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      closeFolders()
-    }
-  }
+  const { ref: folderMenu, onKeyDown: onFolderKey } = useMenuKeys(folderOpen, closeFolders)
 
   const folders = [...new Set((repos ?? []).map((repo) => parentDir(repo.path)))].sort()
   const needle = query.trim().toLowerCase()
