@@ -217,11 +217,21 @@ function setPorts(next: SessionPort[]): void {
   notify()
 }
 
+/** Polled this often even with no output, so a server stopped from outside drops off */
+const PORTS_QUIET_POLL_MS = 30_000
+
 let polling = false
+let lastPoll = 0
+let outputSincePoll = true
 
 async function pollPorts(): Promise<void> {
   if (polling || document.hidden) return
+  // A poll runs lsof, about 0.1s of CPU: a server prints as it starts, and an unfocused window can wait
+  const quietDue = Date.now() - lastPoll >= PORTS_QUIET_POLL_MS
+  if (!quietDue && !(outputSincePoll && document.hasFocus())) return
   polling = true
+  outputSincePoll = false
+  lastPoll = Date.now()
   const found = await bridge.invoke<{ sessionId: string; port: number; cwd: string | null }[]>('ports').catch(() => null)
   polling = false
   if (found && portsTimer) setPorts(found.map(({ sessionId, port, cwd }) => ({ sessionId, port, cwd, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
@@ -264,6 +274,7 @@ bridge.on('data', (id, data) => {
   }
   session.terminal.write(data)
   session.lastOutput = Date.now()
+  outputSincePoll = true
 })
 
 bridge.on('exit', (id, exitCode) => {
