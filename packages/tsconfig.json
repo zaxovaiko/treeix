@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@treeix/sdk": [
         "./sdk/src/index.ts"

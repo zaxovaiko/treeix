@@ -35,7 +35,7 @@ let renderQueue: Promise<unknown> = Promise.resolve()
 // mermaid.render shares global state, so parallel diagrams corrupt each other
 function renderDiagram(id: string, code: string): Promise<string> {
   const result = renderQueue.then(() => loadMermaid()).then((mermaid) => {
-    mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: themeVariables(), securityLevel: 'strict', fontFamily: 'inherit' })
+    mermaid.initialize({ startOnLoad: false, theme: 'base', look: 'classic', layout: 'dagre', themeVariables: themeVariables(), securityLevel: 'strict', fontFamily: 'inherit' })
     return mermaid.render(id, code)
   })
   renderQueue = result.catch(() => undefined)

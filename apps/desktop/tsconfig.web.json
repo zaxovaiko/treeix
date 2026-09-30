@@ -14,7 +14,9 @@
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
+    "types": [
+      "bun"
+    ],
     "paths": {
       "@treeix/sdk": [
         "../../packages/sdk/src/index.ts"

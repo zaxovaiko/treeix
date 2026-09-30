@@ -20,7 +20,6 @@
       "bun",
       "vite/client"
     ],
-    "baseUrl": ".",
     "paths": {
       "@treeix/sdk": [
         "../../packages/sdk/src/index.ts"
