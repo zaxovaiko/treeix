@@ -284,8 +284,12 @@ function TerminalPane({
         <div
           draggable={renamingId !== session.id}
           onDragStart={(event) => event.dataTransfer.setData(SESSION_MIME, session.id)}
+          // Focus moving into the terminal on mousedown stops Chromium from starting the drag, so the header takes it and hands it over on click
+          tabIndex={-1}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => session.view === 'terminal' && !(event.target as HTMLElement).closest('button') && focusSession(session.id)}
           onContextMenu={(event) => openMenu(event, sessionEntries(session, task, host.flash))}
-          className={`flex h-7 shrink-0 cursor-grab items-center gap-2 border-b border-border bg-card px-2 active:cursor-grabbing ${active ? 'text-foreground' : 'text-foreground/60'}`}
+          className={`flex h-7 outline-none shrink-0 cursor-grab items-center gap-2 border-b border-border bg-card px-2 active:cursor-grabbing ${active ? 'text-foreground' : 'text-foreground/60'}`}
         >
           <Icon name="grip" className="-mx-1 size-3 shrink-0 text-muted-foreground/50" />
           <KindBadge kind={session.kind} />
