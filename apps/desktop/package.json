@@ -17,7 +17,7 @@
     "build": "bun run typecheck && electron-vite build",
     "build:mac": "electron-vite build && electron-builder --mac",
     "dist:dmg": "bun run build && electron-builder --mac dmg zip --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false",
-    "dist:dmg:notarized": "bun run build && electron-builder --mac dmg zip --publish never",
+    "dist:dmg:notarized": "bun run build && electron-builder --mac dmg zip --publish never -c.mac.entitlements=build/entitlements.mac.app.plist -c.mac.provisioningProfile=build/developerID.provisionprofile",
     "dist:mas": "bun run build && electron-builder --mac mas --publish never",
     "release:mac": "bun run build && electron-builder --mac dmg zip --publish never",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper && node-gyp rebuild -C native/mac-window && sh scripts/dev-app-name.sh",

@@ -1,4 +1,4 @@
-appId: com.zaxovaiko.treeix
+appId: com.dyvertex.treeix
 productName: Treeix
 # The feed the app updates from: the tag's GitHub release, with the latest-mac.yml electron-builder uploads beside the zip
 publish:
@@ -60,7 +60,7 @@ mas:
   hardenedRuntime: false
   entitlements: build/entitlements.mas.plist
   entitlementsInherit: build/entitlements.mas.inherit.plist
-  # Download from developer.apple.com (Mac App Store distribution profile for com.zaxovaiko.treeix)
+  # Download from developer.apple.com (Mac App Store distribution profile for com.dyvertex.treeix)
   provisioningProfile: build/embedded.provisionprofile
 linux:
   target:

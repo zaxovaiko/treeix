@@ -71,11 +71,21 @@ APPLE_API_KEY=~/.treeix-signing/AuthKey.p8 APPLE_API_KEY_ID=... APPLE_API_ISSUER
   bun run --cwd apps/desktop dist:dmg:notarized
 ```
 
+### Passkeys
+
+The signed build lets the built-in browser use Touch ID passkeys (`src/main/passkeys.ts`). That takes the
+`keychain-access-groups` entitlement in `build/entitlements.mac.app.plist`, and macOS kills at launch any app that
+claims it without a provisioning profile allowing it. So `dist:dmg:notarized` signs with that file and embeds
+`build/developerID.provisionprofile`, while ad-hoc builds keep the plain entitlements and run without passkeys.
+
+The profile is a Developer ID one for `com.dyvertex.treeix`, made at developer.apple.com > Profiles > + >
+Developer ID with the same certificate. It is committed: every shipped app carries a copy anyway.
+
 The landing page's `/download` redirects to the release asset named `Treeix-arm64.dmg` (`apps/landing/vercel.json`).
 
 ## Mac App Store
 
-1. Create the `com.zaxovaiko.treeix` app ID and a Mac App Store provisioning profile, save it as `apps/desktop/build/embedded.provisionprofile`.
+1. Create the `com.dyvertex.treeix` app ID and a Mac App Store provisioning profile, save it as `apps/desktop/build/embedded.provisionprofile`.
 2. Install the "3rd Party Mac Developer Installer" certificate.
 3. `bun run dist:mas`, then upload the `.pkg` with Transporter.
 

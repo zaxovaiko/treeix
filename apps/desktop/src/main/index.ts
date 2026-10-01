@@ -17,6 +17,7 @@ import { checkTools, commandExists } from './tools'
 import { installMcp, mcpInstallStatus } from './mcp'
 import { setupUpdates } from './updates'
 import { BROWSER_PARTITION, configureBrowserSession, hardenWebview } from './webviewPolicy'
+import { enablePasskeys } from './passkeys'
 
 app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_VERSION__, version: '', copyright: 'Apache 2.0' })
 
@@ -77,6 +78,7 @@ app.whenReady().then(() => {
   // Packaged builds take the icon from the bundle; dev runs inside the stock Electron app
   if (is.dev) app.dock?.setIcon(join(__dirname, '../../resources/icon.png'))
   configureBrowserSession(session.fromPartition(BROWSER_PARTITION), app.userAgentFallback, app.getName())
+  enablePasskeys(session.fromPartition(BROWSER_PARTITION))
   ipcMain.handle('scan', () => scan())
   ipcMain.handle('diff', (_, worktreePath: string) => diff(worktreePath))
   ipcMain.handle('listFiles', (_, worktreePath: string) => listFiles(worktreePath))

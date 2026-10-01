@@ -78,8 +78,8 @@ jobs:
           rm -f "$RUNNER_TEMP/certificate.p12"
           security find-identity -v -p codesigning "$keychain"
 
-      # An empty APPLE_API_KEY is what tells electron-builder to skip notarization, so an unsigned build
-      # takes the same path through the same script
+      # An empty APPLE_API_KEY is what tells electron-builder to skip notarization. Only the signed build takes the
+      # passkey entitlement and its provisioning profile: macOS kills an ad-hoc build that claims it at launch.
       - name: Build, sign and notarize
         env:
           APPLE_API_KEY: ${{ steps.signing.outputs.signed == 'true' && format('{0}/AuthKey.p8', runner.temp) || '' }}
@@ -87,8 +87,12 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
-          if [ -n "$APPLE_API_KEY" ]; then printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"; fi
-          bun run --cwd apps/desktop release:mac
+          script=release:mac
+          if [ -n "$APPLE_API_KEY" ]; then
+            printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"
+            script=dist:dmg:notarized
+          fi
+          bun run --cwd apps/desktop "$script"
           rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       # electron-builder's own uploader quits before the uploads finish when it runs under bun, leaving a
