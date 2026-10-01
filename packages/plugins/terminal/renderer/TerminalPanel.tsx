@@ -14,6 +14,7 @@ import { timeAgo } from '@treeix/app/time'
 import { ListToggle, useHost, usePanels } from '@treeix/sdk'
 import { errorMessage, ResizeGrip } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
+import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, type Task, type TerminalTab, tabPanes } from './tasks'
@@ -37,11 +38,13 @@ import {
   renameSession,
   restoreClosedSession,
   selectAllTerminal,
+  sessionDiagrams,
   setActiveTab,
   setTabFocus,
   splitPane,
   switchView,
   terminalSelection,
+  transcriptRef,
   type Session,
   type SessionKind,
   type SessionView,
@@ -82,6 +85,37 @@ function useNewTabEntries(): { main: NewTabEntry[]; other: NewTabEntry[] } {
 const ChatBadge = ({ kind }: { kind: SessionKind }): React.JSX.Element => (
   <span className="shrink-0 rounded bg-foreground/5 px-1 text-[10.5px] leading-4 text-muted-foreground">{agentOr(kind).label} · chat</span>
 )
+
+/** Opens the mermaid diagrams the session's agent wrote as a tab, newest first; the diagrams plugin draws them */
+function DiagramsButton({ session }: { session: Session }): React.JSX.Element | null {
+  const host = useHost()
+  const ref = transcriptRef(session)
+  if (!ref || !host.isEnabled('diagrams')) return null
+  const open = async (): Promise<void> => {
+    const diagrams = await sessionDiagrams(ref)
+    if (diagrams.length === 0) return host.flash('No mermaid diagrams in this session yet')
+    host.openTab({
+      key: `diagrams:${session.id}`,
+      title: `Diagrams: ${session.title}`,
+      icon: <Icon name="layers" className="size-3.5 text-muted-foreground" />,
+      parent: 'terminal',
+      panels: ['terminal'],
+      content: (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[860px] px-5 py-4">
+            <Markdown>{diagrams.map((code) => `\`\`\`mermaid\n${code}\n\`\`\``).join('\n\n')}</Markdown>
+          </div>
+        </div>
+      )
+    })
+  }
+  return (
+    <button title="Render the mermaid diagrams of this session" onClick={() => void open()} className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+      <Icon name="layers" className="size-3" />
+      Diagrams
+    </button>
+  )
+}
 
 const restore = (entry: ClosedSession): void => void restoreClosedSession(entry).then((id) => setTimeout(() => focusSession(id)))
 
@@ -304,6 +338,7 @@ function TerminalPane({
           {session.view === 'chat' && <ChatBadge kind={session.kind} />}
           {task?.worktreePath !== session.worktreePath && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>}
           <span className="flex-1" />
+          <DiagramsButton session={session} />
           {plans && session.view === 'terminal' && (session.kind === 'claude' || planName) && <plans.PlanButton startedAt={session.startedAt} name={planName} />}
           {number <= 9 && (
             <span data-key-hint="" title={`Focus with ⌥${number}`} className={`shrink-0 rounded px-1 text-[10.5px] leading-4 tabular-nums ${active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground/60'}`}>
@@ -585,6 +620,7 @@ function TabStrip({
         <Icon name="chevron" className="size-2.5 rotate-90" />
       </button>
       <span className="min-w-2 flex-1" />
+      {lone && <DiagramsButton session={lone} />}
       {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
       <button title="Split right (⌘D)" aria-label="Split right" onClick={() => void splitPane('right', cwd)} className={stripButton}>
         <Icon name="splitRight" className="size-3.5" />

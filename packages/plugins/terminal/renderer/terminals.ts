@@ -175,6 +175,9 @@ export const transcriptRef = (session: (SessionMeta & { id: string }) | undefine
 /** Ids of the sessions whose conversation mentions `query` */
 export const searchTranscripts = (query: string, refs: TranscriptRef[]): Promise<string[]> => bridge.invoke<string[]>('searchTranscripts', query, refs).catch(() => [])
 
+/** Mermaid diagrams the session's agent wrote, newest first */
+export const sessionDiagrams = (ref: TranscriptRef): Promise<string[]> => bridge.invoke<string[]>('diagrams', ref).catch(() => [])
+
 export const sessionUsage = (ref: TranscriptRef): Promise<SessionUsage | null> => bridge.invoke<SessionUsage | null>('usage', ref).catch(() => null)
 
 const HISTORY_KEY = 'terminals.history'

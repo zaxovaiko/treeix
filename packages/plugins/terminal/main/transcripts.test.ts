@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test'
-import { claudeUsage, codexUsage, lastReplies } from './transcripts'
+import { claudeUsage, codexUsage, lastReplies, mermaidDiagrams } from './transcripts'
+
+test('mermaidDiagrams takes the fenced diagrams of the replies, newest first', () => {
+  const reply = (text: string): string => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }] } })
+  const transcript = [reply('see\n```mermaid\ngraph TD\n  A --> B\n```\nand\n```ts\nconst a = 1\n```'), reply('```mermaid\nflowchart LR\n```')].join('\n')
+  expect(mermaidDiagrams('claude', transcript)).toEqual(['flowchart LR', 'graph TD\n  A --> B'])
+})
 
 test('claudeUsage counts each message once, across its content block lines', () => {
   const line = (id: string, usage: object): string => JSON.stringify({ message: { id, usage } })

@@ -3,7 +3,7 @@ import type { SessionUsage, TerminalOptions, TranscriptRef } from '../shared/typ
 import { sessionTools } from './agentTools'
 import { codexConversations } from './codex'
 import { claudeCost, watchStatuses, withStatusHooks } from './hooks'
-import { searchTranscripts, transcriptUsage } from './transcripts'
+import { mermaidDiagrams, readTranscript, searchTranscripts, transcriptUsage } from './transcripts'
 import { createTerminal, reportStatus, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
 
 /** Stand-ins for when Treeix's MCP server couldn't start */
@@ -36,6 +36,7 @@ const plugin: MainPlugin = {
       const [usage, costUsd] = await Promise.all([transcriptUsage(ref), statuses.then(({ folder }) => claudeCost(folder, ref.sessionId))])
       return usage && { ...usage, costUsd }
     })
+    context.handle('diagrams', async (_, ref: TranscriptRef) => mermaidDiagrams(ref.kind, await readTranscript(ref)))
     sessionTools().forEach(context.mcpTool)
     context.onDispose(killAllTerminals)
   }

@@ -98,3 +98,9 @@ export function lastReplies(kind: string, transcript: string, count: number): st
   }
   return replies.slice(-count)
 }
+
+/** Mermaid diagrams the agent wrote in its replies, newest first */
+export const mermaidDiagrams = (kind: string, transcript: string): string[] =>
+  lastReplies(kind, transcript, Infinity)
+    .flatMap((reply) => [...reply.matchAll(/```mermaid\s*\n([\s\S]*?)```/g)].map((match) => match[1].trim()))
+    .reverse()
