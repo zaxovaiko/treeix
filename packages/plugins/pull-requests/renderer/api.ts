@@ -6,6 +6,7 @@ const bridge = createBridge('pull-requests')
 
 export const api = {
   listPullRequests: (repoPaths: string[]) => bridge.invoke<PullRequestList>('list', repoPaths),
+  pullRequestAt: (url: string, repoPaths: string[]) => bridge.invoke<PullRequest | null>('at', url, repoPaths),
   pullRequestDetail: (pullRequest: PullRequest) => bridge.invoke<PullRequestDetail>('detail', pullRequest),
   pullRequestFile: (pullRequest: PullRequest, filePath: string) => bridge.invoke<string>('file', pullRequest, filePath),
   setThreadResolved: (pullRequest: PullRequest, thread: ReviewThread, resolved: boolean) => bridge.invoke<void>('setThreadResolved', pullRequest, thread, resolved),

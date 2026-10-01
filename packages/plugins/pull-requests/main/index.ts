@@ -1,6 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
-import { failedJobLogs, filesChangedBetween, assignableUsers, closePullRequest, setAssigned, commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
+import { failedJobLogs, filesChangedBetween, assignableUsers, closePullRequest, setAssigned, commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestAt, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
 
 const plugin: MainPlugin = {
   tools: [
@@ -9,6 +9,7 @@ const plugin: MainPlugin = {
   ],
   activate: (context) => {
     context.handle('list', (_, repoPaths: string[]) => listPullRequests(repoPaths))
+    context.handle('at', (_, url: string, repoPaths: string[]) => pullRequestAt(String(url), repoPaths))
     context.handle('detail', (_, pullRequest: PullRequest) => pullRequestDetail(pullRequest))
     context.handle('file', (_, pullRequest: PullRequest, filePath: string) => pullRequestFile(pullRequest, filePath))
     context.handle('changedBetween', (_, pullRequest: PullRequest, from: string, to: string) => filesChangedBetween(pullRequest, String(from), String(to)))

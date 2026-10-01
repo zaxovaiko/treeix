@@ -170,13 +170,17 @@ function PullRequestSettings(): React.JSX.Element {
   )
 }
 
+const fetchLinked = async (url: string, repoPaths: string[]): Promise<PullRequest | null> =>
+  /\/pipelines\/\d+/.test(url) ? (await refreshPullRequests(repoPaths), findCachedPullRequest(url)) : api.pullRequestAt(url, repoPaths)
+
 /**
- * Opens a pull request or pipeline link from elsewhere, like a terminal, as the pull request's tab. A new one may not be in the list yet,
- * so the workspace's list is fetched once before giving up; false when it isn't one from the workspace's repositories.
+ * Opens a pull request or pipeline link from elsewhere, like a terminal, as the pull request's tab. One not in the list yet is
+ * fetched alone, which is quick; a pipeline link doesn't say whose it is, so only that refetches the workspace's list.
+ * False when it isn't one from the workspace's repositories.
  */
 async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> {
   if (!/\/(pull|merge_requests|pipelines)\/\d+/.test(url)) return false
-  const pr = findCachedPullRequest(url) ?? (host.scopeRepoPaths ? (await refreshPullRequests(host.scopeRepoPaths), findCachedPullRequest(url)) : null)
+  const pr = findCachedPullRequest(url) ?? (host.scopeRepoPaths ? await fetchLinked(url, host.scopeRepoPaths) : null)
   if (!pr) return false
   host.openTab(detailTab(pr))
   return true

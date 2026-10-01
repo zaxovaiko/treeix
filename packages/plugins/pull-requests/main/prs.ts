@@ -226,12 +226,35 @@ const GITLAB_PIPELINE_QUERY = `query($path: ID!) {
 const githubReviewData = (remote: Remote, repoPath: string): Promise<unknown> =>
   runJson('gh', ['api', 'graphql', '--hostname', remote.host, '-f', `q=repo:${remote.slug} is:pr sort:updated-desc`, '-f', `query=${REVIEW_QUERY}`], repoPath)
 
+const GITHUB_FIELDS = 'number,title,author,headRefName,baseRefName,state,isDraft,updatedAt,additions,deletions,changedFiles,url,mergeable'
+
+/** The number in a pull request link of this remote, whatever page of it; null for any other link */
+export function pullRequestNumberIn(url: string, remote: Remote): number | null {
+  const base = `https://${remote.host}/${remote.slug}/`
+  if (!url.startsWith(base)) return null
+  const match = url.slice(base.length).match(remote.provider === 'github' ? /^pull\/(\d+)/ : /^-\/merge_requests\/(\d+)/)
+  return match ? Number(match[1]) : null
+}
+
+/** The one pull request a link points at, without listing every repository; null when it isn't from these */
+export async function pullRequestAt(url: string, repoPaths: string[]): Promise<PullRequest | null> {
+  const remotes = await Promise.all(repoPaths.map(remoteOf))
+  for (const [index, remote] of remotes.entries()) {
+    const number = remote && pullRequestNumberIn(url, remote)
+    if (!remote || !number) continue
+    const repoPath = repoPaths[index]
+    if (remote.provider === 'github')
+      return toGithubPullRequest(object(await runJson('gh', ['pr', 'view', `${number}`, '-R', `${remote.host}/${remote.slug}`, '--json', GITHUB_FIELDS], repoPath)), repoPath)
+    return toGitlabPullRequest(object(await runJson('glab', ['api', `projects/:id/merge_requests/${number}`], repoPath)), repoPath)
+  }
+  return null
+}
+
 async function listForRepo(repoPath: string): Promise<PullRequest[]> {
   const remote = await remoteOf(repoPath)
   if (!remote) return []
   if (remote.provider === 'github') {
-    const fields = 'number,title,author,headRefName,baseRefName,state,isDraft,updatedAt,additions,deletions,changedFiles,url,mergeable'
-    const args = ['pr', 'list', '-R', `${remote.host}/${remote.slug}`, '--state', 'all', '--limit', `${LIST_LIMIT}`, '--json', fields]
+    const args = ['pr', 'list', '-R', `${remote.host}/${remote.slug}`, '--state', 'all', '--limit', `${LIST_LIMIT}`, '--json', GITHUB_FIELDS]
     // Review marks are a nicety: the list still loads when that query fails
     const [pullRequests, reviewData] = await Promise.all([
       runJson('gh', args, repoPath).then((raw) => list(raw).map((pr) => toGithubPullRequest(pr, repoPath))),

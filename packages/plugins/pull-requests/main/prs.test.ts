@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { splitPatch } from '@treeix/host/git'
-import { githubFilesToPatches, githubPipelines, gitlabPipelines, githubReviewers, githubReviewEvents, gitlabReviewEvents, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview, logTail } from './prs'
+import { githubFilesToPatches, githubPipelines, gitlabPipelines, githubReviewers, githubReviewEvents, gitlabReviewEvents, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, pullRequestNumberIn, toGithubPullRequest, toGitlabPullRequest, githubMyReview, logTail } from './prs'
 
 test('parseRemote', () => {
   expect(parseRemote('git@github.com:blurifycom/openora.git')).toEqual({ provider: 'github', host: 'github.com', slug: 'blurifycom/openora' })
@@ -233,4 +233,13 @@ test('logTail drops colors, GitLab stamps, sections and progress redraws, keepin
   const log = ['\x1b[32;1mstep\x1b[0m', '2026-09-23T17:01:55.886433Z 01O+section_start:1:build\rbuilding', 'progress 1%\rprogress 100%', 'error TS2307', '', '']
   expect(logTail(log.join('\n'))).toBe('step\nbuilding\nprogress 100%\nerror TS2307')
   expect(logTail(Array.from({ length: 200 }, (_, index) => `${index}`).join('\n')).split('\n')).toHaveLength(80)
+})
+
+test('pullRequestNumberIn reads the number only from links of that remote', () => {
+  const github = { provider: 'github', host: 'github.com', slug: 'acme/app' } as const
+  const gitlab = { provider: 'gitlab', host: 'gitlab.acme.io', slug: 'group/sub/app' } as const
+  expect(pullRequestNumberIn('https://github.com/acme/app/pull/12/files', github)).toBe(12)
+  expect(pullRequestNumberIn('https://gitlab.acme.io/group/sub/app/-/merge_requests/437/diffs', gitlab)).toBe(437)
+  expect(pullRequestNumberIn('https://github.com/acme/app-two/pull/12', github)).toBeNull()
+  expect(pullRequestNumberIn('https://gitlab.acme.io/group/sub/app/-/pipelines/55925', gitlab)).toBeNull()
 })
