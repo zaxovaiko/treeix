@@ -16,13 +16,13 @@ test('decryptChromiumValue reads v10 values, stripping the host hash on newer da
   expect(decryptChromiumValue(Buffer.from('v20xxxx'), key, 24)).toBeNull()
 })
 
-test('chromiumCookie maps rows and skips session and expired cookies', () => {
+test('chromiumCookie maps rows, keeps session cookies for a month and skips expired ones', () => {
   const now = 1_800_000_000
   const expires = (now + 3600 + 11644473600) * 1_000_000
   const row = { host_key: '.example.com', name: 'sid', path: '/', expires_utc: expires, is_secure: 1, is_httponly: 1, samesite: 1, has_expires: 1 }
   expect(chromiumCookie(row, 'v', now)).toEqual({ url: 'https://example.com/', name: 'sid', value: 'v', domain: '.example.com', path: '/', secure: true, httpOnly: true, sameSite: 'lax', expirationDate: now + 3600 })
   expect(chromiumCookie({ ...row, host_key: 'app.example.com', is_secure: 0, samesite: -1 }, 'v', now)).toMatchObject({ url: 'http://app.example.com/', domain: undefined, secure: false, sameSite: 'unspecified' })
-  expect(chromiumCookie({ ...row, has_expires: 0 }, 'v', now)).toBeNull()
+  expect(chromiumCookie({ ...row, has_expires: 0, expires_utc: 0 }, 'v', now)).toMatchObject({ name: 'sid', expirationDate: now + 30 * 24 * 60 * 60 })
   expect(chromiumCookie({ ...row, expires_utc: (now - 1 + 11644473600) * 1_000_000 }, 'v', now)).toBeNull()
 })
 

@@ -35,10 +35,15 @@ export const SAME_SITE: Record<number, CookiesSetDetails['sameSite']> = { 0: 'no
 
 export const cookieUrl = (host: string, path: string, secure: boolean): string => `${secure ? 'https' : 'http'}://${host.replace(/^\./, '')}${path || '/'}`
 
-/** Session cookies and expired ones are skipped: the import copies what would survive a relaunch */
+/** How long an imported session cookie lives; Electron would drop it at the next relaunch, and the login with it */
+const SESSION_COOKIE_SECONDS = 30 * 24 * 60 * 60
+
+/**
+ * Expired cookies are skipped. Session cookies come along, since many sites keep the login in one (GitLab's
+ * _gitlab_session, PHPSESSID, JSESSIONID) and Chrome holds on to them while it restores tabs.
+ */
 export function chromiumCookie(row: ChromiumRow, value: string, nowSeconds: number): CookiesSetDetails | null {
-  if (!row.has_expires) return null
-  const expirationDate = Math.floor(Number(row.expires_utc) / 1_000_000 - WINDOWS_EPOCH_OFFSET)
+  const expirationDate = row.has_expires ? Math.floor(Number(row.expires_utc) / 1_000_000 - WINDOWS_EPOCH_OFFSET) : nowSeconds + SESSION_COOKIE_SECONDS
   if (expirationDate <= nowSeconds) return null
   const secure = row.is_secure === 1
   return {
