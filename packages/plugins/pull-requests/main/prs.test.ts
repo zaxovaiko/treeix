@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { splitPatch } from '@treeix/host/git'
-import { githubFilesToPatches, githubPipelines, gitlabPipelines, githubReviewers, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview, logTail } from './prs'
+import { githubFilesToPatches, githubPipelines, gitlabPipelines, githubReviewers, githubReviewEvents, gitlabReviewEvents, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, toGithubPullRequest, toGitlabPullRequest, githubMyReview, logTail } from './prs'
 
 test('parseRemote', () => {
   expect(parseRemote('git@github.com:blurifycom/openora.git')).toEqual({ provider: 'github', host: 'github.com', slug: 'blurifycom/openora' })
@@ -74,6 +74,31 @@ test('gitlabThreads skips system notes and maps positions', () => {
     ['d3', 'b.ts', 7, 'deletions'],
     ['d4', null, null, 'additions']
   ])
+})
+
+test('review events keep verdicts and drop comments and other system notes', () => {
+  const gitlab = gitlabReviewEvents([
+    { id: 'd1', notes: [{ system: true, body: 'changed the description', author: { username: 'x' } }] },
+    { id: 'd2', notes: [{ system: true, body: 'approved this merge request', author: { username: 'ann' }, created_at: 't1' }] },
+    { id: 'd3', notes: [{ body: 'approved this merge request', author: { username: 'bob' } }] },
+    { id: 'd4', notes: [{ system: true, body: 'requested changes', author: { username: 'bob' }, created_at: 't2' }] }
+  ])
+  expect(gitlab.map((event) => [event.author, event.verdict, event.createdAt])).toEqual([
+    ['ann', 'approved', 't1'],
+    ['bob', 'changes', 't2']
+  ])
+  const reviews = [
+    { author: { login: 'ann' }, state: 'COMMENTED', submittedAt: 't1' },
+    { author: { login: 'bob' }, state: 'CHANGES_REQUESTED', submittedAt: 't2' },
+    { author: { login: 'ann' }, state: 'DISMISSED', submittedAt: 't3' },
+    { author: { login: 'bob' }, state: 'APPROVED', submittedAt: 't4' }
+  ]
+  const github = githubReviewEvents({ data: { repository: { pullRequest: { reviews: { nodes: reviews } } } } })
+  expect(github.map((event) => [event.author, event.verdict, event.createdAt])).toEqual([
+    ['bob', 'changes', 't2'],
+    ['bob', 'approved', 't4']
+  ])
+  expect(githubReviewEvents(null)).toEqual([])
 })
 
 test('toGitlabPullRequest maps states', () => {

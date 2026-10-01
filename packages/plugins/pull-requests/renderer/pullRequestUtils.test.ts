@@ -1,6 +1,13 @@
 import { expect, test } from 'bun:test'
 import type { PullRequest, ReviewThread } from '../shared/types'
-import { groupPullRequests, involvesYou, sortPullRequests, threadReference, untilLabel } from './pullRequestUtils'
+import { conversationFeed, groupPullRequests, involvesYou, sortPullRequests, threadReference, untilLabel } from './pullRequestUtils'
+
+test('conversationFeed slots review events between threads by time', () => {
+  const thread = (createdAt: string) => ({ comments: [{ createdAt }] }) as ReviewThread
+  const event = (createdAt: string) => ({ author: 'ann', avatarUrl: null, verdict: 'approved' as const, createdAt })
+  const feed = conversationFeed([thread('2'), thread('4')], [event('1'), event('3'), event('5')])
+  expect(feed.map((entry) => ('verdict' in entry ? `e${entry.createdAt}` : `t${entry.comments[0].createdAt}`))).toEqual(['e1', 't2', 'e3', 't4', 'e5'])
+})
 
 test('untilLabel picks the largest sensible unit', () => {
   const now = 1_000_000_000_000

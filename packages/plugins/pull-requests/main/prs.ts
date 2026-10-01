@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ConflictResult, ImageResult, Person, Provider, PullRequest, Pipeline, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
+import type { ConflictResult, ImageResult, Person, Provider, PullRequest, Pipeline, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewEvent, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
 import { type Json, isJson, list, object, text } from '@treeix/shared/json'
@@ -393,6 +393,32 @@ export function gitlabThreads(discussions: Json[]): ReviewThread[] {
   })
 }
 
+const GITLAB_VERDICTS: Record<string, ReviewEvent['verdict']> = {
+  'approved this merge request': 'approved',
+  'unapproved this merge request': 'unapproved',
+  'requested changes': 'changes'
+}
+
+/** GitLab records verdicts as system notes among the discussions */
+export function gitlabReviewEvents(discussions: Json[]): ReviewEvent[] {
+  return discussions
+    .flatMap((discussion) => list(discussion.notes))
+    .flatMap((note) => {
+      const verdict = note.system === true ? GITLAB_VERDICTS[text(note.body)] : undefined
+      const { login, avatarUrl } = gitlabPerson(object(note.author))
+      return verdict ? [{ author: login, avatarUrl, verdict, createdAt: text(note.created_at) }] : []
+    })
+}
+
+/** Submitted approvals and change requests; dismissed and comment-only reviews are left out */
+export function githubReviewEvents(raw: unknown): ReviewEvent[] {
+  return list(object(githubPullRequestNode(raw).reviews).nodes).flatMap((review) => {
+    const verdict = REVIEW_STATES[text(review.state)]
+    if (verdict !== 'approved' && verdict !== 'changes') return []
+    return [{ author: text(object(review.author).login), avatarUrl: text(object(review.author).avatarUrl) || null, verdict, createdAt: text(review.submittedAt) }]
+  })
+}
+
 const stripPrefix = (path: string, prefix: string): string => (path.startsWith(prefix) ? path.slice(prefix.length) : path)
 
 /**
@@ -527,6 +553,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
         reviewRequests(first: 30) { nodes { requestedReviewer { ... on User { login avatarUrl } } } }
         latestReviews(first: 30) { nodes { author { login avatarUrl } state } }
         viewerLatestReview { state }
+        reviews(first: 100) { nodes { author { login avatarUrl } state submittedAt } }
         assignees(first: 30) { nodes { login avatarUrl } }
       } }
     }`
@@ -542,6 +569,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
       body: text(object(view).body),
       patches: filePatches,
       threads: githubThreads(reviewComments, issueComments, githubThreadStates(extra)),
+      reviewEvents: githubReviewEvents(extra),
       // ponytail: first 100 files only, paginate when PRs get bigger
       viewedFiles: extra === null ? null : githubViewedFiles(extra),
       reviewers: githubReviewers(extra),
@@ -564,6 +592,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
     body: text(object(request).description),
     patches: splitPatch(normalizeGitlabDiff(diff)),
     threads: gitlabThreads(list(discussions)),
+    reviewEvents: gitlabReviewEvents(list(discussions)),
     viewedFiles: null,
     reviewers: gitlabReviewers(request, approvals),
     assignees: list(object(request).assignees).map(gitlabPerson),

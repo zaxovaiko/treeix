@@ -2,7 +2,7 @@ import { type DiffLineAnnotation, PatchDiff, Virtualizer } from '@pierre/diffs/r
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { LineRange } from '@treeix/shared/comments'
 import type { FilePatch, Repo } from '@treeix/shared/types'
-import { type ConflictResult, type MergeMethod, type PullRequest, type PullRequestComment, type Person, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewThread, type ThreadComment } from '../shared/types'
+import { type ConflictResult, type MergeMethod, type PullRequest, type PullRequestComment, type Person, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewEvent, type ReviewThread, type ThreadComment } from '../shared/types'
 import { allFolders, ChangedFileList, folderPaths } from '@treeix/app/ChangedFiles'
 import { groupOpen } from '@treeix/app/settings'
 import { api, imageResolver, prSettings } from './api'
@@ -16,7 +16,7 @@ import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } fr
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { CommentDraft, orderRange } from '@treeix/app/Comments'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
-import { ConflictMark, groupPullRequests, PipelineDot, PipelineLink, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prLabel, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
+import { ConflictMark, conversationFeed, groupPullRequests, PipelineDot, PipelineLink, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prLabel, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
 import { FilterSearch, matchesFilters, parseFilters, type PullRequestFilter } from './PullRequestFilter'
 import { usePullRequestKeys } from './keys'
 import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
@@ -532,6 +532,26 @@ function ReviewerMark({ state }: { state: Reviewer['state'] }): React.JSX.Elemen
     <span className={`absolute -right-0.5 -bottom-0.5 grid size-2.5 place-items-center rounded-full bg-background ${REVIEWER_LOOK[state].className}`}>
       {state === 'requested' ? <span className="size-1.5 rounded-full bg-current" /> : <Icon name={state === 'approved' ? 'check' : state === 'changes' ? 'alert' : 'comment'} className="size-2" />}
     </span>
+  )
+}
+
+const VERDICT_LOOK: Record<ReviewEvent['verdict'], { label: string; icon: IconName; className: string }> = {
+  approved: { label: 'approved', icon: 'check', className: 'text-emerald-400' },
+  changes: { label: 'requested changes', icon: 'alert', className: 'text-red-400' },
+  unapproved: { label: 'withdrew approval', icon: 'undo', className: 'text-muted-foreground' }
+}
+
+/** An approval or change request as one line of the conversation */
+function ReviewEventRow({ event }: { event: ReviewEvent }): React.JSX.Element {
+  const look = VERDICT_LOOK[event.verdict]
+  return (
+    <div className="flex items-center gap-2 px-3 py-1 text-xs">
+      <Icon name={look.icon} className={`size-3.5 shrink-0 ${look.className}`} />
+      <UserAvatar name={event.author} url={event.avatarUrl} />
+      <span className="truncate font-semibold">{event.author}</span>
+      <span className={`shrink-0 ${look.className}`}>{look.label}</span>
+      <span className="shrink-0 text-muted-foreground">{timeAgo(event.createdAt)} ago</span>
+    </div>
   )
 }
 
@@ -1771,9 +1791,9 @@ export function PullRequestDetailView({
           )}
         </div>
         <LinkPreviews urls={detail.body.match(/https?:\/\/[^\s)<>\]"']+/g) ?? []} />
-        {threads.map((thread) => (
-          <div key={thread.id}>{threadCard(thread, true)}</div>
-        ))}
+        {conversationFeed(threads, detail.reviewEvents).map((entry) =>
+          'verdict' in entry ? <ReviewEventRow key={`${entry.author}:${entry.createdAt}`} event={entry} /> : <div key={entry.id}>{threadCard(entry, true)}</div>
+        )}
         {pending.some((entry) => entry.threadId === null) && (
           <div className="overflow-hidden rounded-md border border-border bg-card">
             {pending

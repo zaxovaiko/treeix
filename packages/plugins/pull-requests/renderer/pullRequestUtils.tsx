@@ -1,5 +1,5 @@
 import type { Repo } from '@treeix/shared/types'
-import type { Pipeline, PullRequest, PullRequestState, ReviewStatus, ReviewThread } from '../shared/types'
+import type { Pipeline, PullRequest, PullRequestState, ReviewEvent, ReviewStatus, ReviewThread } from '../shared/types'
 import { Icon } from '@treeix/app/Icon'
 export { timeAgo, untilLabel } from '@treeix/app/time'
 export { UserAvatar } from '@treeix/app/ui'
@@ -13,6 +13,18 @@ export const STATE_STYLE: Record<PullRequestState | 'draft', { label: string; cl
   draft: { label: 'Draft', className: 'bg-foreground/8 text-muted-foreground' },
   merged: { label: 'Merged', className: 'bg-violet-400/14 text-violet-400' },
   closed: { label: 'Closed', className: 'bg-red-400/12 text-red-400' }
+}
+
+/** Review events slotted between the threads by time; the threads keep their order */
+export function conversationFeed<Thread extends Pick<ReviewThread, 'comments'>>(threads: Thread[], events: ReviewEvent[]): (Thread | ReviewEvent)[] {
+  const feed: (Thread | ReviewEvent)[] = []
+  let next = 0
+  for (const thread of threads) {
+    const startedAt = thread.comments[0]?.createdAt ?? ''
+    while (next < events.length && events[next].createdAt < startedAt) feed.push(events[next++])
+    feed.push(thread)
+  }
+  return [...feed, ...events.slice(next)]
 }
 
 /** GitLab links uploads relative to the project page */

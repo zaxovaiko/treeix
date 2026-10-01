@@ -81,10 +81,20 @@ export type ReviewThread = {
   resolveId: string | null
 }
 
+/** A verdict someone gave on the pull request; `unapproved` withdraws an earlier approval (GitLab) */
+export type ReviewEvent = {
+  author: string
+  avatarUrl: string | null
+  verdict: 'approved' | 'changes' | 'unapproved'
+  createdAt: string
+}
+
 export type PullRequestDetail = {
   body: string
   patches: FilePatch[]
   threads: ReviewThread[]
+  /** Approvals and change requests, oldest first */
+  reviewEvents: ReviewEvent[]
   /** Paths marked viewed on GitHub; null where the provider has no API for it (GitLab keeps it in the browser) */
   viewedFiles: string[] | null
   reviewers: Reviewer[]
