@@ -20,7 +20,7 @@ function Tab(): React.JSX.Element {
   )
 }
 
-/** Worktrees other than the one open on the page are rescanned when the window comes back, at most this often */
+/** Main worktrees are rescanned when the window comes back, at most this often */
 const FOCUS_RESCAN_MS = 60_000
 
 /** Scans the workspace's worktrees, rescans one when its env files change, and sets up new worktrees when asked to */
@@ -29,19 +29,22 @@ function Root(): null {
   const known = envs.use()
   const scoped = scopedWorktrees(host, known)
   const pathsKey = scoped.map(({ worktree }) => worktree.path).join('\n')
-  useEffect(() => void rescan(pathsKey ? pathsKey.split('\n') : []).catch(() => undefined), [pathsKey])
+  const mainsKey = scoped.filter(({ isMain }) => isMain).map(({ worktree }) => worktree.path).join('\n')
+  // A scan walks the whole tree, so only worktrees not scanned yet: a workspace can hold a hundred of them
+  useEffect(() => void rescan(pathsKey.split('\n').filter((path) => path && !envs.get().has(path))).catch(() => undefined), [pathsKey])
 
-  // The page watches the worktree it shows; everything else catches up when the window is focused again
+  // The page watches the worktree it shows and rescans all on opening; a focused window only refreshes the mains, which
+  // new worktrees copy from
   useEffect(() => {
     let last = Date.now()
     const onFocus = (): void => {
-      if (Date.now() - last < FOCUS_RESCAN_MS || !pathsKey) return
+      if (Date.now() - last < FOCUS_RESCAN_MS || !mainsKey) return
       last = Date.now()
-      void rescan(pathsKey.split('\n')).catch(() => undefined)
+      void rescan(mainsKey.split('\n')).catch(() => undefined)
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [pathsKey])
+  }, [mainsKey])
 
   // A worktree that appears after the first scan was just created; the host has no event for that, so compare lists
   const seen = useRef<Set<string> | null>(null)
