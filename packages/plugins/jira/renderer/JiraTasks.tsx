@@ -5,14 +5,14 @@ import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { EmptyState, FoldAllButton, IconButton, UserAvatar, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
-import type { Epic, JiraPerson, WorkItem, WorkItemList } from '../shared/types'
+import type { Epic, JiraPerson, WorkItem, WorkItemDetail, WorkItemList } from '../shared/types'
 import { branchFor } from './branch'
 import { Picker } from '@treeix/app/Picker'
 import { applyPatch, type Patches, pendingPatches } from './optimistic'
 import { useCached } from '@treeix/atlassian/renderer/cache'
 import { withList } from '@treeix/atlassian/renderer/panels'
 import { type FilterGroup, FilterSearch, type FilterToken, matchesTokens, parseTokens } from '@treeix/app/FilterSearch'
-import { epicCache, jiraApi, jiraSettings, LIST_LIMIT, listCache, ME, meCache, orderedJql, scopedJql, selection, summaryCache, TTL } from './api'
+import { detailCache, epicCache, jiraApi, jiraSettings, LIST_LIMIT, listCache, ME, meCache, orderedJql, scopedJql, selection, TTL } from './api'
 import { BugPill, EpicChip, EpicProgress, isBug, PriorityMark, StatusPill, TypeMark } from './marks'
 import { type Bucket, BUCKETS, bucketOf, epicIndex, groupByEpic, isItemSort, projectOf, SORTS, sortItems } from './buckets'
 import { COMMENT_INPUT, LABEL_INPUT, type PickerId, type StatusOption, TicketMain, useTicket } from './TicketView'
@@ -146,9 +146,10 @@ export function JiraTasks(): React.JSX.Element {
     ...(collapsed.includes(group.id) ? [] : group.items.map((item): Entry => ({ kind: 'item', item, group: group.id })))
   ])
 
-  // An item picked from elsewhere, like an epic from the detail pane, may not be in this list; it loads on its own
+  // An item picked from elsewhere, like a link or an epic from the detail pane, may not be in this list; it loads on its
+  // own, as the detail the pane shows anyway, so opening it costs one request instead of a summary and then the detail
   const outsideKey = selectedKey && !visible.some((item) => item.key === selectedKey) ? selectedKey : ''
-  const { value: outsideItem } = useCached<WorkItem>(summaryCache, outsideKey, TTL.summary, jiraApi.summary)
+  const { value: outsideItem } = useCached<WorkItemDetail>(detailCache, outsideKey, TTL.detail, jiraApi.detail)
   const selected =
     visible.find((item) => item.key === selectedKey) ?? (outsideItem && outsideItem.key === outsideKey ? applyPatch(outsideItem, patches) : undefined) ?? groups[0]?.items[0]
   useEffect(() => setEditingSummary(false), [selected?.key])
