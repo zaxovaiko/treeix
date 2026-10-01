@@ -9,7 +9,7 @@ import { useHost, useListNav } from '@treeix/sdk'
 import { type Task, taskPanes } from './tasks'
 import { NameInput, renaming, startRename, switchTask, taskLabel, taskStatus } from './taskUi'
 import { ClosedSessions, openTab } from './TerminalPanel'
-import { type ClosedSession, deleteTask, renameTask, type Session } from './terminals'
+import { type ClosedSession, clearClosedSessions, deleteTask, renameTask, type Session } from './terminals'
 
 /** Tasks of the workspace with what their sessions need; j/k move, ⏎ goes to the task's terminal, e or double-click renames */
 /** The group's pill counts the agents in its most pressing state */
@@ -150,11 +150,20 @@ export function TaskList({
       </div>
       {history.length > 0 && (
         <div className="flex max-h-[40%] min-h-0 shrink-0 flex-col border-t border-border">
-          <button onClick={() => setHistoryOpen(!historyOpen)} className="flex h-8 shrink-0 items-center gap-1.5 px-3 text-left text-[11px] font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground">
-            <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
-            History
-            <span className="font-normal normal-case tabular-nums">{history.length}</span>
-          </button>
+          <div className="group/history flex h-8 shrink-0 items-center pr-1.5">
+            <button onClick={() => setHistoryOpen(!historyOpen)} className="flex h-8 min-w-0 flex-1 items-center gap-1.5 px-3 text-left text-[11px] font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground">
+              <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
+              History
+              <span className="font-normal normal-case tabular-nums">{history.length}</span>
+            </button>
+            <button
+              title="Clear history"
+              onClick={() => window.confirm(`Remove ${history.length} closed ${history.length === 1 ? 'session' : 'sessions'} from history?`) && clearClosedSessions(history.map((entry) => entry.id))}
+              className="h-6 shrink-0 rounded px-1.5 text-[10.5px] text-muted-foreground opacity-0 group-hover/history:opacity-100 hover:text-red-400 focus-visible:opacity-100"
+            >
+              Clear
+            </button>
+          </div>
           {historyOpen && (
             <div className="min-h-0 overflow-y-auto px-1.5 pb-2">
               <ClosedSessions entries={history} repos={repos} />
