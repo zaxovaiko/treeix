@@ -343,7 +343,7 @@ export function Tooltips(): React.JSX.Element | null {
       ref={fitInWindow}
       role="tooltip"
       style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
-      className="pointer-events-none fixed z-[100] flex max-w-sm items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground shadow-lg shadow-black/40"
+      className="pointer-events-none fixed z-[100] flex w-max max-w-[min(24rem,calc(100vw-16px))] items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground shadow-lg shadow-black/40"
     >
       <span>{tip.text}</span>
       {tip.shortcut && (
