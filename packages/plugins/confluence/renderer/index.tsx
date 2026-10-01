@@ -79,7 +79,14 @@ const plugin: RendererPlugin = {
       <ApiToken bridge={confluenceBridge} purpose="Search, recently viewed pages and images" />
     </Card>
   ),
-  linkPreviews: [{ label: 'Confluence', keyOf: (url) => pageOfUrl(url)?.id ?? null, render: PagePreview }]
+  linkPreviews: [{ label: 'Confluence', keyOf: (url) => pageOfUrl(url)?.id ?? null, render: PagePreview }],
+  openLink: (url, host) => {
+    const page = pageOfUrl(url)
+    if (!page) return false
+    openRequest.update({ id: page.id })
+    host.setActiveTab(TAB_ID)
+    return true
+  }
 }
 
 export default plugin

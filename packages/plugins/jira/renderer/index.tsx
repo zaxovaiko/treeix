@@ -122,15 +122,17 @@ void jiraApi.projects().then((keys) => {
   projects = new Set(keys)
 }, () => undefined)
 
+function openIssue(key: string, host: HostApi): void {
+  selection.update({ key })
+  host.setActiveTab(TAB_ID)
+}
+
 const plugin: RendererPlugin = {
-  services: {
-    jira: {
-      isProject: (key) => projects.has(key),
-      open: (key, host) => {
-        selection.update({ key })
-        host.setActiveTab(TAB_ID)
-      }
-    }
+  services: { jira: { isProject: (key) => projects.has(key), open: openIssue } },
+  openLink: (url, host) => {
+    const key = issueKeyOf(url)
+    if (key) openIssue(key, host)
+    return key !== null
   },
   commands: ticketCommands,
   shortcuts: [{ keys: '← →', label: 'Fold / unfold the group', section: 'Tasks', page: TAB_ID }],

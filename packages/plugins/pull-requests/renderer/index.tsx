@@ -172,7 +172,7 @@ function PullRequestSettings(): React.JSX.Element {
 
 /**
  * Opens a pull request or pipeline link from elsewhere, like a terminal, as the pull request's tab. A new one may not be in the list yet,
- * so the workspace's list is fetched once before giving up.
+ * so the workspace's list is fetched once before giving up; false when it isn't one from the workspace's repositories.
  */
 async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> {
   if (!/\/(pull|merge_requests|pipelines)\/\d+/.test(url)) return false
@@ -194,7 +194,7 @@ const listedCommands = (host: HostApi): Command[] =>
   }))
 
 const plugin: RendererPlugin = {
-  services: { pullRequests: { open: openPullRequestUrl } },
+  openLink: openPullRequestUrl,
   tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'], Badge: PullRequestsCount }],
   Root: Polling,
   Settings: PullRequestSettings,

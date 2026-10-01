@@ -290,15 +290,7 @@ function useFileLinks(): void {
   )
   // Looked up on use: the Jira plugin may load after this one, or be switched off later
   useEffect(() => setIssueLinks({ isProject: (project) => host.service('jira')?.isProject(project) ?? false, open: (key) => host.service('jira')?.open(key, host) }))
-  useEffect(() =>
-    setWebLinkHandler(async (url) => {
-      const opened = (await host.service('pullRequests')?.open(url, host).catch(() => false)) ?? false
-      if (opened) return
-      const browser = host.service('browser')
-      if (browser?.handles(url)) browser.open(url)
-      else window.open(url)
-    })
-  )
+  useEffect(() => setWebLinkHandler(host.openLink))
 }
 
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {

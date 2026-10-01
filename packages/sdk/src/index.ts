@@ -121,8 +121,6 @@ export type SessionsService = {
  */
 export interface Services {
   sessions: SessionsService
-  /** Provided by the pull requests plugin */
-  pullRequests: PullRequestsService
   /** The built-in browser: `handles` says whether a link should open there, per the user's setting */
   browser: { open: (url: string) => void; handles: (url: string) => boolean }
   /** Chat sessions with agents, provided by the chat plugin */
@@ -147,11 +145,6 @@ export type ChatService = {
   subscribe: (listener: () => void) => () => void
 }
 
-export type PullRequestsService = {
-  /** Opens the pull request at `url` in its own tab; false when it isn't one from the workspace's repositories */
-  open: (url: string, host: HostApi) => Promise<boolean>
-}
-
 /** Everything a plugin's renderer module can contribute; all optional */
 export type RendererPlugin = {
   tabs?: TabContribution[]
@@ -172,6 +165,8 @@ export type RendererPlugin = {
   /** Renderers for fenced code blocks in markdown, by language */
   codeBlocks?: Record<string, ComponentType<{ code: string }>>
   linkPreviews?: LinkPreview[]
+  /** Shows what a web link points at inside the app (a pull request, an issue, a page); false when the link isn't the plugin's */
+  openLink?: (url: string, host: HostApi) => boolean | Promise<boolean>
   /** Icons for command line tools the plugin's main module checks, by tool name */
   toolMarks?: Record<string, ComponentType>
   /** Keys the plugin handles, listed in the shortcut sheet (?) and Settings */
@@ -206,6 +201,8 @@ export type HostApi = {
   setActiveTab: (id: string) => void
   openTab: (tab: DocumentTab) => void
   closeTab: (key: string) => void
+  /** Opens a web link where a plugin shows it in the app, else in the browser */
+  openLink: (url: string) => void
   openWorktree: (path: string) => void
   createWorktree: (repoPath: string, branch: string, base?: string, session?: SessionKind | null) => Promise<void>
   /** Opens Settings, on `page` when given: `plugin:<id>` for a plugin's own page, else the page left open last */

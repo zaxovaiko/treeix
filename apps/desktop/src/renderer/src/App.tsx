@@ -37,7 +37,7 @@ import { matcherFor } from './searchMatcher'
 import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindForKey, useSymbolNavigation } from './codeNavigation'
 import { codeThemeOptions, diffBackground, FileView, findLineElement } from './FileView'
 import { FileIcon, Icon, type IconName } from './Icon'
-import { findService, usePlugins, useSessions } from './plugins'
+import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
 import { isPageId, showSettingsPage } from './settingsNav'
@@ -68,6 +68,17 @@ const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
 function openPage(url: string): void {
   const browser = findService('browser')
   if (browser) browser.open(url)
+  else window.open(url)
+}
+
+/** A web link in the app when a plugin shows what it points at, else in the browser */
+async function openLink(url: string, host: HostApi): Promise<void> {
+  for (const { plugin } of loadedPlugins()) {
+    const opened = await Promise.resolve(plugin.openLink?.(url, host)).catch(() => false)
+    if (opened) return
+  }
+  const browser = findService('browser')
+  if (browser?.handles(url)) browser.open(url)
   else window.open(url)
 }
 
@@ -1281,6 +1292,7 @@ function App(): React.JSX.Element {
   const latest = useRef(hostCalls)
   latest.current = hostCalls
   const scopeRepoPaths = useMemo(() => (workspaceRepos ? reposInScope(workspaceRepos, scope).map((repo) => repo.path) : null), [repos, workspace, scope.folder, scope.focus])
+  const hostRef = useRef<HostApi | null>(null)
   const host = useMemo(
     (): HostApi => ({
       repos,
@@ -1300,6 +1312,7 @@ function App(): React.JSX.Element {
       setActiveTab: setAppTab,
       openTab: (tab) => latest.current.openTab(tab),
       closeTab: (key) => latest.current.closeTab(key),
+      openLink: (url) => void (hostRef.current && openLink(url, hostRef.current)),
       openWorktree: (path) => latest.current.openWorktree(path),
       createWorktree: (repoPath, branch, base, session) => latest.current.createWorktree(repoPath, branch, base, session),
       openSettings: (page) => latest.current.openSettings(page),
@@ -1328,6 +1341,18 @@ function App(): React.JSX.Element {
     // Beyond the fields: what the render functions and isPanelVisible read, so views built from them refresh
     [repos, workspaceId, scopeRepoPaths, scopeLabel, selected, worktree, explorerRoot, browseRoot, defaultCwd, diffStyle, appTab, activePage, splitPageId, splitFocused, comments, patches, worktreeFiles, fileReload, dock.layout, shell.zen, draggingPanel, plugins]
   )
+  hostRef.current = host
+  // ⌘-click on any link goes through the plugins first; a plain click still opens the browser
+  useEffect(() => {
+    const onClick = (event: MouseEvent): void => {
+      const anchor = event.metaKey && event.target instanceof Element ? event.target.closest('a') : null
+      if (!anchor || !/^https?:\/\//.test(anchor.getAttribute('href') ?? '')) return
+      event.preventDefault()
+      hostRef.current?.openLink(anchor.href)
+    }
+    window.addEventListener('click', onClick, true)
+    return () => window.removeEventListener('click', onClick, true)
+  }, [])
   // The split page sees itself as the active page, so its layout keeps its own panels and widths
   const splitHost = useMemo((): HostApi => ({ ...host, activeTab: splitPage?.id ?? '', activePage: splitPage?.id ?? '' }), [host, splitPage?.id])
   const keptTabs = keptPages(pluginTabs, visitedTabs, appTab, splitPageId)
