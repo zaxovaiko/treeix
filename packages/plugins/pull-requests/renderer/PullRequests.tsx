@@ -30,7 +30,8 @@ import { isJson, isString, list as jsonList, parseJson } from '@treeix/shared/js
 
 // ponytail: keeps the most recently loaded details, which carry every patch; raise if reopening older PRs refetches too often
 const MAX_CACHED_DETAILS = 30
-const detailCache = new Map<string, PullRequestDetail>()
+/** With when it was loaded and for which update, so coming back to a tab soon after shows it without fetching again */
+const detailCache = new Map<string, { detail: PullRequestDetail; at: number; updatedAt: string }>()
 /** Conflict checks by pull request and update, so switching back and forth doesn't fetch again */
 const conflictCache = new Map<string, Promise<ConflictResult>>()
 
@@ -970,7 +971,7 @@ export function PullRequestDetailView({
   const load = (): Promise<void> =>
     api.pullRequestDetail(pr).then((result) => {
       detailCache.delete(pr.url)
-      detailCache.set(pr.url, result)
+      detailCache.set(pr.url, { detail: result, at: Date.now(), updatedAt: pr.updatedAt })
       if (detailCache.size > MAX_CACHED_DETAILS) detailCache.delete(detailCache.keys().next().value ?? '')
       setDetail(result)
       setFilePath((current) => current ?? result.patches[0]?.path ?? null)
@@ -982,10 +983,13 @@ export function PullRequestDetailView({
   useEffect(() => {
     loadedFor.current = pr.updatedAt
     restoredScroll.current = false
-    const cachedDetail = detailCache.get(pr.url)
+    const cached = detailCache.get(pr.url)
+    const cachedDetail = cached?.detail
     setDetail(cachedDetail ?? null)
     setFilePath(savedPlace.filePath ?? cachedDetail?.patches[0]?.path ?? null)
     setError(null)
+    // A detail load is several CLI calls and redraws every file, so a tab reopened right away keeps what it has
+    if (cached && cached.updatedAt === pr.updatedAt && Date.now() - cached.at < DETAIL_FOCUS_REFRESH_MS) return
     load().catch((reason: unknown) => cachedDetail === undefined && setError(errorMessage(reason)))
   }, [pr.url])
 
