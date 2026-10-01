@@ -9,14 +9,20 @@ const WAITING_FOR_INPUT =
   /Do you want to|❯\s*1\.\s*Yes|Yes, and don't ask|\[y\/n\]|\(y\/n\)|Allow command|Would you like to run|Press Enter to continue/i
 /** Claude Code and Codex show this for as long as they work */
 const WORKING = /esc to interrupt/i
+// ponytail: screen-scraped, Claude's footer counts what it left running after its turn, e.g. "· 1 shell"; no hook reports it
+const BACKGROUND_WORK = /·\s+\d+\s+(?:shell|monitor|agent|background task)s?\s*$/im
+const FOOTER_ROWS = 3
+const footer = (screen: string): string => screen.trimEnd().split('\n').slice(-FOOTER_ROWS).join('\n')
 
 /**
  * Claude from its hooks, which report every change, so before the first one it sits at its prompt; other agents are read
- * off the screen. Never from output timing: a TUI redraws while it waits.
+ * off the screen. Never from output timing: a TUI redraws while it waits. Claude watching a background shell after its
+ * turn still counts as working.
  */
 export function agentState(hooked: AgentHookStatus | undefined, hasHooks: boolean, screen: string): AgentState {
-  if (hooked) return hooked === 'input' ? 'input' : hooked === 'working' ? 'running' : 'idle'
-  if (hasHooks) return 'idle'
+  if (hooked === 'input') return 'input'
+  if (hooked === 'working') return 'running'
+  if (hooked || hasHooks) return BACKGROUND_WORK.test(footer(screen)) ? 'running' : 'idle'
   if (WAITING_FOR_INPUT.test(screen)) return 'input'
   return WORKING.test(screen) ? 'running' : 'idle'
 }

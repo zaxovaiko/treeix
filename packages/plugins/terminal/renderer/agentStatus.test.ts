@@ -8,6 +8,13 @@ test('hooks decide for Claude, even before the first one fires', () => {
   expect(agentState(undefined, true, 'Do you want to proceed?')).toBe('idle')
 })
 
+test('Claude watching a background shell after its turn still works', () => {
+  const screen = (footer: string): string => `✻ Crunched for 3s · done 18:12 · 1 shell still running\n\n❯ \n\n  Opus 5.5 | 2.0%\n  ⏵⏵ bypass permissions on${footer}\n\n`
+  expect(agentState('done', true, screen(' · 1 shell'))).toBe('running')
+  expect(agentState(undefined, true, screen(' · 2 shells'))).toBe('running')
+  expect(agentState('done', true, screen(''))).toBe('idle')
+})
+
 test('agents without hooks are read off the screen', () => {
   expect(agentState(undefined, false, '• Working (3s • esc to interrupt)')).toBe('running')
   expect(agentState(undefined, false, 'Would you like to run the following command?')).toBe('input')
