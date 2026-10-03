@@ -85,7 +85,8 @@ function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
   const agents = useAgents().filter((agent) => agent.chat)
   const current = chat.options?.agent
   if (!current) return null
-  if (hasConversation(chat) || agents.length < 2) {
+  // A plugin's agent, like an AI Hub persona, is the point of its chat
+  if (hasConversation(chat) || agents.length < 2 || agentOr(current).plugin) {
     return (
       <span title="A chat keeps the agent it started with" className="flex h-6 items-center px-1.5 text-xs text-muted-foreground">
         {agentOr(current).label}

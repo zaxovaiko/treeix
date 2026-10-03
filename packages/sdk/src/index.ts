@@ -263,7 +263,7 @@ export function createBridge(pluginId: string): {
   }
 }
 
-export type Store<T> = { get: () => T; set: (next: T) => void; use: () => T }
+export type Store<T> = { get: () => T; set: (next: T) => void; use: () => T; subscribe: (listener: () => void) => () => void }
 
 /** A value React components can follow; keep it immutable, since a new value is what rerenders them */
 export function createStore<T>(initial: T): Store<T> {
@@ -279,7 +279,8 @@ export function createStore<T>(initial: T): Store<T> {
       value = next
       listeners.forEach((listener) => listener())
     },
-    use: () => useSyncExternalStore(subscribe, () => value)
+    use: () => useSyncExternalStore(subscribe, () => value),
+    subscribe
   }
 }
 

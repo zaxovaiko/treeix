@@ -1,0 +1,12 @@
+{
+  "name": "@treeix/plugin-hub",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "hub",
+    "name": "AI Hub",
+    "description": "An AI Hub tab for your own agents: a name, look, model and instructions on top of Claude, Codex or any chat agent, to chat with and ping.",
+    "enabledByDefault": false,
+    "requires": ["chat"]
+  }
+}

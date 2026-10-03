@@ -450,7 +450,7 @@ function Avatar({ workspace }: { workspace: Pick<Workspace, 'name' | 'avatarText
 const AVATAR_PIXELS = 96
 
 /** Cropped square and scaled down, so a photo doesn't fill localStorage */
-async function shrinkImage(file: File): Promise<string> {
+export async function shrinkImage(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file)
   const side = Math.min(bitmap.width, bitmap.height)
   const canvas = document.createElement('canvas')
