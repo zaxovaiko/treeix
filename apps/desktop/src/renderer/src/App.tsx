@@ -270,6 +270,9 @@ function App(): React.JSX.Element {
   const { diffStyle } = settings
   const setDiffStyle = (style: 'split' | 'unified'): void => updateSettings({ diffStyle: style })
   const [appTab, setAppTab] = useState(SAVED_PLACE.appTab)
+  /** The page tab clicked again to hide it; another page showing unhides it */
+  const [hiddenTab, setHiddenTab] = useState<string | null>(null)
+  const pageHidden = hiddenTab === appTab
   /** Plugin pages seen in this workspace; they stay mounted so coming back to one is instant */
   const [visited, setVisited] = useState<{ workspace: string; tabs: string[] }>({ workspace: '', tabs: [] })
   /** A second page shown beside the active one; never the active page itself */
@@ -282,11 +285,7 @@ function App(): React.JSX.Element {
     const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
     localStorage.setItem(workspaceKey('app.place'), JSON.stringify(place))
   }, [appTab, selected, viewer])
-  const tabBeforeHub = useRef(DEFAULT_TAB)
   const onHub = appTab === HUB_TAB
-  useEffect(() => {
-    if (!onHub) tabBeforeHub.current = appTab
-  }, [appTab])
   const tabBeforeSettings = useRef('worktrees')
   const openSettings = (page?: unknown): void => {
     // Menu and button handlers may pass their event, so only a page id counts
@@ -557,6 +556,7 @@ function App(): React.JSX.Element {
   /** Shows a page with the keyboard in it: its list, or the terminal on the Terminal page */
   const goPage = (tab: string): void => {
     // The page in the split trades places with the active one
+    setHiddenTab(null)
     if (tab === splitTab) setSplitTab(tabs.some((candidate) => candidate.id === appTab) ? appTab : null)
     if (tab === 'settings') openSettings()
     else setAppTab(tab)
@@ -1706,12 +1706,12 @@ function App(): React.JSX.Element {
       <button
         key={tab.id}
         data-page-tab={tab.id}
-        aria-current={appTab === tab.id ? 'page' : undefined}
+        aria-current={appTab === tab.id && !pageHidden ? 'page' : undefined}
         title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag anywhere in the title bar`}
         {...barItemDrag(tab.id)}
-        onClick={() => goPage(tab.id === HUB_TAB && onHub ? tabBeforeHub.current : tab.id)}
+        onClick={() => (appTab === tab.id && !pageHidden ? setHiddenTab(tab.id) : goPage(tab.id))}
         onContextMenu={(event) => pageTabMenu(event, tab)}
-        className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
+        className={`${tabClass(appTab === tab.id && !pageHidden)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
       >
         {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
         {!compact && tab.label}
@@ -1730,6 +1730,7 @@ function App(): React.JSX.Element {
     repo.worktrees.some((candidate) => candidate.path === selected) && selected ? selected : repo.path
   )
   const activePluginTab = pluginTabs.find((tab) => tab.id === appTab)
+  const hiddenPage = pageHidden ? tabs.find((tab) => tab.id === appTab) : undefined
   const appTabLabel = openDocTab?.title ?? activePluginTab?.label ?? (appTab === 'settings' ? 'Settings' : appTab === 'worktrees' ? 'Worktrees' : 'This tab')
 
   const changedPaths = new Set(files.map((patch) => patch.path))
@@ -2129,10 +2130,17 @@ function App(): React.JSX.Element {
               {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
               <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
-                  {appTab === 'worktrees' && worktreeView}
+                  {hiddenPage && (
+                    <EmptyState fill icon={hiddenPage.icon} title="No tab open">
+                      <button onClick={() => goPage(hiddenPage.id)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+                        Show {hiddenPage.label}
+                      </button>
+                    </EmptyState>
+                  )}
+                  {appTab === 'worktrees' && !pageHidden && worktreeView}
                   <Suspense fallback={<div className="flex-1" />}>
                     {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
-                    {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab))}
+                    {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab && !pageHidden))}
                     {openDocTab && (
                       <TabDock placement={settings.bottomPanel} withDock={withDock}>
                         {openDocTab.content}

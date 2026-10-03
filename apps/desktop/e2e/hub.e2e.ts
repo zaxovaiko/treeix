@@ -17,7 +17,7 @@ const fake = {
   chat: { adapter: 'acp', command: `"${process.execPath}" "${join(__dirname, 'fakeAcpAgent.mjs')}"` }
 }
 
-/** Shows the AI Hub; its tab clicked while it is open would go back to the page before it */
+/** Shows the AI Hub; its tab clicked while it is open would hide it */
 async function showHub(page: Page): Promise<void> {
   const tab = page.locator('[data-page-tab="hub"]')
   if ((await tab.getAttribute('aria-current')) !== 'page') await tab.click()
@@ -227,15 +227,4 @@ test('a first launch opens the AI Hub', async () => {
   } finally {
     await fresh.close()
   }
-})
-
-test('the AI Hub tab clicked while open goes back to the page before it', async () => {
-  const { page } = launched
-  const hubTab = page.locator('[data-page-tab="hub"]')
-  const worktreesTab = page.locator('[data-page-tab="worktrees"]')
-  await worktreesTab.click()
-  await hubTab.click()
-  await expect(hubTab).toHaveAttribute('aria-current', 'page')
-  await hubTab.click()
-  await expect(worktreesTab).toHaveAttribute('aria-current', 'page')
 })
