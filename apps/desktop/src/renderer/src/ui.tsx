@@ -277,7 +277,7 @@ export function Popup({
           }}
         />
       )}
-      <div ref={attach} {...rest} className={`fixed z-[65] ${className}`} />
+      <div ref={attach} data-popup {...rest} className={`fixed z-[65] ${className}`} />
     </>,
     document.body
   )

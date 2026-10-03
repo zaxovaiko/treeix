@@ -37,6 +37,16 @@ function startApi(): Promise<string> {
   return new Promise((resolve) => api.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(api.address() as AddressInfo).port}/v1`)))
 }
 
+/** A titled control; once hovered, its title lives on as the tooltip's data-tip */
+const titled = (page: Launched['page'], title: string): ReturnType<Launched['page']['locator']> => page.locator(`[title="${title}"], [data-tip="${title}"]`)
+
+/** Opens a field's dropdown, searches it and picks the first match */
+async function choose(page: Launched['page'], field: string, search: string): Promise<void> {
+  await titled(page, field).click()
+  await page.keyboard.type(search)
+  await page.keyboard.press('Enter')
+}
+
 test.beforeAll(async () => {
   launched = await launch({ 'README.md': 'alpha' }, 'README.md')
   const { page } = launched
@@ -56,9 +66,14 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
   await page.getByRole('button', { name: 'Create an agent' }).click()
 
   await page.getByPlaceholder('Reviewer').fill('Scout')
-  await page.getByRole('combobox', { name: /^Runtime/ }).selectOption('agent:fake')
-  await page.getByRole('button', { name: 'Detect models' }).click()
-  await expect(page.getByRole('button', { name: 'Detect models' })).toBeEnabled({ timeout: 20_000 })
+  // Esc closes an open dropdown, not the editor around it
+  await titled(page, 'Runtime').click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByPlaceholder('Reviewer')).toHaveValue('Scout')
+  await choose(page, 'Runtime', 'Fake')
+  await expect(page.getByRole('button', { name: 'Refresh models' })).toBeEnabled({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Refresh models' }).click()
+  await expect(page.getByRole('button', { name: 'Refresh models' })).toBeEnabled({ timeout: 20_000 })
   await expect(page.getByText('The runtime lists no models; type one in')).toBeVisible()
   await page.getByPlaceholder(/^Who the agent is/).fill('You scout ahead.')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
@@ -92,12 +107,12 @@ test('an agent on an OpenAI-compatible API lists its models and chats with its i
   await page.getByRole('button', { name: 'Create an agent' }).click()
 
   await page.getByPlaceholder('Reviewer').fill('Local')
-  await page.getByRole('combobox', { name: /^Runtime/ }).selectOption('api:')
+  await choose(page, 'Runtime', 'Other OpenAI')
   await page.getByPlaceholder('http://localhost:1234/v1').fill(baseUrl)
   await expect(page.getByRole('button', { name: 'Create', exact: true })).toBeDisabled()
-  await page.getByRole('button', { name: 'Detect models' }).click()
-  await expect(page.locator('#hub-models option')).toHaveAttribute('value', 'tiny')
-  await page.getByRole('combobox', { name: 'Model' }).fill('tiny')
+  // The models load once the URL is in, without asking
+  await page.getByTitle('Model', { exact: true }).click()
+  await page.getByRole('button', { name: 'Tiny tiny' }).click()
   await page.getByPlaceholder(/^Who the agent is/).fill('You run locally.')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
 
@@ -113,7 +128,7 @@ test('asking an agent from the palette records a run with its thinking and answe
   await page.locator('[data-page-tab="hub"]').click()
   await page.getByRole('button', { name: 'New agent' }).click()
   await page.getByPlaceholder('Reviewer').fill('Courier')
-  await page.getByRole('combobox', { name: /^Runtime/ }).selectOption('agent:fake')
+  await choose(page, 'Runtime', 'Fake')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
 
   await page.getByRole('button', { name: 'Run command' }).click()
@@ -138,7 +153,7 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   // A step added with the input selected goes between it and the output
   await steps.filter({ hasText: 'Input' }).click()
   await page.getByRole('button', { name: 'Agent', exact: true }).click()
-  await page.getByRole('combobox', { name: 'Agent', exact: true }).selectOption({ label: 'Courier' })
+  await choose(page, 'The agent this step asks', 'Courier')
   await expect(page.locator('.react-flow__edge')).toHaveCount(2)
   await expect(page.getByRole('button', { name: 'Relay' })).toBeVisible()
 
@@ -197,4 +212,13 @@ test('an approval step holds the run, counted on the tab, until approved', async
   await page.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByText(/^Done · /)).toBeVisible()
   await expect(hubTab.getByTitle('1 run waiting for you')).toBeHidden()
+})
+
+test('a first launch opens the AI Hub', async () => {
+  const fresh = await launch({ 'README.md': 'alpha' })
+  try {
+    await expect(fresh.page.getByRole('button', { name: 'Create an agent' })).toBeVisible()
+  } finally {
+    await fresh.close()
+  }
 })

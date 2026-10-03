@@ -3,11 +3,13 @@ import { useHost } from '@treeix/sdk'
 import { Dialog, errorMessage } from '@treeix/app/ui'
 import { asking, hubAgents, hubApi, hubSelection, hubWorkflows, TAB_ID } from './store'
 
-/** Esc closes the dialog before anything behind it sees the key */
+/** Esc closes the dialog before anything behind it sees the key, once no dropdown in it is open */
 export function useEscape(onClose: () => void): void {
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
+      // An open dropdown inside the dialog closes first
+      if (event.target instanceof Element && event.target.closest('[data-popup]')) return
       event.preventDefault()
       event.stopPropagation()
       onClose()

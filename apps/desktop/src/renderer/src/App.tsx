@@ -37,6 +37,7 @@ import { matcherFor } from './searchMatcher'
 import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindForKey, useSymbolNavigation } from './codeNavigation'
 import { codeThemeOptions, diffBackground, FileView, findLineElement } from './FileView'
 import { FileIcon, Icon, type IconName } from './Icon'
+import { McpInstallButton } from './mcpInstall'
 import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
@@ -59,6 +60,9 @@ import { isJson, list, object } from '../../shared/json'
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
 /** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
 const DEFAULT_TAB = 'terminal'
+/** A first launch, before any workspace saved where it was left, opens the AI Hub */
+const FIRST_RUN_TAB = 'hub'
+const isFirstRun = typeof localStorage !== 'undefined' && !Object.keys(localStorage).some((key) => key.startsWith('app.place@'))
 /** Where Worktrees sits among the plugin tabs */
 /** Page tabs dragged in the title bar carry their id */
 const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
@@ -89,7 +93,7 @@ function readPlace(workspaceId: string): SavedPlace {
   const record = object(stored)
   const viewer = isJson(record.viewer) ? record.viewer : null
   return {
-    appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : DEFAULT_TAB,
+    appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : isFirstRun ? FIRST_RUN_TAB : DEFAULT_TAB,
     selected: typeof record.selected === 'string' ? record.selected : null,
     viewer: viewer && typeof viewer.path === 'string' ? { path: viewer.path, line: typeof viewer.line === 'number' ? viewer.line : null } : null
   }
@@ -2122,29 +2126,6 @@ function App(): React.JSX.Element {
 }
 
 export default App
-
-/** Sets up Treeix's MCP server in Claude Code and Codex for sessions started outside Treeix; its own get it anyway */
-function McpInstallButton({ flash }: { flash: (message: string) => void }): React.JSX.Element | null {
-  const [status, setStatus] = useState<Awaited<ReturnType<typeof window.api.mcpInstallStatus>>>([])
-  const refresh = (): void => void window.api.mcpInstallStatus().then(setStatus, () => setStatus([]))
-  useEffect(refresh, [])
-  if (status.length === 0) return null
-  const pending = status.filter((agent) => agent.state !== 'installed')
-  const install = async (): Promise<void> => {
-    const { installed, failed } = await window.api.installMcp()
-    flash(failed.length ? `Could not set up the Treeix MCP in ${failed.join(' and ')}` : `Treeix MCP set up in ${installed.join(' and ')}`)
-    refresh()
-  }
-  return (
-    <IconButton
-      label={pending.length ? `Set up the Treeix MCP in ${pending.map((agent) => `${agent.agent}${agent.state === 'outdated' ? ' (outdated)' : ''}`).join(' and ')}` : `Treeix MCP is set up in ${status.map((agent) => agent.agent).join(' and ')}`}
-      active={pending.length === 0}
-      onClick={() => void install()}
-    >
-      <Icon name="plug" />
-    </IconButton>
-  )
-}
 
 /** A small outlined action that shows its shortcut */
 function HintButton({ title, icon, label, hint, onClick }: { title: string; icon?: IconName; label: string; hint: string; onClick: () => void }): React.JSX.Element {

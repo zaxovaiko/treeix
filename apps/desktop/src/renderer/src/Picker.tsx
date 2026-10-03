@@ -20,7 +20,9 @@ export function Picker({
   onPick,
   onQuery,
   width = 'w-64',
-  align = 'left'
+  align = 'left',
+  stretch = false,
+  note
 }: {
   trigger: React.ReactNode
   title: string
@@ -33,6 +35,10 @@ export function Picker({
   onQuery?: (query: string) => void
   width?: string
   align?: 'left' | 'right'
+  /** The button fills its container, as a form field does */
+  stretch?: boolean
+  /** A line above the options, e.g. while they load */
+  note?: string
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -62,8 +68,8 @@ export function Picker({
     if (id !== current) onPick(id)
   }
   return (
-    <div className="relative min-w-0">
-      <button ref={button} title={title} onClick={() => (open ? close() : onOpenChange(true))} className="flex max-w-full min-w-0 items-center rounded-md">
+    <div className={`relative min-w-0 ${stretch ? 'w-full' : ''}`}>
+      <button ref={button} title={title} onClick={() => (open ? close() : onOpenChange(true))} className={`group flex max-w-full min-w-0 items-center rounded-md ${stretch ? 'w-full' : ''}`}>
         {trigger}
       </button>
       {open && (
@@ -98,7 +104,7 @@ export function Picker({
             className="mb-1 h-7 w-full shrink-0 rounded-md bg-muted px-2 text-xs ring-1 ring-border outline-none placeholder:text-muted-foreground/70"
           />
           <div className="max-h-80 min-h-0 overflow-y-auto">
-            {sections.length === 0 && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">No matches</p>}
+            {(sections.length === 0 || note) && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{note ?? 'No matches'}</p>}
             {sections.map(({ section, options: sectionOptions }, index) => (
               <div key={section}>
                 {index > 0 && <hr className="my-1 border-border" />}
@@ -124,5 +130,82 @@ export function Picker({
         </Popup>
       )}
     </div>
+  )
+}
+
+export type SelectOption = { value: string; label: string; hint?: string; section?: string }
+
+/**
+ * A form field that picks one value from a searchable list, the app's stand-in for a native select. With `custom`
+ * a typed value no option has can be picked too.
+ */
+export function Select({
+  value,
+  options,
+  onChange,
+  title,
+  placeholder = 'Choose…',
+  custom = false,
+  width = 'w-72',
+  note,
+  onOpen
+}: {
+  value: string | null
+  options: SelectOption[]
+  onChange: (value: string) => void
+  title: string
+  placeholder?: string
+  custom?: boolean
+  width?: string
+  /** A line above the options, e.g. while they load */
+  note?: string
+  /** Lets the caller load options only once someone looks */
+  onOpen?: () => void
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const typed = query.trim()
+  const listed: SelectOption[] = [
+    ...options,
+    ...(value !== null && !options.some((option) => option.value === value) ? [{ value, label: value }] : []),
+    ...(custom && typed && typed !== value && !options.some((option) => option.value === typed) ? [{ value: typed, label: typed, hint: 'Use this', section: 'Typed' }] : [])
+  ]
+  const current = listed.find((option) => option.value === value)
+  return (
+    <Picker
+      stretch
+      title={title}
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) onOpen?.()
+      }}
+      current={value}
+      placeholder={custom ? 'Search or type a value…' : 'Search…'}
+      note={note}
+      width={width}
+      onPick={onChange}
+      onQuery={custom ? setQuery : undefined}
+      options={listed.map((option) => ({
+        id: option.value,
+        label: `${option.label} ${option.hint ?? ''} ${option.value}`,
+        section: option.section ?? '',
+        render: (
+          <>
+            <span className="truncate">{option.label}</span>
+            {option.hint && <span className="ml-auto shrink-0 pl-3 text-muted-foreground">{option.hint}</span>}
+          </>
+        )
+      }))}
+      trigger={
+        <span
+          className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-md border bg-muted px-2.5 text-left text-[13px] group-focus:border-foreground/22 ${open ? 'border-foreground/22' : 'border-input'}`}
+        >
+          <span className={`min-w-0 flex-1 truncate ${current ? 'text-foreground' : 'text-muted-foreground/60'}`}>{current?.label ?? placeholder}</span>
+          {current?.hint && <span className="shrink-0 truncate text-xs text-muted-foreground">{current.hint}</span>}
+          <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground" />
+        </span>
+      }
+    />
   )
 }

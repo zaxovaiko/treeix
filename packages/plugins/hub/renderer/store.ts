@@ -51,6 +51,9 @@ export function followWorkflows(): () => void {
 
 export const hubRuns = createStore<Run[]>([])
 
+/** Clicks on main's notifications for scheduled runs; returns the unfollow */
+export const onOpenRun = (listener: (runId: string) => void): (() => void) => bridge.on('openRun', (id) => typeof id === 'string' && listener(id))
+
 export function followRuns(): () => void {
   void hubApi.runs().then(hubRuns.set)
   return bridge.on('run', (run) => isRun(run) && hubRuns.set([run, ...hubRuns.get().filter((entry) => entry.id !== run.id)].sort((a, b) => b.startedAt - a.startedAt)))

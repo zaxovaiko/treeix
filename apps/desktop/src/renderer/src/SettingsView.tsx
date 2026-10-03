@@ -14,6 +14,7 @@ import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, Settin
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
 import { copyText } from './contextMenu'
+import { McpSetup } from './mcpInstall'
 import { useKeyExtras, useShortcuts } from './Shell'
 import { checkForUpdates, updateSummary, useUpdates } from './updates'
 
@@ -417,6 +418,13 @@ const SETTINGS: SettingSpec[] = [
     label: 'Agent notifications',
     description: 'A macOS notification when an agent session or chat finishes or needs an answer while Treeix is in the background. Click it to open the session.',
     Control: toggle('agentNotifications', 'Agent notifications')
+  },
+  {
+    section: 'General',
+    card: 'Treeix MCP',
+    label: 'MCP in Claude Code and Codex',
+    description: "Adds Treeix's MCP server to Claude Code and Codex, so sessions started outside Treeix reach its browser, sessions and AI Hub too.",
+    Control: McpSetup
   },
   {
     section: 'Appearance',

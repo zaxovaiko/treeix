@@ -9,7 +9,7 @@ const setAgents = async (customAgents: unknown[]): Promise<void> => {
 }
 
 test('presets carry ACP chat commands', () => {
-  expect(BUILTIN_AGENTS.claude.chat).toEqual({ adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp@0.79.0' })
+  expect(BUILTIN_AGENTS.claude.chat).toEqual({ adapter: 'acp', command: 'npx -y @agentclientprotocol/claude-agent-acp@0.85.1' })
   expect(BUILTIN_AGENTS.codex.chat).toEqual({ adapter: 'acp', command: 'npx -y @zed-industries/codex-acp@0.16.0' })
   expect('chat' in BUILTIN_AGENTS.shell).toBe(false)
 })

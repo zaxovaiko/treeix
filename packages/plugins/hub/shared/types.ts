@@ -1,4 +1,5 @@
 import { isJson, isString } from '@treeix/shared/json'
+import { isCron } from './cron'
 
 /** An agent from the registry (Claude, Codex, the user's own), or an OpenAI-compatible API by base URL */
 export type Runtime = { kind: 'agent'; agent: string } | { kind: 'api'; baseUrl: string }
@@ -8,6 +9,9 @@ export const API_PRESETS = [
   { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { name: 'Ollama', baseUrl: 'http://localhost:11434/v1' }
 ] as const
+
+/** A prompt the agent gets on a crontab schedule while Treeix runs; `notify` shows its answer as a notification */
+export type Schedule = { id: string; cron: string; prompt: string; notify: boolean; enabled: boolean }
 
 /** An agent of the user's own: a persona on top of a runtime from the agent registry */
 export type HubAgent = {
@@ -27,6 +31,8 @@ export type HubAgent = {
   folder: string | null
   /** Allows every permission it asks for in runs, so they never wait; missing on agents saved before it existed */
   autoApprove?: boolean
+  /** Missing on agents saved before schedules existed */
+  schedules?: Schedule[]
   updatedAt: number
 }
 
@@ -38,10 +44,14 @@ const isNullableString = (value: unknown): value is string | null => value === n
 const isRuntime = (value: unknown): value is Runtime =>
   isJson(value) && ((value.kind === 'agent' && isString(value.agent)) || (value.kind === 'api' && isString(value.baseUrl)))
 
+const isSchedule = (value: unknown): value is Schedule =>
+  isJson(value) && isString(value.id) && isString(value.cron) && isCron(value.cron) && isString(value.prompt) && typeof value.notify === 'boolean' && typeof value.enabled === 'boolean'
+
 export const isHubAgent = (value: unknown): value is HubAgent =>
   isJson(value) &&
   ['id', 'name', 'icon', 'color', 'instructions'].every((key) => isString(value[key])) &&
   ['avatar', 'model', 'mode', 'folder'].every((key) => isNullableString(value[key])) &&
   isRuntime(value.runtime) &&
   (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
+  (value.schedules === undefined || (Array.isArray(value.schedules) && value.schedules.every(isSchedule))) &&
   typeof value.updatedAt === 'number'

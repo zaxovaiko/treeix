@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { type ChatOption, useHost } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
+import { Select, type SelectOption } from '@treeix/app/Picker'
 import { Dialog, errorMessage } from '@treeix/app/ui'
 import { shrinkImage } from '@treeix/app/WorkspaceRail'
 import { WORKSPACE_COLORS } from '@treeix/app/workspaces'
-import { API_PRESETS, type HubAgent, type Runtime } from '../shared/types'
+import { CRON_PRESETS, isCron } from '../shared/cron'
+import { API_PRESETS, type HubAgent, type Runtime, type Schedule } from '../shared/types'
 import { useEscape } from './AskDialog'
 import { hubApi, runtimeSpec } from './store'
 
-const FIELD = 'h-8 rounded-md border border-input bg-muted px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60'
+const FIELD = 'h-8 rounded-md border border-input bg-muted px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 const LABEL = 'flex min-w-0 flex-col gap-1.5 text-xs text-muted-foreground'
 
 const CUSTOM_API = 'api:'
@@ -33,33 +35,103 @@ export function AgentAvatar({ agent, className }: { agent: Pick<HubAgent, 'avata
   )
 }
 
-/** A text field that suggests the values the runtime offers and takes any other */
+const DEFAULT_CHOICE = ''
+
+/** Picks one of the values the runtime offers, or any typed one; `optional` adds the runtime's own default */
 function OptionField({
   label,
   value,
   option,
-  placeholder,
+  optional,
+  loading,
+  onOpen,
   onChange
 }: {
   label: string
   value: string | null
   option: ChatOption | undefined
-  placeholder: string
+  optional: boolean
+  loading: boolean
+  onOpen: () => void
   onChange: (value: string | null) => void
 }): React.JSX.Element {
-  const listId = `hub-${label.toLowerCase()}s`
+  const options: SelectOption[] = [
+    ...(optional ? [{ value: DEFAULT_CHOICE, label: "The runtime's default" }] : []),
+    ...(option?.values ?? []).map((entry) => ({ value: entry.value, label: entry.name, hint: entry.name === entry.value ? undefined : entry.value }))
+  ]
   return (
-    <label className={`${LABEL} flex-1`}>
+    <div className={`${LABEL} flex-1`}>
       {label}
-      <input list={listId} value={value ?? ''} onChange={(event) => onChange(event.target.value.trim() || null)} placeholder={placeholder} className={FIELD} />
-      <datalist id={listId}>
-        {option?.values.map((entry) => (
-          <option key={entry.value} value={entry.value}>
-            {entry.name}
-          </option>
-        ))}
-      </datalist>
-    </label>
+      <Select
+        custom
+        title={label}
+        value={value ?? (optional ? DEFAULT_CHOICE : null)}
+        placeholder="Required"
+        options={options}
+        note={loading ? 'Asking the runtime for its options…' : undefined}
+        onOpen={onOpen}
+        onChange={(next) => onChange(next.trim() || null)}
+      />
+    </div>
+  )
+}
+
+/** Options each runtime offers, read once per app session since detecting starts the runtime */
+const detected = new Map<string, Promise<ChatOption[]>>()
+
+const PROMPT_FIELD = 'resize-y rounded-md border border-input bg-muted px-2.5 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
+
+/** Prompts the agent gets on a schedule while Treeix runs, each optionally shown as a notification */
+function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (schedules: Schedule[]) => void }): React.JSX.Element {
+  const patch = (id: string, next: Partial<Schedule>): void => onChange(schedules.map((entry) => (entry.id === id ? { ...entry, ...next } : entry)))
+  return (
+    <div className={LABEL}>
+      <span className="flex items-center justify-between">
+        Schedules
+        <button
+          onClick={() => onChange([...schedules, { id: crypto.randomUUID(), cron: CRON_PRESETS[0].cron, prompt: '', notify: true, enabled: true }])}
+          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          <Icon name="plus" className="size-3" />
+          Add
+        </button>
+      </span>
+      {schedules.length === 0 && <span className="text-[11px]">None. A schedule sends the agent a prompt on its own, e.g. every Monday morning, while Treeix is open.</span>}
+      {schedules.map((schedule) => (
+        <div key={schedule.id} className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                custom
+                title="When, as a preset or a crontab line like 30 8 * * 1-5"
+                value={schedule.cron}
+                options={CRON_PRESETS.map((preset) => ({ value: preset.cron, label: preset.label, hint: preset.cron }))}
+                onChange={(cron) => patch(schedule.id, { cron })}
+              />
+            </div>
+            <label className="flex shrink-0 items-center gap-1.5 text-foreground">
+              <input type="checkbox" checked={schedule.enabled} onChange={(event) => patch(schedule.id, { enabled: event.target.checked })} />
+              On
+            </label>
+            <button onClick={() => onChange(schedules.filter((entry) => entry.id !== schedule.id))} aria-label="Remove schedule" className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground">
+              <Icon name="trash" className="size-3.5" />
+            </button>
+          </div>
+          {!isCron(schedule.cron) && <span className="text-[11px] text-destructive">Not a crontab line: minute hour day month weekday, e.g. 0 9 * * 1</span>}
+          <textarea
+            value={schedule.prompt}
+            onChange={(event) => patch(schedule.id, { prompt: event.target.value })}
+            placeholder="What to do each time, e.g. Sum up this week's AI news in five bullets."
+            rows={2}
+            className={PROMPT_FIELD}
+          />
+          <label className="flex items-center gap-1.5 text-foreground">
+            <input type="checkbox" checked={schedule.notify} onChange={(event) => patch(schedule.id, { notify: event.target.checked })} />
+            Show the answer as a notification
+          </label>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -109,18 +181,29 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
 
   useEscape(onClose)
 
-  const detect = (): void => {
-    if (!spec) return
+  // Detecting starts the runtime, so it waits until a list is opened; an answer for a runtime no longer picked is dropped
+  const specKey = spec && (!isApi || URL.canParse(baseUrl)) ? `${spec.adapter} ${spec.command}` : null
+  const pickedKey = useRef(specKey)
+  pickedKey.current = specKey
+  /** Lists what the runtime offers; `fresh` asks it again instead of reusing its last answer */
+  const detect = (fresh: boolean): void => {
+    if (!spec || !specKey || (detecting && !fresh)) return
+    const isPicked = (): boolean => pickedKey.current === specKey
     setDetecting(true)
     setProblem('')
-    storeKey()
-      .then(() => hubApi.detect(spec, draft.folder ?? host.defaultCwd))
+    const found =
+      (fresh ? undefined : detected.get(specKey)) ??
+      storeKey()
+        .then(() => hubApi.detect(spec, draft.folder ?? host.defaultCwd))
+        .then((list) => (detected.set(specKey, Promise.resolve(list)), list))
+    found
       .then(
-        (found) => (setOptions(found), found.length === 0 && setProblem('The runtime lists no models; type one in')),
-        (reason: unknown) => setProblem(errorMessage(reason))
+        (list) => isPicked() && (setOptions(list), list.length === 0 && setProblem('The runtime lists no models; type one in')),
+        (reason: unknown) => isPicked() && setProblem(errorMessage(reason))
       )
-      .finally(() => setDetecting(false))
+      .finally(() => isPicked() && setDetecting(false))
   }
+  const detectOnOpen = (): void => void (options.length === 0 && detect(false))
 
   const pickImage = (file: File | undefined): void => {
     if (!file) return
@@ -132,7 +215,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
 
   const name = draft.name.trim()
   // An API has no default model to fall back on
-  const canSave = name !== '' && (!isApi || (URL.canParse(baseUrl) && draft.model !== null))
+  const canSave = name !== '' && (!isApi || (URL.canParse(baseUrl) && draft.model !== null)) && (draft.schedules ?? []).every((schedule) => isCron(schedule.cron))
   const save = (): void => {
     if (!canSave) return
     storeKey()
@@ -169,7 +252,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
                 onChange={(event) => patch({ icon: [...event.target.value.trim()].slice(0, 2).join('') })}
                 aria-label="Icon"
                 placeholder={glyphOf({ ...draft, icon: '' })}
-                className="h-6 w-11 rounded-md border border-input bg-muted text-center text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60"
+                className="h-6 w-11 rounded-md border border-input bg-muted text-center text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary"
               />
             )}
           </div>
@@ -194,38 +277,27 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         </div>
 
         <div className="flex items-end gap-2">
-          <label className={`${LABEL} flex-1`}>
+          <div className={`${LABEL} flex-1`}>
             Runtime
-            <select
+            <Select
+              title="Runtime"
               value={runtimeChoice(draft.runtime)}
-              onChange={(event) => (patch({ runtime: fromChoice(event.target.value), model: null, mode: null }), setOptions([]))}
-              className={FIELD}
-            >
-              {!spec && draft.runtime.kind === 'agent' && <option value={runtimeChoice(draft.runtime)}>{draft.runtime.agent} (gone)</option>}
-              <optgroup label="Agents">
-                {runtimes.map((entry) => (
-                  <option key={entry.id} value={`agent:${entry.id}`}>
-                    {entry.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="APIs">
-                {API_PRESETS.map((preset) => (
-                  <option key={preset.baseUrl} value={`api:${preset.baseUrl}`}>
-                    {preset.name}
-                  </option>
-                ))}
-                <option value={CUSTOM_API}>Other OpenAI-compatible API</option>
-              </optgroup>
-            </select>
-          </label>
+              onChange={(choice) => (patch({ runtime: fromChoice(choice), model: null, mode: null }), setOptions([]))}
+              options={[
+                ...(!spec && draft.runtime.kind === 'agent' ? [{ value: runtimeChoice(draft.runtime), label: `${draft.runtime.agent} (gone)`, section: 'Agents' }] : []),
+                ...runtimes.map((entry) => ({ value: `agent:${entry.id}`, label: entry.label, section: 'Agents' })),
+                ...API_PRESETS.map((preset) => ({ value: `api:${preset.baseUrl}`, label: preset.name, section: 'APIs' })),
+                { value: CUSTOM_API, label: 'Other OpenAI-compatible API', section: 'APIs' }
+              ]}
+            />
+          </div>
           <button
-            onClick={detect}
+            onClick={() => detect(true)}
             disabled={!spec || (isApi && !URL.canParse(baseUrl)) || detecting}
             title={isApi ? 'List the models the API offers' : 'Start the runtime once to list its models and modes'}
             className="h-8 rounded-md px-3 text-xs text-foreground ring-1 ring-border hover:bg-accent disabled:opacity-50"
           >
-            {detecting ? 'Detecting…' : 'Detect models'}
+            {detecting ? 'Detecting…' : 'Refresh models'}
           </button>
         </div>
 
@@ -262,8 +334,8 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         )}
 
         <div className="flex gap-2">
-          <OptionField label="Model" placeholder={isApi ? 'Required' : "The runtime's default"} value={draft.model} option={options.find((option) => option.category === 'model')} onChange={(model) => patch({ model })} />
-          {!isApi && <OptionField label="Mode" placeholder="The runtime's default" value={draft.mode} option={options.find((option) => option.category === 'mode')} onChange={(mode) => patch({ mode })} />}
+          <OptionField label="Model" optional={!isApi} loading={detecting} onOpen={detectOnOpen} value={draft.model} option={options.find((option) => option.category === 'model')} onChange={(model) => patch({ model })} />
+          {!isApi && <OptionField label="Mode" optional loading={detecting} onOpen={detectOnOpen} value={draft.mode} option={options.find((option) => option.category === 'mode')} onChange={(mode) => patch({ mode })} />}
         </div>
 
         <label className={LABEL}>
@@ -273,7 +345,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             onChange={(event) => patch({ instructions: event.target.value })}
             placeholder="Who the agent is and how it works, e.g. You review diffs for bugs and explain each in one line."
             rows={6}
-            className="resize-y rounded-md border border-input bg-muted px-2.5 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60"
+            className={PROMPT_FIELD}
           />
         </label>
 
@@ -294,6 +366,8 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             {draft.autoApprove && <span className="mt-0.5 block text-[11px] text-amber-400">It edits files and runs commands without asking you first.</span>}
           </span>
         </label>
+
+        <Schedules schedules={draft.schedules ?? []} onChange={(schedules) => patch({ schedules })} />
 
         {problem && <span className="text-[11px] whitespace-pre-wrap text-destructive">{problem}</span>}
       </div>

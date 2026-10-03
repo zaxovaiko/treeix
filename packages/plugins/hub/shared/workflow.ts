@@ -54,7 +54,8 @@ export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupt
 
 export type Run = {
   id: string
-  kind: 'workflow' | 'ask'
+  /** `schedule` is an ask an agent's schedule started */
+  kind: 'workflow' | 'ask' | 'schedule'
   title: string
   workflow: Workflow
   input: string
@@ -97,6 +98,14 @@ export function askWorkflow(agent: string, folder: string | null): Workflow {
 export const freshNode = (): NodeRun => ({ status: 'pending', attempt: 0, startedAt: null, endedAt: null, prompt: null, output: null, branch: null, error: null, usage: null })
 
 export const isWaiting = (run: Run): boolean => run.status === 'running' && Object.values(run.nodes).some((node) => node.waiting)
+
+/** The agents some running step is asking right now, each counted once */
+export const activeAgents = (runs: Run[]): Set<string> =>
+  new Set(
+    runs
+      .filter((run) => run.status === 'running')
+      .flatMap((run) => run.workflow.nodes.filter((node): node is AgentNode => node.kind === 'agent' && run.nodes[node.id]?.status === 'running').map((node) => node.agent))
+  )
 
 /** Runs are written by the app; this only keeps a damaged file from reaching the UI */
 export const isRun = (value: unknown): value is Run =>

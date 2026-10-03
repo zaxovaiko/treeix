@@ -1,9 +1,11 @@
 import { join } from 'node:path'
+import { Notification } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { isJson, isString } from '@treeix/shared/json'
+import { cronMatches } from '../shared/cron'
 import { type HubAgent, isHubAgent } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentRuntime, isWorkflow, type Workflow } from '../shared/workflow'
+import { type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
 import { createOpenAiAdapter } from './openaiAdapter'
@@ -11,6 +13,8 @@ import { createRuns } from './runs'
 import { jsonList } from './store'
 
 const DETECT_TIMEOUT_MS = 60_000
+const MINUTE_MS = 60_000
+const NOTICE_CHARS = 300
 
 const isAgentRuntime = (value: unknown): value is AgentRuntime => isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
 
@@ -105,6 +109,38 @@ const plugin: MainPlugin = {
       if (problem) throw new Error(problem.message)
       return engine.launch('workflow', workflow.name, workflow, input).id
     })
+
+    // Shown notifications are kept until clicked or closed, else Electron collects them and the click goes nowhere
+    const notices = new Set<Notification>()
+    const notify = (agent: HubAgent, run: Run): void => {
+      if (!Notification.isSupported()) return
+      const failed = run.status !== 'done'
+      const notice = new Notification({ title: failed ? `${agent.name}'s scheduled run ${run.status}` : agent.name, body: ((failed ? run.nodes.agent?.error : run.output) ?? '').slice(0, NOTICE_CHARS) })
+      notices.add(notice)
+      notice.on('click', () => (notices.delete(notice), context.broadcast('openRun', run.id)))
+      notice.on('close', () => notices.delete(notice))
+      notice.show()
+    }
+
+    // ponytail: schedules fire only while Treeix runs; a minute missed asleep or quit is skipped, not caught up
+    const fireSchedules = async (now: Date): Promise<void> => {
+      for (const agent of await agents.get())
+        for (const schedule of agent.schedules ?? []) {
+          if (!schedule.enabled || !schedule.prompt.trim() || !cronMatches(schedule.cron, now)) continue
+          const run = engine.launch('schedule', schedule.prompt.trim().split('\n')[0], askWorkflow(agent.id, null), schedule.prompt)
+          if (schedule.notify) void engine.wait(run.id).then((ended) => ended && notify(agent, ended))
+        }
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // Re-aimed at each minute's start, so the clock never drifts past one
+    const tick = (): void => {
+      timer = setTimeout(() => {
+        void fireSchedules(new Date())
+        tick()
+      }, MINUTE_MS - (Date.now() % MINUTE_MS))
+    }
+    tick()
+    context.onDispose(() => clearTimeout(timer))
 
     context.on('cancelRun', (_, id: string) => engine.cancel(id))
     context.on('decide', (_, runId: string, node: string, approved: boolean) => engine.decide(runId, node, approved))

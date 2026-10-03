@@ -35,7 +35,8 @@ test('the plug button sets up the Treeix MCP in Claude Code and Codex, keeping t
   await page.reload()
 
   await page.getByRole('button', { name: 'Set up the Treeix MCP in Claude Code and Codex (outdated)' }).click()
-  await expect(page.getByRole('button', { name: 'Treeix MCP is set up in Claude Code and Codex' })).toBeVisible({ timeout: 10_000 })
+  // Set up, it leaves the title bar; Settings keeps the button
+  await expect(page.getByRole('button', { name: /^Set up the Treeix MCP/ })).toBeHidden({ timeout: 10_000 })
 
   const claude = JSON.parse(readFileSync(join(home, '.claude.json'), 'utf8')) as { mcpServers: { treeix: { url: string; headers: { Authorization: string } } } }
   const codex = readFileSync(join(home, '.codex', 'config.toml'), 'utf8')

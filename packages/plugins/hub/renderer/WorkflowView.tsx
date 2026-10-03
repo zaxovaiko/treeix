@@ -19,6 +19,7 @@ import { useHost } from '@treeix/sdk'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton } from '@treeix/app/ui'
+import { Picker, Select } from '@treeix/app/Picker'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
@@ -30,7 +31,7 @@ type StepNode = FlowNode<{ step: WorkflowNode }, 'step'>
 const SAVE_DELAY_MS = 500
 const COLUMN = 260
 const ROW = 120
-const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60'
+const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 const LABEL = 'flex flex-col gap-1.5 text-xs text-muted-foreground'
 const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', approval: 'lock', output: 'check' }
 const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the pattern', empty: 'is empty' } as const satisfies Record<Extract<WorkflowNode, { kind: 'condition' }>['test'], string>
@@ -119,25 +120,32 @@ const NODE_TYPES = { step: StepCard }
 
 /** A template box with a menu that appends a reference to the input, what flows in, or an earlier step */
 function TemplateField({ label, value, sources, onChange }: { label: string; value: string; sources: { id: string; label: string }[]; onChange: (value: string) => void }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const references = [
+    { id: 'input', label: "The run's input" },
+    { id: 'prev', label: 'What flows in' },
+    ...sources.map((source) => ({ id: `nodes.${source.id}.output`, label: `Output of ${source.label}` }))
+  ]
   return (
     <div className={LABEL}>
       <span className="flex items-center justify-between">
         {label}
-        <select
-          aria-label={`Insert into ${label}`}
-          value=""
-          onChange={(event) => event.target.value && onChange(`${value}${value && !value.endsWith(' ') ? ' ' : ''}{{${event.target.value}}}`)}
-          className="rounded bg-transparent text-[11px] text-muted-foreground outline-none hover:text-foreground"
-        >
-          <option value="">Insert…</option>
-          <option value="input">The run's input</option>
-          <option value="prev">What flows in</option>
-          {sources.map((source) => (
-            <option key={source.id} value={`nodes.${source.id}.output`}>
-              Output of {source.label}
-            </option>
-          ))}
-        </select>
+        <Picker
+          title={`Insert into ${label}`}
+          open={open}
+          onOpenChange={setOpen}
+          current={null}
+          placeholder="Search…"
+          align="right"
+          onPick={(reference) => onChange(`${value}${value && !value.endsWith(' ') ? ' ' : ''}{{${reference}}}`)}
+          options={references.map((reference) => ({ ...reference, section: '', render: <span className="truncate">{reference.label}</span> }))}
+          trigger={
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+              Insert…
+              <Icon name="chevron" className="size-3 rotate-90" />
+            </span>
+          }
+        />
       </span>
       <textarea aria-label={label} rows={5} value={value} onChange={(event) => onChange(event.target.value)} className={`${FIELD} resize-y font-mono text-xs`} />
     </div>
@@ -159,17 +167,16 @@ function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; 
       {step.kind === 'input' && <p className="text-xs text-muted-foreground">The text you run the workflow with. Steps read it as {'{{input}}'}.</p>}
       {step.kind === 'agent' && (
         <>
-          <label className={LABEL}>
+          <div className={LABEL}>
             Agent
-            <select value={step.agent} onChange={(event) => onChange({ ...step, agent: event.target.value })} className={`${FIELD} h-8`}>
-              {!agents.some((agent) => agent.id === step.agent) && <option value={step.agent}>Pick an agent</option>}
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <Select
+              title="The agent this step asks"
+              value={agents.some((agent) => agent.id === step.agent) ? step.agent : null}
+              placeholder="Pick an agent"
+              options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+              onChange={(agent) => onChange({ ...step, agent })}
+            />
+          </div>
           <TemplateField label="Prompt" value={step.prompt} sources={sources} onChange={(prompt) => onChange({ ...step, prompt })} />
           <label className={LABEL}>
             Folder
@@ -185,13 +192,18 @@ function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; 
               <input type="number" min={1} value={step.timeoutMin} onChange={(event) => onChange({ ...step, timeoutMin: Math.max(1, Number(event.target.value) || 1) })} className={`${FIELD} h-8`} />
             </label>
           </div>
-          <label className={LABEL}>
+          <div className={LABEL}>
             If it fails
-            <select value={step.onError} onChange={(event) => onChange({ ...step, onError: event.target.value === 'continue' ? 'continue' : 'stop' })} className={`${FIELD} h-8`}>
-              <option value="stop">Stop the run</option>
-              <option value="continue">Go on without its output</option>
-            </select>
-          </label>
+            <Select
+              title="If it fails"
+              value={step.onError}
+              options={[
+                { value: 'stop', label: 'Stop the run' },
+                { value: 'continue', label: 'Go on without its output' }
+              ]}
+              onChange={(onError) => onChange({ ...step, onError: onError === 'continue' ? 'continue' : 'stop' })}
+            />
+          </div>
         </>
       )}
       {step.kind === 'approval' && (
@@ -204,23 +216,18 @@ function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; 
       {step.kind === 'condition' && (
         <>
           <TemplateField label="Check" value={step.source} sources={sources} onChange={(source) => onChange({ ...step, source })} />
-          <label className={LABEL}>
+          <div className={LABEL}>
             Test
-            <select
+            <Select
+              title="Test"
               value={step.test}
-              onChange={(event) => {
-                const test = Object.keys(TESTS).find((key): key is keyof typeof TESTS => key === event.target.value)
+              options={Object.entries(TESTS).map(([test, label]) => ({ value: test, label }))}
+              onChange={(value) => {
+                const test = Object.keys(TESTS).find((key): key is keyof typeof TESTS => key === value)
                 if (test) onChange({ ...step, test })
               }}
-              className={`${FIELD} h-8`}
-            >
-              {Object.entries(TESTS).map(([test, label]) => (
-                <option key={test} value={test}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
           {step.test !== 'empty' && (
             <label className={LABEL}>
               Value
