@@ -13,7 +13,24 @@ export type WorkflowNode =
 /** `branch` is set on edges leaving a condition: only the side that matched runs */
 export type Edge = { id: string; from: string; to: string; branch: 'true' | 'false' | null }
 
-export type Workflow = { id: string; name: string; nodes: WorkflowNode[]; edges: Edge[]; updatedAt: number }
+export type Point = { x: number; y: number }
+
+/** `layout` is where each step sits on the canvas; runs ignore it */
+export type Workflow = { id: string; name: string; nodes: WorkflowNode[]; edges: Edge[]; layout: Record<string, Point>; updatedAt: number }
+
+const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'output'] satisfies WorkflowNode['kind'][]
+
+/** Saved workflows come from the renderer; this keeps a malformed one out of the file */
+export const isWorkflow = (value: unknown): value is Workflow =>
+  isJson(value) &&
+  typeof value.id === 'string' &&
+  typeof value.name === 'string' &&
+  Array.isArray(value.nodes) &&
+  value.nodes.every((node) => isJson(node) && typeof node.id === 'string' && typeof node.kind === 'string' && KINDS.includes(node.kind)) &&
+  Array.isArray(value.edges) &&
+  value.edges.every((edge) => isJson(edge) && typeof edge.from === 'string' && typeof edge.to === 'string') &&
+  isJson(value.layout) &&
+  typeof value.updatedAt === 'number'
 
 export type NodeStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'cancelled'
 
@@ -68,6 +85,7 @@ export function askWorkflow(agent: string, folder: string | null): Workflow {
       { id: 'input-agent', from: 'input', to: 'agent', branch: null },
       { id: 'agent-output', from: 'agent', to: 'output', branch: null }
     ],
+    layout: {},
     updatedAt: 0
   }
 }

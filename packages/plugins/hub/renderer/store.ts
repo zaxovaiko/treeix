@@ -2,7 +2,7 @@ import { type ChatOption, type ChatSpec, createBridge, createStore, definePlugin
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
 import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
-import { type AgentRuntime, isRun, isRunEvent, type Run, type RunEvent } from '../shared/workflow'
+import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type Workflow } from '../shared/workflow'
 
 export const TAB_ID = 'hub'
 
@@ -21,6 +21,11 @@ export const hubApi = {
   runEvents: (id: string) => bridge.invoke<RunEvent[]>('runEvents', id),
   /** Starts a recorded one-off question; resolves with the run id */
   ask: (agent: string, message: string) => bridge.invoke<string>('ask', agent, message),
+  workflows: () => bridge.invoke<Workflow[]>('workflows'),
+  saveWorkflow: (workflow: Workflow) => bridge.invoke<void>('saveWorkflow', workflow),
+  removeWorkflow: (id: string) => bridge.invoke<void>('deleteWorkflow', id),
+  /** Starts a run of the saved workflow; resolves with the run id */
+  runWorkflow: (id: string, input: string) => bridge.invoke<string>('runWorkflow', id, input),
   cancelRun: (id: string) => bridge.send('cancelRun', id),
   answer: (runId: string, node: string, requestId: string, optionId: string) => bridge.send('answer', runId, node, requestId, optionId)
 }
@@ -31,6 +36,13 @@ export const hubAgents = createStore<HubAgent[]>([])
 export function followAgents(): () => void {
   void hubApi.agents().then(hubAgents.set)
   return bridge.on('agents', (agents) => Array.isArray(agents) && hubAgents.set(agents.filter(isHubAgent)))
+}
+
+export const hubWorkflows = createStore<Workflow[]>([])
+
+export function followWorkflows(): () => void {
+  void hubApi.workflows().then(hubWorkflows.set)
+  return bridge.on('workflows', (workflows) => Array.isArray(workflows) && hubWorkflows.set(workflows.filter(isWorkflow)))
 }
 
 export const hubRuns = createStore<Run[]>([])
@@ -65,12 +77,12 @@ const storedSelection = (): string | null => {
   const value = parseJson(localStorage.getItem(SELECTED_KEY))
   return typeof value === 'string' ? value : null
 }
-/** What the page shows: `agent:<id>` or `run:<id>` */
+/** What the page shows: `agent:<id>`, `workflow:<id>` or `run:<id>` */
 export const hubSelection = createStore<string | null>(storedSelection())
 hubSelection.subscribe(() => localStorage.setItem(SELECTED_KEY, JSON.stringify(hubSelection.get())))
 
-/** The agent the Ask dialog is open for */
-export const asking = createStore<string | null>(null)
+/** What the Ask dialog starts, `agent:<id>` or `workflow:<id>`, and whether the run's page opens after */
+export const asking = createStore<{ target: string; openRun: boolean } | null>(null)
 
 /** The last conversation of each agent, by hub agent id, so the page resumes it */
 export const hubSettings = definePluginSettings('hub', (stored) => ({ conversations: stringValues(stored.conversations) }))

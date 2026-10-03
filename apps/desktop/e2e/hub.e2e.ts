@@ -125,3 +125,47 @@ test('asking an agent from the palette records a run with its thinking and answe
   await expect(page.getByRole('button', { name: /Where to\?/ })).toBeVisible()
   await expect(page.locator('header').getByTitle('Done')).toBeVisible()
 })
+
+test('a workflow built on the canvas runs its agent, shows each step done and undoes edits', async () => {
+  const { page } = launched
+  const steps = page.locator('.react-flow__node')
+  await page.locator('[data-page-tab="hub"]').click()
+  await page.getByRole('button', { name: 'New workflow' }).click()
+  await page.getByRole('textbox', { name: 'Workflow name' }).fill('Relay')
+
+  // A step added with the input selected goes between it and the output
+  await steps.filter({ hasText: 'Input' }).click()
+  await page.getByRole('button', { name: 'Agent', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Agent', exact: true }).selectOption({ label: 'Courier' })
+  await expect(page.locator('.react-flow__edge')).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Relay' })).toBeVisible()
+
+  // Nothing goes after an output, so this one starts unconnected
+  await steps.filter({ hasText: 'Output' }).click()
+  await page.getByRole('button', { name: 'Merge', exact: true }).click()
+  await expect(steps).toHaveCount(4)
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(steps).toHaveCount(3)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(steps).toHaveCount(4)
+  await expect(page.getByText('Connect a step to it')).toBeVisible()
+  await steps.filter({ hasText: 'Merge' }).click()
+  await page.keyboard.press('Backspace')
+  await expect(steps).toHaveCount(3)
+  // The deleted card had focus, and undo still hears the keys
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(steps).toHaveCount(4)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(steps).toHaveCount(3)
+
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await page.getByPlaceholder(/^The input/).fill('Go')
+  await page.keyboard.press('Enter')
+  await expect(steps.filter({ hasText: 'Courier' }).getByTitle('Done')).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: /^Last run/ }).click()
+  await expect(page.getByText('Here is a picture')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Run command' }).click()
+  await page.getByPlaceholder(/^Search commands/).fill('Run Relay')
+  await expect(page.getByText('Run Relay…')).toBeVisible()
+})

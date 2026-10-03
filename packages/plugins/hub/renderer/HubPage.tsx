@@ -1,16 +1,32 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { focusZone, PageLayout, useHost, useListNav } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
 import { EmptyState, errorMessage, IconButton } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
+import type { Workflow } from '../shared/workflow'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { RunView, StatusIcon } from './RunView'
-import { asking, hubAgents, hubApi, hubRuns, hubSelection, hubSettings, registryId, runtimeLabel } from './store'
+import { asking, hubAgents, hubApi, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel } from './store'
+
+// The canvas library is big and only workflows need it
+const WorkflowView = lazy(() => import('./WorkflowView').then((module) => ({ default: module.WorkflowView })))
 
 const ROW = 'flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent'
 const HEADING = 'text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
+
+const newWorkflow = (): Workflow => ({
+  id: crypto.randomUUID(),
+  name: 'New workflow',
+  nodes: [
+    { id: 'input', kind: 'input' },
+    { id: 'output', kind: 'output', template: '{{prev}}' }
+  ],
+  edges: [{ id: 'input-output', from: 'input', to: 'output', branch: null }],
+  layout: { input: { x: 0, y: 0 }, output: { x: 520, y: 0 } },
+  updatedAt: Date.now()
+})
 
 const chatIdOf = (agent: HubAgent): string => `hub:${agent.id}`
 
@@ -54,7 +70,7 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
           <div className="truncate text-sm font-medium">{agent.name}</div>
           <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model, agent.mode].filter(Boolean).join(' · ')}</div>
         </div>
-        <IconButton label={`Ask ${agent.name}`} onClick={() => asking.set(agent.id)}>
+        <IconButton label={`Ask ${agent.name}`} onClick={() => asking.set({ target: `agent:${agent.id}`, openRun: true })}>
           <Icon name="comment" className="size-3.5" />
         </IconButton>
         <IconButton label="New conversation" onClick={restart}>
@@ -83,12 +99,14 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
 export function HubPage(): React.JSX.Element {
   const host = useHost()
   const agents = hubAgents.use()
+  const workflows = hubWorkflows.use()
   const runs = hubRuns.use()
   const selection = hubSelection.use()
   const [editing, setEditing] = useState<HubAgent | 'new' | null>(null)
-  const rows = [...agents.map((agent) => `agent:${agent.id}`), ...runs.map((run) => `run:${run.id}`)]
+  const rows = [...agents.map((agent) => `agent:${agent.id}`), ...workflows.map((workflow) => `workflow:${workflow.id}`), ...runs.map((run) => `run:${run.id}`)]
   const selectedRow = selection !== null && rows.includes(selection) ? selection : (rows[0] ?? null)
   const selectedAgent = agents.find((agent) => `agent:${agent.id}` === selectedRow) ?? null
+  const selectedWorkflow = workflows.find((workflow) => `workflow:${workflow.id}` === selectedRow) ?? null
   const selectedRun = runs.find((run) => `run:${run.id}` === selectedRow) ?? null
   const nav = useListNav({
     count: rows.length,
@@ -104,6 +122,14 @@ export function HubPage(): React.JSX.Element {
     chat?.forget(chatIdOf(agent))
     setConversation(agent.id, null)
     hubApi.remove(agent.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
+  }
+
+  const createWorkflow = (): void => {
+    const workflow = newWorkflow()
+    hubApi.saveWorkflow(workflow).then(
+      () => hubSelection.set(`workflow:${workflow.id}`),
+      (reason: unknown) => host.flash(errorMessage(reason))
+    )
   }
 
   const list = (
@@ -127,11 +153,28 @@ export function HubPage(): React.JSX.Element {
             <span className="min-w-0 flex-1 truncate">{agent.name}</span>
           </button>
         ))}
+        <div className="flex items-center pt-3 pr-0 pb-0.5 pl-2">
+          <span className={`${HEADING} flex-1`}>Workflows</span>
+          <IconButton label="New workflow" onClick={createWorkflow}>
+            <Icon name="plus" className="size-3.5" />
+          </IconButton>
+        </div>
+        {workflows.map((workflow, index) => (
+          <button
+            key={workflow.id}
+            {...nav.rowProps(agents.length + index)}
+            onClick={() => hubSelection.set(`workflow:${workflow.id}`)}
+            className={`${ROW} h-8 px-2 text-xs ${workflow === selectedWorkflow ? 'bg-accent' : ''}`}
+          >
+            <Icon name="layers" className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate">{workflow.name}</span>
+          </button>
+        ))}
         {runs.length > 0 && <div className={`${HEADING} px-2 pt-4 pb-1.5`}>Runs</div>}
         {runs.map((run, index) => (
           <button
             key={run.id}
-            {...nav.rowProps(agents.length + index)}
+            {...nav.rowProps(agents.length + workflows.length + index)}
             onClick={() => hubSelection.set(`run:${run.id}`)}
             className={`${ROW} h-8 px-2 text-xs ${run === selectedRun ? 'bg-accent' : ''}`}
           >
@@ -152,6 +195,10 @@ export function HubPage(): React.JSX.Element {
         main={
           selectedRun ? (
             <RunView key={selectedRun.id} run={selectedRun} />
+          ) : selectedWorkflow ? (
+            <Suspense fallback={<div className="flex-1" />}>
+              <WorkflowView key={selectedWorkflow.id} workflow={selectedWorkflow} />
+            </Suspense>
           ) : selectedAgent ? (
             <AgentChat key={selectedAgent.id} agent={selectedAgent} onEdit={() => setEditing(selectedAgent)} onDelete={() => remove(selectedAgent)} />
           ) : (

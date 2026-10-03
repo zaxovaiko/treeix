@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { isJson, isString } from '@treeix/shared/json'
 import { type HubAgent, isHubAgent } from '../shared/types'
-import type { AgentRuntime } from '../shared/workflow'
+import { validate } from '../shared/validate'
+import { type AgentRuntime, isWorkflow, type Workflow } from '../shared/workflow'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
 import { createOpenAiAdapter } from './openaiAdapter'
@@ -18,6 +19,8 @@ const argument = (args: Record<string, unknown>, name: string): string => {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required`)
   return value
 }
+
+const upsert = <T extends { id: string }>(items: T[], item: T): T[] => (items.some((entry) => entry.id === item.id) ? items.map((entry) => (entry.id === item.id ? item : entry)) : [...items, item])
 
 let keys: ReturnType<typeof createKeys> | null = null
 
@@ -37,8 +40,7 @@ const plugin: MainPlugin = {
     context.handle('agents', () => agents.get())
     context.handle('saveAgent', async (_, agent: unknown) => {
       if (!isHubAgent(agent)) throw new Error('Invalid agent')
-      const current = await agents.get()
-      await write(current.some((entry) => entry.id === agent.id) ? current.map((entry) => (entry.id === agent.id ? agent : entry)) : [...current, agent])
+      await write(upsert(await agents.get(), agent))
     })
     context.handle('deleteAgent', async (_, id: string) => write((await agents.get()).filter((entry) => entry.id !== id)))
 
@@ -84,6 +86,25 @@ const plugin: MainPlugin = {
     context.handle('runs', () => engine.list())
     context.handle('runEvents', (_, id: string) => engine.events(id))
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
+    const workflows = jsonList(join(context.dataPath, 'workflows.json'), isWorkflow)
+    const writeWorkflows = async (next: Workflow[]): Promise<void> => {
+      await workflows.set(next)
+      context.broadcast('workflows', next)
+    }
+    context.handle('workflows', () => workflows.get())
+    context.handle('saveWorkflow', async (_, workflow: unknown) => {
+      if (!isWorkflow(workflow)) throw new Error('Invalid workflow')
+      await writeWorkflows(upsert(await workflows.get(), workflow))
+    })
+    context.handle('deleteWorkflow', async (_, id: string) => writeWorkflows((await workflows.get()).filter((entry) => entry.id !== id)))
+    context.handle('runWorkflow', async (_, id: string, input: string) => {
+      const workflow = (await workflows.get()).find((entry) => entry.id === id)
+      if (!workflow) throw new Error('The workflow is gone')
+      const problem = validate(workflow, (await agents.get()).map((agent) => agent.id))[0]
+      if (problem) throw new Error(problem.message)
+      return engine.launch('workflow', workflow.name, workflow, input).id
+    })
+
     context.on('cancelRun', (_, id: string) => engine.cancel(id))
     context.on('answer', (_, runId: string, node: string, requestId: string, optionId: string | null) => engine.answer(runId, node, requestId, optionId))
 

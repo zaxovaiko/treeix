@@ -56,6 +56,7 @@ test('fans out to two agents, merges their answers and keeps the run on disk', a
     id: 'w',
     name: 'Review',
     updatedAt: 0,
+    layout: {},
     nodes: [
       { id: 'input', kind: 'input' },
       agentNode('security', 'Check {{input}}'),

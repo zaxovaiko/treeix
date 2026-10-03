@@ -4,7 +4,7 @@ import { type Agent, useAgents } from '@treeix/app/agents'
 import { subscribeSettings } from '@treeix/app/settings'
 import type { AgentRuntime } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
-import { asAgent, asking, followAgents, followRuns, hubAgents, hubApi, TAB_ID } from './store'
+import { asAgent, asking, followAgents, followRuns, followWorkflows, hubAgents, hubApi, hubWorkflows, TAB_ID } from './store'
 
 // The page pulls in the editor and the chat view, so it loads when first opened
 const HubPage = lazy(() => import('./HubPage').then((module) => ({ default: module.HubPage })))
@@ -33,6 +33,7 @@ function useRuntimes(): void {
 
 function Root(): React.JSX.Element {
   useEffect(followAgents, [])
+  useEffect(followWorkflows, [])
   useEffect(followRuns, [])
   useRuntimes()
   return <AskDialog />
@@ -41,7 +42,10 @@ function Root(): React.JSX.Element {
 const plugin: RendererPlugin = {
   tabs: [{ id: TAB_ID, label: 'AI Hub', icon: 'star', order: 30, render: Tab, panels: ['terminal'] }],
   Root,
-  commands: () => hubAgents.get().map((agent) => ({ id: `hub.ask.${agent.id}`, group: 'Actions', label: `Ask ${agent.name}…`, icon: 'comment', run: () => asking.set(agent.id) })),
+  commands: () => [
+    ...hubAgents.get().map((agent) => ({ id: `hub.ask.${agent.id}`, group: 'Actions', label: `Ask ${agent.name}…`, icon: 'comment' as const, run: () => asking.set({ target: `agent:${agent.id}`, openRun: true }) })),
+    ...hubWorkflows.get().map((workflow) => ({ id: `hub.run.${workflow.id}`, group: 'Actions', label: `Run ${workflow.name}…`, icon: 'wand' as const, run: () => asking.set({ target: `workflow:${workflow.id}`, openRun: true }) }))
+  ],
   // Personas join the new-tab menus and chats; a runtime from Settings can change under them, so settings count too
   agents: {
     list: () => hubAgents.get().flatMap((agent): Agent | Agent[] => asAgent(agent) ?? []),

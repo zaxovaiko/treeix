@@ -16,7 +16,7 @@ const STATUS: Record<NodeStatus | RunStatus, { icon: IconName; className: string
   interrupted: { icon: 'alert', className: 'text-amber-400', label: 'Interrupted' }
 }
 
-const KIND_LABEL: Record<WorkflowNode['kind'], string> = { input: 'Input', agent: 'Agent', merge: 'Merge', condition: 'Condition', output: 'Output' }
+export const KIND_LABEL: Record<WorkflowNode['kind'], string> = { input: 'Input', agent: 'Agent', merge: 'Merge', condition: 'Condition', output: 'Output' }
 
 export function StatusIcon({ status, className = 'size-3.5' }: { status: NodeStatus | RunStatus; className?: string }): React.JSX.Element {
   return (

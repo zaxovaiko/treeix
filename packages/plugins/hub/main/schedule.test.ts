@@ -7,6 +7,7 @@ const workflow: Workflow = {
   id: 'w',
   name: 'W',
   updatedAt: 0,
+  layout: {},
   nodes: [
     { id: 'input', kind: 'input' },
     { id: 'check', kind: 'condition', source: '{{input}}', test: 'contains', value: 'go' },
