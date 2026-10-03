@@ -5,6 +5,8 @@ export type TerminalOptions = {
   rows: number
   /** Opaque renderer data kept with the process so a reloaded window can rebuild its session */
   meta: string
+  /** The session's workspace, which the tools its agent calls act in */
+  workspaceId?: string
   /** Reuses a restored session's id, so its tabs and history keep pointing at it */
   id?: string
 }

@@ -516,7 +516,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
 }
 
 const spawnSession = (meta: SessionMeta, command: string | undefined, id?: string, size = SPAWN_SIZE): Promise<string> =>
-  bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), id })
+  bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), workspaceId: meta.workspaceId, id })
 
 const metaOf = ({ worktreePath, kind, title, renamed, startedAt, workspaceId, agentSessionId, view }: SessionMeta): SessionMeta => ({
   worktreePath,
@@ -669,7 +669,7 @@ function connectChat(session: ChatSession): Promise<void> | null {
   connecting.add(id)
   patchSession(id, { status: 'running' })
   return chat
-    .start(id, { agent: agent.id, ...agent.chat, cwd: session.worktreePath, resume: session.agentSessionId })
+    .start(id, { agent: agent.id, ...agent.chat, cwd: session.worktreePath, resume: session.agentSessionId, workspaceId: session.workspaceId })
     .then(
       (agentSessionId) => {
         // Closed while connecting

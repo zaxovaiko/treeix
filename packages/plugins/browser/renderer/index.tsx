@@ -9,7 +9,7 @@ import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
 import { portDetail } from './Suggestions'
 import { toggleStrip } from './Strip'
-import { closeTab, findTab, getBrowser, openTab, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
+import { closeTab, findTab, getBrowser, openTab, openTabIn, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
 import type { Vital } from '../shared/types'
 
@@ -173,8 +173,16 @@ function Root(): React.JSX.Element {
   host = current
   // Before paint, so a workspace never flashes the previous one's tabs
   useLayoutEffect(() => setBrowserWorkspace(current.workspaceId), [current.workspaceId])
-  // Agents open, show and close tabs by the id main gives them, through Treeix's MCP server
-  useEffect(() => bridge.on('open', (url, id) => typeof url === 'string' && openUrl(url, typeof id === 'string' ? id : undefined)), [])
+  // Agents open, show and close tabs by the id main gives them, through Treeix's MCP server; an agent's tab opens in its session's workspace
+  useEffect(
+    () =>
+      bridge.on('open', (url, id, workspaceId) => {
+        if (typeof url !== 'string') return
+        if (typeof id === 'string' && typeof workspaceId === 'string' && workspaceId !== host?.workspaceId) openTabIn(workspaceId, url, id)
+        else openUrl(url, typeof id === 'string' ? id : undefined)
+      }),
+    []
+  )
   useEffect(
     () =>
       bridge.on('show', (id) => {

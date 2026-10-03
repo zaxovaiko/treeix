@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { app } from 'electron'
 import { withoutAgentVariables } from './env'
-import type { McpContent, McpTool } from '@treeix/sdk/main'
+import type { McpCall, McpContent, McpTool } from '@treeix/sdk/main'
 import { isJson } from '../shared/json'
 
 /** Newest first; an agent asking for one of these gets it back, anything else gets the newest */
@@ -32,14 +32,18 @@ export function registerMcpTool(tool: McpTool): () => void {
   }
 }
 
+/** Lower case, as Node hands incoming headers over */
+const WORKSPACE_HEADER = 'x-treeix-workspace'
+const isWorkspaceId = (value: string): boolean => /^[\w-]{1,100}$/.test(value)
+
 type Request = { id?: string | number | null; method?: unknown; params?: unknown }
 type Reply = { result: unknown } | { error: { code: number; message: string } }
 
-async function callTool(params: Record<string, unknown>): Promise<{ content: McpContent[]; isError?: boolean }> {
+async function callTool(params: Record<string, unknown>, call: McpCall): Promise<{ content: McpContent[]; isError?: boolean }> {
   const tool = tools.get(String(params.name))
   if (!tool) return { content: [{ type: 'text', text: `No tool named ${String(params.name)}; the plugin that offers it may be off` }], isError: true }
   try {
-    const result = await tool.run(isJson(params.arguments) ? params.arguments : {})
+    const result = await tool.run(isJson(params.arguments) ? params.arguments : {}, call)
     return { content: typeof result === 'string' ? [{ type: 'text', text: result }] : result }
   } catch (reason) {
     return { content: [{ type: 'text', text: reason instanceof Error ? reason.message : String(reason) }], isError: true }
@@ -47,7 +51,7 @@ async function callTool(params: Record<string, unknown>): Promise<{ content: Mcp
 }
 
 /** One JSON-RPC message; null for notifications, which get no answer */
-export async function answer(request: Request): Promise<Reply | null> {
+export async function answer(request: Request, call: McpCall = { workspaceId: null }): Promise<Reply | null> {
   if (request.id === undefined || request.id === null) return null
   const params = isJson(request.params) ? request.params : {}
   switch (request.method) {
@@ -67,7 +71,7 @@ export async function answer(request: Request): Promise<Reply | null> {
     case 'tools/list':
       return { result: { tools: [...tools.values()].map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) } }
     case 'tools/call':
-      return { result: await callTool(params) }
+      return { result: await callTool(params, call) }
     default:
       return { error: { code: -32601, message: `Unknown method ${String(request.method)}` } }
   }
@@ -127,7 +131,8 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Not JSON' } })
   }
   if (!isJson(message)) return send(400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batches are not supported' } })
-  const reply = await answer(message)
+  const workspace = request.headers[WORKSPACE_HEADER]
+  const reply = await answer(message, { workspaceId: typeof workspace === 'string' && isWorkspaceId(workspace) ? workspace : null })
   if (!reply) return send(202)
   send(200, { jsonrpc: '2.0', id: message.id, ...reply })
 }
@@ -164,15 +169,17 @@ const tomlString = (value: string): string => JSON.stringify(value)
  * How sessions reach the server: `claude --mcp-config "$TREEIX_CLAUDE_MCP"`, `codex -c "$TREEIX_CODEX_MCP"`,
  * and the URL and token for chat adapters. Empty when the server couldn't start; the terminal plugin fills in no-ops.
  */
-export async function mcpEnv(): Promise<Record<string, string>> {
+export async function mcpEnv(workspaceId?: string): Promise<Record<string, string>> {
   const address = await serverUrl()
   if (!address) return {}
   const authorization = `Bearer ${token}`
+  const workspace = workspaceId && isWorkspaceId(workspaceId) ? { [WORKSPACE_HEADER]: workspaceId } : {}
+  const codexHeaders = Object.entries({ Authorization: authorization, ...workspace }).map(([name, value]) => `${tomlString(name)}=${tomlString(value)}`)
   return {
     TREEIX_MCP_URL: address,
     TREEIX_MCP_TOKEN: token,
-    TREEIX_CLAUDE_MCP: JSON.stringify({ mcpServers: { [SERVER_NAME]: { type: 'http', url: address, headers: { Authorization: authorization } } } }),
-    TREEIX_CODEX_MCP: `mcp_servers.${SERVER_NAME}={url=${tomlString(address)},http_headers={Authorization=${tomlString(authorization)}}}`
+    TREEIX_CLAUDE_MCP: JSON.stringify({ mcpServers: { [SERVER_NAME]: { type: 'http', url: address, headers: { Authorization: authorization, ...workspace } } } }),
+    TREEIX_CODEX_MCP: `mcp_servers.${SERVER_NAME}={url=${tomlString(address)},http_headers={${codexHeaders.join(',')}}}`
   }
 }
 

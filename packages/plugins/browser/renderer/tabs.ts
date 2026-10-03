@@ -169,6 +169,11 @@ export function setBrowserWorkspace(id: string): void {
   commit(legacy && !rest[id] ? { ...rest, [id]: legacy } : states)
 }
 
+/** Opens a tab in another workspace's browser, which stays as it was on screen */
+export function openTabIn(workspaceId: string, url: string, id: string): void {
+  commit({ ...states, [workspaceId]: openTab(states[workspaceId] ?? EMPTY, url, id) })
+}
+
 export function updateBrowser(change: (current: BrowserState) => BrowserState): void {
   const next = change(state)
   if (next !== state) commit({ ...states, [workspace]: next })

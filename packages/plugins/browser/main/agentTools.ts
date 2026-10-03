@@ -190,7 +190,7 @@ export function browserTools(context: MainContext): McpTool[] {
         },
         []
       ),
-      run: async (args) => {
+      run: async (args, { workspaceId }) => {
         if (args.tab === undefined) {
           const url = webUrl(string(args, 'url'))
           const window = targetWindow()
@@ -205,7 +205,7 @@ export function browserTools(context: MainContext): McpTool[] {
               clearTimeout(timer)
               resolve(ready)
             })
-            context.send(window.webContents, 'open', url, id)
+            context.send(window.webContents, 'open', url, id, workspaceId)
           })
           await settled(guest)
           return `Opened tab ${id}: ${describe(guest)}`

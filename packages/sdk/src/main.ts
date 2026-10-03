@@ -21,6 +21,9 @@ export type McpContent = { type: 'text'; text: string } | { type: 'image'; data:
 /** Treeix's item in the macOS menu bar: text and a pair of rings per meter, the 5-hour and weekly share used from 0 to 1, next to its icon, and lines atop its menu */
 export type MenuBarStatus = { title: string; meters: [fiveHour: number | null, weekly: number | null][]; lines: string[] }
 
+/** Who called a tool: the workspace of the session that started the agent, null for agents set up outside Treeix */
+export type McpCall = { workspaceId: string | null }
+
 /** A tool agents started by Treeix can call over its MCP server; arguments come from the agent, so `run` checks them */
 export type McpTool = {
   name: string
@@ -28,7 +31,7 @@ export type McpTool = {
   /** JSON Schema of the arguments */
   inputSchema: Record<string, unknown>
   /** Throwing shows the message to the agent as a failed call */
-  run: (args: Record<string, unknown>) => Promise<string | McpContent[]>
+  run: (args: Record<string, unknown>, call: McpCall) => Promise<string | McpContent[]>
 }
 
 export type MainContext = {
@@ -42,8 +45,8 @@ export type MainContext = {
   send: (target: WebContents, channel: string, ...args: unknown[]) => void
   /** Folder for the plugin's own files in app data */
   dataPath: string
-  /** Environment other enabled plugins add to new terminal sessions */
-  sessionEnv: () => Promise<Record<string, string>>
+  /** Environment other enabled plugins add to new terminal sessions; tools the session's agent calls see `workspaceId` */
+  sessionEnv: (workspaceId?: string) => Promise<Record<string, string>>
   /** Runs when the plugin is disabled or the app quits */
   onDispose: (dispose: () => void) => void
   /** Offers a tool to agent sessions through Treeix's MCP server while the plugin is enabled */

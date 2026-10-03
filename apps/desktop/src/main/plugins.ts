@@ -16,9 +16,9 @@ const channelOf = (pluginId: string, channel: string): string => `plugin:${plugi
 
 const active = new Map<string, { dispose: () => void }>()
 
-/** Treeix's own MCP server, then whatever enabled plugins add */
-export function sessionEnv(): Promise<Record<string, string>> {
-  const sources = [mcpEnv, ...[...active.keys()].flatMap((id) => MAIN_PLUGINS.get(id)?.sessionEnv ?? [])]
+/** Treeix's own MCP server, telling its tools the session's workspace, then whatever enabled plugins add */
+export function sessionEnv(workspaceId?: string): Promise<Record<string, string>> {
+  const sources = [() => mcpEnv(workspaceId), ...[...active.keys()].flatMap((id) => MAIN_PLUGINS.get(id)?.sessionEnv ?? [])]
   return Promise.all(sources.map((source) => source().catch(() => ({})))).then((parts) => Object.assign({}, ...parts))
 }
 

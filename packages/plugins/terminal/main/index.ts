@@ -25,7 +25,7 @@ const plugin: MainPlugin = {
     context.onDispose(() => void statuses.then(({ stop }) => stop()))
     // Built-in agent commands expand these, so each needs a harmless value when nothing else sets it
     context.handle('create', async (event, options: TerminalOptions) => {
-      const env = { TREEIX_CLAUDE_SETTINGS: '{}', ...NO_MCP, ...(await context.sessionEnv()) }
+      const env = { TREEIX_CLAUDE_SETTINGS: '{}', ...NO_MCP, ...(await context.sessionEnv(options.workspaceId)) }
       const { folder } = await statuses
       return createTerminal(event.sender, options, { ...env, TREEIX_CLAUDE_SETTINGS: withStatusHooks(env.TREEIX_CLAUDE_SETTINGS), TREEIX_AGENT_STATUS: folder })
     })
