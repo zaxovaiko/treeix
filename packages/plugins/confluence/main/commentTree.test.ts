@@ -15,3 +15,10 @@ test('toCommentTree nests replies under the comment they answer', () => {
   expect(tree[0].replies?.[0].replies?.[0].id).toBe('3')
   expect(tree[0]).toMatchObject({ author: 'User 1', authorId: 'a1', authorAvatar: 'https://x.atlassian.net/wiki/aa-avatar/x.png', body: 'body 1' })
 })
+
+test('toCommentTree keeps the text an inline comment is pinned to', () => {
+  const inline = { ...comment('5', []), extensions: { location: 'inline', inlineProperties: { originalSelection: 'Adres dev' } } }
+  const [pinned, footer] = toCommentTree({ results: [inline, comment('6', [])] }, '42', null)
+  expect(pinned.quote).toBe('Adres dev')
+  expect(footer.quote).toBeUndefined()
+})

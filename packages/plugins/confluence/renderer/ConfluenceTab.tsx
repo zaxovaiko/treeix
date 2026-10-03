@@ -57,7 +57,7 @@ type Entry =
 type Section = { title: string; error: string | null; count: number; entries: Entry[] }
 
 
-/** Footer comments; reading them needs the API token, so a failure stays down here instead of hiding the page */
+/** Footer and inline comments; reading them needs the API token, so a failure stays down here instead of hiding the page */
 function PageComments({ page }: { page: Page }): React.JSX.Element {
   const { value, error, refresh } = useCached<CommentList>(commentCache, page.id, TTL.comments, confluenceApi.comments)
   const comments = value?.comments ?? []

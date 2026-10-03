@@ -19,6 +19,8 @@ export type AtlassianComment = {
   created: string
   /** Markdown; attachment images point at IMAGE_HOST sources */
   body: string
+  /** Page text a Confluence inline comment is pinned to */
+  quote?: string
   replies?: AtlassianComment[]
 }
 

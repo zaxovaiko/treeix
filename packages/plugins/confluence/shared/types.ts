@@ -27,5 +27,5 @@ export type Page = {
 
 export type PageList = { pages: PageSummary[] }
 
-/** Footer comments with their replies; error when they couldn't be read, e.g. no API token */
+/** Footer and inline comments with their replies; error when they couldn't be read, e.g. no API token */
 export type CommentList = { comments: AtlassianComment[] }

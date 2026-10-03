@@ -11,7 +11,7 @@ export function bodyMarkdown(body: unknown, pageId: string, onLink?: (url: strin
   })
 }
 
-/** v1 content results with history and ancestors, nested under the comment each one answers */
+/** v1 content results with history, ancestors and inline properties, nested under the comment each one answers */
 export function toCommentTree(raw: unknown, pageId: string, host: string | null): AtlassianComment[] {
   const results = object(raw).results
   const roots: AtlassianComment[] = []
@@ -27,6 +27,7 @@ export function toCommentTree(raw: unknown, pageId: string, host: string | null)
       authorId: orNull(text(author.accountId)),
       created: text(object(result.history).createdDate),
       body: bodyMarkdown(result.body, pageId),
+      quote: text(object(object(result.extensions).inlineProperties).originalSelection) || undefined,
       replies: []
     }
     byId.set(comment.id, comment)

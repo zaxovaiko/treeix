@@ -140,6 +140,7 @@ function CommentCard({ comment, ...shared }: Shared & { comment: AtlassianCommen
             </span>
           )}
         </div>
+        {comment.quote && <p className="mb-1.5 line-clamp-3 border-l-2 border-yellow-500/60 pl-2 text-xs text-muted-foreground select-text">{comment.quote}</p>}
         {mode === 'edit' ? (
           <CommentBox placeholder="Comment" initial={comment.body} label="Save" onSubmit={(body) => actions.edit(comment, body).then(done)} onCancel={() => setMode('view')} />
         ) : (
