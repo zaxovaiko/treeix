@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { SessionUsage, TerminalOptions, TranscriptRef } from '../shared/types'
 import { sessionTools } from './agentTools'
@@ -43,7 +44,10 @@ const plugin: MainPlugin = {
       return usage && { ...usage, costUsd }
     })
     context.handle('diagrams', async (_, ref: TranscriptRef) => mermaidDiagrams(ref.kind, await readTranscript(ref)))
-    sessionTools().forEach(context.mcpTool)
+    // ponytail: the focused window, else any; one per session's own window if people run agents across several windows
+    const window = (): Electron.WebContents | null =>
+      (BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find((candidate) => candidate.isVisible()) ?? BrowserWindow.getAllWindows()[0])?.webContents ?? null
+    sessionTools(context, window).forEach(context.mcpTool)
     context.onDispose(killAllTerminals)
   }
 }

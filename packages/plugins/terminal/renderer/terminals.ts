@@ -630,6 +630,19 @@ const parseMetaText = (text: string): SessionMeta | null => {
   }
 }
 
+const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`
+
+// Agents start sessions through Treeix's MCP server (session_new); a shell takes the prompt as its command line
+bridge.on('start', (request, folder, kind, prompt) => {
+  if (typeof request !== 'string' || typeof folder !== 'string' || typeof kind !== 'string' || typeof prompt !== 'string') return
+  if (!getAgent(kind)) return bridge.send('started', request, null, `No agent ${kind} in Treeix's settings`)
+  const argument = prompt && (isAgent(kind) ? shellQuote(prompt) : prompt)
+  createSession(folder, kind, argument || undefined).then(
+    (id) => bridge.send('started', request, id),
+    (reason: unknown) => bridge.send('started', request, null, reason instanceof Error ? reason.message : String(reason))
+  )
+})
+
 const waking = new Map<string, Promise<void>>()
 
 /**

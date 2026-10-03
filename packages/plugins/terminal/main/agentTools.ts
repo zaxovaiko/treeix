@@ -1,10 +1,14 @@
-import type { McpTool } from '@treeix/sdk/main'
+import { randomUUID } from 'node:crypto'
+import { isAbsolute, resolve } from 'node:path'
+import type { WebContents } from 'electron'
+import type { MainContext, McpTool } from '@treeix/sdk/main'
 import { readTranscript, lastReplies } from './transcripts'
-import { listeningPorts, pasteTerminal, reportStatus, sessionEntries, writeTerminal } from './pty'
+import { existingFolder, listeningPorts, pasteTerminal, reportStatus, sessionEntries, writeTerminal } from './pty'
 
 const SCREEN_LINES = 60
 /** Lets the agent's input box take the pasted prompt before Enter sends it */
 const SUBMIT_DELAY_MS = 150
+const START_TIMEOUT_MS = 30_000
 
 type Meta = { title: string; kind: string; worktreePath: string; agentSessionId: string | null }
 
@@ -45,7 +49,13 @@ const findSession = (args: Record<string, unknown>): ReturnType<typeof sessionEn
 
 const SESSION = { session: { type: 'string', description: 'Session id from sessions_list' } }
 
-export function sessionTools(): McpTool[] {
+/** `window` is the Treeix window that opens the sessions agents start */
+export function sessionTools(context: MainContext, window: () => WebContents | null): McpTool[] {
+  /** Starts the renderer asked for, by request id: the new session's id, or why it couldn't start */
+  const starting = new Map<string, (result: { id: string } | { error: string }) => void>()
+  context.on('started', (_, request: string, id: unknown, error: unknown) =>
+    starting.get(request)?.(typeof id === 'string' ? { id } : { error: typeof error === 'string' ? error : 'The session did not start' })
+  )
   return [
     {
       name: 'sessions_list',
@@ -110,6 +120,38 @@ export function sessionTools(): McpTool[] {
         await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
         writeTerminal(session.id, '\r')
         return `Sent to ${session.id}`
+      }
+    },
+    {
+      name: 'session_new',
+      description:
+        'Starts a new Treeix session as a tab: a Claude or Codex agent, or a shell, in a folder, optionally with a first prompt. Returns its id for session_read and session_send.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          folder: { type: 'string', description: 'Absolute path the session works in' },
+          kind: { type: 'string', description: "'claude' by default, 'codex', 'shell', or another agent id from Treeix's settings" },
+          prompt: { type: 'string', description: "First message for an agent, or a shell's command" }
+        },
+        required: ['folder'],
+        additionalProperties: false
+      },
+      run: async (args) => {
+        if (typeof args.folder !== 'string' || !isAbsolute(args.folder)) throw new Error('folder must be an absolute path')
+        const folder = resolve(args.folder)
+        if (existingFolder(folder) !== folder) throw new Error(`No folder ${args.folder}`)
+        const kind = typeof args.kind === 'string' && args.kind ? args.kind : 'claude'
+        const prompt = typeof args.prompt === 'string' ? args.prompt : ''
+        const target = window()
+        if (!target) throw new Error('Treeix has no window open')
+        const request = randomUUID()
+        const result = await new Promise<{ id: string } | { error: string }>((settle) => {
+          const timer = setTimeout(() => settle({ error: 'Treeix did not start the session' }), START_TIMEOUT_MS)
+          starting.set(request, (started) => (clearTimeout(timer), settle(started)))
+          context.send(target, 'start', request, folder, kind, prompt)
+        }).finally(() => starting.delete(request))
+        if ('error' in result) throw new Error(result.error)
+        return `Started ${result.id} (${kind}) in ${folder}`
       }
     }
   ]
