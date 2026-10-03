@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { PluginManifest, RendererPlugin, Services, SessionSummary } from '@treeix/sdk'
+import { setPluginAgents } from './agents'
 import { getSettings, subscribeSettings, updateSettings } from './settings'
 import { setPluginThemes } from './themes'
 
@@ -63,8 +64,18 @@ function sync(): void {
     )
     state = { loaded: loaded.filter((entry) => entry !== null), ready: true }
     setPluginThemes(Object.assign({}, ...state.loaded.map(({ plugin }) => plugin.themes ?? {})))
+    followPluginAgents()
     listeners.forEach((listener) => listener())
   }).catch((reason: unknown) => console.error('Plugins could not be synced', reason))
+}
+
+let unfollowAgents: (() => void)[] = []
+function followPluginAgents(): void {
+  unfollowAgents.forEach((unfollow) => unfollow())
+  const sources = state.loaded.flatMap(({ manifest, plugin }) => (plugin.agents ? [{ id: manifest.id, agents: plugin.agents }] : []))
+  const collect = (): void => setPluginAgents(sources.flatMap(({ id, agents }) => agents.list().map((agent) => ({ ...agent, plugin: id }))))
+  unfollowAgents = sources.map(({ agents }) => agents.subscribe(collect))
+  collect()
 }
 
 let lastChoices = ''

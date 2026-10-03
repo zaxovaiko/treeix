@@ -2,7 +2,7 @@ import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 import type { ChatConnection, ChatContent, ChatEvent, MainPlugin } from '@treeix/sdk/main'
 import type { StartOptions, StartResult } from '../shared/types'
 import { acpAdapter } from './acpAdapter'
-import { createBatcher } from './batcher'
+import { createBatcher } from '@treeix/host/batcher'
 import { createGenerationGuard } from './generations'
 
 type Entry = { connection: ChatConnection; owner: WebContents; dispose: () => void }
@@ -36,7 +36,8 @@ const plugin: MainPlugin = {
 
       const token = generations.begin(chatId)
       const owner = event.sender
-      const connection = await adapter.connect({ cwd: options.cwd, command: options.command, env: await context.sessionEnv(), resume: options.resume })
+      const { cwd, command, instructions, preset, resume } = options
+      const connection = await adapter.connect({ cwd, command, instructions, preset, env: await context.sessionEnv(), resume })
 
       // A newer start for this chat id arrived while connecting: let it own the map, this connection has nowhere to go
       if (!generations.isCurrent(chatId, token)) {

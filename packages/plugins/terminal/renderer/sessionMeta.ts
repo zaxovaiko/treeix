@@ -1,5 +1,5 @@
 import type { SessionKind } from '@treeix/sdk'
-import type { Agent } from '@treeix/app/agents'
+import { type Agent, isChatOnly } from '@treeix/app/agents'
 
 export type SessionView = 'terminal' | 'chat'
 
@@ -40,9 +40,9 @@ export const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab
 
 export type NewTabEntry = { agent: string; view: SessionView; label: string }
 
-/** Each agent in a terminal, then one chat, with `chat` the agent it starts with; the chat picks its agent itself */
+/** Each agent in a terminal (chat-only ones as a chat), then one chat, with `chat` the agent it starts with; the chat picks its agent itself */
 export const newTabEntries = (agents: Agent[], chat: Agent | undefined): NewTabEntry[] => [
-  ...agents.map((agent): NewTabEntry => ({ agent: agent.id, view: 'terminal', label: agent.label })),
+  ...agents.map((agent): NewTabEntry => ({ agent: agent.id, view: isChatOnly(agent) ? 'chat' : 'terminal', label: agent.label })),
   ...(chat ? [{ agent: chat.id, view: 'chat' as const, label: 'Chat' }] : [])
 ]
 

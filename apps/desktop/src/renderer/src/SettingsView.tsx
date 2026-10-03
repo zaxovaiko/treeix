@@ -1169,9 +1169,11 @@ function Agents(): React.JSX.Element {
   }
   return (
     <Card title="Agents">
-      {agents.map((agent) => (
-        <AgentRow key={agent.id} agent={agent} builtin={!custom.some((entry) => entry.id === agent.id)} />
-      ))}
+      {agents
+        .filter((agent) => !agent.plugin)
+        .map((agent) => (
+          <AgentRow key={agent.id} agent={agent} builtin={!custom.some((entry) => entry.id === agent.id)} />
+        ))}
       <Row label="Add an agent" description="Any CLI agent Treeix can start in a worktree. Override a built-in to change its command.">
         <button onClick={add} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
           Add

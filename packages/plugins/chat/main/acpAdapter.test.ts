@@ -1,4 +1,4 @@
-import { AgentSideConnection, ndJsonStream, PROTOCOL_VERSION, type RequestPermissionOutcome } from '@agentclientprotocol/sdk'
+import { AgentSideConnection, type ContentBlock, ndJsonStream, PROTOCOL_VERSION, type RequestPermissionOutcome } from '@agentclientprotocol/sdk'
 import type { ChatEvent } from '@treeix/sdk/main'
 import { expect, test } from 'bun:test'
 import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
@@ -6,33 +6,41 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { confinedPath, connectOverStream, sliceLines } from './acpAdapter'
 
-function fakeAgent() {
+function fakeAgent(name?: string) {
   const toAgent = new TransformStream<Uint8Array, Uint8Array>()
   const toClient = new TransformStream<Uint8Array, Uint8Array>()
-  const agent: { mode: string; outcome: RequestPermissionOutcome | null } = { mode: 'ask', outcome: null }
+  const agent: { mode: string; outcome: RequestPermissionOutcome | null; meta: unknown; prompts: ContentBlock[][] } = { mode: 'ask', outcome: null, meta: null, prompts: [] }
   let cancelArrived = () => undefined as void
   const cancelled = new Promise<void>((resolve) => (cancelArrived = resolve))
 
   const agentSide = new AgentSideConnection(
     (connection) => ({
-      initialize: () => ({ protocolVersion: PROTOCOL_VERSION, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } }),
-      newSession: () => ({
-        sessionId: 's1',
-        modes: {
-          currentModeId: 'ask',
-          availableModes: [
-            { id: 'ask', name: 'Ask' },
-            { id: 'code', name: 'Code' }
-          ]
-        }
+      initialize: () => ({
+        protocolVersion: PROTOCOL_VERSION,
+        agentCapabilities: { loadSession: true, promptCapabilities: { image: true } },
+        agentInfo: name ? { name, version: '1' } : undefined
       }),
+      newSession: ({ _meta }) => {
+        agent.meta = _meta ?? null
+        return {
+          sessionId: 's1',
+          modes: {
+            currentModeId: 'ask',
+            availableModes: [
+              { id: 'ask', name: 'Ask' },
+              { id: 'code', name: 'Code' }
+            ]
+          }
+        }
+      },
       loadSession: async ({ sessionId }) => {
         for (let index = 0; index <= 5000; index++) await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: String(index) } } })
         await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: 'code' } })
         return { modes: { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }] } }
       },
       authenticate: () => undefined,
-      prompt: async ({ sessionId }) => {
+      prompt: async ({ sessionId, prompt }) => {
+        agent.prompts.push(prompt)
         await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } } })
         const { outcome } = await connection.requestPermission({
           sessionId,
@@ -161,4 +169,46 @@ test('writes create new files and overwrite existing ones inside the folder', as
   await agentSide.writeTextFile({ sessionId: 's1', path, content: 'three\nfour' })
   expect(await agentSide.readTextFile({ sessionId: 's1', path, line: 2, limit: 1 })).toEqual({ content: 'four' })
   await expect(agentSide.writeTextFile({ sessionId: 's1', path: join(root, '..', 'out.txt'), content: 'x' })).rejects.toBeDefined()
+})
+
+const allowing = (connection: Awaited<ReturnType<typeof connectOverStream>>, events: ChatEvent[] = []): ChatEvent[] => {
+  connection.onEvent((event) => {
+    events.push(event)
+    if (event.type === 'permission') connection.answer(event.requestId, event.options[0]?.id ?? null)
+  })
+  return events
+}
+
+test('instructions go to the system prompt of an agent that takes one', async () => {
+  const { clientStream, agent } = fakeAgent('@agentclientprotocol/claude-agent-acp')
+  const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: null, instructions: 'Be terse', close: () => undefined })
+  allowing(connection)
+  await connection.prompt([{ type: 'text', text: 'Hi' }])
+  expect(agent.meta).toEqual({ systemPrompt: { append: 'Be terse' } })
+  expect(agent.prompts[0]).toEqual([{ type: 'text', text: 'Hi' }])
+})
+
+test('other agents get instructions before the first message only', async () => {
+  const { clientStream, agent } = fakeAgent()
+  const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: null, instructions: 'Be terse', close: () => undefined })
+  allowing(connection)
+  await connection.prompt([{ type: 'text', text: 'Hi' }])
+  await connection.prompt([{ type: 'text', text: 'Again' }])
+  expect(agent.meta).toBeNull()
+  expect(agent.prompts).toEqual([
+    [
+      { type: 'text', text: 'Be terse' },
+      { type: 'text', text: 'Hi' }
+    ],
+    [{ type: 'text', text: 'Again' }]
+  ])
+})
+
+test('a preset sets the mode on a new conversation and reports what the agent lacks', async () => {
+  const { clientStream, agent } = fakeAgent()
+  const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: null, preset: { mode: 'code', model: 'gpt-9' }, close: () => undefined })
+  const events = allowing(connection)
+  expect(agent.mode).toBe('code')
+  expect(events[0]).toMatchObject({ type: 'options', options: [{ id: 'mode', currentValue: 'code' }] })
+  expect(events).toContainEqual({ type: 'error', message: 'This agent offers no model "gpt-9"; using its default' })
 })

@@ -1,5 +1,5 @@
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, type Client, type McpServer, type RequestPermissionResponse, type Stream } from '@agentclientprotocol/sdk'
-import type { ChatAdapter, ChatConnection, ChatEvent, ChatOption } from '@treeix/sdk/main'
+import type { ChatAdapter, ChatConnection, ChatEvent, ChatOption, ChatSpec } from '@treeix/sdk/main'
 import { lstat, readFile, realpath, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { Writable } from 'node:stream'
@@ -9,6 +9,8 @@ import { killGroup, spawnInShell } from './shell'
 const STDERR_LIMIT = 4096
 const BACKLOG_LIMIT = 5000
 const CONNECT_TIMEOUT_MS = 30_000
+/** Agents that add `_meta.systemPrompt.append` to their system prompt; others get instructions before the first message */
+const SYSTEM_PROMPT_AGENTS = new Set(['@agentclientprotocol/claude-agent-acp'])
 
 const hasCode = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code
 
@@ -48,9 +50,15 @@ export function sliceLines(content: string, line: number | null | undefined, lim
 
 /** Treeix's own MCP server, from the session environment */
 type TreeixMcp = { url: string; token: string }
-type ConnectOptions = { cwd: string; resume: string | null; close: () => void; stderrTail?: () => string; mcp?: TreeixMcp | null }
+type ConnectOptions = Pick<ChatSpec, 'instructions' | 'preset'> & {
+  cwd: string
+  resume: string | null
+  close: () => void
+  stderrTail?: () => string
+  mcp?: TreeixMcp | null
+}
 
-export async function connectOverStream(stream: Stream, { cwd, resume, close, stderrTail = () => '', mcp = null }: ConnectOptions): Promise<ChatConnection> {
+export async function connectOverStream(stream: Stream, { cwd, resume, instructions, preset, close, stderrTail = () => '', mcp = null }: ConnectOptions): Promise<ChatConnection> {
   const listeners = new Set<(event: ChatEvent) => void>()
   // Events before the first listener (a loaded session's replay) wait for it, newest kept; options are state and sent on subscribe
   let backlog: ChatEvent[] | null = []
@@ -116,10 +124,11 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
     const tail = stderrTail().trim()
     emit({ type: 'disconnected', message: tail ? `The agent stopped: ${tail}` : 'The agent stopped' })
   })
-  const { agentCapabilities } = await connection.initialize({
+  const { agentCapabilities, agentInfo } = await connection.initialize({
     protocolVersion: PROTOCOL_VERSION,
     clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
   })
+  const takesSystemPrompt = SYSTEM_PROMPT_AGENTS.has(agentInfo?.name ?? '')
   const mcpServers: McpServer[] =
     mcp && agentCapabilities?.mcpCapabilities?.http ? [{ type: 'http', name: 'treeix', url: mcp.url, headers: [{ name: 'Authorization', value: `Bearer ${mcp.token}` }] }] : []
   const canLoad = agentCapabilities?.loadSession === true
@@ -128,9 +137,40 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
   const { sessionId, session } =
     resume && canLoad
       ? { sessionId: resume, session: await connection.loadSession({ sessionId: resume, cwd, mcpServers }) }
-      : await connection.newSession({ cwd, mcpServers }).then((session) => ({ sessionId: session.sessionId, session }))
+      : await connection
+          .newSession({ cwd, mcpServers, _meta: instructions && takesSystemPrompt ? { systemPrompt: { append: instructions } } : undefined })
+          .then((session) => ({ sessionId: session.sessionId, session }))
   const hasConfigOptions = Boolean(session?.configOptions?.length)
   emit({ type: 'options', options: optionsFrom(session) })
+
+  const setOption = async (id: string, value: string): Promise<void> => {
+    if (hasConfigOptions) {
+      const response = await connection.setSessionConfigOption({ sessionId, configId: id, value })
+      emit({ type: 'options', options: optionsFrom(response) })
+      return
+    }
+    if (id !== 'mode') return
+    await connection.setSessionMode({ sessionId, modeId: value })
+    emit({ type: 'options', options: withCurrentValue(id, value) })
+  }
+
+  // A resumed conversation already has its instructions, model and mode
+  let preamble = instructions && !resume && !takesSystemPrompt ? instructions : null
+  if (!resume) {
+    for (const category of ['model', 'mode'] as const) {
+      const value = preset?.[category]
+      if (!value) continue
+      const option = options.find((candidate) => candidate.category === category)
+      if (!option?.values.some((candidate) => candidate.value === value)) {
+        emit({ type: 'error', message: `This agent offers no ${category} "${value}"; using its default` })
+        continue
+      }
+      if (option.currentValue === value) continue
+      await setOption(option.id, value).catch((error: unknown) =>
+        emit({ type: 'error', message: `Could not set the ${category}: ${error instanceof Error ? error.message : String(error)}` })
+      )
+    }
+  }
 
   return {
     sessionId,
@@ -147,8 +187,10 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
     },
     prompt: async (content) => {
       emit({ type: 'turn_start' })
+      const blocks = toPromptBlocks(preamble ? [{ type: 'text', text: preamble }, ...content] : content)
+      preamble = null
       try {
-        const { stopReason } = await connection.prompt({ sessionId, prompt: toPromptBlocks(content) })
+        const { stopReason } = await connection.prompt({ sessionId, prompt: blocks })
         emit({ type: 'turn_end', stopReason })
         return { stopReason }
       } catch (error) {
@@ -162,16 +204,7 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
       settleAll()
     },
     answer: settle,
-    setOption: async (id, value) => {
-      if (hasConfigOptions) {
-        const response = await connection.setSessionConfigOption({ sessionId, configId: id, value })
-        emit({ type: 'options', options: optionsFrom(response) })
-        return
-      }
-      if (id !== 'mode') return
-      await connection.setSessionMode({ sessionId, modeId: value })
-      emit({ type: 'options', options: withCurrentValue(id, value) })
-    },
+    setOption,
     list: canList
       ? async (folder) => {
           const { sessions } = await connection.listSessions({ cwd: folder })
@@ -190,7 +223,7 @@ export async function connectOverStream(stream: Stream, { cwd, resume, close, st
 export const acpAdapter: ChatAdapter = {
   id: 'acp',
   label: 'Agent Client Protocol',
-  connect: async ({ cwd, command, env, resume }) => {
+  connect: async ({ cwd, command, instructions, preset, env, resume }) => {
     const child = spawnInShell(command, cwd, env)
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => {
@@ -226,7 +259,7 @@ export const acpAdapter: ChatAdapter = {
     })
     const stream = ndJsonStream(Writable.toWeb(child.stdin), fromAgent)
     try {
-      return await Promise.race([connectOverStream(stream, { cwd, resume, close: () => killGroup(child), stderrTail: () => stderr, mcp: env.TREEIX_MCP_URL && env.TREEIX_MCP_TOKEN ? { url: env.TREEIX_MCP_URL, token: env.TREEIX_MCP_TOKEN } : null }), failed])
+      return await Promise.race([connectOverStream(stream, { cwd, resume, instructions, preset, close: () => killGroup(child), stderrTail: () => stderr, mcp: env.TREEIX_MCP_URL && env.TREEIX_MCP_TOKEN ? { url: env.TREEIX_MCP_URL, token: env.TREEIX_MCP_TOKEN } : null }), failed])
     } catch (error) {
       killGroup(child)
       throw error

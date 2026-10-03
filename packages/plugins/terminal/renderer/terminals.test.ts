@@ -41,3 +41,8 @@ test('isTerminalReply tells what xterm answers on its own from keys the user pre
   }
   for (const key of ['1', '\r', 'y', '\x1b[B', '\x1b', 'hello']) expect(isTerminalReply(key)).toBe(false)
 })
+
+test('newTabEntries opens an agent without a terminal command as a chat', () => {
+  const persona = { id: 'hub.a', label: 'A', mark: 'A', color: '#000', command: null, agent: true, chat: { adapter: 'acp', command: 'a' } }
+  expect(newTabEntries([persona], undefined)).toEqual([{ agent: 'hub.a', view: 'chat', label: 'A' }])
+})

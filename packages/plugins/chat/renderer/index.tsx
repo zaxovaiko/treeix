@@ -3,13 +3,14 @@ import { type ChatService, createBridge, type RendererPlugin } from '@treeix/sdk
 import { agentOr } from '@treeix/app/agents'
 import { getSettings } from '@treeix/app/settings'
 import { Chat } from './Chat'
-import { appendDraft, chatIds, forget, getChat, listen, start, statusOf, stop, subscribe, titleOf } from './store'
+import { appendDraft, chatIds, forget, getChat, listen, send, start, statusOf, stop, subscribe, titleOf } from './store'
 
 listen(createBridge('chat'))
 
 const service: ChatService = {
   View: Chat,
   start,
+  send: (chatId, text) => send(chatId, [{ type: 'text', text }]),
   stop,
   status: (chatId) => statusOf(getChat(chatId)),
   draft: appendDraft,

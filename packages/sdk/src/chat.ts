@@ -65,9 +65,19 @@ export type ChatConnection = {
   close: () => void
 }
 
+/** How an agent chats: the adapter id, the command (or address) it connects to, and what a new conversation starts with */
+export type ChatSpec = {
+  adapter: string
+  command: string
+  /** Added to the agent's system prompt where it takes one, else put before the first message */
+  instructions?: string
+  /** Model and mode set on a new conversation, by option value */
+  preset?: { model?: string; mode?: string }
+}
+
 export type ChatAdapter = {
   id: string
   label: string
   /** Starts, or resumes when `resume` is set; `command` is the agent's chat command from the registry */
-  connect: (options: { cwd: string; command: string; env: Record<string, string>; resume: string | null }) => Promise<ChatConnection>
+  connect: (options: Omit<ChatSpec, 'adapter'> & { cwd: string; env: Record<string, string>; resume: string | null }) => Promise<ChatConnection>
 }

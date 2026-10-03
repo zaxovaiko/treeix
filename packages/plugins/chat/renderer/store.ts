@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { ChatCapabilities, ChatContent, ChatEvent, ChatService, SessionStatus } from '@treeix/sdk'
+import type { ChatCapabilities, ChatContent, ChatEvent, ChatService, ChatSpec, SessionStatus } from '@treeix/sdk'
 import type { StartOptions, StartResult } from '../shared/types'
 import { errorMessage } from '@treeix/app/ui'
 import { emptyFeed, type Feed, reduce } from './feed'
@@ -182,7 +182,7 @@ async function connect(chatId: string, options: ChatStartOptions, fresh: boolean
   if (!bridge) throw new Error('Chat is not loaded')
   update(chatId, (state) => ({ ...state, options, error: null }))
   try {
-    const startOptions: StartOptions = { adapter: options.adapter, command: options.command, cwd: options.cwd, resume: options.resume }
+    const startOptions: StartOptions = options
     const result = await bridge.invoke<StartResult>('start', chatId, startOptions)
     // An older connect still waiting gives way to this one
     replayed(chatId)
@@ -213,11 +213,11 @@ function reconnect(chatId: string): Promise<string> {
 export const retry = (chatId: string): void => void reconnect(chatId).catch(() => undefined)
 
 /** Starts the chat over with another agent; for a chat without a conversation yet, see `hasConversation` */
-export function switchAgent(chatId: string, agent: { id: string; chat?: { adapter: string; command: string } }): Promise<string> {
+export function switchAgent(chatId: string, agent: { id: string; chat?: ChatSpec }): Promise<string> {
   const { options } = getChat(chatId)
   if (!options || !agent.chat) return Promise.reject(new Error(`${agent.id} can't chat`))
   update(chatId, (state) => ({ ...state, connected: false, capabilities: null, terminalCommand: null, agentSessionId: null, feed: emptyFeed }))
-  return connect(chatId, { ...options, agent: agent.id, adapter: agent.chat.adapter, command: agent.chat.command, resume: null }, false)
+  return connect(chatId, { agent: agent.id, ...agent.chat, cwd: options.cwd, resume: null }, false)
 }
 
 export function stop(chatId: string): void {

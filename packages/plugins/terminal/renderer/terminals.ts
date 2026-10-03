@@ -3,7 +3,7 @@ import type { Terminal } from '@xterm/xterm'
 import { useSyncExternalStore } from 'react'
 import { terminalPalette, type Theme } from '@treeix/app/themes'
 import { activeTheme, digitPressed, fontStack, getSettings, MONO_STACK, subscribeSettings } from '@treeix/app/settings'
-import { agentOr, getAgent, isAgent, resumeCommandFor, startCommand } from '@treeix/app/agents'
+import { agentOr, getAgent, isAgent, isChatOnly, resumeCommandFor, startCommand } from '@treeix/app/agents'
 import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
 import { agentState, agentStatus } from './agentStatus'
@@ -575,10 +575,11 @@ function startChat(worktreePath: string, kind: SessionKind, taskId?: string, res
 
 /**
  * `promptArgument` is an already shell-quoted first prompt for agent terminals; the session opens as a new tab of `taskId`,
- * or of the task for its folder. A chat for an agent that can't chat opens as a terminal.
+ * or of the task for its folder. A chat for an agent that can't chat opens as a terminal; an agent with only a chat opens as one.
  */
 export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string, taskId?: string, view: SessionView = 'terminal'): Promise<string> {
-  if (view === 'chat' && canChat(kind)) return startChat(worktreePath, kind, taskId)
+  const agent = getAgent(kind)
+  if ((view === 'chat' || (agent && isChatOnly(agent))) && canChat(kind)) return startChat(worktreePath, kind, taskId)
   const id = await startSession(worktreePath, kind, promptArgument)
   placeSession(id, taskId)
   return id
@@ -658,7 +659,7 @@ function connectChat(session: ChatSession): Promise<void> | null {
   connecting.add(id)
   patchSession(id, { status: 'running' })
   return chat
-    .start(id, { agent: agent.id, adapter: agent.chat.adapter, command: agent.chat.command, cwd: session.worktreePath, resume: session.agentSessionId })
+    .start(id, { agent: agent.id, ...agent.chat, cwd: session.worktreePath, resume: session.agentSessionId })
     .then(
       (agentSessionId) => {
         // Closed while connecting

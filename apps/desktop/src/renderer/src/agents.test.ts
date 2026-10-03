@@ -106,3 +106,16 @@ test('the Codex switch skips approvals and the sandbox, resumes included', async
   updateSettings({ codexSkipPermissions: false })
   expect(getAgent('codex')?.command).toBe('codex -c "$TREEIX_CODEX_MCP"')
 })
+
+test("plugin agents come after the user's, never replace them, and chat-only ones open as chats", async () => {
+  await setAgents([{ id: 'mine', label: 'Mine', mark: 'M', color: '#000', command: 'mine', agent: true }])
+  const { getAgents, isChatOnly, setPluginAgents } = await import('./agents')
+  const persona = { id: 'hub.a', label: 'A', mark: 'A', color: '#000', command: null, agent: true, chat: { adapter: 'acp', command: 'a' }, plugin: 'hub' }
+  setPluginAgents([persona, { ...persona, id: 'mine', label: 'Shadow' }])
+  expect(getAgents().map((agent) => agent.label)).toEqual(['Claude', 'Codex', 'Shell', 'Mine', 'A'])
+  expect(isChatOnly(persona)).toBe(true)
+  expect(isChatOnly(BUILTIN_AGENTS.claude)).toBe(false)
+  setPluginAgents([])
+  expect(getAgents().map((agent) => agent.id)).not.toContain('hub.a')
+  await setAgents([])
+})

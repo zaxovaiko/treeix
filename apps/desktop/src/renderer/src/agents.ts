@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { ChatSpec } from '@treeix/sdk'
 import { getSettings, subscribeSettings } from './settings'
 
 export type Agent = {
@@ -20,7 +21,9 @@ export type Agent = {
   /** false only for the shell, which is a terminal rather than an agent */
   agent: boolean
   /** Chat through an adapter; agents without it are terminal only */
-  chat?: { adapter: string; command: string }
+  chat?: ChatSpec
+  /** The plugin that manages it; such agents are edited there, not in Settings */
+  plugin?: string
 }
 
 /**
@@ -60,12 +63,30 @@ export const BUILTIN_AGENTS = {
   shell: { id: 'shell', label: 'Shell', mark: '$', color: '#34d399', command: null, agent: false }
 } as const satisfies Record<string, Agent>
 
-/** Built-ins first, then the user's; a custom agent sharing a built-in id replaces it in place */
-let cache: { from: Agent[]; skip: string; list: Agent[] } | null = null
+let pluginAgents: Agent[] = []
+const pluginListeners = new Set<() => void>()
+
+/** Agents enabled plugins manage, set by the plugin host */
+export function setPluginAgents(agents: Agent[]): void {
+  pluginAgents = agents
+  pluginListeners.forEach((listener) => listener())
+}
+
+const subscribeAgents = (listener: () => void): (() => void) => {
+  const unsubscribe = subscribeSettings(listener)
+  pluginListeners.add(listener)
+  return () => {
+    unsubscribe()
+    pluginListeners.delete(listener)
+  }
+}
+
+/** Built-ins first, then the user's, then plugins'; a custom agent sharing a built-in id replaces it in place */
+let cache: { from: Agent[]; plugins: Agent[]; skip: string; list: Agent[] } | null = null
 export function getAgents(): Agent[] {
   const { customAgents: custom, claudeSkipPermissions, codexSkipPermissions } = getSettings()
   const skip = `${claudeSkipPermissions}:${codexSkipPermissions}`
-  if (cache?.from !== custom || cache.skip !== skip) {
+  if (cache?.from !== custom || cache.plugins !== pluginAgents || cache.skip !== skip) {
     const skipped = (agent: Agent): Agent =>
       agent.id === 'claude' && claudeSkipPermissions
         ? skippingPermissions(agent, CLAUDE, '--dangerously-skip-permissions')
@@ -73,7 +94,8 @@ export function getAgents(): Agent[] {
           ? skippingPermissions(agent, CODEX, '--dangerously-bypass-approvals-and-sandbox')
           : agent
     const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? skipped(agent))
-    cache = { from: custom, skip, list: [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))] }
+    const own = [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))]
+    cache = { from: custom, plugins: pluginAgents, skip, list: [...own, ...pluginAgents.filter((agent) => !own.some((entry) => entry.id === agent.id))] }
   }
   return cache.list
 }
@@ -102,7 +124,10 @@ export function chatAgent(): Agent | undefined {
   return agents.find((agent) => agent.id === getSettings().chatAgent) ?? agents[0]
 }
 
-export const useAgents = (): Agent[] => useSyncExternalStore(subscribeSettings, getAgents)
+export const useAgents = (): Agent[] => useSyncExternalStore(subscribeAgents, getAgents)
+
+/** Has no terminal command, so it only opens as a chat */
+export const isChatOnly = (agent: Agent): boolean => agent.command === null && agent.agent && agent.chat !== undefined
 
 /** The command line that starts the agent, or undefined to drop the user into their shell */
 export function startCommand(agent: Agent, prompt?: string, agentSessionId?: string | null): string | undefined {

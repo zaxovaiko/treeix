@@ -1,6 +1,7 @@
 import { createContext, type ComponentType, type ReactNode, useContext, useSyncExternalStore } from 'react'
 import type { Command } from '@treeix/app/CommandPalette'
 import type { IconName } from '@treeix/app/Icon'
+import type { Agent } from '@treeix/app/agents'
 import type { Theme } from '@treeix/app/themes'
 import type { ReviewComment } from '@treeix/shared/comments'
 import type { Repo } from '@treeix/shared/types'
@@ -21,6 +22,7 @@ export * from './layout'
 export type * from './chat'
 /** Makes a plugin's action runnable from the native menu; the action needs a `Go to` or `Panels` section to show there */
 export { registerActionRunner } from '@treeix/app/actionRunners'
+import type { ChatSpec } from './chat'
 import type { ShortcutInfo } from './layout'
 
 /** A tab in the title bar that always exists while the plugin is enabled */
@@ -130,7 +132,9 @@ export interface Services {
 export type ChatService = {
   View: ComponentType<{ chatId: string }>
   /** Connects and remembers the agent session id; resolves with it */
-  start: (chatId: string, options: { agent: string; adapter: string; command: string; cwd: string; resume: string | null }) => Promise<string>
+  start: (chatId: string, options: ChatSpec & { agent: string; cwd: string; resume: string | null }) => Promise<string>
+  /** Sends a message, queued behind a running turn */
+  send: (chatId: string, text: string) => void
   stop: (chatId: string) => void
   status: (chatId: string) => SessionStatus
   /** Adds text to the composer below what is typed, e.g. review comments sent to the session */
@@ -175,6 +179,8 @@ export type RendererPlugin = {
   shortcuts?: ShortcutInfo[]
   /** App themes by id, offered in Settings under their mode */
   themes?: Record<string, Theme>
+  /** Agents the plugin manages, listed after the user's; `list` returns the same array until `subscribe` fires */
+  agents?: { list: () => Agent[]; subscribe: (listener: () => void) => () => void }
 }
 
 /** What the app offers plugins in the renderer */
