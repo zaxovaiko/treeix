@@ -7,4 +7,4 @@ Short records of significant design decisions: the context, what was decided, an
 - [3. Agent chat through adapters](0003-agent-chat-through-adapters.md) - Accepted
 - [4. Keep visited plugin pages mounted](0004-keep-visited-plugin-pages-mounted.md) - Accepted
 - [5. Monaco for editable files](0005-monaco-for-editable-files.md) - Accepted
-- [6. AI Hub: personas and workflows](0006-ai-hub-personas-and-workflows.md) - Proposed
+- [6. AI Hub: personas and workflows](0006-ai-hub-personas-and-workflows.md) - Accepted

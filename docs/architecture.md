@@ -35,6 +35,8 @@ Plugin pages stay mounted once visited: the page on screen is the only one with 
 
 The `chat` plugin gives agents a chat view next to their terminals. It talks to agents only through the `ChatAdapter` contract in `@treeix/sdk`: an adapter connects to an agent's command and turns what it says into `ChatEvent`s. Any plugin can contribute adapters with `MainPlugin.chatAdapters`; the chat plugin ships the Agent Client Protocol adapter, which covers Claude and Codex through their ACP commands. Agents opt in with `Agent.chat` in the registry, run through the user's login shell like terminal sessions, and keep their own transcripts; chat sessions live in the terminal plugin's groups and tabs with `view: 'chat'`.
 
+The `hub` plugin (ADR 0006) adds personas, workflows and runs on top of chat. Personas join the agent registry through `RendererPlugin.agents` as `hub.<id>`; the plugin also contributes an OpenAI-compatible chat adapter for OpenRouter, Ollama and LM Studio, with API keys kept in main. Workflow runs execute in the hub's main process (`packages/plugins/hub/main/engine.ts`) over `context.chatAdapter`, so they outlive a window reload; run state and event logs live under the plugin's data folder. The canvas is `@xyflow/react`, loaded lazily.
+
 ## Imports
 
 | Alias | Points at |
