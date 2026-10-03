@@ -1,6 +1,13 @@
 import { isJson, isString } from '@treeix/shared/json'
 
-export type Runtime = { kind: 'agent'; agent: string }
+/** An agent from the registry (Claude, Codex, the user's own), or an OpenAI-compatible API by base URL */
+export type Runtime = { kind: 'agent'; agent: string } | { kind: 'api'; baseUrl: string }
+
+/** APIs offered by name; any other OpenAI-compatible URL works too */
+export const API_PRESETS = [
+  { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+  { name: 'Ollama', baseUrl: 'http://localhost:11434/v1' }
+] as const
 
 /** An agent of the user's own: a persona on top of a runtime from the agent registry */
 export type HubAgent = {
@@ -26,7 +33,8 @@ export const AGENT_PREFIX = 'hub.'
 
 const isNullableString = (value: unknown): value is string | null => value === null || isString(value)
 
-const isRuntime = (value: unknown): value is Runtime => isJson(value) && value.kind === 'agent' && isString(value.agent)
+const isRuntime = (value: unknown): value is Runtime =>
+  isJson(value) && ((value.kind === 'agent' && isString(value.agent)) || (value.kind === 'api' && isString(value.baseUrl)))
 
 export const isHubAgent = (value: unknown): value is HubAgent =>
   isJson(value) &&

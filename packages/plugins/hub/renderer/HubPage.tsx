@@ -5,7 +5,7 @@ import { Icon } from '@treeix/app/Icon'
 import { EmptyState, errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
-import { hubAgents, hubApi, hubSettings, registryId } from './store'
+import { hubAgents, hubApi, hubSettings, registryId, runtimeLabel } from './store'
 
 const ROW = 'flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent'
 
@@ -22,7 +22,6 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
   const chat = host.service('chat')
   const registry = useAgents()
   const persona = registry.find((entry) => entry.id === registryId(agent))
-  const runtime = registry.find((entry) => entry.id === agent.runtime.agent)
   const chatId = chatIdOf(agent)
 
   const open = (resume: string | null): void => {
@@ -50,7 +49,7 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
         <AgentAvatar agent={agent} className="size-7 text-sm" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{agent.name}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{[runtime?.label ?? agent.runtime.agent, agent.model, agent.mode].filter(Boolean).join(' · ')}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model, agent.mode].filter(Boolean).join(' · ')}</div>
         </div>
         <IconButton label="New conversation" onClick={restart}>
           <Icon name="plus" className="size-3.5" />
@@ -65,7 +64,7 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
       {chat && persona ? (
         <chat.View chatId={chatId} />
       ) : (
-        <EmptyState fill icon="alert" title={`${agent.name} runs on ${agent.runtime.agent}, which is gone`}>
+        <EmptyState fill icon="alert" title={`${agent.name} runs on ${runtimeLabel(agent.runtime)}, which is gone`}>
           <button onClick={onEdit} className="text-xs text-foreground underline">
             Pick another runtime
           </button>

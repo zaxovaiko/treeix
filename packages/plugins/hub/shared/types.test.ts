@@ -18,6 +18,7 @@ const agent = {
 test('a stored agent passes, one from an older or broken file does not', () => {
   expect(isHubAgent(agent)).toBe(true)
   expect(isHubAgent({ ...agent, model: 3 })).toBe(false)
+  expect(isHubAgent({ ...agent, runtime: { kind: 'api', baseUrl: 'http://localhost:11434/v1' } })).toBe(true)
   expect(isHubAgent({ ...agent, runtime: { kind: 'api' } })).toBe(false)
   const { folder: _, ...missing } = agent
   expect(isHubAgent(missing)).toBe(false)
