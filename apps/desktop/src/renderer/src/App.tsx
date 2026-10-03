@@ -60,8 +60,10 @@ import { isJson, list, object } from '../../shared/json'
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
 /** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
 const DEFAULT_TAB = 'terminal'
+/** The AI Hub opens in zen, and its tab clicked while open goes back to the page before it */
+const HUB_TAB = 'hub'
 /** A first launch, before any workspace saved where it was left, opens the AI Hub */
-const FIRST_RUN_TAB = 'hub'
+const FIRST_RUN_TAB = HUB_TAB
 const isFirstRun = typeof localStorage !== 'undefined' && !Object.keys(localStorage).some((key) => key.startsWith('app.place@'))
 /** Where Worktrees sits among the plugin tabs */
 /** Page tabs dragged in the title bar carry their id */
@@ -248,6 +250,15 @@ function App(): React.JSX.Element {
     const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
     localStorage.setItem(workspaceKey('app.place'), JSON.stringify(place))
   }, [appTab, selected, viewer])
+  const tabBeforeHub = useRef(DEFAULT_TAB)
+  const onHub = appTab === HUB_TAB
+  useEffect(() => {
+    if (onHub) updateShell({ zen: true })
+    else if (getShell().zen) updateShell({ zen: false })
+  }, [onHub])
+  useEffect(() => {
+    if (!onHub) tabBeforeHub.current = appTab
+  }, [appTab])
   const tabBeforeSettings = useRef('worktrees')
   const openSettings = (page?: unknown): void => {
     // Menu and button handlers may pass their event, so only a page id counts
@@ -1547,7 +1558,7 @@ function App(): React.JSX.Element {
             setTimeout(() => setDraggingTab(true))
           }}
           onDragEnd={endTabDrag}
-          onClick={() => goPage(tab.id)}
+          onClick={() => goPage(tab.id === HUB_TAB && onHub ? tabBeforeHub.current : tab.id)}
           onContextMenu={(event) => pageTabMenu(event, tab)}
           className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
         >
