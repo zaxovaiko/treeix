@@ -54,10 +54,11 @@ function Tile({
   return (
     <button title={title} onClick={onClick} onContextMenu={onContextMenu} {...dragProps} {...cursor} className="group/tile relative grid w-full place-items-center py-1">
       {dropEdge && <span className={`pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-[3px]' : '-bottom-[3px]'}`} />}
+      {active && <span data-active-mark className="pointer-events-none absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-r-full bg-foreground" />}
       <span
         style={color ? { background: color } : undefined}
-        className={`relative grid size-8 place-items-center rounded-[9px] text-[11px] font-bold ${color ? 'text-white' : 'bg-foreground/8 text-muted-foreground'} ${
-          active ? '' : 'opacity-60 group-hover/tile:opacity-100'
+        className={`relative grid size-8 place-items-center rounded-[9px] text-[11px] font-bold ${color ? 'text-white' : active ? 'bg-foreground text-background' : 'bg-foreground/8 text-muted-foreground'} ${
+          active ? 'ring-2 ring-foreground ring-offset-2 ring-offset-sidebar' : 'opacity-50 group-hover/tile:opacity-100'
         }`}
       >
         {children}
