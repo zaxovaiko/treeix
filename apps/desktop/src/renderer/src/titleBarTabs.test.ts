@@ -1,23 +1,27 @@
 import { expect, test } from 'bun:test'
-import { arrangeTabs, moveTab, parseTabLayout } from './titleBarTabs'
+import { arrangeBar, moveItem, parseBarLayout, SEARCH_ITEM, SPACE_ITEMS } from './titleBarTabs'
 
-const tabs = ['terminal', 'browser', 'prs', 'worktrees'].map((id) => ({ id }))
-const ids = (side: { id: string }[]): string[] => side.map((tab) => tab.id)
+const [left, right] = SPACE_ITEMS
+const tabs = ['terminal', 'browser', 'prs', 'worktrees']
 
-test('tabs the layout does not name stay left in their default order', () => {
-  const arranged = arrangeTabs(tabs, { left: ['prs'], right: ['browser', 'gone'] })
-  expect(ids(arranged.left)).toEqual(['prs', 'terminal', 'worktrees'])
-  expect(ids(arranged.right)).toEqual(['browser'])
+test('an empty layout puts the tabs before the search between its spaces', () => {
+  expect(arrangeBar(tabs, [])).toEqual([...tabs, left, SEARCH_ITEM, right])
 })
 
-test('a tab moves before another or to the end of either side', () => {
-  const layout = { left: ['terminal', 'browser', 'prs'], right: ['worktrees'] }
-  expect(moveTab(layout, 'prs', 'left', 'terminal')).toEqual({ left: ['prs', 'terminal', 'browser'], right: ['worktrees'] })
-  expect(moveTab(layout, 'terminal', 'right', null)).toEqual({ left: ['browser', 'prs'], right: ['worktrees', 'terminal'] })
-  expect(moveTab(layout, 'worktrees', 'left', 'browser')).toEqual({ left: ['terminal', 'worktrees', 'browser', 'prs'], right: [] })
+test('tabs the layout does not name go before the first space, gone ones drop out', () => {
+  expect(arrangeBar(tabs, ['prs', left, 'browser', SEARCH_ITEM, 'gone', right])).toEqual(['prs', 'terminal', 'worktrees', left, 'browser', SEARCH_ITEM, right])
 })
 
-test('a malformed stored layout reads as empty', () => {
-  expect(parseTabLayout('x')).toEqual({ left: [], right: [] })
-  expect(parseTabLayout({ left: ['a', 1], right: null })).toEqual({ left: ['a'], right: [] })
+test('an item moves before another or to the end', () => {
+  const order = ['terminal', 'hub', left, SEARCH_ITEM, right]
+  expect(moveItem(order, 'hub', SEARCH_ITEM)).toEqual(['terminal', left, 'hub', SEARCH_ITEM, right])
+  expect(moveItem(order, SEARCH_ITEM, 'terminal')).toEqual([SEARCH_ITEM, 'terminal', 'hub', left, right])
+  expect(moveItem(order, 'terminal', null)).toEqual(['hub', left, SEARCH_ITEM, right, 'terminal'])
+})
+
+test('the older left and right sides read as a row', () => {
+  expect(parseBarLayout({ left: ['a', 1], right: ['b'] })).toEqual(['a', left, SEARCH_ITEM, right, 'b'])
+  expect(parseBarLayout({ left: [], right: [] })).toEqual([])
+  expect(parseBarLayout('x')).toEqual([])
+  expect(parseBarLayout(['a', 2, SEARCH_ITEM])).toEqual(['a', SEARCH_ITEM])
 })

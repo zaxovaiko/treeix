@@ -49,7 +49,7 @@ import { menuActions, registerActionRunner, runAction, subscribeRunners } from '
 import { inlineByDefault, refreshToolStatus } from './toolStatus'
 import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
 import { WORKTREE_ACTIONS } from './actions'
-import { arrangeTabs, moveTab, type TabSide, WORKTREES_TAB } from './titleBarTabs'
+import { arrangeBar, isSpace, moveItem, SEARCH_ITEM, SPACE_ITEMS, WORKTREES_TAB } from './titleBarTabs'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
 
@@ -60,7 +60,7 @@ import { isJson, list, object } from '../../shared/json'
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
 /** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
 const DEFAULT_TAB = 'terminal'
-/** The AI Hub opens in zen, and its tab clicked while open goes back to the page before it */
+/** The AI Hub hides the workspace rail, and its tab clicked while open goes back to the page before it */
 const HUB_TAB = 'hub'
 /** A first launch, before any workspace saved where it was left, opens the AI Hub */
 const FIRST_RUN_TAB = HUB_TAB
@@ -253,10 +253,6 @@ function App(): React.JSX.Element {
   const tabBeforeHub = useRef(DEFAULT_TAB)
   const onHub = appTab === HUB_TAB
   useEffect(() => {
-    if (onHub) updateShell({ zen: true })
-    else if (getShell().zen) updateShell({ zen: false })
-  }, [onHub])
-  useEffect(() => {
     if (!onHub) tabBeforeHub.current = appTab
   }, [appTab])
   const tabBeforeSettings = useRef('worktrees')
@@ -270,14 +266,13 @@ function App(): React.JSX.Element {
   const [docTabs, setDocTabs] = useState<DocumentTab[]>([])
   const { loaded: plugins, ready: pluginsReady } = usePlugins()
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
-  /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, left side first, each with the icon picked in Settings */
-  const tabSides = arrangeTabs(
-    [WORKTREES_TAB, ...pluginTabs].sort((a, b) => a.order - b.order).map((tab) => ({ ...tab, icon: settings.tabIcons[tab.id] ?? tab.icon })),
-    settings.titleBarTabs
-  )
-  const tabs = [...tabSides.left, ...tabSides.right]
+  /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, each with the icon picked in Settings */
+  const defaultTabs = [WORKTREES_TAB, ...pluginTabs].sort((a, b) => a.order - b.order).map((tab) => ({ ...tab, icon: settings.tabIcons[tab.id] ?? tab.icon }))
+  const barOrder = arrangeBar(defaultTabs.map((tab) => tab.id), settings.titleBarTabs)
+  const tabs = defaultTabs.toSorted((a, b) => barOrder.indexOf(a.id) - barOrder.indexOf(b.id))
   const [draggingTab, setDraggingTab] = useState(false)
-  const [tabDrop, setTabDrop] = useState<{ side: TabSide; beforeId: string | null } | null>(null)
+  /** Where a dragged title bar item would land: before this item, or at the end when null */
+  const [tabDrop, setTabDrop] = useState<{ beforeId: string | null } | null>(null)
   // Settings and document tabs stay single; a split page whose plugin was turned off just closes
   const splitPage = splitTab !== appTab && !shell.zen ? tabs.find((tab) => tab.id === splitTab) : undefined
   const splitPluginTab = pluginTabs.find((tab) => tab.id === splitPage?.id)
@@ -1290,7 +1285,7 @@ function App(): React.JSX.Element {
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
   // Shown even with no workspace yet: its + is where the first one is made
-  const showRail = shell.rail && !shell.zen
+  const showRail = shell.rail && !shell.zen && !onHub
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1504,25 +1499,25 @@ function App(): React.JSX.Element {
     )
   ]
 
-  const tabDropAt = (event: React.DragEvent<HTMLElement>, side: TabSide): { side: TabSide; beforeId: string | null } => {
-    const before = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-page-tab]')].find((tab) => {
-      const box = tab.getBoundingClientRect()
+  const tabDropAt = (event: React.DragEvent<HTMLElement>): string | null => {
+    const before = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-bar-item]')].find((item) => {
+      const box = item.getBoundingClientRect()
       return event.clientX < box.left + box.width / 2
     })
-    return { side, beforeId: before?.dataset.pageTab ?? null }
+    return before?.dataset.barItem ?? null
   }
   const endTabDrag = (): void => {
     setDraggingTab(false)
     setTabDrop(null)
   }
-  /** A side of the title bar that takes dragged page tabs; it lets the window be dragged by it only while no tab is */
-  const tabDropProps = (side: TabSide): React.HTMLAttributes<HTMLDivElement> => ({
+  /** The title bar row takes dragged tabs and the search field anywhere, Safari style; it lets the window be dragged by its spaces only while nothing is */
+  const tabDropProps: React.HTMLAttributes<HTMLDivElement> = {
     onDragOver: (event) => {
       if (!event.dataTransfer.types.includes(PAGE_TAB_MIME)) return
       event.preventDefault()
-      const next = tabDropAt(event, side)
-      // From the latest state: a dragleave between the zone's children may have just cleared it
-      setTabDrop((current) => (current?.side === next.side && current.beforeId === next.beforeId ? current : next))
+      const beforeId = tabDropAt(event)
+      // From the latest state: a dragleave between the row's children may have just cleared it
+      setTabDrop((current) => (current?.beforeId === beforeId ? current : { beforeId }))
     },
     onDragLeave: (event) => {
       if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setTabDrop(null)
@@ -1531,33 +1526,36 @@ function App(): React.JSX.Element {
       const id = event.dataTransfer.getData(PAGE_TAB_MIME)
       if (!id) return
       event.preventDefault()
-      const { beforeId } = tabDropAt(event, side)
-      updateSettings({ titleBarTabs: moveTab({ left: tabSides.left.map((tab) => tab.id), right: tabSides.right.map((tab) => tab.id) }, id, side, beforeId) })
+      updateSettings({ titleBarTabs: moveItem(barOrder, id, tabDropAt(event)) })
       endTabDrag()
     }
+  }
+  /** Lets a title bar item be dragged to another place in the row; no state updates in dragstart: React re-rendering there makes Chromium cancel the drag */
+  const barItemDrag = (id: string): React.HTMLAttributes<HTMLElement> & { draggable: true; 'data-bar-item': string } => ({
+    'data-bar-item': id,
+    draggable: true,
+    onDragStart: (event) => {
+      event.dataTransfer.setData(PAGE_TAB_MIME, id)
+      event.dataTransfer.effectAllowed = 'move'
+      setTimeout(() => setDraggingTab(true))
+    },
+    onDragEnd: endTabDrag
   })
   const tabDropMark = <span className="relative h-5 w-0 shrink-0"><span className="absolute inset-y-0 -left-px w-0.5 rounded-full bg-foreground/60" /></span>
-  const tabDropZone = (side: TabSide): string => (draggingTab ? `[-webkit-app-region:no-drag] rounded-md outline-1 outline-border outline-dashed ${tabDrop?.side === side ? 'bg-foreground/5' : ''}` : '')
-  const pageTab = (tab: (typeof tabs)[number], side: TabSide): React.ReactNode => {
+  const tabDropZone = draggingTab ? '[-webkit-app-region:no-drag] rounded-md outline-1 outline-border outline-dashed bg-foreground/5' : ''
+  const pageTab = (tab: (typeof tabs)[number]): React.ReactNode => {
     const index = tabs.indexOf(tab)
     const letter = leaderOf(tab.id)?.toUpperCase()
     const compact = settings.compactTabs && appTab !== tab.id
     const digitKey = digitLabel('tabs', index + 1)
     const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
     return (
-      <Fragment key={tab.id}>
-        {tabDrop?.side === side && tabDrop.beforeId === tab.id && tabDropMark}
         <button
+          key={tab.id}
           data-page-tab={tab.id}
-          title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag to reorder or move to the other side`}
-          draggable
-          // No state updates in dragstart: React re-rendering there makes Chromium cancel the drag
-          onDragStart={(event) => {
-            event.dataTransfer.setData(PAGE_TAB_MIME, tab.id)
-            event.dataTransfer.effectAllowed = 'move'
-            setTimeout(() => setDraggingTab(true))
-          }}
-          onDragEnd={endTabDrag}
+          aria-current={appTab === tab.id ? 'page' : undefined}
+          title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag anywhere in the title bar`}
+          {...barItemDrag(tab.id)}
           onClick={() => goPage(tab.id === HUB_TAB && onHub ? tabBeforeHub.current : tab.id)}
           onContextMenu={(event) => pageTabMenu(event, tab)}
           className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
@@ -1567,7 +1565,6 @@ function App(): React.JSX.Element {
           {'Badge' in tab && tab.Badge && <tab.Badge />}
           {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
         </button>
-      </Fragment>
     )
   }
 
@@ -1843,112 +1840,121 @@ function App(): React.JSX.Element {
     </div>
   )
 
+  const openDocs = (
+    <>
+      {docTabs.map((tab) => (
+        <div
+          key={tab.key}
+          className={tabClass(appTab === tab.key)}
+          onContextMenu={(event) =>
+            tabMenu(
+              event,
+              () => closeTab(tab.key),
+              () => {
+                setDocTabs([tab])
+                setAppTab(tab.key)
+              }
+            )
+          }
+        >
+          <button onClick={() => setAppTab(tab.key)} className="flex min-w-0 items-center gap-1.5">
+            {tab.icon}
+            <span className="truncate">{tab.title}</span>
+          </button>
+          <button aria-label="Close tab" onClick={() => closeTab(tab.key)} className="text-muted-foreground hover:text-foreground">
+            <Icon name="close" className="size-3" />
+          </button>
+        </div>
+      ))}
+      <button
+        title={settings.compactTabs ? 'Show every tab name' : 'Show only the active tab name'}
+        aria-pressed={settings.compactTabs}
+        onClick={() => updateSettings({ compactTabs: !settings.compactTabs })}
+        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
+      >
+        <Icon name="chevron" className={`size-3.5 ${settings.compactTabs ? '' : 'rotate-180'}`} />
+      </button>
+    </>
+  )
+  const searchField = (
+    <button
+      title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
+      onClick={() => setPaletteOpen(true)}
+      {...barItemDrag(SEARCH_ITEM)}
+      className="mx-1 flex h-6 w-40 min-w-24 shrink-0 items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
+    >
+      <Icon name="search" className="size-3.5 shrink-0" />
+      <span className="min-w-0 truncate whitespace-nowrap">Run command</span>
+      <Kbd hint>{actionKeys('app.palette')}</Kbd>
+    </button>
+  )
+
   return (
     <HostContext.Provider value={host}>
     <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
       {showTitle && (
-      <div
-        className={`h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] ${chromeless ? '' : '[-webkit-app-region:drag]'}`}
-      >
-        {/* Grid columns as wide as the right side, traffic lights included, so Run command sits in the middle of the window */}
-        <div className={`flex min-w-0 flex-1 items-center gap-0.5 ${chromeless ? '' : 'pl-[80px]'}`}>
-        <span className="mr-1">
-          <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={shell.rail} onClick={() => toggleShellPanel('rail')}>
+      <div className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'}`}>
+        <span className={`mr-1 shrink-0 ${chromeless ? '' : 'pl-[80px]'}`}>
+          <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={showRail} onClick={() => toggleShellPanel('rail')}>
             <Icon name="panel" className="size-3.5" />
           </IconButton>
         </span>
-        <div {...tabDropProps('left')} className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone('left')}`}>
-        {tabSides.left.map((tab) => pageTab(tab, 'left'))}
-        {tabDrop?.side === 'left' && tabDrop.beforeId === null && tabDropMark}
-        {docTabs.map((tab) => (
-          <div
-            key={tab.key}
-            className={tabClass(appTab === tab.key)}
-            onContextMenu={(event) =>
-              tabMenu(
-                event,
-                () => closeTab(tab.key),
-                () => {
-                  setDocTabs([tab])
-                  setAppTab(tab.key)
-                }
-              )
-            }
-          >
-            <button onClick={() => setAppTab(tab.key)} className="flex min-w-0 items-center gap-1.5">
-              {tab.icon}
-              <span className="truncate">{tab.title}</span>
-            </button>
-            <button aria-label="Close tab" onClick={() => closeTab(tab.key)} className="text-muted-foreground hover:text-foreground">
-              <Icon name="close" className="size-3" />
-            </button>
-          </div>
-        ))}
-        <button
-          title={settings.compactTabs ? 'Show every tab name' : 'Show only the active tab name'}
-          aria-pressed={settings.compactTabs}
-          onClick={() => updateSettings({ compactTabs: !settings.compactTabs })}
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
-        >
-          <Icon name="chevron" className={`size-3.5 ${settings.compactTabs ? '' : 'rotate-180'}`} />
-        </button>
-        </div>
-        </div>
-        <button
-          title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
-          onClick={() => setPaletteOpen(true)}
-          className="mx-1 flex h-6 w-40 min-w-24 shrink-0 items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
-        >
-          <Icon name="search" className="size-3.5 shrink-0" />
-          <span className="min-w-0 truncate whitespace-nowrap">Run command</span>
-          <Kbd hint>{actionKeys('app.palette')}</Kbd>
-        </button>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">
-        <div {...tabDropProps('right')} className={`flex h-7 min-w-0 flex-1 items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone('right')}`}>
-          {tabSides.right.map((tab) => pageTab(tab, 'right'))}
-          {tabDrop?.side === 'right' && tabDrop.beforeId === null && tabDropMark}
-        </div>
-        {titleBarItems(false)}
-        {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
-        {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
-          const info = panelInfo(panel)
-          const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
-          return info ? (
-            <PanelToggle
-              key={panel}
-              id={panel}
-              info={info}
-              active={dock.isVisible(panel)}
-              side={dock.sideOf(panel)}
-              badge={Badge && <Badge />}
-              onToggle={() => dock.toggle(panel)}
-              onMove={(side) => dock.move(panel, side)}
-              onDragStart={() => startPanelDrag(panel)}
-              onDragEnd={() => setDraggingPanel(null)}
-            />
-          ) : null
+        <div {...tabDropProps} className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone}`}>
+        {barOrder.map((id) => {
+          const tab = tabs.find((candidate) => candidate.id === id)
+          return (
+            <Fragment key={id}>
+              {tabDrop?.beforeId === id && tabDropMark}
+              {/* Open documents follow the tabs before the first space */}
+              {id === SPACE_ITEMS[0] && openDocs}
+              {isSpace(id) ? <span data-bar-item={id} className="h-full min-w-2 flex-1" /> : id === SEARCH_ITEM ? searchField : tab && pageTab(tab)}
+            </Fragment>
+          )
         })}
-        <button
-          title={`Agent comments (${actionKeys('app.comments')})`}
-          onClick={() => setDrawerOpen(!drawerOpen)}
-          className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
-        >
-          <Icon name="comment" />
-          {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
-          <Kbd hint>{actionKeys('app.comments')}</Kbd>
-        </button>
-        <McpInstallButton flash={flash} />
-        <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
-          <Icon name="settings" />
-        </IconButton>
-        {titleBarItems(true)}
+        {tabDrop?.beforeId === null && tabDropMark}
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {titleBarItems(false)}
+          {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
+          {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
+            const info = panelInfo(panel)
+            const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
+            return info ? (
+              <PanelToggle
+                key={panel}
+                id={panel}
+                info={info}
+                active={dock.isVisible(panel)}
+                side={dock.sideOf(panel)}
+                badge={Badge && <Badge />}
+                onToggle={() => dock.toggle(panel)}
+                onMove={(side) => dock.move(panel, side)}
+                onDragStart={() => startPanelDrag(panel)}
+                onDragEnd={() => setDraggingPanel(null)}
+              />
+            ) : null
+          })}
+          <button
+            title={`Agent comments (${actionKeys('app.comments')})`}
+            onClick={() => setDrawerOpen(!drawerOpen)}
+            className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+          >
+            <Icon name="comment" />
+            {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
+            <Kbd hint>{actionKeys('app.comments')}</Kbd>
+          </button>
+          <McpInstallButton flash={flash} />
+          <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
+            <Icon name="settings" />
+          </IconButton>
+          {titleBarItems(true)}
         </div>
       </div>
       )}
 
-      {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights */}
-      {!showTitle && !chromeless && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
+      {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights; in zen the terminal's tab strip is that */}
+      {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
       <div
         className="flex min-h-0 flex-1"
         onFocusCapture={(event) => setSplitFocused(event.target instanceof Element && event.target.closest('[data-split-pane]') !== null)}

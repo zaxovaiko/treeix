@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
@@ -15,6 +15,12 @@ const fake = {
   command: null,
   agent: true,
   chat: { adapter: 'acp', command: `"${process.execPath}" "${join(__dirname, 'fakeAcpAgent.mjs')}"` }
+}
+
+/** Shows the AI Hub; its tab clicked while it is open would go back to the page before it */
+async function showHub(page: Page): Promise<void> {
+  const tab = page.locator('[data-page-tab="hub"]')
+  if ((await tab.getAttribute('aria-current')) !== 'page') await tab.click()
 }
 
 /** An OpenAI-compatible API that thinks, then answers with what it was sent */
@@ -62,7 +68,7 @@ test.afterAll(async () => {
 
 test('an agent made in the AI Hub chats as itself and joins the new-tab menu', async () => {
   const { page } = launched
-  await page.locator('[data-page-tab="hub"]').click()
+  await showHub(page)
   await page.getByRole('button', { name: 'Create an agent' }).click()
 
   await page.getByPlaceholder('Reviewer').fill('Scout')
@@ -94,7 +100,7 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
   await page.keyboard.press('Enter')
   await expect(page.getByText('Chat with Scout')).toBeVisible({ timeout: 20_000 })
 
-  await page.locator('[data-page-tab="hub"]').click()
+  await showHub(page)
   page.once('dialog', (dialog) => void dialog.accept())
   await page.getByRole('button', { name: 'Delete agent' }).click()
   await expect(page.getByRole('button', { name: 'Create an agent' })).toBeVisible()
@@ -103,7 +109,7 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
 test('an agent on an OpenAI-compatible API lists its models and chats with its instructions', async () => {
   const { page } = launched
   const baseUrl = await startApi()
-  await page.locator('[data-page-tab="hub"]').click()
+  await showHub(page)
   await page.getByRole('button', { name: 'Create an agent' }).click()
 
   await page.getByPlaceholder('Reviewer').fill('Local')
@@ -125,7 +131,7 @@ test('an agent on an OpenAI-compatible API lists its models and chats with its i
 
 test('asking an agent from the palette records a run with its thinking and answer', async () => {
   const { page } = launched
-  await page.locator('[data-page-tab="hub"]').click()
+  await showHub(page)
   await page.getByRole('button', { name: 'New agent' }).click()
   await page.getByPlaceholder('Reviewer').fill('Courier')
   await choose(page, 'Runtime', 'Fake')
@@ -146,7 +152,7 @@ test('asking an agent from the palette records a run with its thinking and answe
 test('a workflow built on the canvas runs its agent, shows each step done and undoes edits', async () => {
   const { page } = launched
   const steps = page.locator('.react-flow__node')
-  await page.locator('[data-page-tab="hub"]').click()
+  await showHub(page)
   await page.getByRole('button', { name: 'New workflow' }).click()
   await page.getByRole('textbox', { name: 'Workflow name' }).fill('Relay')
 
@@ -194,7 +200,7 @@ test('an approval step holds the run, counted on the tab, until approved', async
   // The first Esc clears the last test's query, the next closes the palette
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
-  await hubTab.click()
+  await showHub(page)
   await page.getByRole('button', { name: 'New workflow' }).click()
   await page.getByRole('textbox', { name: 'Workflow name' }).fill('Gate')
   await steps.filter({ hasText: 'Input' }).click()
@@ -221,4 +227,15 @@ test('a first launch opens the AI Hub', async () => {
   } finally {
     await fresh.close()
   }
+})
+
+test('the AI Hub tab clicked while open goes back to the page before it', async () => {
+  const { page } = launched
+  const hubTab = page.locator('[data-page-tab="hub"]')
+  const worktreesTab = page.locator('[data-page-tab="worktrees"]')
+  await worktreesTab.click()
+  await hubTab.click()
+  await expect(hubTab).toHaveAttribute('aria-current', 'page')
+  await hubTab.click()
+  await expect(worktreesTab).toHaveAttribute('aria-current', 'page')
 })

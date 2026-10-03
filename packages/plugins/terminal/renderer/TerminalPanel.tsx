@@ -12,7 +12,7 @@ import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
 import { ListToggle, useHost, usePanels } from '@treeix/sdk'
-import { errorMessage, ResizeGrip } from '@treeix/app/ui'
+import { errorMessage, ResizeGrip, useChromeless } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { droppedPaths } from './fileLinks'
@@ -574,6 +574,9 @@ function TabStrip({
   onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
   const panels = usePanels()
+  // In zen the page's strip moves up beside the traffic lights and drags the window, in place of the title bar
+  const chromeless = useChromeless()
+  const topBar = page && panels.zen && !chromeless
   const newTab = (kind: SessionKind, view: SessionView): void => openTab(task?.worktreePath ?? cwd, kind, task?.id, view)
   const entries = useNewTabEntries()
   const menuEntry = (entry: NewTabEntry): MenuEntry => ({
@@ -594,7 +597,7 @@ function TabStrip({
   // A lone pane has no header, so its plan shows here
   const lone = activeTab && tabPanes(activeTab).length === 1 ? sessions.find((session) => session.id === tabPanes(activeTab)[0]) : undefined
   return (
-    <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5">
+    <div className={`flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
           <ListToggle />
@@ -602,7 +605,7 @@ function TabStrip({
           <span className="ml-1 h-4 w-px shrink-0 bg-border" />
         </div>
       )}
-      <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto [-webkit-app-region:no-drag]">
         {task?.tabs.map((tab, index) => <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />)}
       </div>
       <button

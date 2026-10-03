@@ -4,7 +4,7 @@ import { isShortcut, type Shortcut } from '../../shared/shortcut'
 import type { NavigationKind } from '../../shared/types'
 import type { Agent } from './agents'
 import { codeTheme, DEFAULT_THEME, resolveTheme, subscribeThemes, type Theme } from './themes'
-import { parseTabLayout, type TabLayout } from './titleBarTabs'
+import { type BarLayout, parseBarLayout } from './titleBarTabs'
 import { type IconName, isIconName } from './Icon'
 import { isJson, object } from '../../shared/json'
 import { readStored } from './storage'
@@ -34,7 +34,7 @@ export type Settings = {
   /** Title bar tabs other than the active one show only their icon */
   compactTabs: boolean
   /** Page tabs moved to the right of the title bar or reordered by dragging */
-  titleBarTabs: TabLayout
+  titleBarTabs: BarLayout
   /** Page tab icons picked in Settings, by tab id; absent ones keep their own */
   tabIcons: Record<string, IconName>
   editorMinimap: boolean
@@ -201,7 +201,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], chatAgent: 'claude', chatFullWidth: false, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', compactTabs: true, titleBarTabs: { left: [], right: [] }, tabIcons: {}, editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, codexSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], chatAgent: 'claude', chatFullWidth: false, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', compactTabs: true, titleBarTabs: [], tabIcons: {}, editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, codexSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -258,7 +258,7 @@ function load(): Settings {
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
       bottomPanel: candidate.bottomPanel === 'full' ? 'full' : 'content',
       compactTabs: flag('compactTabs'),
-      titleBarTabs: parseTabLayout(candidate.titleBarTabs),
+      titleBarTabs: parseBarLayout(candidate.titleBarTabs),
       tabIcons: parseTabIcons(candidate.tabIcons),
       editorMinimap: flag('editorMinimap'),
       editorLineNumbers: candidate.editorLineNumbers === 'relative' || candidate.editorLineNumbers === 'off' ? candidate.editorLineNumbers : 'on',

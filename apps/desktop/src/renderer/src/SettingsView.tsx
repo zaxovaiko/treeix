@@ -9,7 +9,7 @@ import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, ty
 import { type Agent, useAgents } from './agents'
 import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile, removeCustomTheme, type Theme } from './themes'
 import { EmptyState, Popup, useMenuKeys } from './ui'
-import { arrangeTabs, WORKTREES_TAB } from './titleBarTabs'
+import { arrangeBar, WORKTREES_TAB } from './titleBarTabs'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
@@ -841,10 +841,10 @@ function TabIcons(): React.JSX.Element {
   const { titleBarTabs } = useSettings()
   const { loaded } = usePlugins()
   const pages = [WORKTREES_TAB, ...loaded.flatMap(({ plugin }) => plugin.tabs ?? [])].sort((a, b) => a.order - b.order)
-  const { left, right } = arrangeTabs(pages, titleBarTabs)
+  const order = arrangeBar(pages.map((page) => page.id), titleBarTabs)
   return (
     <Card title="Tab icons">
-      {[...left, ...right].map((tab) => (
+      {pages.toSorted((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map((tab) => (
         <TabIconRow key={tab.id} tab={tab} />
       ))}
     </Card>
