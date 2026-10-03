@@ -111,7 +111,8 @@ bridge.on('status', (id, status) => {
   const previous = hookStatus.get(id)
   hookStatus.set(id, status)
   if (status === 'done') finishedTurns.add(id)
-  if (status === 'done' || (status === 'input' && previous !== 'input')) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
+  // The status folder's watcher can report one write several times, so only a change notifies
+  if (status !== 'working' && status !== previous) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
 })
 
 /**

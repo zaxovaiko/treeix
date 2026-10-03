@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { type ChatService, createBridge, type RendererPlugin } from '@treeix/sdk'
 import { agentOr } from '@treeix/app/agents'
+import { getSettings } from '@treeix/app/settings'
 import { Chat } from './Chat'
 import { appendDraft, chatIds, forget, getChat, listen, start, statusOf, stop, subscribe, titleOf } from './store'
 
@@ -27,7 +28,7 @@ function Root(): null {
       for (const chatId of chatIds()) {
         const chat = getChat(chatId)
         const status = statusOf(chat)
-        if (status === 'input' && previous.get(chatId) !== 'input' && document.hidden && chat.options) {
+        if (status === 'input' && previous.get(chatId) !== 'input' && document.hidden && chat.options && getSettings().agentNotifications) {
           new Notification(`${agentOr(chat.options.agent).label} needs you`)
         }
         previous.set(chatId, status)

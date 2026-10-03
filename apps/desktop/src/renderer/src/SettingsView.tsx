@@ -411,6 +411,13 @@ const SETTINGS: SettingSpec[] = [
     Control: toggle('hotkeyOnly', 'Hotkey window only')
   },
   {
+    section: 'General',
+    card: 'Notifications',
+    label: 'Agent notifications',
+    description: 'A macOS notification when an agent session or chat finishes or needs an answer while Treeix is in the background. Click it to open the session.',
+    Control: toggle('agentNotifications', 'Agent notifications')
+  },
+  {
     section: 'Appearance',
     card: 'Window',
     label: 'Transparency',
@@ -501,13 +508,6 @@ const SETTINGS: SettingSpec[] = [
     label: 'Skip Codex approvals and sandbox',
     description: 'Starts Codex terminal sessions with --dangerously-bypass-approvals-and-sandbox, so it runs every command without asking or sandboxing. Applies to sessions started after the change.',
     Control: toggle('codexSkipPermissions', 'Skip Codex approvals and sandbox')
-  },
-  {
-    section: 'Terminal',
-    card: 'Agent sessions',
-    label: 'Notifications',
-    description: 'A macOS notification when Claude finishes or needs an answer while Treeix is in the background. Click it to open the session.',
-    Control: toggle('agentNotifications', 'Notifications')
   },
   {
     section: 'Terminal',
