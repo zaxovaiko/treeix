@@ -16,6 +16,7 @@ const service: ChatService = {
   forget,
   terminalCommand: (chatId) => getChat(chatId).terminalCommand,
   agentSessionId: (chatId) => getChat(chatId).agentSessionId,
+  agent: (chatId) => getChat(chatId).options?.agent ?? null,
   title: (chatId) => titleOf(getChat(chatId)),
   subscribe
 }

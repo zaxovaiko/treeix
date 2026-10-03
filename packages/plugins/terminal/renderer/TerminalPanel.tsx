@@ -8,7 +8,7 @@ import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { ActivityMark } from '@treeix/app/activity'
 import { activityOf, KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
-import { agentOr, useAgents } from '@treeix/app/agents'
+import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
 import { ListToggle, useHost, usePanels } from '@treeix/sdk'
@@ -73,12 +73,12 @@ const acceleratorOf = (action: string | undefined): string | undefined => {
 export const openTab = (cwd: string, kind: SessionKind, taskId?: string, view: SessionView = 'terminal'): void =>
   void createSession(cwd, kind, undefined, taskId, view).then((id) => setTimeout(() => focusSession(id)))
 
-/** Each agent in its default view, then below the other view of agents that chat; terminals only while the chat plugin is off */
-function useNewTabEntries(): { main: NewTabEntry[]; other: NewTabEntry[] } {
+/** Each agent in a terminal, then a chat while the chat plugin is on */
+function useNewTabEntries(): NewTabEntry[] {
   const chat = useService('chat')
-  const { agentViews } = useSettings()
-  const entries = newTabEntries(useAgents(), chat ? agentViews : {})
-  return { main: entries.filter((entry) => !entry.secondary), other: chat ? entries.filter((entry) => entry.secondary) : [] }
+  // The chat starts with the agent last picked in one
+  useSettings()
+  return newTabEntries(useAgents(), chat ? chatAgent() : undefined)
 }
 
 /** "Claude · chat" beside a chat's title */
@@ -164,7 +164,7 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
 /** Actions of a session, in its pane header, tab and terminal menus */
 const sessionEntries = (session: Session, task: Task | null, flash: (message: string) => void): MenuEntry[] => [
   {
-    label: `New ${agentOr(session.kind).label} ${session.view === 'chat' ? 'chat' : 'tab'} here`,
+    label: session.view === 'chat' ? 'New chat here' : `New ${agentOr(session.kind).label} tab here`,
     run: () => openTab(session.worktreePath, session.kind, task?.id, session.view)
   },
   otherView(session) === 'chat' && { label: 'Open as chat', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
@@ -563,15 +563,16 @@ function TabStrip({
 }): React.JSX.Element {
   const panels = usePanels()
   const newTab = (kind: SessionKind, view: SessionView): void => openTab(task?.worktreePath ?? cwd, kind, task?.id, view)
-  const { main, other } = useNewTabEntries()
+  const entries = useNewTabEntries()
   const menuEntry = (entry: NewTabEntry): MenuEntry => ({
     label: entry.label,
-    accelerator: acceleratorOf(entry.view === 'terminal' ? NEW_TAB_ACTIONS[entry.agent] : undefined),
+    accelerator: acceleratorOf(entry.view === 'chat' ? 'terminal.newChat' : NEW_TAB_ACTIONS[entry.agent]),
     run: () => newTab(entry.agent, entry.view)
   })
-  // Claude in the view Settings gives it
-  const claude = main.find((entry) => entry.agent === 'claude')
-  const showMenu = (event: React.MouseEvent): void => openMenu(event, [...main.map(menuEntry), null, ...other.map(menuEntry)])
+  const claude = entries.find((entry) => entry.agent === 'claude' && entry.view === 'terminal')
+  const terminals = entries.filter((entry) => entry.view === 'terminal')
+  const chats = entries.filter((entry) => entry.view === 'chat')
+  const showMenu = (event: React.MouseEvent): void => openMenu(event, [...terminals.map(menuEntry), null, ...chats.map(menuEntry)])
   // A click opens Claude; holding opens the menu instead, and the click that ends the hold does nothing
   const pressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const held = useRef(false)
@@ -654,7 +655,7 @@ function TabStrip({
 
 /** A task with no terminals: start one, or bring back a closed one */
 function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; label: string; cwd: string; history: ClosedSession[]; repos: Repo[] | null }): React.JSX.Element {
-  const { main } = useNewTabEntries()
+  const entries = useNewTabEntries()
   return (
     <div data-terminal-empty className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-y-auto bg-background p-4 text-center">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground/5 text-muted-foreground">
@@ -664,14 +665,14 @@ function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; la
         No terminals in <span className="text-foreground">{label}</span>
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        {main.map(({ agent: kind, label: kindLabel, view }, index) => (
+        {entries.map(({ agent: kind, label: kindLabel, view }, index) => (
           <button
-            key={kind}
+            key={`${view}:${kind}`}
             data-zone-focus={index === 0 ? '' : undefined}
             onClick={() => openTab(task?.worktreePath ?? cwd, kind, task?.id, view)}
             className="flex h-8 items-center gap-2 rounded-md bg-foreground/5 px-3 text-xs text-foreground hover:bg-accent"
           >
-            <KindBadge kind={kind} />
+            {view === 'chat' ? <Icon name="comment" className="size-3.5 text-muted-foreground" /> : <KindBadge kind={kind} />}
             {kindLabel}
           </button>
         ))}

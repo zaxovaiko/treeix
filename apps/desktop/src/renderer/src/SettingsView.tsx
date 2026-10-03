@@ -512,6 +512,25 @@ const SETTINGS: SettingSpec[] = [
   {
     section: 'Terminal',
     card: 'Agent sessions',
+    label: 'Chat width',
+    description: 'Fixed keeps chats at a readable line length; full uses the whole pane. The button at the top of a chat switches it too.',
+    Control: function ChatWidth() {
+      const { chatFullWidth } = useSettings()
+      return (
+        <Segmented
+          value={chatFullWidth ? 'full' : 'fixed'}
+          options={[
+            ['fixed', 'Fixed'],
+            ['full', 'Full']
+          ]}
+          onChange={(next) => updateSettings({ chatFullWidth: next === 'full' })}
+        />
+      )
+    }
+  },
+  {
+    section: 'Terminal',
+    card: 'Agent sessions',
     label: 'Thinking in chats',
     description: 'How a chat session shows an agent’s thinking blocks.',
     Control: function ChatThinking() {
@@ -1002,7 +1021,7 @@ function ChatAvailability({ agentId, command }: { agentId: string; command: stri
 }
 
 function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React.JSX.Element {
-  const { customAgents: custom, agentViews } = useSettings()
+  const { customAgents: custom } = useSettings()
   const write = (next: Agent[]): void => updateSettings({ customAgents: next })
   const edit = (key: AgentField, value: string): void =>
     write(custom.map((entry) => (entry.id === agent.id ? { ...entry, [key]: key === 'command' && !value ? null : value } : entry)))
@@ -1022,18 +1041,8 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
         )}
       </Row>
       {agent.chat && (
-        <Row label="Opens as" description={agent.chat.command}>
-          <div className="flex items-center gap-2">
-            <ChatAvailability agentId={agent.id} command={agent.chat.command} />
-            <Segmented
-              value={agentViews[agent.id] === 'chat' ? 'chat' : 'terminal'}
-              options={[
-                ['chat', 'Chat'],
-                ['terminal', 'Terminal']
-              ]}
-              onChange={(next) => updateSettings({ agentViews: { ...getSettings().agentViews, [agent.id]: next } })}
-            />
-          </div>
+        <Row label="Chat" description={agent.chat.command}>
+          <ChatAvailability agentId={agent.id} command={agent.chat.command} />
         </Row>
       )}
       {!builtin &&

@@ -19,6 +19,8 @@ export type ChatState = {
   sending: boolean
   options: ChatStartOptions | null
   agentSessionId: string | null
+  /** When the message being answered was sent, for the time the agent has been at it */
+  turnStartedAt: number | null
 }
 
 export const emptyChat: ChatState = {
@@ -31,7 +33,8 @@ export const emptyChat: ChatState = {
   connected: false,
   sending: false,
   options: null,
-  agentSessionId: null
+  agentSessionId: null,
+  turnStartedAt: null
 }
 
 export function statusOf(state: ChatState): SessionStatus {
@@ -61,6 +64,22 @@ export function titleOf(state: ChatState): string | null {
 
 export const isBusy = (state: ChatState): boolean => state.sending || state.feed.running
 
+/** What the agent is doing now, from the newest block */
+export function activityOf(chat: ChatState): string {
+  const last = chat.feed.blocks.at(-1)
+  if (!chat.feed.running) return 'Sending'
+  if (last?.type === 'thought' && last.endedAt === null) return 'Thinking'
+  if (last?.type === 'tool' && last.call.status !== 'completed' && last.call.status !== 'failed') return last.call.title || 'Running a tool'
+  if (last?.type === 'text' && last.role === 'agent') return 'Writing'
+  return 'Working'
+}
+
+/** Starting or reconnecting: the agent was asked for and neither answered nor failed yet */
+export const isConnecting = (state: ChatState): boolean => state.options !== null && !state.connected && state.error === null
+
+/** Agents can't take over each other's conversations, so a chat picks its agent only before it has one */
+export const hasConversation = (state: ChatState): boolean => state.feed.blocks.length > 0 || state.queue.length > 0 || isBusy(state) || state.options?.resume != null
+
 /** Agents don't echo live prompts, so the user's message goes into the feed here, always as its own block */
 export function withUserMessage(feed: Feed, content: ChatContent[]): Feed {
   const text = content.map((item) => (item.type === 'text' ? item.text : '')).join('')
@@ -68,12 +87,12 @@ export function withUserMessage(feed: Feed, content: ChatContent[]): Feed {
   return { ...feed, blocks: [...feed.blocks, { type: 'text', role: 'user', text, images }] }
 }
 
-const beginTurn = (state: ChatState, content: ChatContent[]): ChatState => ({ ...state, sending: true, feed: withUserMessage(state.feed, content) })
+const beginTurn = (state: ChatState, content: ChatContent[]): ChatState => ({ ...state, sending: true, turnStartedAt: Date.now(), feed: withUserMessage(state.feed, content) })
 
 /** What the prompt that just resolved leaves behind: the next queued message already started, so the chat never looks idle in between */
 export function afterPrompt(state: ChatState): { state: ChatState; next: ChatContent[] | null } {
   const [next, ...rest] = state.queue
-  if (!next || !state.connected) return { state: { ...state, sending: false }, next: null }
+  if (!next || !state.connected) return { state: { ...state, sending: false, turnStartedAt: null }, next: null }
   return { state: beginTurn({ ...state, queue: rest }, next), next }
 }
 
@@ -193,9 +212,17 @@ function reconnect(chatId: string): Promise<string> {
 
 export const retry = (chatId: string): void => void reconnect(chatId).catch(() => undefined)
 
+/** Starts the chat over with another agent; for a chat without a conversation yet, see `hasConversation` */
+export function switchAgent(chatId: string, agent: { id: string; chat?: { adapter: string; command: string } }): Promise<string> {
+  const { options } = getChat(chatId)
+  if (!options || !agent.chat) return Promise.reject(new Error(`${agent.id} can't chat`))
+  update(chatId, (state) => ({ ...state, connected: false, capabilities: null, terminalCommand: null, agentSessionId: null, feed: emptyFeed }))
+  return connect(chatId, { ...options, agent: agent.id, adapter: agent.chat.adapter, command: agent.chat.command, resume: null }, false)
+}
+
 export function stop(chatId: string): void {
   bridge?.send('stop', chatId)
-  update(chatId, (state) => ({ ...state, connected: false, sending: false, queue: [], feed: { ...state.feed, running: false, waiting: false } }))
+  update(chatId, (state) => ({ ...state, connected: false, sending: false, turnStartedAt: null, queue: [], feed: { ...state.feed, running: false, waiting: false } }))
 }
 
 /** Sends a prompt whose turn `beginTurn` already started */

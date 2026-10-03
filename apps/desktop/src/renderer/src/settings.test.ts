@@ -41,13 +41,6 @@ test('parseCustomAgents keeps chat only when adapter and command are both string
   expect(parseCustomAgents([{ ...base, chat: { command: 'aider --acp' } }])[0]?.chat).toBeUndefined()
 })
 
-test('parseAgentViews drops garbage and keeps only chat/terminal values', async () => {
-  const { parseAgentViews } = await import('./settings')
-  expect(parseAgentViews(null)).toEqual({})
-  expect(parseAgentViews('nonsense')).toEqual({})
-  expect(parseAgentViews({ claude: 'chat', codex: 'terminal', shell: 'loud', gemini: 3 })).toEqual({ claude: 'chat', codex: 'terminal' })
-})
-
 test('parseChatThinking falls back to collapsed for unknown values and keeps expanded/hidden', async () => {
   const { parseChatThinking } = await import('./settings')
   expect(parseChatThinking(undefined)).toBe('collapsed')

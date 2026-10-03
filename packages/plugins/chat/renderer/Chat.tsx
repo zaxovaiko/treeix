@@ -1,19 +1,90 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useHost } from '@treeix/sdk'
+import { agentOr } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { ErrorBlock, firstAllow, firstReject, PermissionCard, TextBlock, ThoughtBlock, ToolCard } from './Blocks'
+import { useSettings } from '@treeix/app/settings'
+import { baseName } from '@treeix/app/Sidebar'
+import { ErrorBlock, firstAllow, firstReject, formatElapsed, PermissionCard, TextBlock, ThoughtBlock, ToolCard, useElapsed } from './Blocks'
 import { Composer } from './ChatComposer'
 import type { Block, PendingPermission } from './feed'
-import { answer, cancel, isBusy, retry, useChat } from './store'
+import { activityOf, answer, cancel, type ChatState, isBusy, isConnecting, retry, useChat } from './store'
 
 const STICK_PX = 40
+
+function Activity({ chat }: { chat: ChatState }): React.JSX.Element {
+  const seconds = useElapsed(chat.turnStartedAt, true)
+  if (chat.feed.waiting) {
+    return (
+      <div className="flex items-center gap-2 px-1 text-xs text-amber-300">
+        <Icon name="alert" className="size-3.5 shrink-0" />
+        <span>Waiting for your approval</span>
+        <span className="text-muted-foreground">⌘↵ allow · Esc deny</span>
+      </div>
+    )
+  }
+  return (
+    <div role="status" className="flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground">
+      <Icon name="loader" className="size-3.5 shrink-0 animate-spin text-sky-400" />
+      <span className="min-w-0 truncate text-foreground/85">{activityOf(chat)}…</span>
+      {chat.turnStartedAt !== null && <span className="shrink-0 tabular-nums">{formatElapsed(seconds)}</span>}
+      <span className="shrink-0">· Esc to stop</span>
+    </div>
+  )
+}
+
+/** Before the first message: starting the agent, why it failed to start, or what the chat can do */
+function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cwd: string }): React.JSX.Element {
+  const agent = agentOr(chat.options?.agent ?? '')
+  if (chat.error && !chat.connected) {
+    return (
+      <div className="m-auto flex max-w-md flex-col items-center gap-3 px-4 text-center text-sm">
+        <Icon name="alert" className="size-6 text-red-400" />
+        <div className="text-foreground">{agent.label} could not start</div>
+        <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground select-text">{chat.error}</div>
+        {chat.options && (
+          <button onClick={() => retry(chatId)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+            Retry
+          </button>
+        )}
+      </div>
+    )
+  }
+  if (!chat.connected) {
+    return (
+      <div role="status" className="m-auto flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
+        <Icon name="loader" className="size-5 animate-spin text-sky-400" />
+        <div className="text-foreground">Starting {agent.label}…</div>
+        <div className="text-xs">The first start downloads the adapter and can take a while</div>
+      </div>
+    )
+  }
+  return (
+    <div className="m-auto flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
+      <span style={{ color: agent.color }} className="text-3xl">
+        {agent.mark}
+      </span>
+      <div className="text-base text-foreground">Chat with {agent.label}</div>
+      <div className="font-mono text-xs" title={cwd}>
+        {baseName(cwd)}
+      </div>
+      <ul className="mt-2 flex flex-col gap-1 text-xs">
+        <li>@ adds a file · / runs a command</li>
+        {chat.capabilities?.images && <li>Paste or drop images</li>}
+        <li>Esc stops the agent</li>
+      </ul>
+    </div>
+  )
+}
 
 const pendingOf = (block: Block): PendingPermission | null => (block.type === 'permission' ? block.permission : block.type === 'tool' ? block.permission : null)
 
 export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
   const host = useHost()
   const chat = useChat(chatId)
+  const { chatFullWidth } = useSettings()
   const { feed } = chat
+  const width = chatFullWidth ? 'max-w-none' : 'max-w-3xl'
+  const empty = feed.blocks.length === 0
   const cwd = chat.options?.cwd ?? host.defaultCwd
   const root = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -95,12 +166,25 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
           const element = event.currentTarget
           atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
         }}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
       >
-        <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">{feed.blocks.map(renderBlock)}</div>
+        <div ref={content} className={`mx-auto flex w-full flex-1 ${width} flex-col gap-3 px-4 py-4`}>
+          {empty ? <EmptyState chatId={chatId} chat={chat} cwd={cwd} /> : feed.blocks.map(renderBlock)}
+        </div>
       </div>
-      <div className="mx-auto w-full max-w-3xl">
-        {chat.error && (
+      <div className={`mx-auto w-full ${width}`}>
+        {!empty && isConnecting(chat) && (
+          <div role="status" className="mx-4 mb-2 flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
+            Reconnecting to {agentOr(chat.options?.agent ?? '').label}…
+          </div>
+        )}
+        {isBusy(chat) && (
+          <div className="mx-4 mb-2">
+            <Activity chat={chat} />
+          </div>
+        )}
+        {chat.error && !(empty && !chat.connected) && (
           <div className="mx-4 mb-2 flex items-center gap-2 rounded-md bg-red-400/5 px-3 py-1.5 text-xs text-red-300 ring-1 ring-red-400/30">
             <Icon name="alert" className="size-3.5 shrink-0 text-red-400" />
             <span className="min-w-0 flex-1 truncate select-text" title={chat.error}>

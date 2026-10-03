@@ -140,6 +140,8 @@ export type ChatService = {
   terminalCommand: (chatId: string) => string | null
   /** The agent's conversation id once connected; it can change when a reconnect starts a new conversation */
   agentSessionId: (chatId: string) => string | null
+  /** The agent it talks to, which a chat can switch before its first message */
+  agent: (chatId: string) => string | null
   /** The first message, shortened, for the tab */
   title: (chatId: string) => string | null
   subscribe: (listener: () => void) => () => void

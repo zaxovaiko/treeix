@@ -17,17 +17,15 @@ test('unarchived hides archived history entries', () => {
   expect(unarchived([{ id: 'a' }, { id: 'b', archived: true }, { id: 'c', archived: false }]).map((entry) => entry.id)).toEqual(['a', 'c'])
 })
 
-test('newTabEntries lists each agent in its default view, then the other view when it has chat', () => {
-  const agents = [BUILTIN_AGENTS.claude, BUILTIN_AGENTS.shell]
-  expect(newTabEntries(agents, {})).toEqual([
-    { agent: 'claude', view: 'terminal', label: 'Claude', secondary: false },
-    { agent: 'claude', view: 'chat', label: 'Claude chat', secondary: true },
-    { agent: 'shell', view: 'terminal', label: 'Shell', secondary: false }
+test('newTabEntries lists each agent as a terminal, then a single chat', () => {
+  const agents = [BUILTIN_AGENTS.claude, BUILTIN_AGENTS.codex, BUILTIN_AGENTS.shell]
+  expect(newTabEntries(agents, BUILTIN_AGENTS.codex)).toEqual([
+    { agent: 'claude', view: 'terminal', label: 'Claude' },
+    { agent: 'codex', view: 'terminal', label: 'Codex' },
+    { agent: 'shell', view: 'terminal', label: 'Shell' },
+    { agent: 'codex', view: 'chat', label: 'Chat' }
   ])
-  expect(newTabEntries(agents, { claude: 'chat' }).slice(0, 2)).toEqual([
-    { agent: 'claude', view: 'chat', label: 'Claude', secondary: false },
-    { agent: 'claude', view: 'terminal', label: 'Claude in terminal', secondary: true }
-  ])
+  expect(newTabEntries(agents, undefined).map((entry) => entry.view)).toEqual(['terminal', 'terminal', 'terminal'])
 })
 
 test('isDefaultChatTitle matches only the titles new chats get', () => {

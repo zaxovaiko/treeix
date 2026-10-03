@@ -1,10 +1,11 @@
 import { MultiFileDiff } from '@pierre/diffs/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { PermissionOption, ToolCall, ToolOutput } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
+import { Expandable } from '@treeix/app/Lightbox'
 import { useSettings } from '@treeix/app/settings'
 import { baseName } from '@treeix/app/Sidebar'
 import { type Block, diffCounts, fileTarget, type PendingPermission } from './feed'
@@ -27,18 +28,45 @@ const diffs = (call: ToolCall): Diff[] => call.output.filter((output): output is
 export const firstAllow = (options: PermissionOption[]): PermissionOption | undefined => options.find((option) => option.kind.startsWith('allow'))
 export const firstReject = (options: PermissionOption[]): PermissionOption | undefined => options.find((option) => option.kind.startsWith('reject'))
 
+/** Seconds since `from`, ticking while `live` */
+export function useElapsed(from: number | null, live: boolean): number {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!live) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [live])
+  return from === null ? 0 : Math.max(0, Math.floor((now - from) / 1000))
+}
+
+export const formatElapsed = (seconds: number): string => (seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`)
+
+/** A thumbnail that opens full screen, where it zooms and pans */
+export function ImageThumb({ image, className }: { image: { mimeType: string; data: string }; className: string }): React.JSX.Element {
+  const src = `data:${image.mimeType};base64,${image.data}`
+  return (
+    <Expandable title="Image" preview={<img src={src} alt="" className={`rounded-md object-cover ring-1 ring-border ${className}`} />}>
+      <img src={src} alt="" />
+    </Expandable>
+  )
+}
+
+const Images = ({ images, className }: { images: { mimeType: string; data: string }[]; className: string }): React.JSX.Element | null =>
+  images.length === 0 ? null : (
+    <div className="mb-1.5 flex flex-wrap gap-1.5">
+      {images.map((image, index) => (
+        <ImageThumb key={index} image={image} className={className} />
+      ))}
+    </div>
+  )
+
 export function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }): React.JSX.Element {
   if (block.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap text-foreground select-text">
-          {block.images.length > 0 && (
-            <div className="mb-1.5 flex flex-wrap gap-1.5">
-              {block.images.map((image, index) => (
-                <img key={index} src={`data:${image.mimeType};base64,${image.data}`} alt="" className="h-16 rounded-md object-cover ring-1 ring-border" />
-              ))}
-            </div>
-          )}
+        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-muted px-3.5 py-2 text-sm whitespace-pre-wrap text-foreground select-text">
+          <Images images={block.images} className="h-20 max-w-48" />
           {block.text}
         </div>
       </div>
@@ -46,7 +74,8 @@ export function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }
   }
   return (
     <div className="text-sm select-text">
-      <LazyMarkdown resolveImage={inlineOnly}>{block.text}</LazyMarkdown>
+      <Images images={block.images} className="max-h-64 max-w-full" />
+      {block.text && <LazyMarkdown resolveImage={inlineOnly}>{block.text}</LazyMarkdown>}
     </div>
   )
 }
@@ -54,14 +83,15 @@ export function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }
 export function ThoughtBlock({ block }: { block: Extract<Block, { type: 'thought' }> }): React.JSX.Element | null {
   const { chatThinking } = useSettings()
   const [open, setOpen] = useState(chatThinking === 'expanded')
-  if (chatThinking === 'hidden') return null
   const running = block.endedAt === null
-  const seconds = block.endedAt === null ? 0 : Math.max(1, Math.round((block.endedAt - block.startedAt) / 1000))
+  const elapsed = useElapsed(block.startedAt, running)
+  if (chatThinking === 'hidden') return null
+  const seconds = block.endedAt === null ? elapsed : Math.max(1, Math.round((block.endedAt - block.startedAt) / 1000))
   return (
     <div className="text-xs text-muted-foreground">
       <button onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 hover:text-foreground">
         <Icon name="chevron" className={`size-3 transition-transform ${open || running ? 'rotate-90' : ''}`} />
-        {running ? 'Thinking…' : `Thought for ${seconds}s`}
+        {running ? <span className="animate-pulse">Thinking… {formatElapsed(seconds)}</span> : `Thought for ${formatElapsed(seconds)}`}
       </button>
       {(open || running) && <div className="mt-1 border-l border-border pl-3 whitespace-pre-wrap italic select-text">{block.text}</div>}
     </div>

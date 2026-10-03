@@ -96,9 +96,11 @@ export const agentOr = (id: string): Agent => getAgent(id) ?? { id, label: id, m
 
 export const isAgent = (id: string): boolean => getAgent(id)?.agent ?? false
 
-/** How an agent opens by default: the user's choice when it has a chat command, else the terminal */
-export const viewFor = (agent: Agent, views: Record<string, 'chat' | 'terminal'>): 'chat' | 'terminal' =>
-  agent.chat && views[agent.id] === 'chat' ? 'chat' : 'terminal'
+/** The agent a new chat starts with: the one last picked, else the first that can chat */
+export function chatAgent(): Agent | undefined {
+  const agents = getAgents().filter((agent) => agent.chat)
+  return agents.find((agent) => agent.id === getSettings().chatAgent) ?? agents[0]
+}
 
 export const useAgents = (): Agent[] => useSyncExternalStore(subscribeSettings, getAgents)
 

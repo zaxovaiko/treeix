@@ -16,14 +16,14 @@ import {
   togglePanel,
   useHost
 } from '@treeix/sdk'
-import { getAgent, getAgents, viewFor } from '@treeix/app/agents'
+import { chatAgent, getAgents } from '@treeix/app/agents'
 import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { useService } from '@treeix/app/plugins'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
 import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
-import { digitPressed, getSettings } from '@treeix/app/settings'
+import { digitPressed } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { getCurrentWorkspaceId, inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
 import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } from './folder'
@@ -360,10 +360,10 @@ function newTab(host: HostApi, kind: SessionKind, view: SessionView = 'terminal'
   showTerminals(host)
 }
 
-/** How an agent opens by default, per Settings; chats need the chat plugin on */
-function defaultView(host: HostApi, id: string): SessionView {
-  const agent = getAgent(id)
-  return agent && host.service('chat') ? viewFor(agent, getSettings().agentViews) : 'terminal'
+/** A chat with the agent last picked in one; chats need the chat plugin on */
+function newChat(host: HostApi): void {
+  const agent = chatAgent()
+  if (agent && host.service('chat')) newTab(host, agent.id, 'chat')
 }
 
 /** ⌘⇧T: a task with a shell in the current folder, named after that folder */
@@ -446,6 +446,7 @@ defineActions([
   { id: 'terminal.newTab', label: 'New shell tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true }) },
   { id: 'terminal.newTabAlt', label: 'New shell tab, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
   { id: 'terminal.newClaudeTab', label: 'New Claude tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
+  { id: 'terminal.newChat', label: 'New chat in the group, with the agent last picked in one', section: 'Terminal', keys: key('KeyC', { meta: true, alt: true }) },
   { id: 'terminal.splitRight', label: 'Split the active pane right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
   { id: 'terminal.splitDown', label: 'Split the active pane down with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true, shift: true }) },
   { id: 'terminal.paneLeft', label: 'Focus the pane to the left', section: 'Terminal', keys: key('ArrowLeft', { meta: true, alt: true }) },
@@ -485,7 +486,8 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.newGroup': () => startTask(host),
     'terminal.newTab': () => newTab(host, 'shell'),
     'terminal.newTabAlt': () => newTab(host, 'shell'),
-    'terminal.newClaudeTab': () => newTab(host, 'claude', defaultView(host, 'claude')),
+    'terminal.newClaudeTab': () => newTab(host, 'claude'),
+    'terminal.newChat': () => newChat(host),
     'terminal.reopenClosed': () => reopenClosed(host),
     'terminal.goToFolder': () => openFolderPicker(host)
   }
@@ -595,14 +597,19 @@ const plugin: RendererPlugin = {
       shortcut: actionKeys(NEW_TAB_ACTIONS[agent.id] ?? '') || undefined,
       run: () => newTab(host, agent.id)
     })),
-    ...(host.service('chat') ? getAgents().filter((agent) => agent.chat) : []).map((agent) => ({
-      id: `chat:${agent.id}`,
-      group: 'Actions',
-      label: `New ${agent.label} chat`,
-      detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
-      icon: 'comment' as const,
-      run: () => newTab(host, agent.id, 'chat')
-    })),
+    ...(host.service('chat') && chatAgent()
+      ? [
+          {
+            id: 'chat:new',
+            group: 'Actions',
+            label: 'New chat',
+            detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
+            icon: 'comment' as const,
+            shortcut: actionKeys('terminal.newChat') || undefined,
+            run: () => newChat(host)
+          }
+        ]
+      : []),
     // @ in the palette searches these
     ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),
     ...scope.sessions.map((session) => {

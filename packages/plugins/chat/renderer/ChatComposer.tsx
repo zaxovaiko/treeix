@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatContent, ChatImage, ChatOption } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
+import { agentOr, useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
+import { updateSettings, useSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
+import { ImageThumb } from './Blocks'
 import { completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning } from './composer'
-import { cancel, filesFor, isBusy, send, setDraft, setOption, unqueue, useChat, whenIdle } from './store'
+import { cancel, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 
 const readImage = (file: File): Promise<ChatImage> =>
   new Promise((resolve, reject) => {
@@ -75,6 +78,36 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
   )
 }
 
+/** The chat's agent; picking another starts the chat over with it, so only a chat without a conversation offers it */
+function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
+  const host = useHost()
+  const chat = useChat(chatId)
+  const agents = useAgents().filter((agent) => agent.chat)
+  const current = chat.options?.agent
+  if (!current) return null
+  if (hasConversation(chat) || agents.length < 2) {
+    return (
+      <span title="A chat keeps the agent it started with" className="flex h-6 items-center px-1.5 text-xs text-muted-foreground">
+        {agentOr(current).label}
+      </span>
+    )
+  }
+  const option: ChatOption = {
+    id: 'agent',
+    name: 'Agent',
+    category: 'other',
+    currentValue: current,
+    values: agents.map((agent) => ({ value: agent.id, name: agent.label, description: agent.chat?.command ?? null }))
+  }
+  const pick = (id: string): void => {
+    const agent = agents.find((candidate) => candidate.id === id)
+    if (!agent) return
+    updateSettings({ chatAgent: id })
+    switchAgent(chatId, agent).catch((reason: unknown) => host.flash(errorMessage(reason)))
+  }
+  return <OptionPicker option={option} onChoose={pick} />
+}
+
 const preview = (content: ChatContent[]): string =>
   content.map((item) => (item.type === 'text' ? item.text : '[image]')).join(' ')
 
@@ -83,6 +116,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
   const chat = useChat(chatId)
   const { feed, draft } = chat
   const busy = isBusy(chat)
+  const { chatFullWidth } = useSettings()
   const [images, setImages] = useState<ChatImage[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [files, setFiles] = useState<string[]>([])
@@ -189,7 +223,9 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
     ? 'Esc stops the agent'
     : fullness > 0.8 && hasCompact
       ? 'Context is 80% full: /compact summarizes'
-      : 'Paste a screenshot to show the problem'
+      : acceptsImages
+        ? '@ adds a file, / runs a command, paste a screenshot to show the problem'
+        : '@ adds a file, / runs a command'
 
   return (
     <div className="shrink-0 px-4 pb-3">
@@ -260,7 +296,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
           <div className="flex flex-wrap gap-1.5 px-3 pt-2">
             {images.map((image, index) => (
               <div key={index} className="group relative">
-                <img src={`data:${image.mimeType};base64,${image.data}`} alt="" className="h-12 rounded-md object-cover ring-1 ring-border" />
+                <ImageThumb image={image} className="h-12" />
                 <button
                   aria-label="Remove image"
                   onClick={() => setImages((current) => current.filter((_, at) => at !== index))}
@@ -278,7 +314,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
           rows={1}
           aria-expanded={items.length > 0}
           value={draft}
-          placeholder="Message the agent"
+          placeholder={chat.options?.agent ? `Message ${agentOr(chat.options.agent).label}` : 'Message the agent'}
           onChange={(event) => {
             setDraft(chatId, event.target.value)
             setCaret(event.target.selectionStart)
@@ -313,6 +349,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
               />
             </>
           )}
+          <AgentPicker chatId={chatId} />
           {feed.options.map((option) => (
             <OptionPicker key={option.id} option={option} onChoose={(value) => choose(option, value)} />
           ))}
@@ -325,6 +362,14 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
               {formatTokens(feed.usage.used)} / {formatTokens(feed.usage.size)}
             </span>
           )}
+          <button
+            aria-label={chatFullWidth ? 'Fixed width' : 'Full width'}
+            title={chatFullWidth ? 'Fixed width' : 'Full width'}
+            onClick={() => updateSettings({ chatFullWidth: !chatFullWidth })}
+            className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Icon name={chatFullWidth ? 'narrow' : 'widen'} className="size-3.5" />
+          </button>
           {busy ? (
             <button onClick={() => cancel(chatId)} className="h-6 rounded-md px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent">
               Stop

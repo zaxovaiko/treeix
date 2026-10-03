@@ -1,5 +1,5 @@
 import type { SessionKind } from '@treeix/sdk'
-import { type Agent, viewFor } from '@treeix/app/agents'
+import type { Agent } from '@treeix/app/agents'
 
 export type SessionView = 'terminal' | 'chat'
 
@@ -38,17 +38,13 @@ export const unarchived = <T extends { archived?: boolean }>(entries: T[]): T[] 
 /** Agents with a key of their own for a new tab */
 export const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab' }
 
-export type NewTabEntry = { agent: string; view: SessionView; label: string; secondary: boolean }
+export type NewTabEntry = { agent: string; view: SessionView; label: string }
 
-/** Each agent in its default view, then its other view when it has a chat command */
-export const newTabEntries = (agents: Agent[], views: Record<string, SessionView>): NewTabEntry[] =>
-  agents.flatMap((agent) => {
-    const view = viewFor(agent, views)
-    const main: NewTabEntry = { agent: agent.id, view, label: agent.label, secondary: false }
-    if (!agent.chat) return [main]
-    const other: NewTabEntry = view === 'chat' ? { agent: agent.id, view: 'terminal', label: `${agent.label} in terminal`, secondary: true } : { agent: agent.id, view: 'chat', label: `${agent.label} chat`, secondary: true }
-    return [main, other]
-  })
+/** Each agent in a terminal, then one chat, with `chat` the agent it starts with; the chat picks its agent itself */
+export const newTabEntries = (agents: Agent[], chat: Agent | undefined): NewTabEntry[] => [
+  ...agents.map((agent): NewTabEntry => ({ agent: agent.id, view: 'terminal', label: agent.label })),
+  ...(chat ? [{ agent: chat.id, view: 'chat' as const, label: 'Chat' }] : [])
+]
 
 /** What xterm sends on its own, not the user: focus in and out, cursor position and device reports, color replies */
 export const isTerminalReply = (data: string): boolean => /^\x1b(?:\[[?>]?[\d;]*[IORcnt]|\][^\x07\x1b]*(?:\x07|\x1b\\))$/.test(data)

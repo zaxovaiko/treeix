@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
-import { emptyFeed } from './feed'
+import type { ToolCall } from '@treeix/sdk'
+import { emptyFeed, type Feed } from './feed'
 import type { StartResult } from '../shared/types'
-import { afterPrompt, cancel, emptyChat, getChat, listen, send, setDraft, shortTitle, start, statusOf, subscribe, titleOf, whenIdle, withUserMessage } from './store'
+import { activityOf, afterPrompt, hasConversation, cancel, type ChatState, emptyChat, getChat, listen, send, setDraft, shortTitle, start, statusOf, subscribe, titleOf, whenIdle, withUserMessage } from './store'
 
 test('status: waiting beats running beats connected', () => {
   expect(statusOf(emptyChat)).toBe('exited')
@@ -116,4 +117,20 @@ test('titleOf is the first user message with text', () => {
   const feed = withUserMessage(withUserMessage(withImage, [{ type: 'text', text: 'Hello there' }]), [{ type: 'text', text: 'Later' }])
   expect(titleOf({ ...emptyChat, feed })).toBe('Hello there')
   expect(titleOf(emptyChat)).toBeNull()
+})
+
+test('the activity names what the newest block is doing', () => {
+  const running = (blocks: Feed['blocks']): ChatState => ({ ...emptyChat, sending: true, feed: { ...emptyFeed, running: true, blocks } })
+  const call: ToolCall = { id: '1', title: 'npm test', kind: 'execute', status: 'in_progress', locations: [], output: [], rawInput: null }
+  expect(activityOf({ ...emptyChat, sending: true })).toBe('Sending')
+  expect(activityOf(running([{ type: 'thought', text: '', startedAt: 0, endedAt: null }]))).toBe('Thinking')
+  expect(activityOf(running([{ type: 'tool', call, permission: null }]))).toBe('npm test')
+  expect(activityOf(running([{ type: 'tool', call: { ...call, status: 'completed' }, permission: null }]))).toBe('Working')
+  expect(activityOf(running([{ type: 'text', role: 'agent', text: 'Hi', images: [] }]))).toBe('Writing')
+})
+
+test('a chat has a conversation once anything was said or it resumes one', () => {
+  expect(hasConversation(emptyChat)).toBe(false)
+  expect(hasConversation({ ...emptyChat, sending: true })).toBe(true)
+  expect(hasConversation({ ...emptyChat, feed: { ...emptyFeed, blocks: [{ type: 'error', message: 'x' }] } })).toBe(true)
 })

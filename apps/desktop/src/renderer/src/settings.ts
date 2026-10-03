@@ -13,8 +13,9 @@ export type Settings = {
   plugins: Record<string, boolean>
   /** Agents the user added or redefined, merged over the built-in table by id */
   customAgents: Agent[]
-  /** Default view per agent id; absent means terminal */
-  agentViews: Record<string, 'chat' | 'terminal'>
+  /** The agent new chats start with: the one last picked in a chat */
+  chatAgent: string
+  chatFullWidth: boolean
   /** How a chat session shows an agent's thinking blocks */
   chatThinking: 'collapsed' | 'expanded' | 'hidden'
   /** Background syntax highlighting workers; applied on next launch */
@@ -132,11 +133,6 @@ function parseKeymap(value: unknown): Settings['keymap'] {
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, Shortcut | null] => entry[1] === null || isShortcut(entry[1])))
 }
 
-export function parseAgentViews(value: unknown): Settings['agentViews'] {
-  const stored = object(value)
-  return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, 'chat' | 'terminal'] => entry[1] === 'chat' || entry[1] === 'terminal'))
-}
-
 export const parseChatThinking = (value: unknown): Settings['chatThinking'] => (value === 'expanded' || value === 'hidden' ? value : 'collapsed')
 
 function parseDigitShortcuts(value: unknown): Settings['digitShortcuts'] {
@@ -198,7 +194,7 @@ const clampScrollback = (value: unknown): number =>
 /** Below the minimum the window becomes hard to find, so values are clamped */
 export const clampOpacity = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], agentViews: {}, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', compactTabs: true, titleBarTabs: { left: [], right: [] }, editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, codexSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+const DEFAULTS: Settings = { plugins: {}, customAgents: [], chatAgent: 'claude', chatFullWidth: false, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', compactTabs: true, titleBarTabs: { left: [], right: [] }, editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, codexSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -247,7 +243,8 @@ function load(): Settings {
     return {
       plugins: parsePluginChoices(candidate),
       customAgents: parseCustomAgents(candidate.customAgents),
-      agentViews: parseAgentViews(candidate.agentViews),
+      chatAgent: typeof candidate.chatAgent === 'string' ? candidate.chatAgent : DEFAULTS.chatAgent,
+      chatFullWidth: candidate.chatFullWidth === true,
       chatThinking: parseChatThinking(candidate.chatThinking),
       ...parseAppearance(candidate),
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',

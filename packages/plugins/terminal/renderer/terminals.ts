@@ -693,8 +693,9 @@ export function syncChats(): void {
     const status = session.status === 'dormant' ? 'dormant' : connecting.has(session.id) ? 'running' : chat.status(session.id)
     const agentSessionId = chat.agentSessionId(session.id) ?? session.agentSessionId
     const title = (isDefaultChatTitle(session.title) && chat.title(session.id)) || session.title
-    const same = status === session.status && agentSessionId === session.agentSessionId && title === session.title
-    return same ? session : { ...session, status, agentSessionId, title }
+    const kind = chat.agent(session.id) ?? session.kind
+    const same = status === session.status && agentSessionId === session.agentSessionId && title === session.title && kind === session.kind
+    return same ? session : { ...session, status, agentSessionId, title, kind }
   })
   if (next.some((session, index) => session !== state.sessions[index])) update({ sessions: next })
 }

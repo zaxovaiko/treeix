@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { BUILTIN_AGENTS, viewFor } from './agents'
+import { BUILTIN_AGENTS } from './agents'
 
 globalThis.localStorage ??= { getItem: () => null, setItem: () => undefined } as unknown as Storage
 
@@ -14,10 +14,14 @@ test('presets carry ACP chat commands', () => {
   expect('chat' in BUILTIN_AGENTS.shell).toBe(false)
 })
 
-test('viewFor defaults to terminal and never picks chat for an agent without a chat command', () => {
-  expect(viewFor(BUILTIN_AGENTS.claude, {})).toBe('terminal')
-  expect(viewFor(BUILTIN_AGENTS.claude, { claude: 'chat' })).toBe('chat')
-  expect(viewFor(BUILTIN_AGENTS.shell, { shell: 'chat' })).toBe('terminal')
+test('chatAgent is the one last picked while it can chat, else the first that can', async () => {
+  const { chatAgent } = await import('./agents')
+  const { updateSettings } = await import('./settings')
+  updateSettings({ chatAgent: 'codex' })
+  expect(chatAgent()?.id).toBe('codex')
+  updateSettings({ chatAgent: 'shell' })
+  expect(chatAgent()?.id).toBe('claude')
+  updateSettings({ chatAgent: 'claude' })
 })
 
 test('built-in commands keep the behaviour they had when they were hardcoded', async () => {
