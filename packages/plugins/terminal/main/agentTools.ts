@@ -1,6 +1,6 @@
 import type { McpTool } from '@treeix/sdk/main'
 import { readTranscript, lastReplies } from './transcripts'
-import { listeningPorts, pasteTerminal, sessionEntries, writeTerminal } from './pty'
+import { listeningPorts, pasteTerminal, reportStatus, sessionEntries, writeTerminal } from './pty'
 
 const SCREEN_LINES = 60
 /** Lets the agent's input box take the pasted prompt before Enter sends it */
@@ -84,14 +84,29 @@ export function sessionTools(): McpTool[] {
     },
     {
       name: 'session_send',
-      description: 'Types a message into a session and presses Enter: a prompt for an agent, a command for a shell. Read the answer later with session_read.',
-      inputSchema: { type: 'object', properties: { ...SESSION, text: { type: 'string' } }, required: ['session', 'text'], additionalProperties: false },
+      description:
+        "Types a message into a session: a prompt for an agent, a command for a shell. By default it waits in the session's input, marked for the user, who reads it and sends it; send: 'send' presses Enter too. Read the answer later with session_read.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ...SESSION,
+          text: { type: 'string' },
+          send: { type: 'string', enum: ['ask', 'send'], description: "'ask', the default, leaves the text for the user to send; 'send' submits it" }
+        },
+        required: ['session', 'text'],
+        additionalProperties: false
+      },
       run: async (args) => {
         const session = findSession(args)
         if (!session.alive) throw new Error('That session has exited')
         if (typeof args.text !== 'string' || !args.text) throw new Error('text is required')
         // Bracketed paste keeps newlines in the message instead of sending it line by line
         pasteTerminal(session.id, args.text)
+        if (args.send !== 'send') {
+          // The session's "needs you" mark, which goes once the user types in it
+          reportStatus(session.id, 'input')
+          return `Typed into ${session.id}; it waits there for the user to send it`
+        }
         await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
         writeTerminal(session.id, '\r')
         return `Sent to ${session.id}`

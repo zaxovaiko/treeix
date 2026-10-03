@@ -73,8 +73,13 @@ test('agent sessions get an MCP server that drives the built-in browser', async 
       .find((line) => line.includes(' shell ')) ?? ''
   expect(shell).toContain('running')
   const session = shell.split(' ')[0]
-  await call('session_send', { session, text: 'echo treeix-$((6*7))' })
+  await call('session_send', { session, text: 'echo treeix-$((6*7))', send: 'send' })
   await expect.poll(async () => text(await call('session_read', { session })), { timeout: 5000 }).toContain('treeix-42')
+  // By default the text waits for the user to send it
+  expect(text(await call('session_send', { session, text: 'echo asked-$((2*3))' }))).toContain('waits')
+  await expect.poll(async () => text(await call('session_read', { session })), { timeout: 5000 }).toContain('echo asked-$((2*3))')
+  await page.waitForTimeout(500)
+  expect(text(await call('session_read', { session }))).not.toContain('asked-6')
 
   const opened = text(await call('browser_navigate', { url: siteUrl }))
   const tab = opened.match(/Opened tab (\S+):/)?.[1] ?? ''
