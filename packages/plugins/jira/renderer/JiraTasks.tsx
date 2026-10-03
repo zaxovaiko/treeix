@@ -48,10 +48,26 @@ const FILTER_ID = 'ticket-filter'
 type GroupBy = 'status' | 'epic'
 
 const SORT_HINTS: Record<keyof typeof SORTS, React.ReactNode> = {
-  status: <span>Status <span className="text-muted-foreground">in progress first</span></span>,
-  priority: <span>Priority <span className="text-muted-foreground">most urgent first</span></span>,
-  updated: <span>Updated <span className="text-muted-foreground">newest first</span></span>,
-  created: <span>Created <span className="text-muted-foreground">newest first</span></span>
+  status: (
+    <span>
+      Status <span className="text-muted-foreground">in progress first</span>
+    </span>
+  ),
+  priority: (
+    <span>
+      Priority <span className="text-muted-foreground">most urgent first</span>
+    </span>
+  ),
+  updated: (
+    <span>
+      Updated <span className="text-muted-foreground">newest first</span>
+    </span>
+  ),
+  created: (
+    <span>
+      Created <span className="text-muted-foreground">newest first</span>
+    </span>
+  )
 }
 /** Your own items to start with; removing the chip shows everyone's */
 const DEFAULT_FILTERS: FilterToken[] = [{ kind: 'assignee', value: ME }]
@@ -131,11 +147,26 @@ export function JiraTasks(): React.JSX.Element {
   const inSprint = (item: WorkItem): boolean | null => (list?.sprintKeys ? list.sprintKeys.includes(item.key) : null)
   const bucketFor = (item: WorkItem): Bucket => bucketOf(item, inSprint(item), statusBuckets)
   const statusGroups: Group[] = (Object.keys(BUCKETS) as Bucket[])
-    .map((bucket) => ({ id: bucket, bucket, epic: null, items: sortItems(visible.filter((item) => bucketFor(item) === bucket), sort) }))
+    .map((bucket) => ({
+      id: bucket,
+      bucket,
+      epic: null,
+      items: sortItems(
+        visible.filter((item) => bucketFor(item) === bucket),
+        sort
+      )
+    }))
     .filter((group) => group.items.length > 0)
   const bucketRank = (item: WorkItem): number => (Object.keys(BUCKETS) as Bucket[]).indexOf(bucketFor(item))
   // Inside an epic, your move comes first, as in the status view
-  const epicGroups: Group[] = (groupBy === 'epic' && epics ? groupByEpic(sortItems(visible, sort).sort((a, b) => bucketRank(a) - bucketRank(b)), epics) : []).map((group) => ({
+  const epicGroups: Group[] = (
+    groupBy === 'epic' && epics
+      ? groupByEpic(
+          sortItems(visible, sort).sort((a, b) => bucketRank(a) - bucketRank(b)),
+          epics
+        )
+      : []
+  ).map((group) => ({
     ...group,
     id: `epic:${group.epic?.key ?? 'none'}`,
     bucket: null
@@ -155,7 +186,11 @@ export function JiraTasks(): React.JSX.Element {
   useEffect(() => setEditingSummary(false), [selected?.key])
   // Only statuses seen on listed items are known, with the category Jira gave them
   const people: JiraPerson[] = [
-    ...new Map(items.flatMap((item) => (item.assigneeId && item.assignee ? [[item.assigneeId, { accountId: item.assigneeId, name: item.assignee, avatar: item.assigneeAvatar }] as const] : []))).values()
+    ...new Map(
+      items.flatMap((item) =>
+        item.assigneeId && item.assignee ? [[item.assigneeId, { accountId: item.assigneeId, name: item.assignee, avatar: item.assigneeAvatar }] as const] : []
+      )
+    ).values()
   ]
   const types = [...new Set(['Task', 'Story', 'Bug', ...items.map((item) => item.type)])].filter((type) => !/epic|sub.?task/i.test(type))
   const statuses: StatusOption[] = [...new Map(items.map((item) => [item.status, { name: item.status, category: item.statusCategory }])).values()]
@@ -177,7 +212,10 @@ export function JiraTasks(): React.JSX.Element {
     jiraSettings.update({ statusBuckets: bucket ? { ...rest, [status]: bucket } : rest })
   }
 
-  const cursor = cursorGroup !== null ? entries.findIndex((entry) => entry.kind === 'group' && entry.id === cursorGroup) : entries.findIndex((entry) => entry.kind === 'item' && entry.item.key === selected?.key)
+  const cursor =
+    cursorGroup !== null
+      ? entries.findIndex((entry) => entry.kind === 'group' && entry.id === cursorGroup)
+      : entries.findIndex((entry) => entry.kind === 'item' && entry.item.key === selected?.key)
   const selectEntry = (index: number): void => {
     const entry = entries[index]
     if (entry.kind === 'group') return setCursorGroup(entry.id)
@@ -405,7 +443,9 @@ export function JiraTasks(): React.JSX.Element {
         {error && <p className="px-2 py-3 text-xs break-words text-amber-400 select-text">{error}</p>}
         {!list && !error && <EmptyState title="Loading tasks..." />}
         {list && visible.length === 0 && <EmptyState title="No tasks match" />}
-        {items.length >= LIST_LIMIT && <p className="px-2 pt-3 text-[11px] text-muted-foreground">Jira returned the first {LIST_LIMIT} items. Filter by project or person to see the rest.</p>}
+        {items.length >= LIST_LIMIT && (
+          <p className="px-2 pt-3 text-[11px] text-muted-foreground">Jira returned the first {LIST_LIMIT} items. Filter by project or person to see the rest.</p>
+        )}
         {groupBy === 'epic' && !epics && list && <p className="px-2 py-3 text-[11px] text-muted-foreground">Loading epics...</p>}
         {entries.map((entry, index) => {
           if (entry.kind === 'item') return row(entry.item, index)

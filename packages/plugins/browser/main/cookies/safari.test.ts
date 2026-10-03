@@ -21,7 +21,7 @@ function file(records: Buffer[]): Buffer {
   head.writeUInt32BE(0x100, 0)
   head.writeUInt32LE(records.length, 4)
   let at = head.length
-  records.forEach((cookie, index) => ((head.writeUInt32LE(at, 8 + index * 4), (at += cookie.length))))
+  records.forEach((cookie, index) => (head.writeUInt32LE(at, 8 + index * 4), (at += cookie.length)))
   const page = Buffer.concat([head, ...records])
   const top = Buffer.alloc(12)
   top.write('cook', 0, 'latin1')
@@ -32,7 +32,10 @@ function file(records: Buffer[]): Buffer {
 
 test('safariCookies reads records, flags and domains, skipping expired ones', () => {
   const now = 1_800_000_000
-  const cookies = safariCookies(file([record(5, '.example.com', 'a', '/', 'b', now + 60), record(0, 'host.test', 'c', '/x', 'd', now + 60), record(0, 'old.test', 'e', '/', 'f', now - 1)]), now)
+  const cookies = safariCookies(
+    file([record(5, '.example.com', 'a', '/', 'b', now + 60), record(0, 'host.test', 'c', '/x', 'd', now + 60), record(0, 'old.test', 'e', '/', 'f', now - 1)]),
+    now
+  )
   expect(cookies).toEqual([
     { url: 'https://example.com/', name: 'a', value: 'b', domain: '.example.com', path: '/', secure: true, httpOnly: true, sameSite: 'unspecified', expirationDate: now + 60 },
     { url: 'http://host.test/x', name: 'c', value: 'd', domain: undefined, path: '/x', secure: false, httpOnly: false, sameSite: 'unspecified', expirationDate: now + 60 },

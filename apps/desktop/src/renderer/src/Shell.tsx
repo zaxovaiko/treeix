@@ -19,7 +19,11 @@ export function useKeyExtras(): ShortcutInfo[] {
   return [
     ...digits('tabs', 'Title bar page by position, 9 is the last'),
     ...digits('workspaces', 'Workspace by rail order'),
-    { keys: 'G then a letter', label: 'Pages: T terminal, P pull requests, W worktrees, J tasks, C Confluence, E env, S settings, H closed sessions, A agent comments', section: 'Go to' },
+    {
+      keys: 'G then a letter',
+      label: 'Pages: T terminal, P pull requests, W worktrees, J tasks, C Confluence, E env, S settings, H closed sessions, A agent comments',
+      section: 'Go to'
+    },
     { keys: 'j k ⏎ esc', label: 'Move in a list, open, step back: the focus model, fixed', section: 'Focus' },
     ...loaded.flatMap(({ plugin }) => plugin.shortcuts ?? [])
   ]
@@ -116,18 +120,18 @@ export function WhichKey({ pages, workspaces }: { pages: { letter: string; label
       {/* A click anywhere cancels the leader, even over a terminal that would swallow it */}
       <div className="fixed inset-0 z-[69]" onMouseDown={() => updateShell({ leader: false })} />
       <div className="fixed bottom-8 left-16 z-[70] max-h-[calc(100vh-4rem)] w-[440px] max-w-[calc(100vw-5rem)] overflow-y-auto rounded-lg border border-input bg-popover p-3 shadow-2xl shadow-black/60">
-      <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-        <Keys combo="G" />
-        <span className="font-medium text-foreground">Go to</span>
-        <span className="flex-1" />
-        <KeyHintLabel hint={['esc', 'cancel']} />
-      </div>
-      <div className="grid grid-cols-2 gap-x-3">
-        {pages.map((page) => item(page.letter.toUpperCase(), page.label, page.icon))}
-        {workspaces.slice(0, 9).map((name, index) => item(String(index + 1), `Workspace ${name}`))}
-        {item('H', 'Recently closed sessions', 'history')}
-        {item('A', 'Agent comments', 'comment')}
-      </div>
+        <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Keys combo="G" />
+          <span className="font-medium text-foreground">Go to</span>
+          <span className="flex-1" />
+          <KeyHintLabel hint={['esc', 'cancel']} />
+        </div>
+        <div className="grid grid-cols-2 gap-x-3">
+          {pages.map((page) => item(page.letter.toUpperCase(), page.label, page.icon))}
+          {workspaces.slice(0, 9).map((name, index) => item(String(index + 1), `Workspace ${name}`))}
+          {item('H', 'Recently closed sessions', 'history')}
+          {item('A', 'Agent comments', 'comment')}
+        </div>
       </div>
     </>
   )
@@ -174,8 +178,8 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
             </div>
           ))}
           <div className="break-inside-avoid rounded-md border border-border p-2.5 text-[11px] leading-4 text-muted-foreground">
-            <b className="text-foreground/80">Model.</b> Zones are rail, list, main, inspector and bottom terminal. F6 cycles them, the focused one has a frame. Inside a zone j k move a cursor, ⏎ acts,
-            esc steps back. Terminals keep every bare key, so from a terminal use chords, ⌘G or F6.
+            <b className="text-foreground/80">Model.</b> Zones are rail, list, main, inspector and bottom terminal. F6 cycles them, the focused one has a frame. Inside a zone j k
+            move a cursor, ⏎ acts, esc steps back. Terminals keep every bare key, so from a terminal use chords, ⌘G or F6.
           </div>
         </div>
       </div>

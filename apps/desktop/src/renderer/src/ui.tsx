@@ -10,8 +10,7 @@ export { readStored }
 export function usePersisted<T extends string | number | boolean | null>(key: string, initial: T): [T, (value: T) => void] {
   const [value, setValue] = useState<T>(() => {
     // A nullable default (e.g. a selection that starts unset) accepts a stored string alongside null itself
-    const matches = (candidate: unknown): candidate is T =>
-      initial === null ? candidate === null || typeof candidate === 'string' : typeof candidate === typeof initial
+    const matches = (candidate: unknown): candidate is T => (initial === null ? candidate === null || typeof candidate === 'string' : typeof candidate === typeof initial)
     const stored = readStored(key)
     return matches(stored) ? stored : initial
   })
@@ -72,7 +71,11 @@ export function ResizeGrip({ across }: { across: boolean }): React.JSX.Element {
 }
 
 /** Focuses a popup menu's first item when it opens; j k and arrows then move between items, esc closes it, and its keys stay inside */
-export function useMenuKeys(open: boolean, close: () => void, selector = 'button'): { ref: React.RefObject<HTMLDivElement | null>; onKeyDown: (event: React.KeyboardEvent) => void } {
+export function useMenuKeys(
+  open: boolean,
+  close: () => void,
+  selector = 'button'
+): { ref: React.RefObject<HTMLDivElement | null>; onKeyDown: (event: React.KeyboardEvent) => void } {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (open) ref.current?.querySelector('button')?.focus()
@@ -94,10 +97,20 @@ export function useMenuKeys(open: boolean, close: () => void, selector = 'button
 }
 
 /** A panel over a dimmed backdrop; a click outside closes it, Escape is up to the caller */
-export function Dialog({ onClose, offset, className, children, ...panel }: { onClose: () => void; offset: string; className: string; children: React.ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, 'className' | 'onClick'>): React.JSX.Element {
+export function Dialog({
+  onClose,
+  offset,
+  className,
+  children,
+  ...panel
+}: { onClose: () => void; offset: string; className: string; children: React.ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, 'className' | 'onClick'>): React.JSX.Element {
   return (
     <div className={`fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-[2px] ${offset}`} onClick={onClose}>
-      <div {...panel} onClick={(event) => event.stopPropagation()} className={`rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl ${className}`}>
+      <div
+        {...panel}
+        onClick={(event) => event.stopPropagation()}
+        className={`rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl ${className}`}
+      >
         {children}
       </div>
     </div>
@@ -125,17 +138,7 @@ export function CopyButton({ text, label = 'Copy', className = 'size-3' }: { tex
   )
 }
 
-export function IconButton({
-  label,
-  active = false,
-  onClick,
-  children
-}: {
-  label: string
-  active?: boolean
-  onClick: () => void
-  children: React.ReactNode
-}): React.JSX.Element {
+export function IconButton({ label, active = false, onClick, children }: { label: string; active?: boolean; onClick: () => void; children: React.ReactNode }): React.JSX.Element {
   return (
     <button
       title={label}
@@ -151,7 +154,17 @@ export function IconButton({
 }
 
 /** A list header's fold all / unfold all: folds every group while any is open; `z` in the list's zone does the same */
-export function FoldAllButton({ anyOpen, groups = 'groups', shortcut = 'z', onClick }: { anyOpen: boolean; groups?: string; shortcut?: string | null; onClick: () => void }): React.JSX.Element {
+export function FoldAllButton({
+  anyOpen,
+  groups = 'groups',
+  shortcut = 'z',
+  onClick
+}: {
+  anyOpen: boolean
+  groups?: string
+  shortcut?: string | null
+  onClick: () => void
+}): React.JSX.Element {
   return (
     <IconButton label={`${anyOpen ? 'Fold' : 'Unfold'} all ${groups}${shortcut ? ` (${shortcut})` : ''}`} onClick={onClick}>
       <Icon name={anyOpen ? 'collapseAll' : 'expandAll'} className="size-3.5" />
@@ -346,9 +359,7 @@ export function Tooltips(): React.JSX.Element | null {
       className="pointer-events-none fixed z-[100] flex w-max max-w-[min(24rem,calc(100vw-16px))] items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground shadow-lg shadow-black/40"
     >
       <span>{tip.text}</span>
-      {tip.shortcut && (
-        <kbd className="shrink-0 rounded bg-foreground/8 px-1 font-sans text-[10.5px] text-muted-foreground">{tip.shortcut}</kbd>
-      )}
+      {tip.shortcut && <kbd className="shrink-0 rounded bg-foreground/8 px-1 font-sans text-[10.5px] text-muted-foreground">{tip.shortcut}</kbd>}
     </div>
   )
 }
@@ -366,9 +377,7 @@ export function EmptyState({
   children?: React.ReactNode
 }): React.JSX.Element {
   return (
-    <div
-      className={`flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-muted-foreground ${fill ? 'min-h-0 min-w-0 flex-1' : ''}`}
-    >
+    <div className={`flex flex-col items-center justify-center gap-3 px-6 py-8 text-center text-muted-foreground ${fill ? 'min-h-0 min-w-0 flex-1' : ''}`}>
       {icon && <Icon name={icon} className="size-5 opacity-50" />}
       <p className="max-w-80 text-[13px] leading-5 text-balance break-words">{title}</p>
       {children && <div className="flex flex-wrap justify-center gap-2">{children}</div>}

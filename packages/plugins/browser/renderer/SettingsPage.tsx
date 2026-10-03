@@ -30,7 +30,10 @@ function SavedAddresses(): React.JSX.Element {
     <Card title="Saved addresses">
       {saved.map((entry, index) => (
         <Row key={`${index}:${entry.url}`} label={entry.name} description={entry.url}>
-          <button className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent" onClick={() => browserSettings.update({ saved: saved.filter((_, at) => at !== index) })}>
+          <button
+            className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent"
+            onClick={() => browserSettings.update({ saved: saved.filter((_, at) => at !== index) })}
+          >
             Remove
           </button>
         </Row>
@@ -160,7 +163,11 @@ export function BrowserSettings(): React.JSX.Element {
                   </option>
                 ))}
               </select>
-              <button disabled={!chosen || busy} onClick={() => void runImport()} className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent disabled:opacity-50">
+              <button
+                disabled={!chosen || busy}
+                onClick={() => void runImport()}
+                className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent disabled:opacity-50"
+              >
                 {busy ? (chosenProfile?.blocked ? 'Checking…' : 'Importing…') : chosenProfile?.blocked ? 'Check again' : info ? 'Import again' : 'Import'}
               </button>
             </div>

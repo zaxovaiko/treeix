@@ -18,9 +18,7 @@ export function openMenu(event: MouseEvent | React.MouseEvent, entries: MenuEntr
   const copySelection: MenuEntry[] = selection ? [{ label: 'Copy selection', accelerator: 'CmdOrCtrl+C', run: () => copyText(selection) }, null] : []
   const actions = normalizeEntries([...copySelection, ...entries])
   const items: ContextMenuItem[] = actions.map((action, index) =>
-    action === null
-      ? { type: 'separator' }
-      : { id: `${index}`, label: action.label, enabled: action.enabled, accelerator: action.accelerator }
+    action === null ? { type: 'separator' } : { id: `${index}`, label: action.label, enabled: action.enabled, accelerator: action.accelerator }
   )
   window.api.showContextMenu(items).then((id) => {
     const chosen = id === null ? null : actions[Number(id)]

@@ -39,10 +39,7 @@ export function navRows(plugins: PluginEntry[], loaded: LoadedPlugin[]): NavRow[
     .filter(({ manifest }) => withSettings.has(manifest.id))
     .map(({ manifest }): NavRow => ({ page: pluginPage(manifest.id), label: manifest.name, icon: 'plug', child: true }))
   const integrations = INTEGRATION_PAGES.map(([page, icon]): NavRow => ({ page, label: page, icon, child: true }))
-  return SECTIONS.flatMap(([id, icon]): NavRow[] => [
-    { page: id, label: id, icon, child: false },
-    ...(id === 'Plugins' ? children : id === 'Integrations' ? integrations : [])
-  ])
+  return SECTIONS.flatMap(([id, icon]): NavRow[] => [{ page: id, label: id, icon, child: false }, ...(id === 'Plugins' ? children : id === 'Integrations' ? integrations : [])])
 }
 
 /** A plugin page is the only page that can go missing, when its plugin is switched off while Settings remembers it */

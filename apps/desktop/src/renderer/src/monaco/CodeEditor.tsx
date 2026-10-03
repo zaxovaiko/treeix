@@ -102,11 +102,7 @@ export function CodeEditor({
     if (!change) return
     const from = model.getPositionAt(change.start)
     const to = model.getPositionAt(change.end)
-    model.pushEditOperations(
-      [],
-      [{ range: new handle.monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column), text: change.text }],
-      () => null
-    )
+    model.pushEditOperations([], [{ range: new handle.monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column), text: change.text }], () => null)
   }, [handle, contents])
 
   useEffect(() => {

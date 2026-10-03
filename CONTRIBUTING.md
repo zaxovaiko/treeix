@@ -12,16 +12,18 @@ macOS 14 or newer, Apple silicon, [Bun](https://bun.sh). The optional command li
 ## Before opening a pull request
 
 ```sh
+bun run format
+bun run lint
 bun run typecheck
 bun run test
 ```
 
-Both have to pass. UI changes need a screenshot of the change in the app.
+All have to pass; CI checks the formatting with `bun run format:check`. UI changes need a screenshot of the change in the app.
 
 ## House style
 
 - TypeScript with no `any`. `unknown` at trust boundaries, narrowed with a type guard.
-- Single quotes, no semicolons, 180 column lines.
+- Single quotes, no semicolons, 180 column lines. `bun run format` (oxfmt) applies them; rules live in `.oxfmtrc.json` and `.oxlintrc.json`.
 - Clear names and decomposition over comments. A comment explains why, never what.
 - No speculative abstraction: no interface with one implementation, no option nobody sets.
 - Conventional commit messages (`feat:`, `fix:`, `docs:`, `refactor:`).

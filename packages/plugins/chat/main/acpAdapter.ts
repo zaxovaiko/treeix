@@ -259,7 +259,18 @@ export const acpAdapter: ChatAdapter = {
     })
     const stream = ndJsonStream(Writable.toWeb(child.stdin), fromAgent)
     try {
-      return await Promise.race([connectOverStream(stream, { cwd, resume, instructions, preset, close: () => killGroup(child), stderrTail: () => stderr, mcp: env.TREEIX_MCP_URL && env.TREEIX_MCP_TOKEN ? { url: env.TREEIX_MCP_URL, token: env.TREEIX_MCP_TOKEN } : null }), failed])
+      return await Promise.race([
+        connectOverStream(stream, {
+          cwd,
+          resume,
+          instructions,
+          preset,
+          close: () => killGroup(child),
+          stderrTail: () => stderr,
+          mcp: env.TREEIX_MCP_URL && env.TREEIX_MCP_TOKEN ? { url: env.TREEIX_MCP_URL, token: env.TREEIX_MCP_TOKEN } : null
+        }),
+        failed
+      ])
     } catch (error) {
       killGroup(child)
       throw error

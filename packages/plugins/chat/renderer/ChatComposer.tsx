@@ -56,7 +56,13 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
         <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground/65" />
       </button>
       {open && (
-        <Popup ref={menu} anchor={anchor} onDismiss={close} onKeyDown={onKey} className="max-h-72 w-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground">
+        <Popup
+          ref={menu}
+          anchor={anchor}
+          onDismiss={close}
+          onKeyDown={onKey}
+          className="max-h-72 w-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground"
+        >
           {option.values.map((value) => (
             <button
               key={value.value}
@@ -109,8 +115,7 @@ function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
   return <OptionPicker option={option} onChoose={pick} />
 }
 
-const preview = (content: ChatContent[]): string =>
-  content.map((item) => (item.type === 'text' ? item.text : '[image]')).join(' ')
+const preview = (content: ChatContent[]): string => content.map((item) => (item.type === 'text' ? item.text : '[image]')).join(' ')
 
 export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string; onSent: () => void }): React.JSX.Element {
   const host = useHost()
@@ -313,7 +318,6 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
           ref={input}
           autoFocus
           rows={1}
-          aria-expanded={items.length > 0}
           value={draft}
           placeholder={chat.options?.agent ? `Message ${agentOr(chat.options.agent).label}` : 'Message the agent'}
           onChange={(event) => {
@@ -334,7 +338,12 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         <div className="flex items-center gap-1.5 px-2 pb-2">
           {acceptsImages && (
             <>
-              <button aria-label="Attach images" title="Attach images" onClick={() => picker.current?.click()} className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+              <button
+                aria-label="Attach images"
+                title="Attach images"
+                onClick={() => picker.current?.click()}
+                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
                 <Icon name="paperclip" className="size-3.5" />
               </button>
               <input

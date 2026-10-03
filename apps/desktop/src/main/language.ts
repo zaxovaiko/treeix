@@ -1,6 +1,17 @@
 import { utilityProcess, type UtilityProcess } from 'electron'
 import { supportsLanguageService } from '../shared/languages'
-import type { CodeDiagnostic, CodeLocation, CodePosition, CompletionDetails, CompletionItem, HoverInfo, LanguageRequest, NavigationKind, SignatureHelp, SymbolTarget } from '../shared/types'
+import type {
+  CodeDiagnostic,
+  CodeLocation,
+  CodePosition,
+  CompletionDetails,
+  CompletionItem,
+  HoverInfo,
+  LanguageRequest,
+  NavigationKind,
+  SignatureHelp,
+  SymbolTarget
+} from '../shared/types'
 import { findDefinitions, findTextReferences } from './git'
 import languageProcessPath from './languageProcess?modulePath'
 
@@ -36,10 +47,12 @@ function ask<T>(request: LanguageRequest): Promise<T | null> {
       pending.delete(id)
       reject(new Error('Language service timed out'))
     }, REQUEST_TIMEOUT_MS)
-    const settle = <V>(done: (value: V) => void) => (value: V) => {
-      clearTimeout(timer)
-      done(value)
-    }
+    const settle =
+      <V>(done: (value: V) => void) =>
+      (value: V) => {
+        clearTimeout(timer)
+        done(value)
+      }
     pending.set(id, { resolve: settle((value) => resolve(value as T | null)), reject: settle(reject) })
     languageProcess().postMessage({ id, request })
   })
@@ -59,12 +72,24 @@ export const hover = (worktreePath: string, target: SymbolTarget): Promise<Hover
   supportsLanguageService(target.path) ? ask<HoverInfo>({ type: 'hover', worktreePath, target }).catch(() => null) : Promise.resolve(null)
 
 const forTypeScript = <T>(path: string, request: LanguageRequest, fallback: T): Promise<T> =>
-  supportsLanguageService(path) ? ask<T>(request).then((result) => result ?? fallback, () => fallback) : Promise.resolve(fallback)
+  supportsLanguageService(path)
+    ? ask<T>(request).then(
+        (result) => result ?? fallback,
+        () => fallback
+      )
+    : Promise.resolve(fallback)
 
 export const completions = (worktreePath: string, path: string, text: string, position: CodePosition): Promise<CompletionItem[]> =>
   forTypeScript(path, { type: 'completions', worktreePath, path, text, position }, [])
-export const completionDetails = (worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null): Promise<CompletionDetails | null> =>
-  forTypeScript(path, { type: 'completionDetails', worktreePath, path, text, position, name, source, data }, null)
+export const completionDetails = (
+  worktreePath: string,
+  path: string,
+  text: string,
+  position: CodePosition,
+  name: string,
+  source: string | null,
+  data: string | null
+): Promise<CompletionDetails | null> => forTypeScript(path, { type: 'completionDetails', worktreePath, path, text, position, name, source, data }, null)
 export const signatureHelp = (worktreePath: string, path: string, text: string, position: CodePosition): Promise<SignatureHelp | null> =>
   forTypeScript(path, { type: 'signatureHelp', worktreePath, path, text, position }, null)
 export const diagnostics = (worktreePath: string, path: string, text: string): Promise<CodeDiagnostic[]> =>

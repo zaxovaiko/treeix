@@ -3,20 +3,23 @@ import { parseSite } from '@treeix/atlassian/main/cli'
 import { sprintJql, threadComments, toWorkItem } from './acli'
 
 test('toWorkItem reads Jira issue JSON and builds the browse link', () => {
-  const item = toWorkItem({
-    key: 'OPN-412',
-    self: 'https://team.atlassian.net/rest/api/3/issue/10001',
-    fields: {
-      summary: 'Rate limit behind proxy',
-      status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } },
-      issuetype: { name: 'Bug' },
-      priority: { name: 'High' },
-      assignee: null,
-    assigneeAvatar: null,
-      project: { name: 'Openora' },
-      updated: '2026-09-17T10:00:00.000+0000'
-    }
-  }, 'team.atlassian.net')
+  const item = toWorkItem(
+    {
+      key: 'OPN-412',
+      self: 'https://team.atlassian.net/rest/api/3/issue/10001',
+      fields: {
+        summary: 'Rate limit behind proxy',
+        status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } },
+        issuetype: { name: 'Bug' },
+        priority: { name: 'High' },
+        assignee: null,
+        assigneeAvatar: null,
+        project: { name: 'Openora' },
+        updated: '2026-09-17T10:00:00.000+0000'
+      }
+    },
+    'team.atlassian.net'
+  )
   expect(item).toEqual({
     key: 'OPN-412',
     summary: 'Rate limit behind proxy',
@@ -43,7 +46,7 @@ test('sprintJql keeps ORDER BY at the end', () => {
   expect(sprintJql('project = BF')).toBe('(project = BF) AND sprint in openSprints()')
 })
 
-test('threadComments nests a comment opening with an earlier author under that author\'s thread', () => {
+test("threadComments nests a comment opening with an earlier author under that author's thread", () => {
   const comment = (id: string, author: string, body: string) => ({ id, author, authorAvatar: null, authorId: null, created: '', body, replies: [] })
   const roots = threadComments([
     comment('1', 'Ann Lee', 'Why EKS?'),

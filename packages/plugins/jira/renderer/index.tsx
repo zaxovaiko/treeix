@@ -45,7 +45,13 @@ function IssuePreview({ url }: { url: string }): React.JSX.Element {
       </button>
       {item?.assignee && <UserAvatar name={item.assignee} url={item.assigneeAvatar} size="size-5" />}
       {item && <StatusPill item={item} />}
-      <a href={url} target="_blank" rel="noreferrer" title="Open in Jira" className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        title="Open in Jira"
+        className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
         <Icon name="external" className="size-3" />
       </a>
     </div>
@@ -58,7 +64,10 @@ function JiraSettings(): React.JSX.Element {
   useEffect(() => setDraft(jql), [jql])
   return (
     <Card title="Tasks">
-      <Row label="Work items" description="JQL for the Tasks tab, without the assignee: the tab's Mine and Anyone switch adds that. Needs the Atlassian CLI signed in: acli jira auth login --web">
+      <Row
+        label="Work items"
+        description="JQL for the Tasks tab, without the assignee: the tab's Mine and Anyone switch adds that. Needs the Atlassian CLI signed in: acli jira auth login --web"
+      >
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -118,9 +127,12 @@ declare module '@treeix/sdk' {
 
 let projects = new Set<string>()
 // Once per launch as the plugin loads, so keys link on the first hover; a new project shows after a restart
-void jiraApi.projects().then((keys) => {
-  projects = new Set(keys)
-}, () => undefined)
+void jiraApi.projects().then(
+  (keys) => {
+    projects = new Set(keys)
+  },
+  () => undefined
+)
 
 function openIssue(key: string, host: HostApi): void {
   selection.update({ key })

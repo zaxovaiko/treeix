@@ -7,8 +7,7 @@ import { prLabel, ProviderMark, REVIEW_MARKS, UserAvatar } from './pullRequestUt
 type ReviewKey = keyof typeof REVIEW_MARKS
 
 /** Someone asking for changes outranks your own state, as it blocks the merge */
-const reviewOf = (pr: PullRequest): ReviewKey | null =>
-  pr.review?.changesRequested ? 'changes' : pr.review && pr.review.state !== 'unreviewed' ? pr.review.state : null
+const reviewOf = (pr: PullRequest): ReviewKey | null => (pr.review?.changesRequested ? 'changes' : pr.review && pr.review.state !== 'unreviewed' ? pr.review.state : null)
 const isReviewKey = (value: string): value is ReviewKey => Object.hasOwn(REVIEW_MARKS, value)
 
 const COMMENT_BUCKETS = [
@@ -52,7 +51,11 @@ const GROUPS: FilterGroup<PullRequest>[] = [
   }
 ]
 
-export const parseFilters = (stored: unknown): PullRequestFilter[] => parseTokens(stored, GROUPS.map((group) => group.kind))
+export const parseFilters = (stored: unknown): PullRequestFilter[] =>
+  parseTokens(
+    stored,
+    GROUPS.map((group) => group.kind)
+  )
 
 export const matchesFilters = (pr: PullRequest, filters: PullRequestFilter[]): boolean => matchesTokens(pr, filters, GROUPS)
 
@@ -65,5 +68,13 @@ export function FilterSearch({
   filters: PullRequestFilter[]
   onChange: (filters: PullRequestFilter[]) => void
 }): React.JSX.Element {
-  return <GenericFilterSearch items={pullRequests} groups={GROUPS} tokens={filters} onChange={onChange} placeholder="Search, or filter by person, repository, review, comments, branch" />
+  return (
+    <GenericFilterSearch
+      items={pullRequests}
+      groups={GROUPS}
+      tokens={filters}
+      onChange={onChange}
+      placeholder="Search, or filter by person, repository, review, comments, branch"
+    />
+  )
 }

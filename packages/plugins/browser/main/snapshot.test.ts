@@ -20,7 +20,9 @@ test('formatSnapshot lifts wrappers, drops text repeating its parent and gives r
     node('6', 'heading', 'Cart', [], { properties: [{ name: 'level', value: { value: 2 } }] }),
     node('7', 'button', 'Hidden', [], { ignored: true })
   ]
-  expect(formatSnapshot(nodes)).toBe(['- RootWebArea "Shop" [ref=101]', '  - link "Home" [ref=103]', '  - textbox "Email" value="a@b.c" focused [ref=105]', '  - heading "Cart" level=2 [ref=106]'].join('\n'))
+  expect(formatSnapshot(nodes)).toBe(
+    ['- RootWebArea "Shop" [ref=101]', '  - link "Home" [ref=103]', '  - textbox "Email" value="a@b.c" focused [ref=105]', '  - heading "Cart" level=2 [ref=106]'].join('\n')
+  )
 })
 
 test('parseKey knows named keys, characters and modifiers', () => {

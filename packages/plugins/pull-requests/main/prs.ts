@@ -2,7 +2,26 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ConflictResult, ImageResult, Person, Provider, PullRequest, Pipeline, PullRequestDetail, PullRequestList, PullRequestComment, PullRequestState, Reaction, Reviewer, ReviewEvent, ReviewStatus, ReviewThread, ReviewVerdict, ThreadComment, MergeMethod } from '../shared/types'
+import type {
+  ConflictResult,
+  ImageResult,
+  Person,
+  Provider,
+  PullRequest,
+  Pipeline,
+  PullRequestDetail,
+  PullRequestList,
+  PullRequestComment,
+  PullRequestState,
+  Reaction,
+  Reviewer,
+  ReviewEvent,
+  ReviewStatus,
+  ReviewThread,
+  ReviewVerdict,
+  ThreadComment,
+  MergeMethod
+} from '../shared/types'
 import { REACTIONS } from '../shared/types'
 import { splitPatch } from '@treeix/host/git'
 import { type Json, isJson, list, object, text } from '@treeix/shared/json'
@@ -31,8 +50,7 @@ async function runWithBody(command: string, args: string[], cwd: string, body: J
   return (await pending).stdout
 }
 
-const runJson = async (command: string, args: string[], cwd: string): Promise<unknown> =>
-  JSON.parse(await run(command, args, cwd))
+const runJson = async (command: string, args: string[], cwd: string): Promise<unknown> => JSON.parse(await run(command, args, cwd))
 
 export type Remote = { provider: Provider; host: string; slug: string }
 
@@ -61,7 +79,7 @@ async function cli<T>(action: () => Promise<T>): Promise<T> {
   try {
     return await action()
   } catch (reason) {
-    throw new Error(failureMessage(reason))
+    throw new Error(failureMessage(reason), { cause: reason })
   }
 }
 
@@ -74,8 +92,7 @@ const githubPullRequestNode = (raw: unknown): Json => object(object(object(objec
 const GITLAB_STATES: Record<string, PullRequestState> = { opened: 'open', merged: 'merged', closed: 'closed', locked: 'closed' }
 
 /** `gh pr list` has no avatar field; bots come through as `app/<name>` and have no profile image */
-export const githubAvatar = (login: string): string | null =>
-  login && !login.includes('/') ? `https://github.com/${login}.png?size=64` : null
+export const githubAvatar = (login: string): string | null => (login && !login.includes('/') ? `https://github.com/${login}.png?size=64` : null)
 
 export function toGithubPullRequest(raw: Json, repoPath: string): PullRequest {
   return {
@@ -173,9 +190,7 @@ export function githubReviewStatuses(raw: unknown): Map<number, ReviewStatus> {
     const requested = list(object(pr.reviewRequests).nodes).some((node) => text(object(node.requestedReviewer).login) === viewer)
     const state: ReviewStatus['state'] =
       text(object(pr.author).login) === viewer ? 'yours' : requested ? 'requested' : mine ? (REVIEW_STATES[text(mine.state)] ?? 'commented') : 'unreviewed'
-    const changesRequested = list(object(pr.latestReviews).nodes).some(
-      (review) => text(review.state) === 'CHANGES_REQUESTED' && text(object(review.author).login) !== viewer
-    )
+    const changesRequested = list(object(pr.latestReviews).nodes).some((review) => text(review.state) === 'CHANGES_REQUESTED' && text(object(review.author).login) !== viewer)
     statuses.set(number, { state, newCommits: state === 'yours' ? 0 : newCommits, ...(changesRequested && { changesRequested }) })
   }
   return statuses
@@ -288,12 +303,8 @@ async function listForRepo(repoPath: string): Promise<PullRequest[]> {
 
 export async function listPullRequests(repoPaths: string[]): Promise<PullRequestList> {
   const results = await Promise.allSettled(repoPaths.map(listForRepo))
-  const errors = results.flatMap((result, index) =>
-    result.status === 'rejected' ? [`${basename(repoPaths[index])}: ${failureMessage(result.reason)}`] : []
-  )
-  const pullRequests = results
-    .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  const errors = results.flatMap((result, index) => (result.status === 'rejected' ? [`${basename(repoPaths[index])}: ${failureMessage(result.reason)}`] : []))
+  const pullRequests = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   return { pullRequests, errors }
 }
 
@@ -384,9 +395,7 @@ export function githubThreads(reviewComments: Json[], issueComments: Json[], sta
           path: null,
           line: null,
           side: 'additions',
-          comments: issueComments.map((raw) =>
-            toComment(`issue:${raw.id}`, raw.user, raw.body, raw.created_at, raw.reactions)
-          ),
+          comments: issueComments.map((raw) => toComment(`issue:${raw.id}`, raw.user, raw.body, raw.created_at, raw.reactions)),
           resolved: null,
           resolveId: null
         }
@@ -466,11 +475,7 @@ export function normalizeGitlabDiff(diff: string): string {
     const from = stripPrefix(line.slice(4).trim(), 'a/')
     const to = stripPrefix(next.slice(4).trim(), 'b/')
     const path = to === '/dev/null' ? from : to
-    output.push(
-      `diff --git a/${path} b/${path}`,
-      from === '/dev/null' ? '--- /dev/null' : `--- a/${from}`,
-      to === '/dev/null' ? '+++ /dev/null' : `+++ b/${to}`
-    )
+    output.push(`diff --git a/${path} b/${path}`, from === '/dev/null' ? '--- /dev/null' : `--- a/${from}`, to === '/dev/null' ? '+++ /dev/null' : `+++ b/${to}`)
     index++
   }
   return output.join('\n')
@@ -487,7 +492,7 @@ export function githubFilesToPatches(files: Json[]): FilePatch[] {
     const hunks = text(file.patch)
     return {
       path,
-      patch: [`diff --git a/${previous} b/${path}`, `--- ${from}`, `+++ ${to}`, ...(hunks ? [hunks] : [])].join('\n') + '\n',
+      patch: `${[`diff --git a/${previous} b/${path}`, `--- ${from}`, `+++ ${to}`, ...(hunks ? [hunks] : [])].join('\n')}\n`,
       additions: numberOrNull(file.additions) ?? 0,
       deletions: numberOrNull(file.deletions) ?? 0
     }
@@ -518,7 +523,12 @@ export function logTail(log: string): string {
   const lines = log
     .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
     .split(/\r?\n/)
-    .map((line) => line.replace(/^.*\r(?!$)/, '').replace(GITLAB_LINE_PREFIX, '').replace(/section_(start|end):\d+:\S+/g, ''))
+    .map((line) =>
+      line
+        .replace(/^.*\r(?!$)/, '')
+        .replace(GITLAB_LINE_PREFIX, '')
+        .replace(/section_(start|end):\d+:\S+/g, '')
+    )
   while (lines.length > 0 && !lines.at(-1)?.trim()) lines.pop()
   return lines.slice(-LOG_TAIL_LINES).join('\n')
 }
@@ -586,7 +596,11 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
       pages(`repos/${remote.slug}/pulls/${number}/comments`),
       pages(`repos/${remote.slug}/issues/${number}/comments`),
       // Without it threads and files still show, just without resolve buttons and viewed marks
-      runJson('gh', ['api', 'graphql', '--hostname', remote.host, '-f', `query=${threadQuery}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${number}`], repoPath).catch(() => null)
+      runJson(
+        'gh',
+        ['api', 'graphql', '--hostname', remote.host, '-f', `query=${threadQuery}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${number}`],
+        repoPath
+      ).catch(() => null)
     ])
     return {
       body: text(object(view).body),
@@ -716,7 +730,10 @@ const gitlabUsers = new Map<string, Promise<string | null>>()
 function gitlabUser(repoPath: string): Promise<string | null> {
   const known = gitlabUsers.get(repoPath)
   if (known) return known
-  const asking = runJson('glab', ['api', 'user'], repoPath).then((user) => text(object(user).username) || null, () => null)
+  const asking = runJson('glab', ['api', 'user'], repoPath).then(
+    (user) => text(object(user).username) || null,
+    () => null
+  )
   gitlabUsers.set(repoPath, asking)
   return asking
 }
@@ -777,7 +794,11 @@ export async function setFileViewed(pullRequest: PullRequest, filePath: string, 
   if (remote?.provider !== 'github') throw new Error('Only GitHub stores viewed files')
   const [owner, name] = remote.slug.split('/')
   const idQuery = 'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } } }'
-  const ids = await runJson('gh', ['api', 'graphql', '--hostname', remote.host, '-f', `query=${idQuery}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${number}`], repoPath)
+  const ids = await runJson(
+    'gh',
+    ['api', 'graphql', '--hostname', remote.host, '-f', `query=${idQuery}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${number}`],
+    repoPath
+  )
   const pullRequestId = text(githubPullRequestNode(ids).id)
   const mutation = viewed ? 'markFileAsViewed' : 'unmarkFileAsViewed'
   const query = `mutation($id: ID!, $path: String!) { ${mutation}(input: { pullRequestId: $id, path: $path }) { clientMutationId } }`
@@ -818,7 +839,12 @@ export async function mergePullRequest(pullRequest: PullRequest, method: MergeMe
   await cli(async () => {
     if (remote.provider === 'github') {
       await run('gh', ['api', '--hostname', remote.host, '-X', 'PUT', `repos/${remote.slug}/pulls/${number}/merge`, '-f', `merge_method=${method}`], repoPath)
-      if (deleteBranch) await run('gh', ['api', '--hostname', remote.host, '-X', 'DELETE', `repos/${remote.slug}/git/refs/heads/${sourceBranch.split('/').map(encodeURIComponent).join('/')}`], repoPath)
+      if (deleteBranch)
+        await run(
+          'gh',
+          ['api', '--hostname', remote.host, '-X', 'DELETE', `repos/${remote.slug}/git/refs/heads/${sourceBranch.split('/').map(encodeURIComponent).join('/')}`],
+          repoPath
+        )
       return
     }
     const how = method === 'squash' ? ['--squash'] : method === 'rebase' ? ['--rebase'] : []
@@ -885,7 +911,9 @@ export async function setAssigned(pullRequest: PullRequest, login: string, assig
   const remote = await requireRemote(repoPath)
   await cli(async () => {
     if (remote.provider === 'github') {
-      await runWithBody('gh', ['api', '--hostname', remote.host, '-X', assigned ? 'POST' : 'DELETE', `repos/${remote.slug}/issues/${number}/assignees`], repoPath, { assignees: [login] })
+      await runWithBody('gh', ['api', '--hostname', remote.host, '-X', assigned ? 'POST' : 'DELETE', `repos/${remote.slug}/issues/${number}/assignees`], repoPath, {
+        assignees: [login]
+      })
       return
     }
     // The quick action takes a username, the REST update wants the full list of user ids

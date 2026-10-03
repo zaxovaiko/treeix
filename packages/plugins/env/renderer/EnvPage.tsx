@@ -93,10 +93,15 @@ export function EnvPage(): React.JSX.Element {
   const worktreeEntries = scoped.filter(
     ({ repo, worktree, env }) =>
       (showQuiet || withEnv.has(repo.path)) &&
-      (!lower || branchLabel(worktree).toLowerCase().includes(lower) || env?.files.some((file) => file.vars.some((entry) => entry.name.toLowerCase().includes(lower) || entry.value.toLowerCase().includes(lower))))
+      (!lower ||
+        branchLabel(worktree).toLowerCase().includes(lower) ||
+        env?.files.some((file) => file.vars.some((entry) => entry.name.toLowerCase().includes(lower) || entry.value.toLowerCase().includes(lower))))
   )
-  const names = [...index.keys()].filter((candidate) => !lower || candidate.toLowerCase().includes(lower) || index.get(candidate)?.some((place) => place.value?.toLowerCase().includes(lower)))
-  const entries: Entry[] = mode === 'variable' ? names.map((variable) => ({ kind: 'variable', name: variable })) : worktreeEntries.map((entry) => ({ kind: 'worktree', target: entry }))
+  const names = [...index.keys()].filter(
+    (candidate) => !lower || candidate.toLowerCase().includes(lower) || index.get(candidate)?.some((place) => place.value?.toLowerCase().includes(lower))
+  )
+  const entries: Entry[] =
+    mode === 'variable' ? names.map((variable) => ({ kind: 'variable', name: variable })) : worktreeEntries.map((entry) => ({ kind: 'worktree', target: entry }))
   const cursor = entries.findIndex((entry) => (entry.kind === 'variable' ? entry.name === name : entry.target === target))
   const pick = (entry: Entry): void => {
     setSelected(null)
@@ -178,13 +183,21 @@ export function EnvPage(): React.JSX.Element {
               const variants = new Set(places.flatMap((place) => (place.value === null ? [] : [place.value]))).size
               const missing = places.filter((place) => place.value === null).length
               return (
-                <button key={variable} {...nav.rowProps(++position)} onClick={() => pick({ kind: 'variable', name: variable })} className={`${ROW} ${variable === name ? 'bg-accent' : ''}`}>
+                <button
+                  key={variable}
+                  {...nav.rowProps(++position)}
+                  onClick={() => pick({ kind: 'variable', name: variable })}
+                  className={`${ROW} ${variable === name ? 'bg-accent' : ''}`}
+                >
                   <KindIcon kind={kind} />
                   <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${variable === name ? 'text-foreground' : 'text-foreground/80'}`}>
                     <VarName name={variable} kind={kind} />
                   </span>
                   {(missing > 0 || variants > 1) && (
-                    <span title={missing ? `${missing} missing` : `${variants} different values`} className={`size-1.5 shrink-0 rounded-full ${missing ? 'bg-red-400' : 'bg-amber-400'}`} />
+                    <span
+                      title={missing ? `${missing} missing` : `${variants} different values`}
+                      className={`size-1.5 shrink-0 rounded-full ${missing ? 'bg-red-400' : 'bg-amber-400'}`}
+                    />
                   )}
                 </button>
               )
@@ -206,9 +219,16 @@ export function EnvPage(): React.JSX.Element {
                   {repoEntries.map((entry) => {
                     const active = entry === target
                     return (
-                      <button key={entry.worktree.path} {...nav.rowProps(++position)} onClick={() => pick({ kind: 'worktree', target: entry })} className={`${ROW} ${active ? 'bg-accent' : ''}`}>
+                      <button
+                        key={entry.worktree.path}
+                        {...nav.rowProps(++position)}
+                        onClick={() => pick({ kind: 'worktree', target: entry })}
+                        className={`${ROW} ${active ? 'bg-accent' : ''}`}
+                      >
                         <Icon name={entry.isMain ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
-                        <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/80'}`}>{branchLabel(entry.worktree)}</span>
+                        <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/80'}`}>
+                          {branchLabel(entry.worktree)}
+                        </span>
                         <StatusDot target={entry} />
                       </button>
                     )
@@ -241,18 +261,18 @@ export function EnvPage(): React.JSX.Element {
     )
   const inspector =
     mode === 'worktree' && shownTarget && shownTarget.env.files.length > 0 ? (
-      <Inspector target={shownTarget} row={selectedRow} places={selectedRow ? inRepo(index.get(selectedRow.name) ?? [], shownTarget) : []} scoped={scoped} onComment={commentOnSelected} />
+      <Inspector
+        target={shownTarget}
+        row={selectedRow}
+        places={selectedRow ? inRepo(index.get(selectedRow.name) ?? [], shownTarget) : []}
+        scoped={scoped}
+        onComment={commentOnSelected}
+      />
     ) : undefined
 
   return (
     <>
-      <PageLayout
-        inspectorWidth={270}
-        listWidth={240}
-        list={list}
-        main={main}
-        inspector={inspector}
-      />
+      <PageLayout inspectorWidth={270} listWidth={240} list={list} main={main} inspector={inspector} />
       {edits.size > 0 && !reviewing && (
         <div className="fixed bottom-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-input bg-popover py-1.5 pr-1.5 pl-3 text-xs shadow-2xl shadow-black/60">
           <span className="rounded bg-amber-400/12 px-1.5 font-mono text-amber-400">{edits.size}</span>

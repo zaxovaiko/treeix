@@ -1,11 +1,38 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
-import { failedJobLogs, filesChangedBetween, assignableUsers, closePullRequest, setAssigned, commentOnPullRequest, conflictingFiles, listPullRequests, pullRequestAt, pullRequestDetail, pullRequestFile, pullRequestImage, reactToPullRequestComment, deletePullRequestComment, editPullRequestComment, mergePullRequest, requestReview, setDraft, setFileViewed, setThreadResolved, submitReview } from './prs'
+import {
+  failedJobLogs,
+  filesChangedBetween,
+  assignableUsers,
+  closePullRequest,
+  setAssigned,
+  commentOnPullRequest,
+  conflictingFiles,
+  listPullRequests,
+  pullRequestAt,
+  pullRequestDetail,
+  pullRequestFile,
+  pullRequestImage,
+  reactToPullRequestComment,
+  deletePullRequestComment,
+  editPullRequestComment,
+  mergePullRequest,
+  requestReview,
+  setDraft,
+  setFileViewed,
+  setThreadResolved,
+  submitReview
+} from './prs'
 
 const plugin: MainPlugin = {
   tools: [
     { name: 'gh', purpose: 'GitHub pull requests', auth: true, releases: { url: 'https://api.github.com/repos/cli/cli/releases/latest', field: 'tag_name' } },
-    { name: 'glab', purpose: 'GitLab merge requests', auth: true, releases: { url: 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest', field: 'tag_name' } }
+    {
+      name: 'glab',
+      purpose: 'GitLab merge requests',
+      auth: true,
+      releases: { url: 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest', field: 'tag_name' }
+    }
   ],
   activate: (context) => {
     context.handle('list', (_, repoPaths: string[]) => listPullRequests(repoPaths))

@@ -51,8 +51,7 @@ export function onPageMessage(listener: (tabId: string, channel: string, args: u
   return () => messageListeners.delete(listener)
 }
 
-const sameRect = (a: DOMRect | null, b: DOMRect | null): boolean =>
-  a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
+const sameRect = (a: DOMRect | null, b: DOMRect | null): boolean => a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
 
 /** Every open page, laid over the shown slot; pages never move in the DOM, so switching tab and panel doesn't reload them */
 export function PageLayer({ children }: { children?: React.ReactNode }): React.JSX.Element {
@@ -92,10 +91,7 @@ export function PageLayer({ children }: { children?: React.ReactNode }): React.J
   }, [hasSlot])
   const box = lastBox.current
   return (
-    <div
-      data-browser
-      style={{ position: 'fixed', left: box.x, top: box.y, width: box.width, height: box.height, visibility: onScreen ? 'visible' : 'hidden', zIndex: 10 }}
-    >
+    <div data-browser style={{ position: 'fixed', left: box.x, top: box.y, width: box.width, height: box.height, visibility: onScreen ? 'visible' : 'hidden', zIndex: 10 }}>
       {tabs.map((tab) => (
         <Page key={tab.id} tab={tab} active={tab.id === activeId} />
       ))}
@@ -123,7 +119,11 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
           // -3 is a load cut short by another one, like a redirect or a click during loading
           if (event.isMainFrame === false || event.errorCode === -3) return
           // The failed address stays in the bar, so a first load that never connected still says what it tried
-          patch({ url: String(event.validatedURL), loading: false, error: { code: Number(event.errorCode), description: String(event.errorDescription), url: String(event.validatedURL) } })
+          patch({
+            url: String(event.validatedURL),
+            loading: false,
+            error: { code: Number(event.errorCode), description: String(event.errorDescription), url: String(event.validatedURL) }
+          })
         }
       ],
       ['did-stop-loading', () => patch({ loading: false, ...history() })],
@@ -196,7 +196,14 @@ export function setDesign(on: boolean): void {
 
 function isSelection(value: unknown): value is ElementSelection {
   const candidate = value as Partial<ElementSelection> | null
-  return !!candidate && typeof candidate.selector === 'string' && typeof candidate.html === 'string' && typeof candidate.url === 'string' && typeof candidate.rect?.x === 'number' && typeof candidate.viewport?.width === 'number'
+  return (
+    !!candidate &&
+    typeof candidate.selector === 'string' &&
+    typeof candidate.html === 'string' &&
+    typeof candidate.url === 'string' &&
+    typeof candidate.rect?.x === 'number' &&
+    typeof candidate.viewport?.width === 'number'
+  )
 }
 
 onPageMessage((tabId, channel, args) => {

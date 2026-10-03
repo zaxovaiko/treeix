@@ -6,7 +6,15 @@ const base = { worktreePath: '/repo', range: { start: 0, end: 0 }, code: '' }
 test('commentsPrompt groups browser items per page, after references and before code notes', () => {
   const comments: ReviewComment[] = [
     { ...base, id: '1', filePath: 'src/a.ts', range: { start: 3, end: 3 }, text: 'Rename this' },
-    { ...base, id: '2', filePath: 'http://localhost:3000/pricing', text: 'Price shows NaN', body: 'Selector: .price', kind: 'browser', attachments: [{ path: '/att/el.png', name: 'el.png' }] },
+    {
+      ...base,
+      id: '2',
+      filePath: 'http://localhost:3000/pricing',
+      text: 'Price shows NaN',
+      body: 'Selector: .price',
+      kind: 'browser',
+      attachments: [{ path: '/att/el.png', name: 'el.png' }]
+    },
     { ...base, id: '3', filePath: 'Jira', text: 'Jira BF-1', kind: 'reference' }
   ]
   expect(commentsPrompt(comments, 'feat/x')).toBe(

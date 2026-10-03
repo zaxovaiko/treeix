@@ -10,8 +10,7 @@ const MAX_ENTRIES = 40
 export const isStale = (entry: Entry<unknown> | null, ttlMs: number, now = Date.now()): boolean => entry === null || now - entry.fetchedAt > ttlMs
 
 /** Newest entries first, capped, so one cache can't fill browser storage */
-export const trimEntries = <T>(entries: [string, Entry<T>][], max = MAX_ENTRIES): [string, Entry<T>][] =>
-  [...entries].sort((a, b) => b[1].fetchedAt - a[1].fetchedAt).slice(0, max)
+export const trimEntries = <T>(entries: [string, Entry<T>][], max = MAX_ENTRIES): [string, Entry<T>][] => [...entries].sort((a, b) => b[1].fetchedAt - a[1].fetchedAt).slice(0, max)
 
 const isEntry = (value: unknown): value is Entry<unknown> => typeof value === 'object' && value !== null && typeof (value as Entry<unknown>).fetchedAt === 'number'
 
@@ -69,7 +68,11 @@ export type Cached<T> = {
  */
 export function useCached<T>(cache: Cache<T>, id: string, ttlMs: number, load: (id: string) => Promise<T>): Cached<T> {
   const cachedEntry = id ? cache.get(id) : null
-  const [state, setState] = useState<{ id: string; value: T | null; fetchedAt: number | null }>({ id, value: cachedEntry?.value ?? null, fetchedAt: cachedEntry?.fetchedAt ?? null })
+  const [state, setState] = useState<{ id: string; value: T | null; fetchedAt: number | null }>({
+    id,
+    value: cachedEntry?.value ?? null,
+    fetchedAt: cachedEntry?.fetchedAt ?? null
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)

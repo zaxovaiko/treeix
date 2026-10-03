@@ -12,7 +12,6 @@ import { raceBranches } from './worktreePlans'
 /** Several agents race on the same prompt, each in a worktree of its own named after it */
 export type NewBranchRequest = { repoPath: string; name: string; base: string; worktree: boolean; sessions: SessionKind[]; prompt: string }
 
-
 const localName = (branch: string): string => branch.replace(/^origin\//, '')
 
 const MAX_SUGGESTIONS = 50
@@ -24,7 +23,8 @@ function BranchCombobox({
   branches,
   placeholder,
   autoFocus = false,
-  onSubmit
+  onSubmit,
+  id
 }: {
   value: string
   onChange: (value: string) => void
@@ -32,6 +32,7 @@ function BranchCombobox({
   placeholder: string
   autoFocus?: boolean
   onSubmit?: () => void
+  id: string
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -52,6 +53,7 @@ function BranchCombobox({
   return (
     <div className="relative mt-1">
       <input
+        id={id}
         ref={inputRef}
         autoFocus={autoFocus}
         value={value}
@@ -174,16 +176,20 @@ export function BranchDialog({
         <Kbd hint>esc</Kbd>
       </div>
 
-      <label className="mt-3 block text-xs text-muted-foreground">Branch</label>
-      <BranchCombobox autoFocus value={name} onChange={setName} branches={branches ?? []} placeholder="feat/my-branch" onSubmit={submit} />
+      <label htmlFor="branch-name" className="mt-3 block text-xs text-muted-foreground">
+        Branch
+      </label>
+      <BranchCombobox id="branch-name" autoFocus value={name} onChange={setName} branches={branches ?? []} placeholder="feat/my-branch" onSubmit={submit} />
       <p className="mt-1 h-4 text-[11px] text-muted-foreground">
         {existing ? `Exists${existing.remote ? ' on origin' : ''}, will be checked out` : name.trim() ? 'New branch' : ''}
       </p>
 
       {!existing && (
         <>
-          <label className="mt-2 block text-xs text-muted-foreground">Start from</label>
-          <BranchCombobox value={base} onChange={setBase} branches={branches ?? []} placeholder="dev" onSubmit={submit} />
+          <label htmlFor="branch-base" className="mt-2 block text-xs text-muted-foreground">
+            Start from
+          </label>
+          <BranchCombobox id="branch-base" value={base} onChange={setBase} branches={branches ?? []} placeholder="dev" onSubmit={submit} />
         </>
       )}
 
@@ -203,7 +209,9 @@ export function BranchDialog({
               key={agent?.id ?? 'none'}
               onClick={() => (agent ? toggleAgent(agent.id) : setChosen(''))}
               className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ${
-                (agent ? sessions.includes(agent.id) : sessions.length === 0) ? 'bg-foreground/[.08] text-foreground ring-input' : 'text-muted-foreground ring-border hover:bg-accent'
+                (agent ? sessions.includes(agent.id) : sessions.length === 0)
+                  ? 'bg-foreground/[.08] text-foreground ring-input'
+                  : 'text-muted-foreground ring-border hover:bg-accent'
               }`}
             >
               {agent ? (
@@ -243,7 +251,11 @@ export function BranchDialog({
         <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
-        <button onClick={submit} disabled={!name.trim() || busy || (!worktree && Boolean(existing))} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+        <button
+          onClick={submit}
+          disabled={!name.trim() || busy || (!worktree && Boolean(existing))}
+          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40"
+        >
           {busy ? 'Creating…' : worktree ? (sessions.length > 1 ? `Create ${sessions.length} worktrees` : 'Create worktree') : existing ? 'Branch exists' : 'Create branch'}
           <Kbd hint>⌘⏎</Kbd>
         </button>

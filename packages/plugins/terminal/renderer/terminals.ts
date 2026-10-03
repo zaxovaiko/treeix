@@ -218,7 +218,8 @@ let ports: SessionPort[] = []
 let portsTimer: ReturnType<typeof setInterval> | null = null
 export const getPorts = (): SessionPort[] => ports
 
-const samePorts = (a: SessionPort[], b: SessionPort[]): boolean => a.length === b.length && a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port && port.cwd === b[index].cwd)
+const samePorts = (a: SessionPort[], b: SessionPort[]): boolean =>
+  a.length === b.length && a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port && port.cwd === b[index].cwd)
 
 function setPorts(next: SessionPort[]): void {
   if (samePorts(ports, next)) return
@@ -517,7 +518,16 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
 const spawnSession = (meta: SessionMeta, command: string | undefined, id?: string, size = SPAWN_SIZE): Promise<string> =>
   bridge.invoke<string>('create', { cwd: meta.worktreePath, command, ...size, meta: JSON.stringify(meta), id })
 
-const metaOf = ({ worktreePath, kind, title, renamed, startedAt, workspaceId, agentSessionId, view }: SessionMeta): SessionMeta => ({ worktreePath, kind, title, renamed, startedAt, workspaceId, agentSessionId, view })
+const metaOf = ({ worktreePath, kind, title, renamed, startedAt, workspaceId, agentSessionId, view }: SessionMeta): SessionMeta => ({
+  worktreePath,
+  kind,
+  title,
+  renamed,
+  startedAt,
+  workspaceId,
+  agentSessionId,
+  view
+})
 
 function newMeta(worktreePath: string, kind: SessionKind, view: SessionView): SessionMeta {
   const same = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind && session.view === view).length
@@ -735,7 +745,10 @@ async function restoreSessions(): Promise<void> {
   const rename = (id: string): string | undefined => (findSession(id) ? id : undefined)
   const tasks = savedTasks
     ? remapTasks(savedTasks.tasks, rename)
-    : tasksFromSessions(state.sessions.filter((session) => !taskOf(state.tasks, session.id)), remapPanes(saved.layout, rename).flat())
+    : tasksFromSessions(
+        state.sessions.filter((session) => !taskOf(state.tasks, session.id)),
+        remapPanes(saved.layout, rename).flat()
+      )
   const selected = savedTasks?.selected ?? Object.fromEntries([...tasks].reverse().map((task) => [task.workspaceId, task.id]))
   setTasks([...tasks, ...state.tasks], { ...selected, ...state.selected })
   placeOrphans()
@@ -910,7 +923,11 @@ export function killSession(id: string): void {
 
 /** Closes every pane of a tab */
 export function closeTab(taskId: string, tabId: string): void {
-  state.tasks.find((task) => task.id === taskId)?.tabs.find((tab) => tab.id === tabId)?.layout.flat().forEach(killSession)
+  state.tasks
+    .find((task) => task.id === taskId)
+    ?.tabs.find((tab) => tab.id === tabId)
+    ?.layout.flat()
+    .forEach(killSession)
 }
 
 export const forgetClosedSession = (id: string): void => setHistory(state.history.filter((entry) => entry.id !== id))
@@ -974,7 +991,9 @@ export function sendText(id: string, text: string, submit: boolean): void {
   if (findSession(id)?.status === 'dormant') {
     // Listening before the process starts, so its first output counts
     const ready = whenReady(id)
-    void wakeSession(id).then(() => ready).then(write)
+    void wakeSession(id)
+      .then(() => ready)
+      .then(write)
   } else write()
   revealSession(id)
 }

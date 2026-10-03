@@ -91,7 +91,12 @@ export function parseCodexLimits(lines: string[], now = Date.now()): AgentLimits
 
 /** Treeix's status line bridge, LimitBar's cache and the Claude desktop app; whichever saw usage last */
 async function readClaude(statusFile: string): Promise<AgentLimits | null> {
-  const [status, modified, limitBar, desktop] = await Promise.all([readJsonFile(statusFile), stat(statusFile).catch(() => null), readJsonFile(CLAUDE_LIMITS), readJsonFile(CLAUDE_DESKTOP_USAGE)])
+  const [status, modified, limitBar, desktop] = await Promise.all([
+    readJsonFile(statusFile),
+    stat(statusFile).catch(() => null),
+    readJsonFile(CLAUDE_LIMITS),
+    readJsonFile(CLAUDE_DESKTOP_USAGE)
+  ])
   return newestLimits([modified ? parseStatusLineLimits(status, modified.mtimeMs) : null, parseClaudeLimits(limitBar), parseDesktopUsage(desktop)])
 }
 

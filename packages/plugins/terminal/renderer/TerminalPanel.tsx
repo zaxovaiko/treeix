@@ -113,7 +113,11 @@ function DiagramsButton({ session }: { session: Session }): React.JSX.Element | 
     })
   }
   return (
-    <button title="Render the mermaid diagrams of this session" onClick={() => void open()} className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+    <button
+      title="Render the mermaid diagrams of this session"
+      onClick={() => void open()}
+      className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+    >
       <Icon name="layers" className="size-3" />
       Diagrams
     </button>
@@ -353,7 +357,11 @@ function TerminalPane({
           <DiagramsButton session={session} />
           {plans && session.view === 'terminal' && (session.kind === 'claude' || planName) && <plans.PlanButton startedAt={session.startedAt} name={planName} />}
           {number <= 9 && (
-            <span data-key-hint="" title={`Focus with ⌥${number}`} className={`shrink-0 rounded px-1 text-[10.5px] leading-4 tabular-nums ${active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground/60'}`}>
+            <span
+              data-key-hint=""
+              title={`Focus with ⌥${number}`}
+              className={`shrink-0 rounded px-1 text-[10.5px] leading-4 tabular-nums ${active ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground/60'}`}
+            >
               ⌥{number}
             </span>
           )}
@@ -459,7 +467,11 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
             </span>
           )}
           {activity !== 'none' && <ActivityMark activity={activity} />}
-          {digit && <span data-key-hint="" className="shrink-0 text-[10.5px] text-muted-foreground/60">⌘{digit}</span>}
+          {digit && (
+            <span data-key-hint="" className="shrink-0 text-[10.5px] text-muted-foreground/60">
+              ⌘{digit}
+            </span>
+          )}
         </button>
       )}
       <button
@@ -483,10 +495,12 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
   const open = useFolderPickerOpen()
   const inScope = (host.repos ?? []).filter((repo) => !host.scopeRepoPaths || host.scopeRepoPaths.includes(repo.path))
   const home = window.api.home
-  const option = (section: string, label?: string) => (path: string): PickerOption => {
-    const name = label ?? worktreeLabel(host.repos, path)
-    return { id: path, label: `${section} ${name} ${path}`, section, render: <FolderRow name={name} path={path} /> }
-  }
+  const option =
+    (section: string, label?: string) =>
+    (path: string): PickerOption => {
+      const name = label ?? worktreeLabel(host.repos, path)
+      return { id: path, label: `${section} ${name} ${path}`, section, render: <FolderRow name={name} path={path} /> }
+    }
   // Recent picks first, the likeliest next; everything below leaves them out so no folder shows twice
   const recent = recentFolders()
   const unseen = (path: string): boolean => !recent.includes(path)
@@ -597,7 +611,9 @@ function TabStrip({
   // A lone pane has no header, so its plan shows here
   const lone = activeTab && tabPanes(activeTab).length === 1 ? sessions.find((session) => session.id === tabPanes(activeTab)[0]) : undefined
   return (
-    <div className={`flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
+    <div
+      className={`flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}
+    >
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
           <ListToggle />
@@ -606,7 +622,9 @@ function TabStrip({
         </div>
       )}
       <div className="flex min-w-0 items-center gap-1 overflow-x-auto [-webkit-app-region:no-drag]">
-        {task?.tabs.map((tab, index) => <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />)}
+        {task?.tabs.map((tab, index) => (
+          <TabButton key={tab.id} task={task} tab={tab} index={index} count={task.tabs.length} sessions={sessions} />
+        ))}
       </div>
       <button
         title={`New Claude tab (${actionKeys('terminal.newClaudeTab')}); hold or right-click for Shell (${actionKeys('terminal.newTab')}) and other agents`}
@@ -645,7 +663,12 @@ function TabStrip({
         <Icon name="splitDown" className="size-3.5" />
       </button>
       {page && (
-        <button title={`${panels.inspector ? 'Hide' : 'Show'} inspector (⌘⌥B)`} aria-label="Toggle inspector" onClick={() => panels.toggle('inspector')} className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}>
+        <button
+          title={`${panels.inspector ? 'Hide' : 'Show'} inspector (⌘⌥B)`}
+          aria-label="Toggle inspector"
+          onClick={() => panels.toggle('inspector')}
+          className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}
+        >
           <Icon name="panel" className="size-3.5 -scale-x-100" />
         </button>
       )}
@@ -653,14 +676,24 @@ function TabStrip({
         <button
           title={`Docked ${side}; click to move`}
           aria-label="Move terminal panel"
-          onClick={(event) => openMenu(event, DOCK_SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onMove(target) })))}
+          onClick={(event) =>
+            openMenu(
+              event,
+              DOCK_SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onMove(target) }))
+            )
+          }
           className={stripButton}
         >
           <Icon name="panel" className={`size-3.5 ${side === 'bottom' ? 'rotate-90 -scale-x-100' : side === 'right' ? '-scale-x-100' : ''}`} />
         </button>
       )}
       {onHide && (
-        <button title={`Hide the terminal panel${actionKeys('panel.terminal') ? ` (${actionKeys('panel.terminal')})` : ''}`} aria-label="Hide terminal panel" onClick={onHide} className={stripButton}>
+        <button
+          title={`Hide the terminal panel${actionKeys('panel.terminal') ? ` (${actionKeys('panel.terminal')})` : ''}`}
+          aria-label="Hide terminal panel"
+          onClick={onHide}
+          className={stripButton}
+        >
           <Icon name="close" className="size-3.5" />
         </button>
       )}

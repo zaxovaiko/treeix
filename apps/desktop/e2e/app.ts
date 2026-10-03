@@ -30,7 +30,8 @@ export async function launch(files: Record<string, string>, open?: string): Prom
   const page = await app.firstWindow()
   // Without the repository scan the app starts with nothing selected and drops the seeded place
   await page.waitForFunction(() => localStorage.getItem('scan.cache'), null, { timeout: 30_000 })
-  if (open) await page.evaluate((place) => localStorage.setItem('app.place@all', JSON.stringify(place)), { appTab: 'worktrees', selected: repo, viewer: { path: open, line: null } })
+  if (open)
+    await page.evaluate((place) => localStorage.setItem('app.place@all', JSON.stringify(place)), { appTab: 'worktrees', selected: repo, viewer: { path: open, line: null } })
   await page.reload()
   return {
     app,

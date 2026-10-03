@@ -26,7 +26,17 @@ export const renaming = definePluginSettings('terminal-rename', () => ({ id: nul
 export const startRename = (id: string): void => renaming.update({ id })
 
 /** Edits a name in place: ⏎ or leaving saves, esc cancels; `onDone` hands focus back */
-export function NameInput({ value, label, onSave, onDone }: { value: string; label: string; onSave: (name: string) => void; onDone: (input: HTMLInputElement) => void }): React.JSX.Element {
+export function NameInput({
+  value,
+  label,
+  onSave,
+  onDone
+}: {
+  value: string
+  label: string
+  onSave: (name: string) => void
+  onDone: (input: HTMLInputElement) => void
+}): React.JSX.Element {
   // Unmounting may blur the input after ⏎ or esc already finished
   const finished = useRef(false)
   const done = (name: string | null): void => {

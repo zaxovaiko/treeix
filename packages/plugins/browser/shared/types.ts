@@ -19,7 +19,16 @@ export type NetworkEntry = {
 /** `detail` says more than the element (the image, the event, the script); `start` is ms after the page began loading */
 export type Vital = { kind: 'vital'; id: string; name: 'LCP' | 'INP' | 'CLS' | 'Long task'; value: number; element: string; detail: string; start: number; time: number }
 /** `react` names the components around the element and the file it is written in, on a React development build */
-export type ElementSelection = { react?: ReactSource; selector: string; tag: string; text: string; html: string; rect: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number }; url: string }
+export type ElementSelection = {
+  react?: ReactSource
+  selector: string
+  tag: string
+  text: string
+  html: string
+  rect: { x: number; y: number; width: number; height: number }
+  viewport: { width: number; height: number }
+  url: string
+}
 export type EntryBatch = { guestId: number; reset: boolean; console: ConsoleEntry[]; network: NetworkEntry[] }
 export type BrowserProfile = { key: string; browser: string; name: string; blocked: boolean }
 export type ImportResult = { imported: number; skipped: number; error: string | null }

@@ -1,6 +1,6 @@
 import type { Edge, NodeRun, NodeStatus, Workflow, WorkflowNode } from '../shared/workflow'
 
-const SETTLED: NodeStatus[] = ['done', 'failed', 'skipped', 'cancelled']
+const SETTLED = new Set<NodeStatus>(['done', 'failed', 'skipped', 'cancelled'])
 
 /** An edge carries its source's output once the source finished, on the edge's side of a condition; a failed source that let the run continue passes nothing */
 export const isLive = (edge: Edge, nodes: Record<string, NodeRun>): boolean => {
@@ -15,7 +15,7 @@ export function nextSteps(workflow: Workflow, nodes: Record<string, NodeRun>): {
   for (const node of workflow.nodes) {
     if (nodes[node.id].status !== 'pending') continue
     const inputs = workflow.edges.filter((edge) => edge.to === node.id)
-    if (!inputs.every((edge) => SETTLED.includes(nodes[edge.from].status))) continue
+    if (!inputs.every((edge) => SETTLED.has(nodes[edge.from].status))) continue
     if (inputs.length === 0 || inputs.some((edge) => isLive(edge, nodes))) ready.push(node.id)
     else skip.push(node.id)
   }

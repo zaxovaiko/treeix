@@ -8,9 +8,9 @@ import { withStatusHooks } from './hooks'
 test('withStatusHooks keeps other settings and reports input on notifications', () => {
   const settings = JSON.parse(withStatusHooks(JSON.stringify({ statusLine: { type: 'command', command: 'x' } })))
   expect(settings.statusLine.command).toBe('x')
-  expect(settings.hooks.Notification[0].hooks[0].command).toContain("printf input")
+  expect(settings.hooks.Notification[0].hooks[0].command).toContain('printf input')
   expect(settings.hooks.Notification[0].matcher).not.toContain('idle_prompt')
-  expect(settings.hooks.Stop[0].hooks[0].command).toContain("printf done")
+  expect(settings.hooks.Stop[0].hooks[0].command).toContain('printf done')
   expect(JSON.parse(withStatusHooks('not json')).hooks.PreToolUse[0].matcher).toBe('*')
 })
 

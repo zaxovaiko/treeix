@@ -56,7 +56,8 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agentOf(step)?.name ?? 'Deleted agent') : KIND_LABEL[step.kind])
   const lead = agentOf(steps.find((step) => step.kind === 'agent'))
   const logged = nodeEvents.some((entry) => entry.event.type === 'error')
-  const retryable = node && state && (run.status === 'failed' || run.status === 'cancelled' || run.status === 'interrupted') && (state.status === 'failed' || state.status === 'cancelled')
+  const retryable =
+    node && state && (run.status === 'failed' || run.status === 'cancelled' || run.status === 'interrupted') && (state.status === 'failed' || state.status === 'cancelled')
   const retry = (id: string): void => void hubApi.retry(run.id, id).catch((error: unknown) => host.flash(errorMessage(error)))
 
   return (
@@ -90,7 +91,9 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
               >
                 <StatusIcon status={shownNode(stepRun)} className="size-3" />
                 {labelOf(step)}
-                {stepRun.startedAt !== null && stepRun.endedAt !== null && <span className="text-muted-foreground tabular-nums">{duration(stepRun.endedAt - stepRun.startedAt)}</span>}
+                {stepRun.startedAt !== null && stepRun.endedAt !== null && (
+                  <span className="text-muted-foreground tabular-nums">{duration(stepRun.endedAt - stepRun.startedAt)}</span>
+                )}
               </button>
             )
           })}

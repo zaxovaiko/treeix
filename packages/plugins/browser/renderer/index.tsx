@@ -97,7 +97,12 @@ function ServerNotices(): React.JSX.Element | null {
       clearTimeout(timer)
       timers.current.delete(id)
     }
-    for (const { id } of notices) if (!timers.current.has(id)) timers.current.set(id, setTimeout(() => dismiss(id), NOTICE_MS))
+    for (const { id } of notices)
+      if (!timers.current.has(id))
+        timers.current.set(
+          id,
+          setTimeout(() => dismiss(id), NOTICE_MS)
+        )
   }, [notices])
   useEffect(() => () => timers.current.forEach(clearTimeout), [])
   // Again when the terminal plugin is turned on later; the host object itself changes on every render
@@ -115,7 +120,13 @@ function ServerNotices(): React.JSX.Element | null {
       const notify = Date.now() >= settleUntil && browserSettings.get().notifyPorts
       const added = (notify ? fresh : [])
         .filter((port) => !showsPort(port.port) && !started.includes(port))
-        .map((port) => ({ id: nextNoticeId++, key: portKey(port), url: port.url, label: `localhost:${port.port}`, detail: portDetail(service.getSessions(), host?.repos ?? null, port) }))
+        .map((port) => ({
+          id: nextNoticeId++,
+          key: portKey(port),
+          url: port.url,
+          label: `localhost:${port.port}`,
+          detail: portDetail(service.getSessions(), host?.repos ?? null, port)
+        }))
       setNotices((list) => {
         // Stopped servers take their card with them
         const kept = list.filter((notice) => live.has(notice.key) && !added.some((item) => item.key === notice.key))
@@ -144,7 +155,11 @@ function ServerNotices(): React.JSX.Element | null {
           >
             Open
           </button>
-          <button aria-label="Dismiss" onClick={() => dismiss(notice.id)} className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button
+            aria-label="Dismiss"
+            onClick={() => dismiss(notice.id)}
+            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
             <Icon name="close" className="size-3" />
           </button>
         </div>
@@ -206,7 +221,9 @@ function Root(): React.JSX.Element {
     () =>
       bridge.on('key', (input, key) => {
         const { code, meta, shift, alt, control } = input as KeyInput
-        window.dispatchEvent(new KeyboardEvent('keydown', { code, key: String(key), metaKey: meta, shiftKey: shift, altKey: alt, ctrlKey: control, bubbles: true, cancelable: true }))
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { code, key: String(key), metaKey: meta, shiftKey: shift, altKey: alt, ctrlKey: control, bubbles: true, cancelable: true })
+        )
       }),
     []
   )
@@ -224,7 +241,11 @@ function Root(): React.JSX.Element {
 function TabsCount(): React.JSX.Element | null {
   const count = useBrowser().tabs.filter((tab) => tab.url !== 'about:blank').length
   if (!count) return null
-  return <span title={`${count} open page${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">{count}</span>
+  return (
+    <span title={`${count} open page${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">
+      {count}
+    </span>
+  )
 }
 
 function BrowserPage(): React.JSX.Element {
@@ -250,9 +271,24 @@ const plugin: RendererPlugin = {
   },
   commands: (current) => [
     ...(current.selectedWorktree && current.service('sessions')
-      ? [{ id: 'browser:devServer', group: 'Actions', label: `Run dev server in ${current.selectedWorktreeLabel ?? 'the worktree'}`, icon: 'terminal', run: () => void runDevServer(current, current.selectedWorktree ?? '') } satisfies Command]
+      ? [
+          {
+            id: 'browser:devServer',
+            group: 'Actions',
+            label: `Run dev server in ${current.selectedWorktreeLabel ?? 'the worktree'}`,
+            icon: 'terminal',
+            run: () => void runDevServer(current, current.selectedWorktree ?? '')
+          } satisfies Command
+        ]
       : []),
-    { id: 'browser:new', group: 'Actions', label: 'New browser tab', icon: 'globe', shortcut: '⌘T', run: () => (openUrl('about:blank'), setTimeout(() => runBrowserAction('focusAddress'), 50)) }
+    {
+      id: 'browser:new',
+      group: 'Actions',
+      label: 'New browser tab',
+      icon: 'globe',
+      shortcut: '⌘T',
+      run: () => (openUrl('about:blank'), setTimeout(() => runBrowserAction('focusAddress'), 50))
+    }
   ],
   shortcuts: SHORTCUTS,
   Settings: BrowserSettings,

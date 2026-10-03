@@ -80,7 +80,9 @@ export function SaveReview({ scoped, onClose }: { scoped: ScopedWorktree[]; onCl
                 <span className="flex-1" />
                 {change.file}
                 {change.line ? `:${change.line}` : ''}
-                <span className={`font-sans text-[10.5px] ${change.tracked ? 'text-amber-400' : 'text-muted-foreground/70'}`}>{change.tracked ? 'tracked by git' : 'not in git'}</span>
+                <span className={`font-sans text-[10.5px] ${change.tracked ? 'text-amber-400' : 'text-muted-foreground/70'}`}>
+                  {change.tracked ? 'tracked by git' : 'not in git'}
+                </span>
               </div>
               {change.previous !== undefined && (
                 <div className="bg-red-500/10 px-3 py-0.5 break-all text-red-300">

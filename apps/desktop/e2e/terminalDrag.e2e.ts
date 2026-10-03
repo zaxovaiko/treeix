@@ -30,7 +30,11 @@ test('tabs and pane headers dropped on a pane split it', async () => {
 
   // Side by side, then the second pane's header drops below the first
   const second = await panes.nth(1).getAttribute('data-session-id')
-  await panes.nth(1).locator('div[draggable="true"]').first().dragTo(panes.first(), { targetPosition: await dropNear(panes.first(), 'bottom') })
+  await panes
+    .nth(1)
+    .locator('div[draggable="true"]')
+    .first()
+    .dragTo(panes.first(), { targetPosition: await dropNear(panes.first(), 'bottom') })
   const firstBox = await panes.first().boundingBox()
   const movedBox = await page.locator(`[data-session-id="${second}"]`).boundingBox()
   expect(movedBox?.x).toBe(firstBox?.x)

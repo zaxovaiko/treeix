@@ -41,11 +41,16 @@ export const AGENT_PREFIX = 'hub.'
 
 const isNullableString = (value: unknown): value is string | null => value === null || isString(value)
 
-const isRuntime = (value: unknown): value is Runtime =>
-  isJson(value) && ((value.kind === 'agent' && isString(value.agent)) || (value.kind === 'api' && isString(value.baseUrl)))
+const isRuntime = (value: unknown): value is Runtime => isJson(value) && ((value.kind === 'agent' && isString(value.agent)) || (value.kind === 'api' && isString(value.baseUrl)))
 
 const isSchedule = (value: unknown): value is Schedule =>
-  isJson(value) && isString(value.id) && isString(value.cron) && isCron(value.cron) && isString(value.prompt) && typeof value.notify === 'boolean' && typeof value.enabled === 'boolean'
+  isJson(value) &&
+  isString(value.id) &&
+  isString(value.cron) &&
+  isCron(value.cron) &&
+  isString(value.prompt) &&
+  typeof value.notify === 'boolean' &&
+  typeof value.enabled === 'boolean'
 
 export const isHubAgent = (value: unknown): value is HubAgent =>
   isJson(value) &&

@@ -16,9 +16,7 @@ export const spaceNames = (): Promise<Map<string, Space>> => {
   spaces ??= acli(['confluence', 'space', 'list', '--limit', '250', '--json'])
     .then((raw) => {
       const results = object(raw).results
-      return new Map(
-        list(results).map((space) => [text(space.id), { id: text(space.id), key: text(space.key), name: text(space.name) }])
-      )
+      return new Map(list(results).map((space) => [text(space.id), { id: text(space.id), key: text(space.key), name: text(space.name) }]))
     })
     .catch(() => {
       spaces = null
@@ -42,7 +40,9 @@ export async function pageView(id: string): Promise<Page> {
     url: `${text(pageLinks.base)}${text(pageLinks.webui)}`,
     body: bodyMarkdown(raw.body, id, (url) => void links.add(url)),
     parentId: orNull(text(raw.parentId)),
-    children: list(children).filter((child) => child.type === 'page').map((child) => ({ id: text(child.id), title: text(child.title) })),
+    children: list(children)
+      .filter((child) => child.type === 'page')
+      .map((child) => ({ id: text(child.id), title: text(child.title) })),
     updatedAt: orNull(text(object(raw.version).createdAt)),
     links: [...links]
   }
@@ -56,7 +56,13 @@ export async function editPage(id: string, original: string, edited: string): Pr
   const doc = editedAdf(bodyDoc(raw.body), original, edited, pageImageSource(id))
   await restFetch(path, credentials, {
     method: 'PUT',
-    json: { id, status: 'current', title: text(raw.title), body: { representation: 'atlas_doc_format', value: JSON.stringify(doc) }, version: { number: Number(object(raw.version).number) + 1 } }
+    json: {
+      id,
+      status: 'current',
+      title: text(raw.title),
+      body: { representation: 'atlas_doc_format', value: JSON.stringify(doc) },
+      version: { number: Number(object(raw.version).number) + 1 }
+    }
   })
 }
 

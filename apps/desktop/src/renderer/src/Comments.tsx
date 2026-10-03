@@ -22,11 +22,7 @@ const startsOnCode = (event: React.PointerEvent): boolean =>
   event.button === 0 &&
   !event.nativeEvent
     .composedPath()
-    .some(
-      (element) =>
-        element instanceof Element &&
-        (element.hasAttribute('data-column-number') || ['TEXTAREA', 'BUTTON'].includes(element.tagName))
-    )
+    .some((element) => element instanceof Element && (element.hasAttribute('data-column-number') || ['TEXTAREA', 'BUTTON'].includes(element.tagName)))
 
 /** Drag across code lines to select a range; the library only supports dragging line numbers */
 export function useCodeDrag(onSelect: (range: LineRange) => void): {
@@ -80,10 +76,7 @@ async function thumbnailOf(file: File): Promise<string | undefined> {
 }
 
 async function storeAttachment(file: File): Promise<Attachment> {
-  const [path, thumbnail] = await Promise.all([
-    window.api.saveAttachment(file.name || 'pasted-file', new Uint8Array(await file.arrayBuffer())),
-    thumbnailOf(file)
-  ])
+  const [path, thumbnail] = await Promise.all([window.api.saveAttachment(file.name || 'pasted-file', new Uint8Array(await file.arrayBuffer())), thumbnailOf(file)])
   return { path, name: file.name || 'pasted-file', thumbnail }
 }
 
@@ -164,7 +157,9 @@ export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onD
     >
       <Icon name="comment" className="mt-0.5 size-3.5 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] text-muted-foreground">{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}</div>
+        <div className="text-[11px] text-muted-foreground">
+          {comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}
+        </div>
         <Markdown>{comment.text}</Markdown>
         <Attachments attachments={comment.attachments ?? []} />
       </div>
@@ -364,24 +359,17 @@ export function CommentsPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
-        <span className="text-xs text-muted-foreground">
-          {comments.length} on this worktree
-        </span>
+        <span className="text-xs text-muted-foreground">{comments.length} on this worktree</span>
         <span className="flex-1" />
         {comments.length > 0 && (
-          <button
-            onClick={onClear}
-            className="h-6 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
+          <button onClick={onClear} className="h-6 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
             Clear
           </button>
         )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {comments.length === 0 && (
-          <EmptyState icon="comment" title="No comments yet. Drag across lines or line numbers in the diff to leave one." />
-        )}
+        {comments.length === 0 && <EmptyState icon="comment" title="No comments yet. Drag across lines or line numbers in the diff to leave one." />}
         {filePaths.map((filePath) => (
           <div key={filePath} className="mb-2">
             <div className="truncate px-2 py-1 font-mono text-[11px] text-muted-foreground" title={filePath}>
@@ -409,7 +397,15 @@ export function CommentsPanel({
                   className="group/item mb-1 cursor-pointer rounded-md border border-transparent px-2 py-1.5 hover:border-border hover:bg-accent"
                 >
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <span>{comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}</span>
+                    <span>
+                      {comment.range.start > 0
+                        ? `Line ${rangeLabel(comment.range)}`
+                        : comment.kind === 'reference'
+                          ? 'Reference'
+                          : comment.kind === 'browser'
+                            ? 'Browser'
+                            : 'General'}
+                    </span>
                     <span className="flex-1" />
                     {comment.body && comment.kind !== 'browser' && <InlineToggle comment={comment} onChange={onUpdate} />}
                     <button
@@ -426,9 +422,7 @@ export function CommentsPanel({
                   <p className="line-clamp-4 text-[13px] whitespace-pre-wrap text-foreground/90">{comment.text}</p>
                   <Attachments attachments={comment.attachments ?? []} size="sm" />
                   {comment.code && (
-                    <pre className="mt-1 max-h-16 overflow-hidden rounded bg-muted px-1.5 py-1 font-mono text-[10.5px] leading-4 text-muted-foreground">
-                      {comment.code}
-                    </pre>
+                    <pre className="mt-1 max-h-16 overflow-hidden rounded bg-muted px-1.5 py-1 font-mono text-[10.5px] leading-4 text-muted-foreground">{comment.code}</pre>
                   )}
                 </div>
               ))}
@@ -493,16 +487,22 @@ export function AgentCommentsDrawer({
       if (event.defaultPrevented || event.cancelBubble || !inside || event.metaKey || event.ctrlKey || event.altKey) return
       const moveTo = (next: number): void => setCursorId(ordered[Math.max(0, Math.min(ordered.length - 1, next))]?.id ?? null)
       const action =
-        event.key === 'Escape' ? onClose
-        : event.key === 'j' || event.key === 'ArrowDown' ? () => moveTo(index + 1)
-        : event.key === 'k' || event.key === 'ArrowUp' ? () => moveTo(index - 1)
-        : event.key === 'Enter' && current && !(event.target instanceof Element && event.target.closest('button')) ? () => onOpen(current)
-        : (event.key === 'd' || event.key === 'Backspace' || event.key === 'Delete') && current ? () => {
-            onDelete(current)
-            setCursorId(ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null)
-          }
-        : event.key === 'X' && ordered.length > 0 ? onClearAll
-        : null
+        event.key === 'Escape'
+          ? onClose
+          : event.key === 'j' || event.key === 'ArrowDown'
+            ? () => moveTo(index + 1)
+            : event.key === 'k' || event.key === 'ArrowUp'
+              ? () => moveTo(index - 1)
+              : event.key === 'Enter' && current && !(event.target instanceof Element && event.target.closest('button'))
+                ? () => onOpen(current)
+                : (event.key === 'd' || event.key === 'Backspace' || event.key === 'Delete') && current
+                  ? () => {
+                      onDelete(current)
+                      setCursorId(ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null)
+                    }
+                  : event.key === 'X' && ordered.length > 0
+                    ? onClearAll
+                    : null
       if (!action) return
       event.preventDefault()
       event.stopPropagation()
@@ -530,7 +530,12 @@ export function AgentCommentsDrawer({
         <span className="text-[13px] font-medium">Agent comments</span>
         <span className="text-xs text-muted-foreground tabular-nums">{comments.length}</span>
         <span className="flex-1" />
-        <button title="Close (esc or ⌘I)" aria-label="Close agent comments" onClick={onClose} className="flex h-6 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          title="Close (esc or ⌘I)"
+          aria-label="Close agent comments"
+          onClick={onClose}
+          className="flex h-6 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <Keys combo="esc" />
         </button>
       </div>
@@ -543,7 +548,11 @@ export function AgentCommentsDrawer({
           const active = current?.worktreePath === path
           return (
             <section key={path} className={`mb-2 rounded-lg p-1.5 ring-1 ${active ? 'ring-input' : 'ring-border'}`}>
-              <button onClick={() => onOpenWorktree(path)} title={`Open ${path}`} className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-medium hover:bg-accent">
+              <button
+                onClick={() => onOpenWorktree(path)}
+                title={`Open ${path}`}
+                className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-medium hover:bg-accent"
+              >
                 <Icon name="branch" className="size-3.5 text-emerald-400" />
                 <span className="min-w-0 truncate">{labelOf(path)}</span>
                 <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">{group.length}</span>

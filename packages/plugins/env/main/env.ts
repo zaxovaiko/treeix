@@ -12,8 +12,7 @@ const exec = promisify(execFile)
 const ENV_GLOB = ':(glob)**/.env*'
 const USAGE_LIMIT = 20
 
-const gitLines = async (cwd: string, args: string[]): Promise<string[]> =>
-  (await exec('git', ['-C', cwd, ...args], { maxBuffer: 64 << 20 })).stdout.split('\n').filter(Boolean)
+const gitLines = async (cwd: string, args: string[]): Promise<string[]> => (await exec('git', ['-C', cwd, ...args], { maxBuffer: 64 << 20 })).stdout.split('\n').filter(Boolean)
 
 const readText = (path: string): Promise<string | null> => readFile(path, 'utf8').catch(() => null)
 const folderOf = (path: string): string => posix.dirname(path)

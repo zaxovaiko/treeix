@@ -29,6 +29,9 @@ test('palette browses actions, searches every group and narrows by prefix', () =
 })
 
 test('a word typed out whole beats the same letters scattered across a longer label', () => {
-  const results = paletteResults([command('Shortcuts', 'Close the focused pane to History; the last pane closes its tab'), command('Actions', 'Close split (terminal)')], 'close split')
+  const results = paletteResults(
+    [command('Shortcuts', 'Close the focused pane to History; the last pane closes its tab'), command('Actions', 'Close split (terminal)')],
+    'close split'
+  )
   expect(results[0].command.label).toBe('Close split (terminal)')
 })

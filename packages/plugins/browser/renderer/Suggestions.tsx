@@ -51,7 +51,13 @@ export function useSuggestions(query: string): SuggestionSection[] {
       .map((label) => ({ url: `http://${label}`, label, detail: '' }))
     const sections: SuggestionSection[] = [
       { title: 'Running now', items: running.filter(matches) },
-      { title: 'Recent', items: recent.map(({ url, title }) => ({ url, label: withoutScheme(url), detail: title })).filter(matches).slice(0, RECENT_SHOWN) },
+      {
+        title: 'Recent',
+        items: recent
+          .map(({ url, title }) => ({ url, label: withoutScheme(url), detail: title }))
+          .filter(matches)
+          .slice(0, RECENT_SHOWN)
+      },
       { title: 'Saved', items: saved.map(({ name, url }) => ({ url, label: name, detail: withoutScheme(url) })).filter(matches) },
       { title: 'Common', items: common.filter(matches) }
     ]
@@ -82,11 +88,24 @@ export function SuggestionRow({ item, active, onOpen, onHover }: { item: Suggest
 export const sectionLabel = 'px-2 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
 
 /** The address bar's dropdown; `highlighted` indexes the rows across sections */
-export function Suggestions({ sections, highlighted, onOpen, onHighlight }: { sections: SuggestionSection[]; highlighted: number; onOpen: (url: string) => void; onHighlight: (index: number) => void }): React.JSX.Element {
+export function Suggestions({
+  sections,
+  highlighted,
+  onOpen,
+  onHighlight
+}: {
+  sections: SuggestionSection[]
+  highlighted: number
+  onOpen: (url: string) => void
+  onHighlight: (index: number) => void
+}): React.JSX.Element {
   let index = 0
   return (
     // Clicks on labels and the scrollbar must not blur the address bar, which closes this
-    <div onMouseDown={(event) => event.preventDefault()} className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg">
+    <div
+      onMouseDown={(event) => event.preventDefault()}
+      className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg"
+    >
       {sections.map((section) => (
         <div key={section.title}>
           <div className={sectionLabel}>{section.title}</div>

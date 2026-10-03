@@ -29,7 +29,11 @@ test('a chain of known agents reading earlier outputs is fine', () => {
 test('names loops, loose steps, gone agents, later references and the missing output', () => {
   const broken: Workflow = {
     ...workflow,
-    nodes: [...workflow.nodes.filter((node) => node.kind !== 'output'), agent('loose', 'Read {{nodes.b.output}}'), { id: 'if', kind: 'condition', source: '{{prev}}', test: 'regex', value: '(' }],
+    nodes: [
+      ...workflow.nodes.filter((node) => node.kind !== 'output'),
+      agent('loose', 'Read {{nodes.b.output}}'),
+      { id: 'if', kind: 'condition', source: '{{prev}}', test: 'regex', value: '(' }
+    ],
     edges: [...workflow.edges, { id: '4', from: 'b', to: 'a', branch: null }, { id: '5', from: 'input', to: 'if', branch: null }]
   }
   expect(validate(broken, [])).toEqual([

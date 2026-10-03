@@ -5,7 +5,10 @@ import { app } from 'electron'
 
 const MAX_BYTES = 25 * 1024 * 1024
 
-export const safeFileName = (name: string): string => basename(name).replace(/[^\w.-]+/g, '_').slice(-80) || 'file'
+export const safeFileName = (name: string): string =>
+  basename(name)
+    .replace(/[^\w.-]+/g, '_')
+    .slice(-80) || 'file'
 
 /** Copies land in app data so agents can read them even after the original moves */
 export async function saveAttachment(name: string, data: Uint8Array): Promise<string> {

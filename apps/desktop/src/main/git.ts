@@ -9,18 +9,7 @@ import { insideWorktree } from './paths'
 const exec = promisify(execFile)
 const MAX_DEPTH = 6
 // macOS privacy-protected dirs block on permission prompts, skip them
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'vendor',
-  'target',
-  'dist',
-  'Library',
-  'Applications',
-  'Pictures',
-  'Music',
-  'Movies',
-  'Public'
-])
+const SKIP_DIRS = new Set(['node_modules', 'vendor', 'target', 'dist', 'Library', 'Applications', 'Pictures', 'Music', 'Movies', 'Public'])
 const MAX_UNTRACKED_PATCHES = 200
 const MAX_VIEW_BYTES = 2 * 1024 * 1024
 const MAX_MATCHES = 500
@@ -45,10 +34,7 @@ export async function findRepos(root = homedir(), depth = 0): Promise<string[]> 
   if (depth > MAX_DEPTH) return []
   const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
   if (entries.some((entry) => entry.name === '.git' && entry.isDirectory())) return [root]
-  const children = entries.filter(
-    (entry) =>
-      entry.isDirectory() && !entry.isSymbolicLink() && !entry.name.startsWith('.') && !SKIP_DIRS.has(entry.name)
-  )
+  const children = entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && !entry.name.startsWith('.') && !SKIP_DIRS.has(entry.name))
   const nested = await Promise.all(children.map((entry) => findRepos(join(root, entry.name), depth + 1)))
   return nested.flat()
 }
@@ -176,7 +162,16 @@ export async function readFile(worktreePath: string, filePath: string): Promise<
 }
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
-const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon' }
+const IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon'
+}
 
 /** Image type of a path by its extension; SVG is text and opens as code */
 export const imageType = (filePath: string): string | null => IMAGE_TYPES[filePath.split('.').pop()?.toLowerCase() ?? ''] ?? null
@@ -225,8 +220,7 @@ async function grepSymbol(worktreePath: string, symbol: string, keep: (text: str
   return locations
 }
 
-export const findDefinitions = (worktreePath: string, symbol: string): Promise<CodeLocation[]> =>
-  grepSymbol(worktreePath, symbol, (text) => isDefinitionLine(text, symbol))
+export const findDefinitions = (worktreePath: string, symbol: string): Promise<CodeLocation[]> => grepSymbol(worktreePath, symbol, (text) => isDefinitionLine(text, symbol))
 
 /** Whole-word text matches, for languages without a language service */
 export const findTextReferences = (worktreePath: string, symbol: string): Promise<CodeLocation[]> => grepSymbol(worktreePath, symbol, () => true)
@@ -305,7 +299,10 @@ export async function listBranches(repoPath: string): Promise<Branch[]> {
   // The default branch itself is never "merged", whether base is main or origin/main
   const baseName = base?.replace(/^origin\//, '')
   const mergedRefs = new Set(merged.split('\n').filter(Boolean))
-  const rows = refs.split('\n').filter(Boolean).map((row) => row.split('\0'))
+  const rows = refs
+    .split('\n')
+    .filter(Boolean)
+    .map((row) => row.split('\0'))
   const localNames = new Set(rows.filter(([ref]) => ref.startsWith('refs/heads/')).map(([ref]) => ref.slice('refs/heads/'.length)))
   const branches: Branch[] = []
   for (const [ref, track = '', committedAt = '0'] of rows) {

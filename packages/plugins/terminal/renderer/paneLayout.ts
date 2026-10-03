@@ -6,8 +6,7 @@ export type DropEdge = 'left' | 'right' | 'top' | 'bottom'
 export const MAX_PANES = 6
 const MAX_COLUMNS = 3
 
-const without = (layout: PaneLayout, id: string): PaneLayout =>
-  layout.map((column) => column.filter((pane) => pane !== id)).filter((column) => column.length > 0)
+const without = (layout: PaneLayout, id: string): PaneLayout => layout.map((column) => column.filter((pane) => pane !== id)).filter((column) => column.length > 0)
 
 /** New panes open as a column, or stack under the shortest column once there are enough columns */
 export function addPane(layout: PaneLayout, id: string): PaneLayout {

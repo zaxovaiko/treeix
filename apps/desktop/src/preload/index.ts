@@ -99,7 +99,7 @@ const api: Api = {
       ipcRenderer.on('updates:status', handler)
       return () => ipcRenderer.removeListener('updates:status', handler)
     }
-  },
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

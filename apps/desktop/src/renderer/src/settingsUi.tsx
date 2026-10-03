@@ -28,31 +28,25 @@ export const HIDE_WHEN_EMPTY = '[&:not(:has([data-setting]))]:hidden'
 export function SearchGroup({ title, className = '', children }: { title: string; className?: string; children: React.ReactNode }): React.JSX.Element {
   const query = useContext(SettingsQuery)
   const titleMatch = query.trim() !== '' && settingMatches(query, title)
-  return (
-    <div className={`${className} ${query.trim() && !titleMatch ? HIDE_WHEN_EMPTY : ''}`}>
-      {titleMatch ? <SettingsSearch value="">{children}</SettingsSearch> : children}
-    </div>
-  )
+  return <div className={`${className} ${query.trim() && !titleMatch ? HIDE_WHEN_EMPTY : ''}`}>{titleMatch ? <SettingsSearch value="">{children}</SettingsSearch> : children}</div>
 }
 
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }): React.JSX.Element {
   return (
-    <button role="switch" aria-checked={checked} aria-label={label} onClick={onChange} className={`relative h-5 w-9 shrink-0 rounded-full ${checked ? 'bg-primary' : 'bg-foreground/15'}`}>
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onChange}
+      className={`relative h-5 w-9 shrink-0 rounded-full ${checked ? 'bg-primary' : 'bg-foreground/15'}`}
+    >
       <span className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow ${checked ? 'translate-x-4' : ''}`} />
     </button>
   )
 }
 
 /** Options side by side; ← and → on its settings row step through them */
-export function Segmented<T extends string>({
-  value,
-  options,
-  onChange
-}: {
-  value: T
-  options: [T, string][]
-  onChange: (value: T) => void
-}): React.JSX.Element {
+export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (value: T) => void }): React.JSX.Element {
   return (
     <div data-segmented className="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
       {options.map(([option, label]) => (

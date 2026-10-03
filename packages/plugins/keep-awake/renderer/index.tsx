@@ -74,7 +74,13 @@ function Indicator(): React.JSX.Element {
       aria-pressed={keepAwakeEnabled}
       onClick={() => awakeSettings.update({ keepAwakeEnabled: !keepAwakeEnabled })}
       className={`relative flex h-6 items-center rounded-md px-1.5 hover:bg-accent [-webkit-app-region:no-drag] ${
-        !keepAwakeEnabled ? 'text-muted-foreground/40' : lidClosed ? 'bg-amber-400/12 text-amber-400' : awake ? 'bg-emerald-400/12 text-emerald-400' : 'bg-foreground/8 text-foreground'
+        !keepAwakeEnabled
+          ? 'text-muted-foreground/40'
+          : lidClosed
+            ? 'bg-amber-400/12 text-amber-400'
+            : awake
+              ? 'bg-emerald-400/12 text-emerald-400'
+              : 'bg-foreground/8 text-foreground'
       }`}
     >
       <Icon name="coffee" className="size-3.5" />

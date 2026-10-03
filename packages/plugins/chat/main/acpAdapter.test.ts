@@ -34,7 +34,8 @@ function fakeAgent(name?: string) {
         }
       },
       loadSession: async ({ sessionId }) => {
-        for (let index = 0; index <= 5000; index++) await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: String(index) } } })
+        for (let index = 0; index <= 5000; index++)
+          await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: String(index) } } })
         await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: 'code' } })
         return { modes: { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }] } }
       },

@@ -185,7 +185,17 @@ export function useTicket(
 }
 
 /** The title, edited in place: Enter saves, Escape puts it back, and either returns focus to where e was pressed */
-function EditableSummary({ summary, editing, onEditingChange, onSave }: { summary: string; editing: boolean; onEditingChange: (editing: boolean) => void; onSave: (summary: string) => void }): React.JSX.Element {
+function EditableSummary({
+  summary,
+  editing,
+  onEditingChange,
+  onSave
+}: {
+  summary: string
+  editing: boolean
+  onEditingChange: (editing: boolean) => void
+  onSave: (summary: string) => void
+}): React.JSX.Element {
   const [draft, setDraft] = useState(summary)
   const input = useRef<HTMLInputElement>(null)
   const returnTo = useRef<HTMLElement | null>(null)
@@ -210,7 +220,11 @@ function EditableSummary({ summary, editing, onEditingChange, onSave }: { summar
   if (!editing) {
     return (
       <h1 className="-mx-2">
-        <button onClick={() => onEditingChange(true)} title="Edit summary (e)" className="w-full cursor-text rounded-md px-2 py-1 text-left text-[17px] leading-7 font-semibold break-words hover:bg-accent">
+        <button
+          onClick={() => onEditingChange(true)}
+          title="Edit summary (e)"
+          className="w-full cursor-text rounded-md px-2 py-1 text-left text-[17px] leading-7 font-semibold break-words hover:bg-accent"
+        >
           {summary}
         </button>
       </h1>
@@ -296,7 +310,7 @@ const Meta = ({ label, children }: { label: string; children: React.ReactNode })
   </span>
 )
 
-const SectionTitle =({ children }: { children: React.ReactNode }): React.JSX.Element => (
+const SectionTitle = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
   <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{children}</h3>
 )
 
@@ -377,7 +391,12 @@ export function TicketMain({
                 }
                 options={[...statuses]
                   .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category))
-                  .map((status) => ({ id: status.name, label: status.name, section: CATEGORY_LABELS[status.category], render: <StatusPill item={{ status: status.name, statusCategory: status.category }} /> }))}
+                  .map((status) => ({
+                    id: status.name,
+                    label: status.name,
+                    section: CATEGORY_LABELS[status.category],
+                    render: <StatusPill item={{ status: status.name, statusCategory: status.category }} />
+                  }))}
                 current={item.status}
                 placeholder={`Move ${item.key} to...`}
                 open={picker === 'status'}
@@ -426,7 +445,12 @@ export function TicketMain({
                       </>
                     )
                   })),
-                  ...ticket.repos.map((path) => ({ id: `new:${path}`, label: baseName(path), section: 'Create new in', render: <span className="truncate">{baseName(path)}</span> }))
+                  ...ticket.repos.map((path) => ({
+                    id: `new:${path}`,
+                    label: baseName(path),
+                    section: 'Create new in',
+                    render: <span className="truncate">{baseName(path)}</span>
+                  }))
                 ]}
                 current={null}
                 placeholder="Worktree or repository..."
@@ -437,7 +461,11 @@ export function TicketMain({
                 onOpenChange={(open) => (!open ? setPicker(null) : ticket.linked.length > 0 ? setPicker('repo') : ticket.newWorktree())}
                 onPick={(id) => (id.startsWith('open:') ? host.openWorktree(id.slice('open:'.length)) : ticket.createWorktree(id.slice('new:'.length)))}
               />
-              <button onClick={() => ticket.addToComments()} title="Add to agent comments (a)" className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
+              <button
+                onClick={() => ticket.addToComments()}
+                title="Add to agent comments (a)"
+                className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent"
+              >
                 <Icon name="comment" className="size-3.5" />
                 To agent
                 <Kbd hint>a</Kbd>
@@ -461,7 +489,16 @@ export function TicketMain({
                     <Kbd hint>t</Kbd>
                   </span>
                 }
-                options={types.map((type) => ({ id: type, label: type, section: '', render: <><TypeMark type={type} /> {type}</> }))}
+                options={types.map((type) => ({
+                  id: type,
+                  label: type,
+                  section: '',
+                  render: (
+                    <>
+                      <TypeMark type={type} /> {type}
+                    </>
+                  )
+                }))}
                 current={item.type}
                 placeholder="Change type..."
                 width="w-48"
@@ -478,7 +515,11 @@ export function TicketMain({
                 {/epic/i.test(parent.type) ? (
                   <EpicChip summary={parent.summary} onClick={() => selection.update({ key: parent.key })} />
                 ) : (
-                  <button onClick={() => selection.update({ key: parent.key })} title={`Open ${parent.key}`} className="-mx-1 flex h-6 min-w-0 items-center gap-1.5 rounded px-1 hover:bg-accent">
+                  <button
+                    onClick={() => selection.update({ key: parent.key })}
+                    title={`Open ${parent.key}`}
+                    className="-mx-1 flex h-6 min-w-0 items-center gap-1.5 rounded px-1 hover:bg-accent"
+                  >
                     <TypeMark type={parent.type} />
                     <span className="truncate">{parent.summary}</span>
                   </button>
@@ -505,7 +546,12 @@ export function TicketMain({
             {ticket.linked.length > 0 && (
               <Meta label="Worktree">
                 {ticket.linked.map(({ repo, worktree }) => (
-                  <button key={worktree.path} onClick={() => host.openWorktree(worktree.path)} title={worktree.path} className="-mx-1 flex h-6 min-w-0 items-center gap-1.5 rounded px-1 hover:bg-accent">
+                  <button
+                    key={worktree.path}
+                    onClick={() => host.openWorktree(worktree.path)}
+                    title={worktree.path}
+                    className="-mx-1 flex h-6 min-w-0 items-center gap-1.5 rounded px-1 hover:bg-accent"
+                  >
                     <Icon name="branch" className="size-3.5 shrink-0 text-emerald-400" />
                     <span className="truncate">{baseName(repo.path)}</span>
                     {worktree.changedFiles > 0 && <span className="shrink-0 text-[11px] text-muted-foreground">{worktree.changedFiles} changed</span>}

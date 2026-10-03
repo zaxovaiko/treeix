@@ -22,7 +22,19 @@ export type Command = {
 
 function Marked({ text, marks }: { text: string; marks: Set<number> }): React.JSX.Element {
   if (marks.size === 0) return <>{text}</>
-  return <>{[...text].map((char, index) => (marks.has(index) ? <b key={index} className="font-semibold text-foreground">{char}</b> : char))}</>
+  return (
+    <>
+      {[...text].map((char, index) =>
+        marks.has(index) ? (
+          <b key={index} className="font-semibold text-foreground">
+            {char}
+          </b>
+        ) : (
+          char
+        )
+      )}
+    </>
+  )
 }
 
 /** Key hints show as keycaps; anything else in the slot, like "3 changed", as plain text */

@@ -11,7 +11,13 @@ const codexSessions = (): string => join(homedir(), '.codex', 'sessions')
 async function claudeTranscript(id: string): Promise<string | null> {
   for (const folder of await readdir(claudeProjects()).catch(() => [])) {
     const path = join(claudeProjects(), folder, `${id}.jsonl`)
-    if (await access(path).then(() => true, () => false)) return path
+    if (
+      await access(path).then(
+        () => true,
+        () => false
+      )
+    )
+      return path
   }
   return null
 }
@@ -68,9 +74,7 @@ export function claudeUsage(transcript: string): SessionUsage {
 
 /** Codex reports running totals; the last one is the conversation's */
 export function codexUsage(transcript: string): SessionUsage {
-  const last = transcript
-    .split('\n')
-    .findLast((line) => line.includes('"total_token_usage"'))
+  const last = transcript.split('\n').findLast((line) => line.includes('"total_token_usage"'))
   const payload = last ? parseLine(last)?.payload : null
   const info = isJson(payload) && isJson(payload.info) ? payload.info : null
   const total = info && isJson(info.total_token_usage) ? info.total_token_usage : null
@@ -94,7 +98,8 @@ export function lastReplies(kind: string, transcript: string, count: number): st
   for (const line of transcript.split('\n')) {
     const entry = parseLine(line)
     if (kind === 'claude' && entry?.type === 'assistant' && isJson(entry.message)) replies.push(...texts(entry.message.content, 'text'))
-    if (kind === 'codex' && isJson(entry?.payload) && entry.payload.type === 'message' && entry.payload.role === 'assistant') replies.push(...texts(entry.payload.content, 'output_text'))
+    if (kind === 'codex' && isJson(entry?.payload) && entry.payload.type === 'message' && entry.payload.role === 'assistant')
+      replies.push(...texts(entry.payload.content, 'output_text'))
   }
   return replies.slice(-count)
 }

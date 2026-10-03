@@ -7,6 +7,8 @@
     "name": "AI Hub",
     "description": "An AI Hub tab for your own agents: a name, look, model and instructions on top of Claude, Codex, OpenRouter or Ollama, to chat with, ping and chain into workflows on a canvas.",
     "enabledByDefault": true,
-    "requires": ["chat"]
+    "requires": [
+      "chat"
+    ]
   }
 }

@@ -48,7 +48,9 @@ function loadPanels(): StoredPanels {
     title: flag(record.title, defaults.title),
     pages: Object.fromEntries(
       Object.entries(object(record.pages)).flatMap(([page, prefs]) =>
-        isJson(prefs) ? [[page, { list: flag(prefs.list, true), inspector: flag(prefs.inspector, true), listWidth: width(prefs.listWidth), inspectorWidth: width(prefs.inspectorWidth) }]] : []
+        isJson(prefs)
+          ? [[page, { list: flag(prefs.list, true), inspector: flag(prefs.inspector, true), listWidth: width(prefs.listWidth), inspectorWidth: width(prefs.inspectorWidth) }]]
+          : []
       )
     )
   }
@@ -87,7 +89,12 @@ export function showPanel(panel: 'list' | 'inspector', page: string): void {
 }
 
 /** The zone to act on: the innermost one that has a layout box, so zones of a page kept mounted off screen are passed over */
-export function chooseZone<T>(candidates: T[], shown: (candidate: T) => boolean, contains: (outer: T, inner: T) => boolean, prefer: (candidate: T) => boolean = () => false): T | null {
+export function chooseZone<T>(
+  candidates: T[],
+  shown: (candidate: T) => boolean,
+  contains: (outer: T, inner: T) => boolean,
+  prefer: (candidate: T) => boolean = () => false
+): T | null {
   const visible = candidates.filter(shown)
   const innermost = visible.filter((candidate) => !visible.some((other) => other !== candidate && contains(candidate, other)))
   return innermost.find(prefer) ?? innermost[0] ?? null
@@ -141,7 +148,7 @@ export function cycleZone(step: 1 | -1): void {
 /** Esc outside inputs and terminals: detail back to the list, side zones back to main; false when there is nowhere to go */
 export function zoneBack(): boolean {
   if (state.zone === 'list') return false
-  if (state.zone !== 'main') return focusZone('main'), true
+  if (state.zone !== 'main') return (focusZone('main'), true)
   if (!zoneElement('list')) return false
   focusZone('list')
   return true
@@ -210,17 +217,7 @@ export function useZone(): { zone: ZoneId; focusZone: (zone: ZoneId) => void } {
  * the inset frame. Mark the element that should take keyboard
  * focus when the zone is entered with `data-zone-focus`; later visits return to whatever was focused last.
  */
-export function Zone({
-  id,
-  className = '',
-  style,
-  children
-}: {
-  id: ZoneId
-  className?: string
-  style?: CSSProperties
-  children?: ReactNode
-}): React.JSX.Element {
+export function Zone({ id, className = '', style, children }: { id: ZoneId; className?: string; style?: CSSProperties; children?: ReactNode }): React.JSX.Element {
   const ref = useRef<HTMLElement>(null)
   const focused = useSyncExternalStore(subscribe, () => state.zone === id)
   return (
@@ -314,7 +311,13 @@ export function PageLayout({
         <Zone id="inspector" style={{ width: inspectorSize }} className="shrink-0 border-l border-border bg-card">
           {inspector}
           {resizable && (
-            <ResizeHandle edge="left" width={inspectorSize} min={LIST_LIMITS.inspector[0]} max={LIST_LIMITS.inspector[1]} onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />
+            <ResizeHandle
+              edge="left"
+              width={inspectorSize}
+              min={LIST_LIMITS.inspector[0]}
+              max={LIST_LIMITS.inspector[1]}
+              onResize={(next) => setPagePanels(page, { inspectorWidth: next })}
+            />
           )}
         </Zone>
       )}
@@ -325,7 +328,12 @@ export function PageLayout({
 /** Text fields, the code editor and the terminal's hidden textarea keep every bare key */
 export function isTyping(event: KeyboardEvent): boolean {
   const origin = event.composedPath()[0]
-  return origin instanceof HTMLInputElement || origin instanceof HTMLTextAreaElement || origin instanceof HTMLSelectElement || (origin instanceof HTMLElement && origin.isContentEditable)
+  return (
+    origin instanceof HTMLInputElement ||
+    origin instanceof HTMLTextAreaElement ||
+    origin instanceof HTMLSelectElement ||
+    (origin instanceof HTMLElement && origin.isContentEditable)
+  )
 }
 
 /**
@@ -428,14 +436,19 @@ export function ListToggle({ page }: { page?: string }): React.JSX.Element {
   const panels = usePanels(page)
   const label = `${panels.list ? 'Hide' : 'Show'} list (⌘⇧E)`
   return (
-    <button title={label} aria-label={label} onClick={() => panels.toggle('list')} className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]">
+    <button
+      title={label}
+      aria-label={label}
+      onClick={() => panels.toggle('list')}
+      className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
+    >
       <Icon name="panel" className="size-3.5" />
       <Kbd hint>⌘⇧E</Kbd>
     </button>
   )
 }
 
-const MODIFIER_KEYS = ['Meta', 'Alt', 'Control']
+const MODIFIER_KEYS = new Set(['Meta', 'Alt', 'Control'])
 const HINT_DELAY_MS = 300
 
 /** Sets `data-hints` on <html> while ⌘, ⌥ or ⌃ is held on its own, which reveals the inline keycaps marked `data-key-hint` */
@@ -450,7 +463,7 @@ export function useModifierHints(): void {
     }
     const onKeyDown = (event: KeyboardEvent): void => {
       // Any other key means a shortcut is under way, so a quick one never flashes the hints
-      if (!MODIFIER_KEYS.includes(event.key)) return hide()
+      if (!MODIFIER_KEYS.has(event.key)) return hide()
       if (!timer && !root.hasAttribute('data-hints')) timer = window.setTimeout(() => root.setAttribute('data-hints', ''), HINT_DELAY_MS)
     }
     const onKeyUp = (event: KeyboardEvent): void => {

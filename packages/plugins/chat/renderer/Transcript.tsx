@@ -18,7 +18,9 @@ export function FeedBlocks({
   onAnswer: ((requestId: string, optionId: string) => void) | undefined
 }): React.JSX.Element {
   const card = (permission: PendingPermission): React.ReactNode =>
-    onAnswer && <PermissionCard key={permission.requestId} permission={permission} newest={permission === newest} onAnswer={(optionId) => onAnswer(permission.requestId, optionId)} />
+    onAnswer && (
+      <PermissionCard key={permission.requestId} permission={permission} newest={permission === newest} onAnswer={(optionId) => onAnswer(permission.requestId, optionId)} />
+    )
   return (
     <>
       {blocks.map((block, index) => {

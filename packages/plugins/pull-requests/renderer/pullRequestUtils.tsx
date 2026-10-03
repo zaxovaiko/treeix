@@ -78,8 +78,7 @@ export function StateBadge({ pr }: { pr: PullRequest }): React.JSX.Element {
 
 /** Reviewed by you, or your own, with nothing pushed since: the list dims these so the rest stands out */
 // Lists cached or sent by an older main process have no review field, hence the optional
-export const reviewSettled = (review?: ReviewStatus | null): boolean =>
-  !!review && review.newCommits === 0 && ['yours', 'approved', 'changes', 'commented'].includes(review.state)
+export const reviewSettled = (review?: ReviewStatus | null): boolean => !!review && review.newCommits === 0 && ['yours', 'approved', 'changes', 'commented'].includes(review.state)
 
 /** Yours, asked of you, or reviewed by you; GitHub only, GitLab lists carry no review state */
 export const involvesYou = (pr: PullRequest): boolean => !!pr.review && pr.review.state !== 'unreviewed'
@@ -149,10 +148,7 @@ function Mark({ state, title }: { state: keyof typeof REVIEW_MARKS; title?: stri
 export function ConflictMark({ pr }: { pr: PullRequest }): React.JSX.Element | null {
   if (!pr.conflicts || pr.state !== 'open') return null
   return (
-    <span
-      title={`Conflicts with ${pr.targetBranch}`}
-      className="flex shrink-0 items-center rounded bg-red-500/12 px-1.5 text-[10.5px] font-medium whitespace-nowrap text-red-400"
-    >
+    <span title={`Conflicts with ${pr.targetBranch}`} className="flex shrink-0 items-center rounded bg-red-500/12 px-1.5 text-[10.5px] font-medium whitespace-nowrap text-red-400">
       Conflicts
     </span>
   )
@@ -175,7 +171,11 @@ export function PipelineDot({ pipeline }: { pipeline: Pipeline | null | undefine
 export function PipelineLink({ pipeline }: { pipeline: Pipeline | null | undefined }): React.JSX.Element | null {
   if (!pipeline) return null
   return (
-    <button title="Open the pipeline" onClick={() => window.open(pipeline.url)} className="flex shrink-0 items-center gap-1.5 rounded px-1 whitespace-nowrap hover:bg-accent hover:text-foreground">
+    <button
+      title="Open the pipeline"
+      onClick={() => window.open(pipeline.url)}
+      className="flex shrink-0 items-center gap-1.5 rounded px-1 whitespace-nowrap hover:bg-accent hover:text-foreground"
+    >
       <PipelineDot pipeline={pipeline} />
       {PIPELINE_LOOK[pipeline.status].label.toLowerCase()}
     </button>
@@ -197,11 +197,13 @@ const changedLines = (pr: PullRequest): number | null => (pr.additions === null 
 /** Pull requests without the counted number (GitLab has no file or line counts) go last, most recently updated first */
 export function sortPullRequests(pullRequests: PullRequest[], sort: PullRequestSort): PullRequest[] {
   const byUpdated = (a: PullRequest, b: PullRequest): number => b.updatedAt.localeCompare(a.updatedAt)
-  const ascending = (value: (pr: PullRequest) => number | null, direction: 1 | -1) => (a: PullRequest, b: PullRequest): number => {
-    const [first, second] = [value(a), value(b)]
-    if (first === null || second === null) return first === second ? byUpdated(a, b) : first === null ? 1 : -1
-    return (first - second) * direction || byUpdated(a, b)
-  }
+  const ascending =
+    (value: (pr: PullRequest) => number | null, direction: 1 | -1) =>
+    (a: PullRequest, b: PullRequest): number => {
+      const [first, second] = [value(a), value(b)]
+      if (first === null || second === null) return first === second ? byUpdated(a, b) : first === null ? 1 : -1
+      return (first - second) * direction || byUpdated(a, b)
+    }
   const compare = {
     updated: byUpdated,
     oldest: (a: PullRequest, b: PullRequest) => -byUpdated(a, b),

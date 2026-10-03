@@ -13,11 +13,44 @@ export type AxNode = {
 
 const SNAPSHOT_LIMIT = 60_000
 /** Wrappers that say nothing on their own; their children take their place */
-const TRANSPARENT = new Set(['generic', 'none', 'presentation', 'InlineTextBox', 'LineBreak', 'RootWebArea', 'WebArea', 'group', 'Section', 'paragraph', 'LayoutTable', 'LayoutTableRow', 'LayoutTableCell'])
-const STATES = ['focused', 'checked', 'pressed', 'selected', 'expanded', 'disabled', 'required', 'invalid']
-const INTERACTIVE = new Set(['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio', 'switch', 'slider', 'spinbutton', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option', 'listbox', 'treeitem'])
+const TRANSPARENT = new Set([
+  'generic',
+  'none',
+  'presentation',
+  'InlineTextBox',
+  'LineBreak',
+  'RootWebArea',
+  'WebArea',
+  'group',
+  'Section',
+  'paragraph',
+  'LayoutTable',
+  'LayoutTableRow',
+  'LayoutTableCell'
+])
+const STATES = new Set(['focused', 'checked', 'pressed', 'selected', 'expanded', 'disabled', 'required', 'invalid'])
+const INTERACTIVE = new Set([
+  'button',
+  'link',
+  'textbox',
+  'searchbox',
+  'combobox',
+  'checkbox',
+  'radio',
+  'switch',
+  'slider',
+  'spinbutton',
+  'tab',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'listbox',
+  'treeitem'
+])
 
-const str = (value: AxValue | undefined): string => (typeof value?.value === 'string' || typeof value?.value === 'number' || typeof value?.value === 'boolean' ? String(value.value) : '')
+const str = (value: AxValue | undefined): string =>
+  typeof value?.value === 'string' || typeof value?.value === 'number' || typeof value?.value === 'boolean' ? String(value.value) : ''
 const quoted = (value: string): string => JSON.stringify(value.replace(/\s+/g, ' ').trim().slice(0, 200))
 
 /**
@@ -37,7 +70,7 @@ export function formatSnapshot(nodes: AxNode[]): string {
     const repeats = text && name === parentName
     const shown = !node.ignored && !repeats && (text ? name !== '' : !TRANSPARENT.has(role) || name !== '') && role !== ''
     if (shown) {
-      const states = (node.properties ?? []).filter((property) => STATES.includes(property.name) && property.value.value === true).map((property) => property.name)
+      const states = (node.properties ?? []).filter((property) => STATES.has(property.name) && property.value.value === true).map((property) => property.name)
       const level = (node.properties ?? []).find((property) => property.name === 'level')
       const value = str(node.value)
       const parts = [

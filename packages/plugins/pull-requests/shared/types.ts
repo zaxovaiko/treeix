@@ -66,8 +66,6 @@ export type PullRequestComment = {
   side?: 'additions' | 'deletions'
 }
 
-
-
 /** A conversation thread; path is null for general discussion */
 export type ReviewThread = {
   id: string

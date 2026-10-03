@@ -78,7 +78,8 @@ export function DesignPopover(): React.JSX.Element | null {
     <div
       style={{ position: 'absolute', top: top + offset.y, left: left + offset.x, width: WIDTH }}
       onPointerDown={drag}
-      className="z-20 cursor-grab rounded-lg border border-border bg-popover p-2 shadow-lg">
+      className="z-20 cursor-grab rounded-lg border border-border bg-popover p-2 shadow-lg"
+    >
       <div className="mb-1.5 truncate font-mono text-[11px] text-muted-foreground" title={value.selector}>
         {value.selector}
       </div>

@@ -40,7 +40,10 @@ test('parseCodexLimits takes the newest rate_limits event and matches windows by
 })
 
 test('parseStatusLineLimits reads Claude Code status line rate_limits', () => {
-  const input = { model: { display_name: 'Opus' }, rate_limits: { five_hour: { used_percentage: 8.4, resets_at: 1_789_598_400 }, seven_day: { used_percentage: 33, resets_at: 1_789_758_000 } } }
+  const input = {
+    model: { display_name: 'Opus' },
+    rate_limits: { five_hour: { used_percentage: 8.4, resets_at: 1_789_598_400 }, seven_day: { used_percentage: 33, resets_at: 1_789_758_000 } }
+  }
   expect(parseStatusLineLimits(input, 1_789_589_000_000, now)).toEqual({
     fiveHour: { usedPercent: 8, resetsAt: 1_789_598_400_000 },
     weekly: { usedPercent: 33, resetsAt: 1_789_758_000_000 },
@@ -50,7 +53,13 @@ test('parseStatusLineLimits reads Claude Code status line rate_limits', () => {
 })
 
 test('parseDesktopUsage takes the newest sample and newestLimits borrows reset times', () => {
-  const desktop = parseDesktopUsage({ version: 2, samples: [{ t: 1, org: 'o', u: { fh: 3, sd: 30 } }, { t: 1_789_589_500_000, org: 'o', u: { fh: 10.2, sd: 33 } }] })
+  const desktop = parseDesktopUsage({
+    version: 2,
+    samples: [
+      { t: 1, org: 'o', u: { fh: 3, sd: 30 } },
+      { t: 1_789_589_500_000, org: 'o', u: { fh: 10.2, sd: 33 } }
+    ]
+  })
   expect(desktop).toEqual({ fiveHour: { usedPercent: 10, resetsAt: null }, weekly: { usedPercent: 33, resetsAt: null }, updatedAt: 1_789_589_500_000 })
   expect(parseDesktopUsage({ samples: [] })).toBeNull()
 

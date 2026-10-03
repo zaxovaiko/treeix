@@ -79,7 +79,8 @@ function OptionField({
 /** Options each runtime offers, read once per app session since detecting starts the runtime */
 const detected = new Map<string, Promise<ChatOption[]>>()
 
-const PROMPT_FIELD = 'resize-y rounded-md border border-input bg-muted px-2.5 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
+const PROMPT_FIELD =
+  'resize-y rounded-md border border-input bg-muted px-2.5 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 
 /** Prompts the agent gets on a schedule while Treeix runs, each optionally shown as a notification */
 function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (schedules: Schedule[]) => void }): React.JSX.Element {
@@ -113,7 +114,11 @@ function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (
               <input type="checkbox" checked={schedule.enabled} onChange={(event) => patch(schedule.id, { enabled: event.target.checked })} />
               On
             </label>
-            <button onClick={() => onChange(schedules.filter((entry) => entry.id !== schedule.id))} aria-label="Remove schedule" className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground">
+            <button
+              onClick={() => onChange(schedules.filter((entry) => entry.id !== schedule.id))}
+              aria-label="Remove schedule"
+              className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground"
+            >
               <Icon name="trash" className="size-3.5" />
             </button>
           </div>
@@ -168,7 +173,10 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
     setKeySaved(false)
     if (!URL.canParse(baseUrl)) return
     let current = true
-    void hubApi.hasKey(baseUrl).then((saved) => current && setKeySaved(saved), () => undefined)
+    void hubApi.hasKey(baseUrl).then(
+      (saved) => current && setKeySaved(saved),
+      () => undefined
+    )
     return () => void (current = false)
   }, [baseUrl])
   /** A typed key is stored before anything talks to the API */
@@ -221,9 +229,9 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
     storeKey()
       .then(() => hubApi.save({ ...draft, name, icon: glyphOf(draft), mode: isApi ? null : draft.mode, updatedAt: Date.now() }))
       .then(
-      () => onSaved(draft.id),
-      (reason: unknown) => setProblem(errorMessage(reason))
-    )
+        () => onSaved(draft.id),
+        (reason: unknown) => setProblem(errorMessage(reason))
+      )
   }
 
   return (
@@ -258,13 +266,26 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
           </div>
           <label className={`${LABEL} flex-1`}>
             Name
-            <input autoFocus value={draft.name} onChange={(event) => patch({ name: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && save()} placeholder="Reviewer" className={FIELD} />
+            <input
+              autoFocus
+              value={draft.name}
+              onChange={(event) => patch({ name: event.target.value })}
+              onKeyDown={(event) => event.key === 'Enter' && save()}
+              placeholder="Reviewer"
+              className={FIELD}
+            />
           </label>
           <div className={LABEL}>
             Colour
             <div className="flex h-8 items-center gap-1.5">
               {WORKSPACE_COLORS.map((swatch) => (
-                <button key={swatch} aria-label={`Colour ${swatch}`} onClick={() => patch({ color: swatch })} style={{ background: swatch }} className="grid size-5 place-items-center rounded-md text-white">
+                <button
+                  key={swatch}
+                  aria-label={`Colour ${swatch}`}
+                  onClick={() => patch({ color: swatch })}
+                  style={{ background: swatch }}
+                  className="grid size-5 place-items-center rounded-md text-white"
+                >
                   {draft.color === swatch && <Icon name="check" className="size-3" />}
                 </button>
               ))}
@@ -320,7 +341,12 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
                 <span className="flex h-8 items-center gap-2 text-[13px] text-foreground">
                   Saved for {URL.canParse(baseUrl) ? new URL(baseUrl).host : baseUrl}
                   <button
-                    onClick={() => void hubApi.setKey(baseUrl, null).then(() => setKeySaved(false), (reason: unknown) => setProblem(errorMessage(reason)))}
+                    onClick={() =>
+                      void hubApi.setKey(baseUrl, null).then(
+                        () => setKeySaved(false),
+                        (reason: unknown) => setProblem(errorMessage(reason))
+                      )
+                    }
                     className="text-xs text-muted-foreground hover:text-foreground"
                   >
                     Remove
@@ -334,8 +360,26 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         )}
 
         <div className="flex gap-2">
-          <OptionField label="Model" optional={!isApi} loading={detecting} onOpen={detectOnOpen} value={draft.model} option={options.find((option) => option.category === 'model')} onChange={(model) => patch({ model })} />
-          {!isApi && <OptionField label="Mode" optional loading={detecting} onOpen={detectOnOpen} value={draft.mode} option={options.find((option) => option.category === 'mode')} onChange={(mode) => patch({ mode })} />}
+          <OptionField
+            label="Model"
+            optional={!isApi}
+            loading={detecting}
+            onOpen={detectOnOpen}
+            value={draft.model}
+            option={options.find((option) => option.category === 'model')}
+            onChange={(model) => patch({ model })}
+          />
+          {!isApi && (
+            <OptionField
+              label="Mode"
+              optional
+              loading={detecting}
+              onOpen={detectOnOpen}
+              value={draft.mode}
+              option={options.find((option) => option.category === 'mode')}
+              onChange={(mode) => patch({ mode })}
+            />
+          )}
         </div>
 
         <label className={LABEL}>

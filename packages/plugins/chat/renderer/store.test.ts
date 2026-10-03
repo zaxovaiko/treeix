@@ -2,7 +2,25 @@ import { expect, test } from 'bun:test'
 import type { ToolCall } from '@treeix/sdk'
 import { emptyFeed, type Feed } from './feed'
 import type { StartResult } from '../shared/types'
-import { activityOf, afterPrompt, hasConversation, cancel, type ChatState, emptyChat, getChat, listen, send, setDraft, shortTitle, start, statusOf, subscribe, titleOf, whenIdle, withUserMessage } from './store'
+import {
+  activityOf,
+  afterPrompt,
+  hasConversation,
+  cancel,
+  type ChatState,
+  emptyChat,
+  getChat,
+  listen,
+  send,
+  setDraft,
+  shortTitle,
+  start,
+  statusOf,
+  subscribe,
+  titleOf,
+  whenIdle,
+  withUserMessage
+} from './store'
 
 test('status: waiting beats running beats connected', () => {
   expect(statusOf(emptyChat)).toBe('exited')
@@ -13,7 +31,10 @@ test('status: waiting beats running beats connected', () => {
 })
 
 test('the user message goes into the feed as one block with its images', () => {
-  const feed = withUserMessage(emptyFeed, [{ type: 'text', text: 'Look' }, { type: 'image', mimeType: 'image/png', data: 'AAA' }])
+  const feed = withUserMessage(emptyFeed, [
+    { type: 'text', text: 'Look' },
+    { type: 'image', mimeType: 'image/png', data: 'AAA' }
+  ])
   expect(feed.blocks).toEqual([{ type: 'text', role: 'user', text: 'Look', images: [{ mimeType: 'image/png', data: 'AAA' }] }])
 })
 

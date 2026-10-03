@@ -2,7 +2,18 @@ import { statSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import ts from 'typescript'
 import { supportsLanguageService } from '../shared/languages'
-import type { CodeDiagnostic, CodeLocation, CodePosition, CodeRange, CompletionDetails, CompletionItem, HoverInfo, NavigationKind, SignatureHelp, SymbolTarget } from '../shared/types'
+import type {
+  CodeDiagnostic,
+  CodeLocation,
+  CodePosition,
+  CodeRange,
+  CompletionDetails,
+  CompletionItem,
+  HoverInfo,
+  NavigationKind,
+  SignatureHelp,
+  SymbolTarget
+} from '../shared/types'
 
 // Solution-style configs give a worktree two or more programs (node and web), so fit a few worktrees' worth
 const MAX_SERVICES = 6
@@ -176,8 +187,7 @@ export function navigate(worktreePath: string, kind: NavigationKind, target: Sym
     const existing = unique.get(key)
     unique.set(key, { ...location, isDefinition: Boolean(existing?.isDefinition || location.isDefinition) })
   }
-  return [...unique.values()]
-    .sort(byPosition)
+  return [...unique.values()].sort(byPosition)
 }
 
 export function hover(worktreePath: string, target: SymbolTarget): HoverInfo | null {
@@ -234,7 +244,15 @@ function isCompletionEntryData(value: unknown): value is ts.CompletionEntryData 
   return typeof value === 'object' && value !== null && 'exportName' in value && typeof (value as { exportName: unknown }).exportName === 'string'
 }
 
-export function completionDetails(worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null): CompletionDetails | null {
+export function completionDetails(
+  worktreePath: string,
+  path: string,
+  text: string,
+  position: CodePosition,
+  name: string,
+  source: string | null,
+  data: string | null
+): CompletionDetails | null {
   const document = openDocument(worktreePath, path, text, position)
   if (!document) return null
   const parsed: unknown = data ? JSON.parse(data) : undefined
@@ -268,7 +286,12 @@ export function signatureHelp(worktreePath: string, path: string, text: string, 
   }
 }
 
-const SEVERITY = { [ts.DiagnosticCategory.Error]: 'error', [ts.DiagnosticCategory.Warning]: 'warning', [ts.DiagnosticCategory.Suggestion]: 'info', [ts.DiagnosticCategory.Message]: 'info' } as const
+const SEVERITY = {
+  [ts.DiagnosticCategory.Error]: 'error',
+  [ts.DiagnosticCategory.Warning]: 'warning',
+  [ts.DiagnosticCategory.Suggestion]: 'info',
+  [ts.DiagnosticCategory.Message]: 'info'
+} as const
 
 export function diagnostics(worktreePath: string, path: string, text: string): CodeDiagnostic[] | null {
   const document = openDocument(worktreePath, path, text, { line: 1, column: 0 })
@@ -277,7 +300,14 @@ export function diagnostics(worktreePath: string, path: string, text: string): C
   return [...service.getSyntacticDiagnostics(fileName), ...service.getSemanticDiagnostics(fileName)].flatMap((diagnostic) =>
     diagnostic.start === undefined
       ? []
-      : [{ range: rangeOf(sourceFile, diagnostic.start, diagnostic.length ?? 0), message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), severity: SEVERITY[diagnostic.category], code: diagnostic.code }]
+      : [
+          {
+            range: rangeOf(sourceFile, diagnostic.start, diagnostic.length ?? 0),
+            message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+            severity: SEVERITY[diagnostic.category],
+            code: diagnostic.code
+          }
+        ]
   )
 }
 

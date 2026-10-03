@@ -30,7 +30,11 @@ export function screenText(output: string, lines: number): string {
     .replace(/\x1b[@-_]/g, '')
     .split('\n')
     .map((line) => line.replace(/\r$/, '').split('\r').at(-1)?.trimEnd() ?? '')
-  return plain.filter((line, index) => line || plain[index - 1]).slice(-lines).join('\n').trim()
+  return plain
+    .filter((line, index) => line || plain[index - 1])
+    .slice(-lines)
+    .join('\n')
+    .trim()
 }
 
 const findSession = (args: Record<string, unknown>): ReturnType<typeof sessionEntries>[number] => {
@@ -61,7 +65,12 @@ export function sessionTools(): McpTool[] {
     {
       name: 'session_read',
       description: "A session's latest output: an agent's last replies from its conversation, or a shell's screen.",
-      inputSchema: { type: 'object', properties: { ...SESSION, count: { type: 'number', description: 'Replies or screen lines, 3 and 60 by default' } }, required: ['session'], additionalProperties: false },
+      inputSchema: {
+        type: 'object',
+        properties: { ...SESSION, count: { type: 'number', description: 'Replies or screen lines, 3 and 60 by default' } },
+        required: ['session'],
+        additionalProperties: false
+      },
       run: async (args) => {
         const session = findSession(args)
         const meta = parseMeta(session.meta)

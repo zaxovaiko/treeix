@@ -45,7 +45,10 @@ function marked(node: Json, context: AdfContext): string {
   return value
 }
 
-const inline = (node: Json, context: AdfContext): string => children(node).map((child) => convert(child, context)).join('')
+const inline = (node: Json, context: AdfContext): string =>
+  children(node)
+    .map((child) => convert(child, context))
+    .join('')
 const cellText = (node: Json, context: AdfContext): string => inline(node, context).trim().replace(/\n+/g, ' ').replace(/\|/g, '\\|')
 const indent = (block: string, prefix: string): string =>
   block
@@ -83,12 +86,21 @@ function macroSource(node: Json): string {
   const body = children(node)
     .map((child) => textOf(child))
     .join('\n')
-  return [body, ...strings].find((candidate) => /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|mindmap|timeline)\b/.test(candidate)) ?? ''
+  return (
+    [body, ...strings].find((candidate) => /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|mindmap|timeline)\b/.test(candidate)) ?? ''
+  )
 }
 
 const escapeHtml = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-const textOf = (node: unknown): string => (isJson(node) ? (node.type === 'text' ? text(node.text) : children(node).map(textOf).join(node.type === 'paragraph' ? '\n' : '')) : '')
+const textOf = (node: unknown): string =>
+  isJson(node)
+    ? node.type === 'text'
+      ? text(node.text)
+      : children(node)
+          .map(textOf)
+          .join(node.type === 'paragraph' ? '\n' : '')
+    : ''
 
 /** Markdown from Atlassian Document Format */
 export function convert(raw: unknown, context: AdfContext): string {
@@ -140,7 +152,13 @@ export function convert(raw: unknown, context: AdfContext): string {
       // Collapsed like in Confluence; the blank lines let the body stay markdown
       return `<details><summary>${escapeHtml(text(attrs.title) || 'Click here to expand...')}</summary>\n\n${inline(node, { ...context, inExpand: true }).trim()}\n\n</details>\n\n`
     case 'table': {
-      const rows = children(node).filter(isJson).map((row) => children(row).filter(isJson).map((cell) => cellText(cell, context)))
+      const rows = children(node)
+        .filter(isJson)
+        .map((row) =>
+          children(row)
+            .filter(isJson)
+            .map((cell) => cellText(cell, context))
+        )
       if (rows.length === 0) return ''
       const width = Math.max(...rows.map((row) => row.length))
       const line = (cells: string[]): string => `| ${Array.from({ length: width }, (_, index) => cells[index] ?? '').join(' | ')} |`

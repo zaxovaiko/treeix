@@ -1,6 +1,18 @@
 import { createBridge, definePluginSettings } from '@treeix/sdk'
 import type { FilePatch } from '@treeix/shared/types'
-import type { ConflictResult, ImageResult, Person, PullRequest, PullRequestComment, PullRequestDetail, PullRequestList, Reaction, ReviewThread, ReviewVerdict, MergeMethod } from '../shared/types'
+import type {
+  ConflictResult,
+  ImageResult,
+  Person,
+  PullRequest,
+  PullRequestComment,
+  PullRequestDetail,
+  PullRequestList,
+  Reaction,
+  ReviewThread,
+  ReviewVerdict,
+  MergeMethod
+} from '../shared/types'
 
 const bridge = createBridge('pull-requests')
 

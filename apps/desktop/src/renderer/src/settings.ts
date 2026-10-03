@@ -199,9 +199,47 @@ const clampScrollback = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(SCROLLBACK_RANGE.max, Math.max(SCROLLBACK_RANGE.min, value))) : DEFAULTS.terminalScrollback
 
 /** Below the minimum the window becomes hard to find, so values are clamped */
-export const clampOpacity = (value: unknown): number =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100
-const DEFAULTS: Settings = { plugins: {}, customAgents: [], chatAgent: 'claude', chatFullWidth: false, chatThinking: 'collapsed', highlightWorkers: 2, themeMode: 'dark', lightTheme: DEFAULT_THEME.light, darkTheme: DEFAULT_THEME.dark, diffStyle: 'split', sections: 'hidden', bottomPanel: 'content', compactTabs: true, titleBarTabs: [], tabIcons: {}, editorMinimap: true, editorLineNumbers: 'on', editorWordWrap: false, claudeSkipPermissions: false, codexSkipPermissions: false, agentNotifications: true, sidebarBranches: false, opacity: 100, borderStrength: 100, hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }, hotkeyHideOnBlur: true, hotkeyOnly: false, editorFontSize: 13, terminalFontSize: 12, terminalFontWeight: 'auto', terminalContrast: 4.5, terminalScrollback: 5000, uiFont: '', editorFont: '', terminalFont: '', digitShortcuts: { tabs: 'off', workspaces: 'altMeta' }, keymap: {}, navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) } }
+export const clampOpacity = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(100, Math.max(MIN_OPACITY, value))) : 100)
+const DEFAULTS: Settings = {
+  plugins: {},
+  customAgents: [],
+  chatAgent: 'claude',
+  chatFullWidth: false,
+  chatThinking: 'collapsed',
+  highlightWorkers: 2,
+  themeMode: 'dark',
+  lightTheme: DEFAULT_THEME.light,
+  darkTheme: DEFAULT_THEME.dark,
+  diffStyle: 'split',
+  sections: 'hidden',
+  bottomPanel: 'content',
+  compactTabs: true,
+  titleBarTabs: [],
+  tabIcons: {},
+  editorMinimap: true,
+  editorLineNumbers: 'on',
+  editorWordWrap: false,
+  claudeSkipPermissions: false,
+  codexSkipPermissions: false,
+  agentNotifications: true,
+  sidebarBranches: false,
+  opacity: 100,
+  borderStrength: 100,
+  hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false },
+  hotkeyHideOnBlur: true,
+  hotkeyOnly: false,
+  editorFontSize: 13,
+  terminalFontSize: 12,
+  terminalFontWeight: 'auto',
+  terminalContrast: 4.5,
+  terminalScrollback: 5000,
+  uiFont: '',
+  editorFont: '',
+  terminalFont: '',
+  digitShortcuts: { tabs: 'off', workspaces: 'altMeta' },
+  keymap: {},
+  navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) }
+}
 
 /** Before plugins, four features had their own on/off switch under these keys */
 const LEGACY_MODULES: Record<string, string> = { terminal: 'terminal', pullRequests: 'pull-requests', plans: 'plans', diagrams: 'diagrams' }
@@ -221,7 +259,8 @@ export function parseCustomAgents(value: unknown): Agent[] {
     const id = text('id')
     if (!id) return []
     const chatCandidate = typeof candidate.chat === 'object' && candidate.chat !== null ? (candidate.chat as Record<string, unknown>) : undefined
-    const chat = typeof chatCandidate?.adapter === 'string' && typeof chatCandidate.command === 'string' ? { adapter: chatCandidate.adapter, command: chatCandidate.command } : undefined
+    const chat =
+      typeof chatCandidate?.adapter === 'string' && typeof chatCandidate.command === 'string' ? { adapter: chatCandidate.adapter, command: chatCandidate.command } : undefined
     return [
       {
         id,
@@ -245,7 +284,8 @@ function load(): Settings {
     const stored = readStored(KEY)
     if (!isJson(stored)) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
+    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean =>
+      typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key]
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),

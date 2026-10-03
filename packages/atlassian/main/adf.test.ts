@@ -11,9 +11,39 @@ test('adfToMarkdown keeps blocks apart and renders marks, lists, tasks, tables, 
     content: [
       { type: 'heading', attrs: { level: 2 }, content: [t('Context')] },
       p(t('See '), t('spec', [{ type: 'link', attrs: { href: 'https://x.atlassian.net/wiki/spaces/B/pages/42/Wallet+Balance' } }]), t(' and '), t('code', [{ type: 'code' }])),
-      { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('one'))] }, { type: 'listItem', content: [p(t('two')), { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('nested'))] }] }] }] },
-      { type: 'taskList', content: [{ type: 'taskItem', attrs: { state: 'DONE' }, content: [t('done')] }, { type: 'taskItem', attrs: { state: 'TODO' }, content: [t('todo')] }] },
-      { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableHeader', content: [p(t('A'))] }, { type: 'tableHeader', content: [p(t('B'))] }] }, { type: 'tableRow', content: [{ type: 'tableCell', content: [p(t('1'))] }, { type: 'tableCell', content: [p(t('x|y'))] }] }] },
+      {
+        type: 'bulletList',
+        content: [
+          { type: 'listItem', content: [p(t('one'))] },
+          { type: 'listItem', content: [p(t('two')), { type: 'bulletList', content: [{ type: 'listItem', content: [p(t('nested'))] }] }] }
+        ]
+      },
+      {
+        type: 'taskList',
+        content: [
+          { type: 'taskItem', attrs: { state: 'DONE' }, content: [t('done')] },
+          { type: 'taskItem', attrs: { state: 'TODO' }, content: [t('todo')] }
+        ]
+      },
+      {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              { type: 'tableHeader', content: [p(t('A'))] },
+              { type: 'tableHeader', content: [p(t('B'))] }
+            ]
+          },
+          {
+            type: 'tableRow',
+            content: [
+              { type: 'tableCell', content: [p(t('1'))] },
+              { type: 'tableCell', content: [p(t('x|y'))] }
+            ]
+          }
+        ]
+      },
       { type: 'codeBlock', attrs: { language: 'mermaid' }, content: [t('graph TD\n  A-->B')] },
       { type: 'mediaSingle', content: [{ type: 'media', attrs: { alt: 'shot.png', id: 'f1' } }] },
       { type: 'inlineCard', attrs: { url: 'https://x.atlassian.net/browse/BF-1' } }
@@ -60,7 +90,16 @@ test('textToAdf splits paragraphs and lines and leads with the mention', () => {
     type: 'doc',
     version: 1,
     content: [
-      { type: 'paragraph', content: [{ type: 'mention', attrs: { id: 'a1', text: '@Ann' } }, { type: 'text', text: ' ' }, { type: 'text', text: 'one' }, { type: 'hardBreak' }, { type: 'text', text: 'two' }] },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'mention', attrs: { id: 'a1', text: '@Ann' } },
+          { type: 'text', text: ' ' },
+          { type: 'text', text: 'one' },
+          { type: 'hardBreak' },
+          { type: 'text', text: 'two' }
+        ]
+      },
       { type: 'paragraph', content: [{ type: 'text', text: 'three' }] }
     ]
   })

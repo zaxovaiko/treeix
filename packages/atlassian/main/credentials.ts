@@ -1,7 +1,6 @@
-import { safeStorage } from 'electron'
+import { safeStorage, app } from 'electron'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { app } from 'electron'
 import type { Credentials } from '../shared'
 
 // One token for every Atlassian plugin

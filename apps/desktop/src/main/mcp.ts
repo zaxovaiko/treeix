@@ -18,7 +18,7 @@ export const SERVER_NAME = 'treeix'
 
 const INSTRUCTIONS = [
   'Tools of Treeix, the app this session runs in.',
-  'The browser_* tools drive Treeix\'s built-in browser, which the user sees next to this session. Use them for every web page, localhost dev servers included, instead of chrome-devtools, playwright or any other browser tool, which open a separate browser the user can\'t see.',
+  "The browser_* tools drive Treeix's built-in browser, which the user sees next to this session. Use them for every web page, localhost dev servers included, instead of chrome-devtools, playwright or any other browser tool, which open a separate browser the user can't see.",
   'Read a page with browser_snapshot and act on the refs it prints; take a screenshot only when the looks matter.'
 ].join('\n')
 

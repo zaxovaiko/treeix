@@ -98,7 +98,12 @@ export function SendButton({
     if (!hotkeys) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing || !anchor.current?.closest('[data-drawer]')?.contains(document.activeElement)) return
-      const action = event.metaKey && event.key === 'Enter' ? latest.current.sendDefault : !event.metaKey && !event.ctrlKey && !event.altKey && event.key === 't' ? latest.current.openMenu : null
+      const action =
+        event.metaKey && event.key === 'Enter'
+          ? latest.current.sendDefault
+          : !event.metaKey && !event.ctrlKey && !event.altKey && event.key === 't'
+            ? latest.current.openMenu
+            : null
       if (!action) return
       event.preventDefault()
       action()
@@ -113,27 +118,18 @@ export function SendButton({
   const elsewhere = alive.filter((session) => session.worktreePath !== worktreePath && isAgent(session.kind))
 
   const row = (session: Session): React.JSX.Element => (
-    <button
-      key={session.id}
-      onClick={() => send(session)}
-      className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent"
-    >
+    <button key={session.id} onClick={() => send(session)} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent">
       <span className="w-3 text-foreground">{session.id === target?.id ? '✓' : ''}</span>
       <KindBadge kind={session.kind} />
       <span className="min-w-0 flex-1 truncate">
         {session.title}
-        {session.worktreePath !== worktreePath && (
-          <span className="text-muted-foreground"> · {worktreeLabel(repos, session.worktreePath)}</span>
-        )}
+        {session.worktreePath !== worktreePath && <span className="text-muted-foreground"> · {worktreeLabel(repos, session.worktreePath)}</span>}
       </span>
       <StatusDot session={session} withLabel />
     </button>
   )
 
-  const shell =
-    variant === 'pill'
-      ? 'h-7 rounded-full border border-primary/40 bg-card text-primary shadow-lg shadow-black/40'
-      : 'h-8 w-full rounded-md bg-primary text-white'
+  const shell = variant === 'pill' ? 'h-7 rounded-full border border-primary/40 bg-card text-primary shadow-lg shadow-black/40' : 'h-8 w-full rounded-md bg-primary text-white'
   const divider = variant === 'pill' ? 'border-primary/30' : 'border-white/25'
 
   return (

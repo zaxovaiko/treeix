@@ -72,10 +72,7 @@ function attachmentSource(fields: Json): AdfContext['mediaSource'] {
 }
 
 export async function workItemDetail(key: string): Promise<WorkItemDetail> {
-  const [raw, host] = await Promise.all([
-    acli(['jira', 'workitem', 'view', key, '--fields', DETAIL_FIELDS, '--json']),
-    atlassianSite()
-  ])
+  const [raw, host] = await Promise.all([acli(['jira', 'workitem', 'view', key, '--fields', DETAIL_FIELDS, '--json']), atlassianSite()])
   const fields = object(object(raw).fields)
   const links = new Set<string>()
   const context = { onLink: (url: string) => void links.add(url), mediaSource: attachmentSource(fields) }
@@ -135,13 +132,26 @@ const PROJECT_KEY = /^[A-Z][A-Z0-9_]*$/
 export async function openEpics(projects: string[]): Promise<Epic[]> {
   const keys = projects.filter((project) => PROJECT_KEY.test(project))
   if (keys.length === 0) return []
-  const raw = await acli(['jira', 'workitem', 'search', '--jql', `project in (${keys.join(', ')}) AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`, '--fields', 'key,summary,status', '--limit', `${LIST_LIMIT}`, '--json'])
+  const raw = await acli([
+    'jira',
+    'workitem',
+    'search',
+    '--jql',
+    `project in (${keys.join(', ')}) AND issuetype = Epic AND statusCategory != Done ORDER BY updated DESC`,
+    '--fields',
+    'key,summary,status',
+    '--limit',
+    `${LIST_LIMIT}`,
+    '--json'
+  ])
   const epics = (Array.isArray(raw) ? raw : []).map((issue) => toWorkItem(issue, null))
   const result: Epic[] = []
   for (let start = 0; start < epics.length; start += EPIC_CONCURRENCY) {
     const batch = await Promise.all(
       epics.slice(start, start + EPIC_CONCURRENCY).map(async (epic) => {
-        const children = await acli(['jira', 'workitem', 'search', '--jql', `parent = ${epic.key}`, '--fields', 'key,status', '--limit', `${LIST_LIMIT}`, '--json']).catch(() => null)
+        const children = await acli(['jira', 'workitem', 'search', '--jql', `parent = ${epic.key}`, '--fields', 'key,status', '--limit', `${LIST_LIMIT}`, '--json']).catch(
+          () => null
+        )
         return {
           key: epic.key,
           summary: epic.summary,
@@ -186,7 +196,7 @@ async function withAdfFile(doc: Json, use: (file: string) => Promise<unknown>): 
     await writeFile(file, JSON.stringify(doc))
     await use(file)
   } catch (reason) {
-    throw new Error(failure(reason))
+    throw new Error(failure(reason), { cause: reason })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

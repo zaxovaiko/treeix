@@ -45,8 +45,6 @@ export function StatusDot({ session, withLabel = false }: { session: Pick<Sessio
   )
 }
 
-
 /** Agent sessions only: a shell printing output is no news */
 export const activityOf = (sessions: Pick<SessionSummary, 'kind' | 'status'>[]): Activity =>
   agentActivity(sessions.filter((session) => isAgent(session.kind)).map((session) => session.status))
-

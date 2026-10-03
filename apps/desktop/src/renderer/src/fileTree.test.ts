@@ -2,10 +2,7 @@ import { expect, test } from 'bun:test'
 import { ancestorFolders, buildFolderTree } from './fileTree'
 
 test('buildFolderTree merges single-child folder chains', () => {
-  const tree = buildFolderTree(
-    ['apps/backoffice/src/modules/players/hooks/a.ts', 'apps/backoffice/src/modules/wallet/b.tsx', 'apps/e2e/pages/c.ts', 'README.md'],
-    (path) => path
-  )
+  const tree = buildFolderTree(['apps/backoffice/src/modules/players/hooks/a.ts', 'apps/backoffice/src/modules/wallet/b.tsx', 'apps/e2e/pages/c.ts', 'README.md'], (path) => path)
   expect(tree.files).toEqual(['README.md'])
   const [apps] = tree.folders
   expect(apps.name).toBe('apps')

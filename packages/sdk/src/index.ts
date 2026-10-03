@@ -5,6 +5,8 @@ import type { Agent } from '@treeix/app/agents'
 import type { Theme } from '@treeix/app/themes'
 import type { ReviewComment } from '@treeix/shared/comments'
 import type { Repo } from '@treeix/shared/types'
+import type { ChatSpec, LoggedChatEvent } from './chat'
+import type { ShortcutInfo } from './layout'
 
 /** The `treeix` field of a plugin's package.json */
 export type PluginManifest = {
@@ -22,8 +24,6 @@ export * from './layout'
 export type * from './chat'
 /** Makes a plugin's action runnable from the native menu; the action needs a `Go to` or `Panels` section to show there */
 export { registerActionRunner } from '@treeix/app/actionRunners'
-import type { ChatSpec, LoggedChatEvent } from './chat'
-import type { ShortcutInfo } from './layout'
 
 /** A tab in the title bar that always exists while the plugin is enabled */
 export type TabContribution = {

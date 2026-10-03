@@ -95,9 +95,7 @@ export function saveWorkspace(workspace: Workspace): void {
     ...state,
     // The first workspace replaces the implicit everything view
     currentId: state.workspaces.length === 0 ? workspace.id : state.currentId,
-    workspaces: exists
-      ? state.workspaces.map((candidate) => (candidate.id === workspace.id ? workspace : candidate))
-      : [...state.workspaces, workspace]
+    workspaces: exists ? state.workspaces.map((candidate) => (candidate.id === workspace.id ? workspace : candidate)) : [...state.workspaces, workspace]
   })
 }
 
@@ -110,12 +108,16 @@ export const reorderWorkspaces = (workspaces: Workspace[], id: string, beforeId:
   return index === -1 ? workspaces : [...rest.slice(0, index), moved, ...rest.slice(index)]
 }
 
-export const moveWorkspace = (id: string, beforeId: string | null): void =>
-  commit({ ...state, workspaces: reorderWorkspaces(state.workspaces, id, beforeId) })
+export const moveWorkspace = (id: string, beforeId: string | null): void => commit({ ...state, workspaces: reorderWorkspaces(state.workspaces, id, beforeId) })
 
 export function deleteWorkspace(id: string): void {
   const workspaces = state.workspaces.filter((workspace) => workspace.id !== id)
-  commit({ ...state, workspaces, currentId: state.currentId === id ? (workspaces[0]?.id ?? ALL_PROJECTS) : state.currentId, recentIds: state.recentIds.filter((candidate) => candidate !== id) })
+  commit({
+    ...state,
+    workspaces,
+    currentId: state.currentId === id ? (workspaces[0]?.id ?? ALL_PROJECTS) : state.currentId,
+    recentIds: state.recentIds.filter((candidate) => candidate !== id)
+  })
 }
 
 export function addRepoToWorkspace(id: string, repoPath: string): void {
@@ -154,8 +156,7 @@ export function shades(hex: string): string[] {
 }
 
 /** Repos of a workspace, or every repo for All projects */
-export const reposOf = (workspace: Workspace | undefined, repos: Repo[]): Repo[] =>
-  workspace ? repos.filter((repo) => workspace.repoPaths.includes(repo.path)) : repos
+export const reposOf = (workspace: Workspace | undefined, repos: Repo[]): Repo[] => (workspace ? repos.filter((repo) => workspace.repoPaths.includes(repo.path)) : repos)
 
 const containsWorktree = (workspace: Workspace, repos: Repo[] | null, worktreePath: string): boolean =>
   reposOf(workspace, repos ?? []).some((repo) => repo.worktrees.some((worktree) => worktree.path === worktreePath))
@@ -164,16 +165,12 @@ const containsWorktree = (workspace: Workspace, repos: Repo[] | null, worktreePa
  * Each session belongs to exactly one workspace: the one it was started in. Sessions whose workspace
  * is gone (or that predate workspaces) move to the first workspace holding their worktree, else the first one.
  */
-export function inWorkspace(
-  session: { worktreePath: string; workspaceId: string },
-  workspace: Workspace | undefined,
-  repos: Repo[] | null,
-  workspaces: Workspace[]
-): boolean {
+export function inWorkspace(session: { worktreePath: string; workspaceId: string }, workspace: Workspace | undefined, repos: Repo[] | null, workspaces: Workspace[]): boolean {
   if (!workspace) return true
   if (workspaces.some((candidate) => candidate.id === session.workspaceId)) return session.workspaceId === workspace.id
   // With no record of where it started, it belongs to the narrowest workspace holding the checkout, e.g. "Betfeel" over "Betfeel + Openora"
-  const owner = workspaces.filter((candidate) => containsWorktree(candidate, repos, session.worktreePath)).sort((a, b) => a.repoPaths.length - b.repoPaths.length)[0] ?? workspaces[0]
+  const owner =
+    workspaces.filter((candidate) => containsWorktree(candidate, repos, session.worktreePath)).sort((a, b) => a.repoPaths.length - b.repoPaths.length)[0] ?? workspaces[0]
   return owner?.id === workspace.id
 }
 

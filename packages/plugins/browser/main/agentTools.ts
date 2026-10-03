@@ -26,7 +26,8 @@ const string = (args: Record<string, unknown>, name: string): string => {
   if (typeof value !== 'string' || !value) throw new Error(`${name} is required`)
   return value
 }
-const optionalNumber = (args: Record<string, unknown>, name: string, fallback: number): number => (typeof args[name] === 'number' && Number.isFinite(args[name]) ? args[name] : fallback)
+const optionalNumber = (args: Record<string, unknown>, name: string, fallback: number): number =>
+  typeof args[name] === 'number' && Number.isFinite(args[name]) ? args[name] : fallback
 
 function pageOf(args: Record<string, unknown>): WebContents {
   const id = string(args, 'tab')
@@ -63,7 +64,8 @@ async function cdp<T>(guest: WebContents, method: string, params?: Record<string
 }
 
 // ponytail: the focused window, else any; one per session's own window if people run agents across several windows
-const targetWindow = (): BrowserWindow | null => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find((window) => window.isVisible()) ?? BrowserWindow.getAllWindows()[0] ?? null
+const targetWindow = (): BrowserWindow | null =>
+  BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find((window) => window.isVisible()) ?? BrowserWindow.getAllWindows()[0] ?? null
 
 const tabIdOf = (guest: WebContents): string | undefined => [...tabs].find(([, candidate]) => candidate === guest)?.[0]
 
@@ -119,7 +121,11 @@ async function press(guest: WebContents, combo: string): Promise<void> {
   const { result } = await cdp<{ result: { value?: unknown } }>(guest, 'Runtime.evaluate', { expression: `window.${flag}`, returnByValue: true })
   if (result.value === true) return
   const { result: page } = await cdp<{ result: { objectId?: string } }>(guest, 'Runtime.evaluate', { expression: 'document' })
-  await cdp(guest, 'Runtime.callFunctionOn', { objectId: page.objectId, functionDeclaration: SYNTHETIC_KEY, arguments: [{ value: key.key }, { value: key.code }, { value: key.text ?? '' }, { value: key.modifiers }] })
+  await cdp(guest, 'Runtime.callFunctionOn', {
+    objectId: page.objectId,
+    functionDeclaration: SYNTHETIC_KEY,
+    arguments: [{ value: key.key }, { value: key.code }, { value: key.text ?? '' }, { value: key.modifiers }]
+  })
 }
 
 const clip = (text: string): string => (text.length > VALUE_LIMIT ? `${text.slice(0, VALUE_LIMIT)}\n(cut at ${VALUE_LIMIT / 1000}k characters)` : text)
@@ -166,12 +172,24 @@ export function browserTools(context: MainContext): McpTool[] {
       name: 'browser_tabs',
       description: "Lists the tabs open in Treeix's built-in browser: id, title and address.",
       inputSchema: schema({}, []),
-      run: async () => [...tabs].filter(([, guest]) => !guest.isDestroyed()).map(([id, guest]) => `${id}  ${describe(guest)}`).join('\n') || 'No tabs are open'
+      run: async () =>
+        [...tabs]
+          .filter(([, guest]) => !guest.isDestroyed())
+          .map(([id, guest]) => `${id}  ${describe(guest)}`)
+          .join('\n') || 'No tabs are open'
     },
     {
       name: 'browser_navigate',
-      description: "Loads an address in a tab, or in a new tab of Treeix's built-in browser when no tab is given, and waits for the page. Returns the tab id the other browser tools take.",
-      inputSchema: schema({ ...TAB, url: { type: 'string', description: 'http or https; a bare host like localhost:3000 gets http://' }, action: { type: 'string', enum: ['back', 'forward', 'reload'] } }, []),
+      description:
+        "Loads an address in a tab, or in a new tab of Treeix's built-in browser when no tab is given, and waits for the page. Returns the tab id the other browser tools take.",
+      inputSchema: schema(
+        {
+          ...TAB,
+          url: { type: 'string', description: 'http or https; a bare host like localhost:3000 gets http://' },
+          action: { type: 'string', enum: ['back', 'forward', 'reload'] }
+        },
+        []
+      ),
       run: async (args) => {
         if (args.tab === undefined) {
           const url = webUrl(string(args, 'url'))
@@ -206,7 +224,8 @@ export function browserTools(context: MainContext): McpTool[] {
     },
     {
       name: 'browser_snapshot',
-      description: "The page's accessibility tree as text: roles, names, values and states, with refs for browser_click and browser_type. Cheaper and more exact than a screenshot.",
+      description:
+        "The page's accessibility tree as text: roles, names, values and states, with refs for browser_click and browser_type. Cheaper and more exact than a screenshot.",
       inputSchema: schema(TAB, ['tab']),
       run: async (args) => {
         const guest = pageOf(args)
@@ -243,7 +262,12 @@ export function browserTools(context: MainContext): McpTool[] {
         const { object } = await cdp<{ object: { objectId?: string } }>(guest, 'DOM.resolveNode', { backendNodeId: ref }).catch(() => {
           throw new Error(`Ref ${ref} is gone; take a new browser_snapshot`)
         })
-        const { result } = await cdp<{ result: { value?: unknown } }>(guest, 'Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: FILL_FIELD, arguments: [{ value: text }], returnByValue: true })
+        const { result } = await cdp<{ result: { value?: unknown } }>(guest, 'Runtime.callFunctionOn', {
+          objectId: object.objectId,
+          functionDeclaration: FILL_FIELD,
+          arguments: [{ value: text }],
+          returnByValue: true
+        })
         if (result.value === 'no-option') throw new Error(`The select has no option ${text}`)
         if (result.value === 'not-a-field') throw new Error(`Ref ${ref} is not a field one can type in`)
         if (args.submit === true) await press(guest, 'Enter')
@@ -270,7 +294,10 @@ export function browserTools(context: MainContext): McpTool[] {
       inputSchema: schema({ ...TAB, expression: { type: 'string' } }, ['tab', 'expression']),
       run: async (args) => {
         const guest = pageOf(args)
-        const { result, exceptionDetails } = await cdp<{ result: { value?: unknown; type: string; description?: string }; exceptionDetails?: { exception?: { description?: string }; text?: string } }>(guest, 'Runtime.evaluate', {
+        const { result, exceptionDetails } = await cdp<{
+          result: { value?: unknown; type: string; description?: string }
+          exceptionDetails?: { exception?: { description?: string }; text?: string }
+        }>(guest, 'Runtime.evaluate', {
           expression: string(args, 'expression'),
           awaitPromise: true,
           returnByValue: true,
@@ -300,30 +327,57 @@ export function browserTools(context: MainContext): McpTool[] {
       inputSchema: schema({ ...TAB, limit: { type: 'number', description: 'How many of the newest to return, 50 by default' } }, ['tab']),
       run: async (args) => {
         const entries = guestLog(pageOf(args)).console.slice(-optionalNumber(args, 'limit', 50))
-        return clip(entries.map((entry) => `[${entry.level}] ${entry.text}${entry.source ? ` (${entry.source})` : ''}${entry.stack ? `\n${entry.stack}` : ''}`).join('\n') || 'Nothing logged')
+        return clip(
+          entries.map((entry) => `[${entry.level}] ${entry.text}${entry.source ? ` (${entry.source})` : ''}${entry.stack ? `\n${entry.stack}` : ''}`).join('\n') || 'Nothing logged'
+        )
       }
     },
     {
       name: 'browser_network',
       description: 'Requests the page made since it last changed site, newest last; with an id, that request with its headers and response body.',
-      inputSchema: schema({ ...TAB, filter: { type: 'string', description: 'Only addresses containing this' }, id: { type: 'string', description: 'Request id from the list' }, limit: { type: 'number' } }, ['tab']),
+      inputSchema: schema(
+        {
+          ...TAB,
+          filter: { type: 'string', description: 'Only addresses containing this' },
+          id: { type: 'string', description: 'Request id from the list' },
+          limit: { type: 'number' }
+        },
+        ['tab']
+      ),
       run: async (args) => {
         const guest = pageOf(args)
         const requests = guestLog(guest).network
         if (typeof args.id === 'string') {
           const request = requests.find((candidate) => candidate.id === args.id)
           if (!request) throw new Error(`No request ${args.id}`)
-          const headers = (list: Record<string, string>): string => Object.entries(list).map(([name, value]) => `  ${name}: ${value}`).join('\n')
+          const headers = (list: Record<string, string>): string =>
+            Object.entries(list)
+              .map(([name, value]) => `  ${name}: ${value}`)
+              .join('\n')
           const body = await responseBody(guest, request.id)
           return clip(
-            [`${request.method} ${request.url}`, `Status: ${request.status ?? request.failed ?? 'pending'}`, `Request headers:\n${headers(request.requestHeaders)}`, request.postData && `Request body:\n${request.postData}`, `Response headers:\n${headers(request.responseHeaders)}`, `Response body:\n${body ?? '(not available)'}`]
+            [
+              `${request.method} ${request.url}`,
+              `Status: ${request.status ?? request.failed ?? 'pending'}`,
+              `Request headers:\n${headers(request.requestHeaders)}`,
+              request.postData && `Request body:\n${request.postData}`,
+              `Response headers:\n${headers(request.responseHeaders)}`,
+              `Response body:\n${body ?? '(not available)'}`
+            ]
               .filter(Boolean)
               .join('\n\n')
           )
         }
         const filter = typeof args.filter === 'string' ? args.filter : ''
         const shown = requests.filter((request) => request.url.includes(filter)).slice(-optionalNumber(args, 'limit', 50))
-        return clip(shown.map((request) => `${request.id} ${request.method} ${request.status ?? request.failed ?? 'pending'} ${request.url} (${request.resourceType}${request.durationMs === null ? '' : `, ${Math.round(request.durationMs)} ms`})`).join('\n') || 'No requests')
+        return clip(
+          shown
+            .map(
+              (request) =>
+                `${request.id} ${request.method} ${request.status ?? request.failed ?? 'pending'} ${request.url} (${request.resourceType}${request.durationMs === null ? '' : `, ${Math.round(request.durationMs)} ms`})`
+            )
+            .join('\n') || 'No requests'
+        )
       }
     },
     {
@@ -335,7 +389,10 @@ export function browserTools(context: MainContext): McpTool[] {
         const text = string(args, 'text')
         const deadline = Date.now() + Math.min(optionalNumber(args, 'timeoutMs', 10_000), WAIT_LIMIT_MS)
         while (Date.now() < deadline) {
-          const { result } = await cdp<{ result: { value?: unknown } }>(guest, 'Runtime.evaluate', { expression: `document.body?.innerText.includes(${JSON.stringify(text)}) ?? false`, returnByValue: true }).catch(() => ({ result: { value: false } }))
+          const { result } = await cdp<{ result: { value?: unknown } }>(guest, 'Runtime.evaluate', {
+            expression: `document.body?.innerText.includes(${JSON.stringify(text)}) ?? false`,
+            returnByValue: true
+          }).catch(() => ({ result: { value: false } }))
           if (result.value === true) return `Found. ${describe(guest)}`
           await pause(250)
         }

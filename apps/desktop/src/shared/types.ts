@@ -64,7 +64,11 @@ export type CodePosition = { line: number; column: number }
 export type CodeRange = { start: CodePosition; end: CodePosition }
 export type CompletionItem = { name: string; kind: string; sortText: string; insertText: string; range: CodeRange | null; source: string | null; data: string | null }
 export type CompletionDetails = { detail: string; documentation: string; edits: { range: CodeRange; text: string }[] }
-export type SignatureHelp = { signatures: { label: string; documentation: string; parameters: { label: string; documentation: string }[] }[]; activeSignature: number; activeParameter: number }
+export type SignatureHelp = {
+  signatures: { label: string; documentation: string; parameters: { label: string; documentation: string }[] }[]
+  activeSignature: number
+  activeParameter: number
+}
 export type CodeDiagnostic = { range: CodeRange; message: string; severity: 'error' | 'warning' | 'info'; code: number }
 
 export type LanguageRequest =
@@ -103,9 +107,7 @@ export type HotkeyOptions = {
   only: boolean
 }
 
-export type ContextMenuItem =
-  | { type: 'separator' }
-  | { type?: 'item'; id: string; label: string; enabled?: boolean; accelerator?: string }
+export type ContextMenuItem = { type: 'separator' } | { type?: 'item'; id: string; label: string; enabled?: boolean; accelerator?: string }
 
 /**
  * Where the app is in getting its next version. `unsupported` covers builds that update elsewhere:
@@ -142,7 +144,15 @@ export type Api = {
   navigate: (worktreePath: string, kind: NavigationKind, target: SymbolTarget) => Promise<CodeLocation[]>
   hover: (worktreePath: string, target: SymbolTarget) => Promise<HoverInfo | null>
   completions: (worktreePath: string, path: string, text: string, position: CodePosition) => Promise<CompletionItem[]>
-  completionDetails: (worktreePath: string, path: string, text: string, position: CodePosition, name: string, source: string | null, data: string | null) => Promise<CompletionDetails | null>
+  completionDetails: (
+    worktreePath: string,
+    path: string,
+    text: string,
+    position: CodePosition,
+    name: string,
+    source: string | null,
+    data: string | null
+  ) => Promise<CompletionDetails | null>
   signatureHelp: (worktreePath: string, path: string, text: string, position: CodePosition) => Promise<SignatureHelp | null>
   diagnostics: (worktreePath: string, path: string, text: string) => Promise<CodeDiagnostic[]>
   closeDocument: (worktreePath: string, path: string) => void

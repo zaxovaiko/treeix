@@ -372,12 +372,7 @@ function TextFileView({
             )}
           </span>
           {onShowHistory && (
-            <button
-              title="Edit history"
-              aria-label="Edit history"
-              onClick={onShowHistory}
-              className="grid size-6 place-items-center rounded hover:bg-accent hover:text-foreground"
-            >
+            <button title="Edit history" aria-label="Edit history" onClick={onShowHistory} className="grid size-6 place-items-center rounded hover:bg-accent hover:text-foreground">
               <Icon name="history" className="size-3.5" />
             </button>
           )}

@@ -55,11 +55,22 @@ export function SessionsDialog({
   const listRef = useRef<HTMLDivElement>(null)
 
   const where = (item: { worktreePath: string }, task: Task | undefined): string => (task ? taskLabel(task, repos) : worktreeLabel(repos, item.worktreePath))
-  const live: Row[] = mode === 'closed' ? [] : sessions.map((session) => ({ group: session.status === 'exited' || session.status === 'dormant' ? 'idle' : session.status, label: session.title, detail: where(session, taskOf(tasks, session.id)), session }))
+  const live: Row[] =
+    mode === 'closed'
+      ? []
+      : sessions.map((session) => ({
+          group: session.status === 'exited' || session.status === 'dormant' ? 'idle' : session.status,
+          label: session.title,
+          detail: where(session, taskOf(tasks, session.id)),
+          session
+        }))
   const closed: Row[] = history.map((entry) => ({
     group: 'closed',
     label: entry.title,
-    detail: `${where(entry, tasks.find((task) => task.id === entry.taskId))} · ${timeAgo(new Date(entry.endedAt).toISOString())}`,
+    detail: `${where(
+      entry,
+      tasks.find((task) => task.id === entry.taskId)
+    )} · ${timeAgo(new Date(entry.endedAt).toISOString())}`,
     entry
   }))
   const needle = query.trim().toLowerCase()
@@ -150,6 +161,7 @@ export function SessionsDialog({
               <div
                 data-active={index === current ? '' : undefined}
                 role="option"
+                tabIndex={-1}
                 aria-selected={index === current}
                 onMouseMove={() => setActive(index)}
                 onClick={() => pick(row)}

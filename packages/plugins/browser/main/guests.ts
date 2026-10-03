@@ -18,7 +18,11 @@ const BODY_LIMIT = 32 * 1024
 const MARGIN = 16
 
 /** The element with a margin, clamped to the visible page, saved where agents can read it */
-export async function captureElement(guest: WebContents, rect: { x: number; y: number; width: number; height: number }, viewport: { width: number; height: number }): Promise<Attachment | null> {
+export async function captureElement(
+  guest: WebContents,
+  rect: { x: number; y: number; width: number; height: number },
+  viewport: { width: number; height: number }
+): Promise<Attachment | null> {
   const x = Math.max(0, Math.floor(rect.x - MARGIN))
   const y = Math.max(0, Math.floor(rect.y - MARGIN))
   const width = Math.min(viewport.width - x, Math.ceil(rect.width + MARGIN * 2))
@@ -81,14 +85,27 @@ function capture(guest: WebContents, context: MainContext): void {
   }
   const onMessage = (_: unknown, method: string, params: unknown): void => {
     const logged: ConsoleEntry | null =
-      method === 'Runtime.consoleAPICalled' ? consoleFromApi(params) : method === 'Runtime.exceptionThrown' ? consoleFromException(params) : method === 'Log.entryAdded' ? consoleFromLog(params) : null
+      method === 'Runtime.consoleAPICalled'
+        ? consoleFromApi(params)
+        : method === 'Runtime.exceptionThrown'
+          ? consoleFromException(params)
+          : method === 'Log.entryAdded'
+            ? consoleFromLog(params)
+            : null
     if (logged) {
       log.console = keepLast(log.console, logged)
       return queue((batch) => ({ ...batch, console: keepLast(batch.console, logged) }))
     }
     if (!method.startsWith('Network.')) return
     const request = applyNetworkEvent(requests, method, params)
-    if (request) queue((batch) => ({ ...batch, network: keepLast(batch.network.filter((entry) => entry.id !== request.id), request) }))
+    if (request)
+      queue((batch) => ({
+        ...batch,
+        network: keepLast(
+          batch.network.filter((entry) => entry.id !== request.id),
+          request
+        )
+      }))
     if (requests.size > ENTRY_LIMIT) requests.delete(requests.keys().next().value as string)
   }
   const attach = (): void => {
@@ -112,7 +129,15 @@ function capture(guest: WebContents, context: MainContext): void {
   guest.debugger.on('detach', () =>
     queue((batch) => ({
       ...batch,
-      console: keepLast(batch.console, { kind: 'console', id: `detach${Date.now()}`, level: 'warning', text: 'Capture stopped; it resumes on the next page load', source: '', stack: '', time: Date.now() })
+      console: keepLast(batch.console, {
+        kind: 'console',
+        id: `detach${Date.now()}`,
+        level: 'warning',
+        text: 'Capture stopped; it resumes on the next page load',
+        source: '',
+        stack: '',
+        time: Date.now()
+      })
     }))
   )
   guest.on('did-start-navigation', (details) => {

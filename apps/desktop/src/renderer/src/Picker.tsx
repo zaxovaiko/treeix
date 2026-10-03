@@ -4,7 +4,6 @@ import { Popup } from './ui'
 
 export type PickerOption = { id: string; label: string; section: string; render: React.ReactNode }
 
-
 /**
  * A button that opens a searchable list, styled like the app's filter dropdowns. Open state belongs to the caller
  * so a key can open it; closing hands focus to the button. `onQuery` loads more options for what is typed.
@@ -69,7 +68,12 @@ export function Picker({
   }
   return (
     <div className={`relative min-w-0 ${stretch ? 'w-full' : ''}`}>
-      <button ref={button} title={title} onClick={() => (open ? close() : onOpenChange(true))} className={`group flex max-w-full min-w-0 items-center rounded-md ${stretch ? 'w-full' : ''}`}>
+      <button
+        ref={button}
+        title={title}
+        onClick={() => (open ? close() : onOpenChange(true))}
+        className={`group flex max-w-full min-w-0 items-center rounded-md ${stretch ? 'w-full' : ''}`}
+      >
         {trigger}
       </button>
       {open && (

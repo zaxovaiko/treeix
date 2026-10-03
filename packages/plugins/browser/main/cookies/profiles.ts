@@ -22,7 +22,11 @@ export type ProfileSource =
 
 type Entry = ProfileSource | BrowserProfile
 
-const exists = (path: string): Promise<boolean> => access(path).then(() => true, () => false)
+const exists = (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false
+  )
 export const isBlocked = (error: unknown): boolean => error instanceof Error && 'code' in error && error.code === 'EPERM'
 const blockedBrowser = (browser: string): BrowserProfile => ({ key: `${browser}:`, browser, name: 'All profiles', blocked: true })
 

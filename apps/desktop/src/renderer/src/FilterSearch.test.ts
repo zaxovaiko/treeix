@@ -13,8 +13,26 @@ test('matchesTokens treats one group as alternatives and different groups as all
   expect(matchesTokens(item, [], groups)).toBe(true)
   expect(matchesTokens(item, [{ kind: 'author', value: 'ann' }], groups)).toBe(true)
   expect(matchesTokens(item, [{ kind: 'author', value: 'bob' }], groups)).toBe(false)
-  expect(matchesTokens(item, [{ kind: 'author', value: 'ann' }, { kind: 'author', value: 'bob' }], groups)).toBe(true)
-  expect(matchesTokens(item, [{ kind: 'author', value: 'ann' }, { kind: 'repo', value: 'betfeel' }], groups)).toBe(false)
+  expect(
+    matchesTokens(
+      item,
+      [
+        { kind: 'author', value: 'ann' },
+        { kind: 'author', value: 'bob' }
+      ],
+      groups
+    )
+  ).toBe(true)
+  expect(
+    matchesTokens(
+      item,
+      [
+        { kind: 'author', value: 'ann' },
+        { kind: 'repo', value: 'betfeel' }
+      ],
+      groups
+    )
+  ).toBe(false)
   expect(matchesTokens(item, [{ kind: 'text', value: 'LOGIN' }], groups)).toBe(true)
   expect(matchesTokens(item, [{ kind: 'text', value: 'logout' }], groups)).toBe(false)
 })

@@ -37,7 +37,10 @@ export function classify(name: string, value = '', { frameworks = [], annotation
   const secretName = SECRET_NAME.test(name)
   const client = CLIENT_PREFIXES.find(([prefix, framework]) => name.startsWith(prefix) && frameworks.includes(framework))
   if (client && (secretValue || secretName)) {
-    return { kind: 'exposed', reason: `${client[0]} is inlined into the browser bundle by ${client[1]}, and ${secretValue ? `the value is a ${secretValue[1]}` : 'the name says secret'}` }
+    return {
+      kind: 'exposed',
+      reason: `${client[0]} is inlined into the browser bundle by ${client[1]}, and ${secretValue ? `the value is a ${secretValue[1]}` : 'the name says secret'}`
+    }
   }
   if (client) return { kind: 'public', reason: `${client[0]} is inlined into the browser bundle by ${client[1]} (from package.json)` }
   if (secretValue) return { kind: 'secret', reason: `the value is a ${secretValue[1]}` }

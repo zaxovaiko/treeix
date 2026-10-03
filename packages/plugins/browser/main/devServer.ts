@@ -36,7 +36,17 @@ const freePort = (): Promise<number> =>
 export async function devServerCommand(folder: string): Promise<string | null> {
   const packageJson = await readJsonFile(join(folder, 'package.json'))
   if (packageJson === null) return null
-  const present = await Promise.all(LOCKFILES.map(([file]) => access(join(folder, file)).then(() => file, () => null)))
-  const command = devCommand(packageJson, present.filter((file) => file !== null))
+  const present = await Promise.all(
+    LOCKFILES.map(([file]) =>
+      access(join(folder, file)).then(
+        () => file,
+        () => null
+      )
+    )
+  )
+  const command = devCommand(
+    packageJson,
+    present.filter((file) => file !== null)
+  )
   return command && `PORT=${await freePort()} ${command}`
 }

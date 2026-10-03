@@ -34,7 +34,6 @@ export type JiraPerson = { accountId: string; name: string; avatar: string | nul
 /** What the detail pane can change through acli; description isn't here because acli would flatten its formatting */
 export type WorkItemEdit = { summary?: string; type?: string; addLabels?: string[]; removeLabels?: string[] }
 
-
 export type WorkItemDetail = WorkItem & {
   /** Markdown; attachment images point at IMAGE_HOST sources the renderer loads through the plugin */
   description: string

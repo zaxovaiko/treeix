@@ -44,11 +44,7 @@ export function setValue(text: string, name: string, value: string): string {
   const end = quote && closing === -1 ? lines.findIndex((line, candidate) => candidate > index && line.includes(quote)) : index
   const quoted = quote !== null && (closing !== -1 || end !== -1)
   const last = end === -1 ? index : end
-  const suffix = !quoted
-    ? (rest.match(/\s*#.*$/)?.[0] ?? '')
-    : last === index
-      ? rest.slice(closing + 1)
-      : lines[last].slice(lines[last].indexOf(quote) + 1).replace(/\r$/, '')
+  const suffix = !quoted ? (rest.match(/\s*#.*$/)?.[0] ?? '') : last === index ? rest.slice(closing + 1) : lines[last].slice(lines[last].indexOf(quote) + 1).replace(/\r$/, '')
   lines.splice(index, last - index + 1, `${prefix}${formatValue(value, quoted ? quote : null)}${suffix}${carriage}`)
   return lines.join('\n')
 }

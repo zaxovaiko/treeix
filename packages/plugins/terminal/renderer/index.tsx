@@ -30,12 +30,11 @@ import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } fro
 import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
 import { TaskList } from './TaskList'
-import { startRename } from './taskUi'
+import { startRename, switchTask, taskLabel } from './taskUi'
 import { openTab, TaskTerminals } from './TerminalPanel'
 import { findInFiles, resolvePath } from './fileLinks'
 import { NEW_TAB_ACTIONS, unarchived } from './sessionMeta'
 import { type Task, taskOf, uniqueName } from './tasks'
-import { switchTask, taskLabel } from './taskUi'
 import {
   type ClosedSession,
   closeActivePane,
@@ -114,7 +113,17 @@ function sessionSummaries(): SessionSummary[] {
   if (summaries.from !== sessions) {
     summaries = {
       from: sessions,
-      list: sessions.map(({ id, kind, view, title, status, exitCode, worktreePath, workspaceId, startedAt }) => ({ id, kind, view, title, status, exitCode, worktreePath, workspaceId, startedAt }))
+      list: sessions.map(({ id, kind, view, title, status, exitCode, worktreePath, workspaceId, startedAt }) => ({
+        id,
+        kind,
+        view,
+        title,
+        status,
+        exitCode,
+        worktreePath,
+        workspaceId,
+        startedAt
+      }))
     }
   }
   return summaries.list
@@ -187,7 +196,10 @@ function TerminalPage(): React.JSX.Element {
             />
           </div>
           {preview && (
-            <aside style={previewMaximized ? undefined : { width: previewWidth }} className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}>
+            <aside
+              style={previewMaximized ? undefined : { width: previewWidth }}
+              className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}
+            >
               {!previewMaximized && <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />}
               <MarkdownFoldScope>
                 <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
@@ -215,7 +227,11 @@ function TerminalPage(): React.JSX.Element {
                     })}
                   </div>
                   {isMarkdownPath(preview.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
-                  <IconButton label={previewMaximized ? 'Show the terminals' : 'Fill the page'} active={previewMaximized} onClick={() => view.update({ previewMaximized: !previewMaximized })}>
+                  <IconButton
+                    label={previewMaximized ? 'Show the terminals' : 'Fill the page'}
+                    active={previewMaximized}
+                    onClick={() => view.update({ previewMaximized: !previewMaximized })}
+                  >
                     <Icon name={previewMaximized ? 'minimize' : 'maximize'} className="size-3.5" />
                   </IconButton>
                   <IconButton label="Close all files" onClick={() => setPreview(null)}>
@@ -234,12 +250,7 @@ function TerminalPage(): React.JSX.Element {
           )}
         </div>
       }
-      inspector={
-        <Inspector
-          previewPath={previewRoot === host.explorerRoot ? (preview?.path ?? null) : null}
-          onOpenFile={(path, root) => open(path, null, root)}
-        />
-      }
+      inspector={<Inspector previewPath={previewRoot === host.explorerRoot ? (preview?.path ?? null) : null} onOpenFile={(path, root) => open(path, null, root)} />}
     />
   )
 }
@@ -328,7 +339,10 @@ function SessionsCount(): React.JSX.Element | null {
   const waiting = sessions.filter((session) => session.status === 'input').length
   if (!sessions.length) return null
   return (
-    <span title={`${sessions.length} session${sessions.length === 1 ? '' : 's'}${waiting ? `, ${waiting} waiting for input` : ''}`} className="flex items-center gap-1 text-muted-foreground tabular-nums">
+    <span
+      title={`${sessions.length} session${sessions.length === 1 ? '' : 's'}${waiting ? `, ${waiting} waiting for input` : ''}`}
+      className="flex items-center gap-1 text-muted-foreground tabular-nums"
+    >
       {sessions.length}
       {waiting > 0 && <span className="size-1.5 rounded-full bg-amber-400" />}
     </span>
@@ -368,7 +382,10 @@ function newChat(host: HostApi): void {
 
 /** ⌘⇧T: a task with a shell in the current folder, named after that folder */
 function startTask(host: HostApi, cwd = terminalCwd(host)): void {
-  const name = uniqueName(worktreeLabel(host.repos, cwd), scope.tasks.map((task) => taskLabel(task, host.repos)))
+  const name = uniqueName(
+    worktreeLabel(host.repos, cwd),
+    scope.tasks.map((task) => taskLabel(task, host.repos))
+  )
   openTab(cwd, 'shell', createTask(name, cwd))
   showTerminals(host)
 }
@@ -463,12 +480,23 @@ defineActions([
   { id: 'terminal.zoomPane', label: 'Maximize the focused pane, or restore it', section: 'Terminal', keys: key('Enter', { meta: true, alt: true }) },
   { id: 'terminal.inspector', label: 'Inspector with files, alias of ⌘⌥B', section: 'Terminal', page: TAB_ID, keys: key('KeyP', { meta: true }) },
   { id: 'terminal.renameGroup', label: 'Rename the group on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('F2') },
-  { id: 'terminal.deleteGroup', label: 'Delete the group on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true, shift: true }) },
+  {
+    id: 'terminal.deleteGroup',
+    label: 'Delete the group on screen, from anywhere on the page',
+    section: 'Terminal',
+    page: TAB_ID,
+    keys: key('Backspace', { meta: true, shift: true })
+  },
   { id: 'terminal.renameInList', label: 'Rename the group in place, also double-click (group list)', section: 'Terminal', page: TAB_ID, keys: key('KeyE') },
   { id: 'terminal.deleteInList', label: 'Delete the group, its sessions go to History (group list)', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true }) }
 ])
 
-const PANE_SIDES: Record<string, 'left' | 'right' | 'top' | 'bottom'> = { 'terminal.paneLeft': 'left', 'terminal.paneRight': 'right', 'terminal.paneUp': 'top', 'terminal.paneDown': 'bottom' }
+const PANE_SIDES: Record<string, 'left' | 'right' | 'top' | 'bottom'> = {
+  'terminal.paneLeft': 'left',
+  'terminal.paneRight': 'right',
+  'terminal.paneUp': 'top',
+  'terminal.paneDown': 'bottom'
+}
 
 function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
   const open = dialogs.get()
@@ -585,7 +613,14 @@ const plugin: RendererPlugin = {
     return true
   },
   commands: (host) => [
-    { id: 'sessions', group: 'Actions', label: 'Find session', icon: 'terminal', shortcut: actionKeys('terminal.sessions') || undefined, run: () => dialogs.update({ sessions: 'all' }) },
+    {
+      id: 'sessions',
+      group: 'Actions',
+      label: 'Find session',
+      icon: 'terminal',
+      shortcut: actionKeys('terminal.sessions') || undefined,
+      run: () => dialogs.update({ sessions: 'all' })
+    },
     { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: actionKeys('terminal.newGroup') || undefined, run: () => startTask(host) },
     { id: 'terminal:folder', group: 'Actions', label: 'Go to folder', icon: 'folder', shortcut: actionKeys('terminal.goToFolder') || undefined, run: () => openFolderPicker(host) },
     ...getAgents().map((agent) => ({
@@ -611,7 +646,14 @@ const plugin: RendererPlugin = {
         ]
       : []),
     // @ in the palette searches these
-    ...scope.tasks.map((task) => ({ id: `task:${task.id}`, group: 'Sessions', label: taskLabel(task, host.repos), detail: 'Group', icon: 'list' as const, run: () => (switchTask(host, task), showTerminals(host), focusShown()) })),
+    ...scope.tasks.map((task) => ({
+      id: `task:${task.id}`,
+      group: 'Sessions',
+      label: taskLabel(task, host.repos),
+      detail: 'Group',
+      icon: 'list' as const,
+      run: () => (switchTask(host, task), showTerminals(host), focusShown())
+    })),
     ...scope.sessions.map((session) => {
       const task = taskOf(scope.tasks, session.id)
       return {

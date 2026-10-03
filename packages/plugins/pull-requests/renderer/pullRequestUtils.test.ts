@@ -62,8 +62,23 @@ test('involvesYou needs a known review state other than unreviewed', () => {
 test('threadReference points at the thread without copying bodies or code', () => {
   const github = { provider: 'github', number: 12, url: 'https://github.com/o/r/pull/12' } as PullRequest
   const gitlab = { provider: 'gitlab', number: 5, url: 'https://gitlab.com/o/r/-/merge_requests/5' } as PullRequest
-  const comment = (id: string) => ({ id, author: 'ann', avatarUrl: null, body: 'secret body', createdAt: '', reactions: { '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 } })
-  const thread = (id: string, path: string | null, line: number | null): ReviewThread => ({ id: '1', path, line, side: 'additions', comments: [comment(id)], resolved: null, resolveId: null })
+  const comment = (id: string) => ({
+    id,
+    author: 'ann',
+    avatarUrl: null,
+    body: 'secret body',
+    createdAt: '',
+    reactions: { '+1': 0, '-1': 0, laugh: 0, hooray: 0, confused: 0, heart: 0, rocket: 0, eyes: 0 }
+  })
+  const thread = (id: string, path: string | null, line: number | null): ReviewThread => ({
+    id: '1',
+    path,
+    line,
+    side: 'additions',
+    comments: [comment(id)],
+    resolved: null,
+    resolveId: null
+  })
   expect(threadReference(github, thread('review:7', 'src/a.ts', 42))).toBe(
     'PR #12 https://github.com/o/r/pull/12 review thread by @ann on src/a.ts:42: https://github.com/o/r/pull/12#discussion_r7'
   )

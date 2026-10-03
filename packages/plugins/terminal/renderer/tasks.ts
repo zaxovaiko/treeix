@@ -15,7 +15,6 @@ export type Task = {
   activeTab: string | null
 }
 
-
 export const tabPanes = (tab: TerminalTab): string[] => tab.layout.flat()
 export const taskPanes = (task: Task): string[] => task.tabs.flatMap(tabPanes)
 export const activeTabOf = (task: Task): TerminalTab | undefined => task.tabs.find((tab) => tab.id === task.activeTab) ?? task.tabs[0]
@@ -27,7 +26,6 @@ export function shownPanes(tasks: Task[], selected: Record<string, string>, work
   const tab = task && activeTabOf(task)
   return tab ? tabPanes(tab) : []
 }
-
 
 export function newTask(fields: Pick<Task, 'workspaceId' | 'worktreePath'> & Partial<Pick<Task, 'name'>>): Task {
   return { id: crypto.randomUUID(), name: '', tabs: [], activeTab: null, ...fields }
@@ -117,7 +115,9 @@ export function parseTasks(value: unknown): Task[] {
     const tabs = (Array.isArray(task.tabs) ? task.tabs : []).flatMap((rawTab: unknown): TerminalTab[] => {
       if (typeof rawTab !== 'object' || rawTab === null) return []
       const tab = rawTab as Record<string, unknown>
-      return isString(tab.id) && isLayout(tab.layout) && tab.layout.length > 0 ? [{ id: tab.id, layout: tab.layout, focus: isString(tab.focus) ? tab.focus : tab.layout.flat()[0] }] : []
+      return isString(tab.id) && isLayout(tab.layout) && tab.layout.length > 0
+        ? [{ id: tab.id, layout: tab.layout, focus: isString(tab.focus) ? tab.focus : tab.layout.flat()[0] }]
+        : []
     })
     return [
       {

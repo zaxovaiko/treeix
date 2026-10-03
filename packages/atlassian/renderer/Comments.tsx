@@ -47,7 +47,10 @@ function CommentBox({
     if (!body.trim() || sending) return
     setSending(true)
     onSubmit(body.trim())
-      .then(() => setBody(''), (reason: unknown) => host.flash(errorMessage(reason)))
+      .then(
+        () => setBody(''),
+        (reason: unknown) => host.flash(errorMessage(reason))
+      )
       .finally(() => setSending(false))
   }
   return (
@@ -76,7 +79,11 @@ function CommentBox({
               Cancel
             </button>
           )}
-          <button onClick={send} disabled={sending || !body.trim()} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+          <button
+            onClick={send}
+            disabled={sending || !body.trim()}
+            className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40"
+          >
             {sending ? 'Sending...' : label}
             <Kbd hint>⌘↵</Kbd>
           </button>
@@ -149,8 +156,12 @@ function CommentCard({ comment, ...shared }: Shared & { comment: AtlassianCommen
       </div>
       {(comment.replies?.length || mode === 'reply') && (
         <div className="ml-6 flex flex-col gap-2">
-          {comment.replies?.map((reply) => <CommentCard key={reply.id} comment={reply} {...shared} />)}
-          {mode === 'reply' && <CommentBox placeholder={`Reply to ${comment.author}`} label="Reply" onSubmit={(body) => actions.add(body, comment).then(done)} onCancel={() => setMode('view')} />}
+          {comment.replies?.map((reply) => (
+            <CommentCard key={reply.id} comment={reply} {...shared} />
+          ))}
+          {mode === 'reply' && (
+            <CommentBox placeholder={`Reply to ${comment.author}`} label="Reply" onSubmit={(body) => actions.add(body, comment).then(done)} onCancel={() => setMode('view')} />
+          )}
         </div>
       )}
     </div>
@@ -158,7 +169,13 @@ function CommentCard({ comment, ...shared }: Shared & { comment: AtlassianCommen
 }
 
 /** Comments with reply, edit and delete, and a box for a new one; `inputId` lets a shortcut focus that box */
-export function Comments({ comments, target, inputId, title, ...shared }: Shared & { comments: AtlassianComment[]; target: string; inputId?: string; title: React.ReactNode }): React.JSX.Element {
+export function Comments({
+  comments,
+  target,
+  inputId,
+  title,
+  ...shared
+}: Shared & { comments: AtlassianComment[]; target: string; inputId?: string; title: React.ReactNode }): React.JSX.Element {
   return (
     <section className="flex flex-col gap-2">
       {title}

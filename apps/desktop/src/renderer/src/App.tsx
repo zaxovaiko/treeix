@@ -12,7 +12,31 @@ import {
   rangeLabel,
   type ReviewComment
 } from '../../shared/comments'
-import { DockSlot, type DocumentTab, focusZone, getShell, HostContext, type HostApi, isPageKey, isTyping, Kbd, KeyHintLabel, PageLayout, pageHasPanel, type PanelName, runShellCommand, type SessionKind, togglePanel, toggleZen, updateShell, useModifierHints, usePanels, useShell, Zone, zoneBack } from '@treeix/sdk'
+import {
+  DockSlot,
+  type DocumentTab,
+  focusZone,
+  getShell,
+  HostContext,
+  type HostApi,
+  isPageKey,
+  isTyping,
+  Kbd,
+  KeyHintLabel,
+  PageLayout,
+  pageHasPanel,
+  type PanelName,
+  runShellCommand,
+  type SessionKind,
+  togglePanel,
+  toggleZen,
+  updateShell,
+  useModifierHints,
+  usePanels,
+  useShell,
+  Zone,
+  zoneBack
+} from '@treeix/sdk'
 import { getAgents } from './agents'
 import { activityOf } from './sessionUi'
 import { keptPages, keyboardPage, visitedIn } from './keepAlive'
@@ -43,7 +67,19 @@ import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
 import { isPageId, showSettingsPage } from './settingsNav'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
-import { addRepoToWorkspace, commonFolder, getCurrentWorkspaceId, workspaceKey, inWorkspace, recentWorkspaces, reposOf, saveWorkspace, setCurrentWorkspace, useWorkspaces, type Workspace } from './workspaces'
+import {
+  addRepoToWorkspace,
+  commonFolder,
+  getCurrentWorkspaceId,
+  workspaceKey,
+  inWorkspace,
+  recentWorkspaces,
+  reposOf,
+  saveWorkspace,
+  setCurrentWorkspace,
+  useWorkspaces,
+  type Workspace
+} from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { inlineByDefault, refreshToolStatus } from './toolStatus'
@@ -135,10 +171,7 @@ const RESIZE_EDGE: Record<DockSide, 'left' | 'right' | 'top'> = { left: 'right',
 const SCAN_KEY = 'scan.cache'
 
 const isRepoList = (value: unknown): value is Repo[] =>
-  Array.isArray(value) &&
-  value.every(
-    (repo) => typeof repo === 'object' && repo !== null && typeof repo.path === 'string' && Array.isArray(repo.worktrees)
-  )
+  Array.isArray(value) && value.every((repo) => typeof repo === 'object' && repo !== null && typeof repo.path === 'string' && Array.isArray(repo.worktrees))
 
 /** Last scan, so the sidebar paints instantly while a fresh scan walks the disk */
 function loadScanCache(): Repo[] | null {
@@ -154,8 +187,7 @@ const worktreeCache = new Map<string, WorktreeData>()
 const FOCUS_REFRESH_MS = 10_000
 
 const sameList = (a: string[], b: string[]): boolean => a.length === b.length && a.every((item, index) => item === b[index])
-const samePatches = (a: FilePatch[], b: FilePatch[]): boolean =>
-  a.length === b.length && a.every((patch, index) => patch.path === b[index].path && patch.patch === b[index].patch)
+const samePatches = (a: FilePatch[], b: FilePatch[]): boolean => a.length === b.length && a.every((patch, index) => patch.path === b[index].path && patch.patch === b[index].patch)
 const sameFiles = (a: WorktreeFiles, b: WorktreeFiles): boolean => sameList(a.files, b.files) && sameList(a.ignored, b.ignored)
 
 const loadComments = (): ReviewComment[] => list(readStored(COMMENTS_KEY), isReviewComment)
@@ -268,7 +300,10 @@ function App(): React.JSX.Element {
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
   /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, each with the icon picked in Settings */
   const defaultTabs = [WORKTREES_TAB, ...pluginTabs].sort((a, b) => a.order - b.order).map((tab) => ({ ...tab, icon: settings.tabIcons[tab.id] ?? tab.icon }))
-  const barOrder = arrangeBar(defaultTabs.map((tab) => tab.id), settings.titleBarTabs)
+  const barOrder = arrangeBar(
+    defaultTabs.map((tab) => tab.id),
+    settings.titleBarTabs
+  )
   const tabs = defaultTabs.toSorted((a, b) => barOrder.indexOf(a.id) - barOrder.indexOf(b.id))
   const [draggingTab, setDraggingTab] = useState(false)
   /** Where a dragged title bar item would land: before this item, or at the end when null */
@@ -279,9 +314,7 @@ function App(): React.JSX.Element {
   const splitPageId = splitPage?.id ?? null
   const pageTabMenu = (event: React.MouseEvent, tab: { id: string }): void =>
     openMenu(event, [
-      tab.id === splitPage?.id
-        ? { label: 'Close split', run: () => setSplitTab(null) }
-        : { label: 'Open in split', enabled: tab.id !== appTab, run: () => setSplitTab(tab.id) }
+      tab.id === splitPage?.id ? { label: 'Close split', run: () => setSplitTab(null) } : { label: 'Open in split', enabled: tab.id !== appTab, run: () => setSplitTab(tab.id) }
     ])
   const pluginPanels = plugins.flatMap(({ plugin }) => plugin.panels ?? [])
   const panelInfo = (id: PanelId): PanelInfo | undefined => pluginPanels.find((panel) => panel.id === id)
@@ -300,7 +333,13 @@ function App(): React.JSX.Element {
   const { workspaces, currentId: workspaceId } = workspacesState
   // Read in the same render the workspace changed in, so no page of the old workspace is mounted again
   const visitedTabs = visitedIn(visited, workspaceId)
-  useEffect(() => setVisited((current) => (current.workspace === workspaceId && current.tabs.includes(appTab) ? current : { workspace: workspaceId, tabs: [...visitedIn(current, workspaceId), appTab] })), [appTab, workspaceId])
+  useEffect(
+    () =>
+      setVisited((current) =>
+        current.workspace === workspaceId && current.tabs.includes(appTab) ? current : { workspace: workspaceId, tabs: [...visitedIn(current, workspaceId), appTab] }
+      ),
+    [appTab, workspaceId]
+  )
   const browseRoot = browsedFolders[workspaceId] || null
   const setBrowsedFolder = (path: string | null): void => {
     const next = { ...browsedFolders, [workspaceId]: path ?? '' }
@@ -374,10 +413,7 @@ function App(): React.JSX.Element {
 
   /** Serve the cached diff at once, then refresh it: agents change files while you look */
   const loadWorktree = (worktreePath: string): void => {
-    Promise.all([
-      window.api.diff(worktreePath),
-      window.api.listFiles(worktreePath).catch(() => ({ files: [], ignored: [] }))
-    ]).then(([freshPatches, freshFiles]) => {
+    Promise.all([window.api.diff(worktreePath), window.api.listFiles(worktreePath).catch(() => ({ files: [], ignored: [] }))]).then(([freshPatches, freshFiles]) => {
       // Autosave refreshes after every pause in typing; reuse unchanged data so diff and file tree don't re-render
       const cached = worktreeCache.get(worktreePath)
       const nextPatches = cached && samePatches(cached.patches, freshPatches) ? cached.patches : freshPatches
@@ -389,9 +425,7 @@ function App(): React.JSX.Element {
       if (selectedRef.current !== worktreePath) return
       setPatches(nextPatches)
       setWorktreeFiles(nextFiles)
-      setFilePath((current) =>
-        current && nextPatches.some((patch) => patch.path === current) ? current : (nextPatches[0]?.path ?? null)
-      )
+      setFilePath((current) => (current && nextPatches.some((patch) => patch.path === current) ? current : (nextPatches[0]?.path ?? null)))
     })
   }
 
@@ -464,7 +498,10 @@ function App(): React.JSX.Element {
 
   /** Asks first; a failed task shows in the flash */
   const confirmRun = (message: string, task: () => Promise<unknown>, done: () => void): void => {
-    if (window.confirm(message)) task().then(done).catch((reason: unknown) => flash(errorMessage(reason)))
+    if (window.confirm(message))
+      task()
+        .then(done)
+        .catch((reason: unknown) => flash(errorMessage(reason)))
   }
 
   /** Opens files where the active tab shows them, otherwise in the worktree view */
@@ -514,7 +551,8 @@ function App(): React.JSX.Element {
     />
   )
 
-  const tabExists = (tab: string): boolean => tab === 'worktrees' || tab === 'settings' || pluginTabs.some((candidate) => candidate.id === tab) || docTabs.some((candidate) => candidate.key === tab)
+  const tabExists = (tab: string): boolean =>
+    tab === 'worktrees' || tab === 'settings' || pluginTabs.some((candidate) => candidate.id === tab) || docTabs.some((candidate) => candidate.key === tab)
 
   /** Shows a page with the keyboard in it: its list, or the terminal on the Terminal page */
   const goPage = (tab: string): void => {
@@ -602,7 +640,14 @@ function App(): React.JSX.Element {
   const sessionsAvailable = findService('sessions') !== null
   const [cleanupOpen, setCleanupOpen] = useState(false)
   const [branchDialog, setBranchDialog] = useState<{ repo: Repo; worktree: boolean; base?: string } | null>(null)
-  const [prompt, setPrompt] = useState<{ title: string; description?: string; placeholder?: string; initialValue?: string; confirmLabel: string; onSubmit: (value: string) => Promise<void> } | null>(null)
+  const [prompt, setPrompt] = useState<{
+    title: string
+    description?: string
+    placeholder?: string
+    initialValue?: string
+    confirmLabel: string
+    onSubmit: (value: string) => Promise<void>
+  } | null>(null)
 
   const createWorktree = async (repoPath: string, branch: string, base?: string, session: SessionKind | null = null, prompt = ''): Promise<void> => {
     const path = await window.api.addWorktree(repoPath, branch, base)
@@ -641,10 +686,14 @@ function App(): React.JSX.Element {
       !branch.remote && {
         label: branch.merged ? 'Delete merged branch…' : 'Delete branch…',
         run: () => {
-          confirmRun(`Delete branch ${branch.name}?\n\nGit refuses if it has commits that are not merged anywhere.`, () => window.api.deleteBranch(repo.path, branch.name), () => {
-            flash(`Deleted branch ${branch.name}`)
-            rescan()
-          })
+          confirmRun(
+            `Delete branch ${branch.name}?\n\nGit refuses if it has commits that are not merged anywhere.`,
+            () => window.api.deleteBranch(repo.path, branch.name),
+            () => {
+              flash(`Deleted branch ${branch.name}`)
+              rescan()
+            }
+          )
         }
       }
     ])
@@ -652,11 +701,15 @@ function App(): React.JSX.Element {
   const removeWorktree = (worktree: Worktree): void => {
     const dirty = worktree.changedFiles > 0
     const warning = dirty ? `\n\nIt has ${worktree.changedFiles} uncommitted changes that will be lost.` : ''
-    confirmRun(`Remove worktree ${branchLabel(worktree)}?${warning}\n\nThe branch itself is kept.`, () => window.api.removeWorktree(worktree.path, dirty), () => {
-      if (selected === worktree.path) setSelected(null)
-      flash(`Removed worktree ${branchLabel(worktree)}`)
-      rescan()
-    })
+    confirmRun(
+      `Remove worktree ${branchLabel(worktree)}?${warning}\n\nThe branch itself is kept.`,
+      () => window.api.removeWorktree(worktree.path, dirty),
+      () => {
+        if (selected === worktree.path) setSelected(null)
+        flash(`Removed worktree ${branchLabel(worktree)}`)
+        rescan()
+      }
+    )
   }
 
   const sessionEntries = (cwd: string): MenuEntry[] =>
@@ -666,9 +719,7 @@ function App(): React.JSX.Element {
     openMenu(event, [
       { label: 'New worktree…', run: () => setBranchDialog({ repo, worktree: true }) },
       { label: 'New branch…', run: () => setBranchDialog({ repo, worktree: false }) },
-      scope.focus === repo.path
-        ? { label: 'Exit focus', run: () => setScopeFocus('') }
-        : { label: 'Focus on this project', run: () => setScopeFocus(repo.path) },
+      scope.focus === repo.path ? { label: 'Exit focus', run: () => setScopeFocus('') } : { label: 'Focus on this project', run: () => setScopeFocus(repo.path) },
       null,
       ...sessionEntries(repo.path),
       null,
@@ -744,13 +795,17 @@ function App(): React.JSX.Element {
     })
 
   const trash = (worktreePath: string, path: string): void => {
-    confirmRun(`Move ${path} to the Trash?`, () => window.api.trashPath(worktreePath, path), () => {
-      flash(`Moved ${baseName(path)} to the Trash`)
-      const removed = (tab: string): boolean => tab === path || tab.startsWith(`${path}/`)
-      setEditorTabs((tabs) => tabs.filter((tab) => !removed(tab)))
-      if (viewer && removed(viewer.path)) setViewer(null)
-      loadWorktree(worktreePath)
-    })
+    confirmRun(
+      `Move ${path} to the Trash?`,
+      () => window.api.trashPath(worktreePath, path),
+      () => {
+        flash(`Moved ${baseName(path)} to the Trash`)
+        const removed = (tab: string): boolean => tab === path || tab.startsWith(`${path}/`)
+        setEditorTabs((tabs) => tabs.filter((tab) => !removed(tab)))
+        if (viewer && removed(viewer.path)) setViewer(null)
+        loadWorktree(worktreePath)
+      }
+    )
   }
 
   /** New, rename and trash entries for a file or folder ('' is the worktree root) */
@@ -763,10 +818,14 @@ function App(): React.JSX.Element {
   ]
 
   const discardFile = (worktreePath: string, path: string): void => {
-    confirmRun(`Discard all changes to ${path}?\n\nUntracked files are deleted. This cannot be undone.`, () => window.api.discardChanges(worktreePath, path), () => {
-      flash(`Discarded changes to ${baseName(path)}`)
-      loadWorktree(worktreePath)
-    })
+    confirmRun(
+      `Discard all changes to ${path}?\n\nUntracked files are deleted. This cannot be undone.`,
+      () => window.api.discardChanges(worktreePath, path),
+      () => {
+        flash(`Discarded changes to ${baseName(path)}`)
+        loadWorktree(worktreePath)
+      }
+    )
   }
 
   const changedFileMenu = (event: React.MouseEvent, path: string): void => {
@@ -890,32 +949,32 @@ function App(): React.JSX.Element {
     return () => drops.forEach((drop) => drop())
   }, [])
 
-    // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
-    const anywhere: Record<string, () => void> = {
-      'app.palette': () => setPaletteOpen(!paletteOpen),
-      'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
-      'app.settings': openSettings,
-      'app.comments': () => setDrawerOpen(!drawerOpen),
-      'app.back': () => goToPlace(-1),
-      'app.forward': () => goToPlace(1),
-      'app.nextTab': () => stepTab(1),
-      'app.previousTab': () => stepTab(-1),
-      // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
-      'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
-      'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
-      'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
-      'app.zoomIn': () => window.api.zoom(1),
-      'app.zoomOut': () => window.api.zoom(-1),
-      'app.zoomReset': () => window.api.zoom(0),
-      'app.search': () => setSearchOpen(!searchOpen),
-      'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
-      'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
-      'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
-      'app.clearComments': () => clearComments(),
-      'workspace.new': () => setEditingWorkspace(null),
-      'workspace.edit': () => workspace && setEditingWorkspace(workspace),
-      ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
-    }
+  // Chords the whole app answers to, terminals included; every one is a named action Settings can rebind
+  const anywhere: Record<string, () => void> = {
+    'app.palette': () => setPaletteOpen(!paletteOpen),
+    'app.paletteAlt': () => setPaletteOpen(!paletteOpen),
+    'app.settings': openSettings,
+    'app.comments': () => setDrawerOpen(!drawerOpen),
+    'app.back': () => goToPlace(-1),
+    'app.forward': () => goToPlace(1),
+    'app.nextTab': () => stepTab(1),
+    'app.previousTab': () => stepTab(-1),
+    // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's; ⌘= / ⌘- stay window zoom as in VS Code
+    'app.fontBigger': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 1),
+    'app.fontSmaller': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', -1),
+    'app.fontDefault': () => stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', 0),
+    'app.zoomIn': () => window.api.zoom(1),
+    'app.zoomOut': () => window.api.zoom(-1),
+    'app.zoomReset': () => window.api.zoom(0),
+    'app.search': () => setSearchOpen(!searchOpen),
+    'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
+    'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
+    'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
+    'app.clearComments': () => clearComments(),
+    'workspace.new': () => setEditingWorkspace(null),
+    'workspace.edit': () => workspace && setEditingWorkspace(workspace),
+    ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
+  }
   const anywhereRef = useRef(anywhere)
   anywhereRef.current = anywhere
   // Everything here is runnable from the native menu too, which is why it lives outside the key handler
@@ -959,13 +1018,15 @@ function App(): React.JSX.Element {
       if (!event.defaultPrevented && inZones && !event.metaKey && !event.ctrlKey && !event.altKey) {
         if (!typing && matchesAction(event, 'app.leaderBare')) return (event.preventDefault(), updateShell({ leader: true }))
         // An open file steps back to its diff before esc leaves main
-        if (!typing && event.key === 'Escape' && appTab === 'worktrees' && getShell().zone === 'main' && viewer) return (event.preventDefault(), files.some((patch) => patch.path === viewer.path) ? showDiff(viewer.path) : setViewer(null))
+        if (!typing && event.key === 'Escape' && appTab === 'worktrees' && getShell().zone === 'main' && viewer)
+          return (event.preventDefault(), files.some((patch) => patch.path === viewer.path) ? showDiff(viewer.path) : setViewer(null))
         if (!typing && event.key === 'Escape' && zoneBack()) return event.preventDefault()
         // Settings takes the filter key for its own search
         if (!typing && matchesAction(event, 'app.filterZone') && appTab !== 'settings' && focusZoneField()) return event.preventDefault()
         // Esc in a text field hands the keys back to its zone, as does ↓ from a filter; the terminal and the code editor keep their Esc
         const field = origin instanceof HTMLInputElement || (origin instanceof HTMLTextAreaElement && !isTerminalFocused()) ? origin.closest<HTMLElement>('[data-zone]') : null
-        if ((event.key === 'Escape' || (event.key === 'ArrowDown' && origin instanceof HTMLInputElement)) && field) return (event.preventDefault(), field.focus({ preventScroll: true }))
+        if ((event.key === 'Escape' || (event.key === 'ArrowDown' && origin instanceof HTMLInputElement)) && field)
+          return (event.preventDefault(), field.focus({ preventScroll: true }))
       }
       // Digits match the physical key (event.code), so ⌥ producing ¡™£ or keyboard layouts don't matter
       const workspaceDigit = digitPressed(event, settings.digitShortcuts.workspaces)
@@ -1099,8 +1160,7 @@ function App(): React.JSX.Element {
     [...new Set(sessions.map((session) => session.worktreePath))].map((path) => [path, activityOf(sessions.filter((session) => session.worktreePath === path))])
   )
 
-  const deleteComment = (comment: ReviewComment): void =>
-    setComments(comments.filter((candidate) => candidate.id !== comment.id))
+  const deleteComment = (comment: ReviewComment): void => setComments(comments.filter((candidate) => candidate.id !== comment.id))
 
   const lineAnnotations: DiffLineAnnotation<{ commentId: string | null }>[] = [
     ...fileComments.map((comment) => ({
@@ -1141,7 +1201,8 @@ function App(): React.JSX.Element {
   }
 
   const clearCommentsOn = (worktreePath: string, count: number): void => {
-    if (window.confirm(`Delete ${count} comment${count === 1 ? '' : 's'} on ${baseName(worktreePath)}?`)) setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
+    if (window.confirm(`Delete ${count} comment${count === 1 ? '' : 's'} on ${baseName(worktreePath)}?`))
+      setComments(comments.filter((comment) => comment.worktreePath !== worktreePath))
   }
 
   const onSent = (message: string): void => {
@@ -1300,7 +1361,25 @@ function App(): React.JSX.Element {
   })
 
   // Plugins' host changes only with the data they render from; its functions call this render's closures, so none go stale
-  const hostCalls = { setBrowsedFolder, openTab, closeTab, openWorktree, createWorktree, openSettings, flash, setComments, deleteComment, commentsSendButton, renderCommentsPanel, fileView, renderExplorer, withDock, dock, plugins, onSent }
+  const hostCalls = {
+    setBrowsedFolder,
+    openTab,
+    closeTab,
+    openWorktree,
+    createWorktree,
+    openSettings,
+    flash,
+    setComments,
+    deleteComment,
+    commentsSendButton,
+    renderCommentsPanel,
+    fileView,
+    renderExplorer,
+    withDock,
+    dock,
+    plugins,
+    onSent
+  }
   const latest = useRef(hostCalls)
   latest.current = hostCalls
   const scopeRepoPaths = useMemo(() => (workspaceRepos ? reposInScope(workspaceRepos, scope).map((repo) => repo.path) : null), [repos, workspace, scope.folder, scope.focus])
@@ -1351,7 +1430,30 @@ function App(): React.JSX.Element {
       onSent: (message) => latest.current.onSent(message)
     }),
     // Beyond the fields: what the render functions and isPanelVisible read, so views built from them refresh
-    [repos, workspaceId, scopeRepoPaths, scopeLabel, selected, worktree, explorerRoot, browseRoot, defaultCwd, diffStyle, appTab, activePage, splitPageId, splitFocused, comments, patches, worktreeFiles, fileReload, dock.layout, shell.zen, draggingPanel, plugins]
+    [
+      repos,
+      workspaceId,
+      scopeRepoPaths,
+      scopeLabel,
+      selected,
+      worktree,
+      explorerRoot,
+      browseRoot,
+      defaultCwd,
+      diffStyle,
+      appTab,
+      activePage,
+      splitPageId,
+      splitFocused,
+      comments,
+      patches,
+      worktreeFiles,
+      fileReload,
+      dock.layout,
+      shell.zen,
+      draggingPanel,
+      plugins
+    ]
   )
   hostRef.current = host
   // ⌘-click on any link goes through the plugins first; a plain click still opens the browser
@@ -1412,12 +1514,21 @@ function App(): React.JSX.Element {
     { id: 'settings', group: 'Actions', label: 'Settings', icon: 'settings', shortcut: actionKeys('app.settings') || undefined, run: openSettings },
     ...tabs.map((tab): Command => {
       const letter = leaderOf(tab.id)
-      return { id: `tab:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()}`, icon: tab.icon, shortcut: letter ? `G ${letter.toUpperCase()}` : undefined, run: () => goPage(tab.id) }
+      return {
+        id: `tab:${tab.id}`,
+        group: 'Actions',
+        label: `Open ${tab.label.toLowerCase()}`,
+        icon: tab.icon,
+        shortcut: letter ? `G ${letter.toUpperCase()}` : undefined,
+        run: () => goPage(tab.id)
+      }
     }),
     ...tabs
       .filter((tab) => tab.id !== appTab && tab.id !== splitPage?.id)
       .map((tab): Command => ({ id: `split:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()} in split`, icon: 'splitRight', run: () => setSplitTab(tab.id) })),
-    ...(splitPage ? [{ id: 'split:close', group: 'Actions', label: `Close split (${splitPage.label.toLowerCase()})`, icon: 'close', run: () => setSplitTab(null) } satisfies Command] : []),
+    ...(splitPage
+      ? [{ id: 'split:close', group: 'Actions', label: `Close split (${splitPage.label.toLowerCase()})`, icon: 'close', run: () => setSplitTab(null) } satisfies Command]
+      : []),
     { id: 'search', group: 'Actions', label: 'Search in projects', icon: 'search', shortcut: actionKeys('app.search') || undefined, run: () => setSearchOpen(true) },
     ...(
       [
@@ -1426,14 +1537,39 @@ function App(): React.JSX.Element {
         ['rail', 'Toggle workspace rail'],
         ['title', 'Toggle title bar']
       ] as const
-    ).map(([panel, label]): Command => ({ id: `toggle:${panel}`, group: 'Actions', label, icon: 'panel', shortcut: actionKeys(`panel.${panel}`) || undefined, run: () => toggleShellPanel(panel) })),
+    ).map(([panel, label]): Command => ({
+      id: `toggle:${panel}`,
+      group: 'Actions',
+      label,
+      icon: 'panel',
+      shortcut: actionKeys(`panel.${panel}`) || undefined,
+      run: () => toggleShellPanel(panel)
+    })),
     { id: 'agent-comments', group: 'Actions', label: 'Agent comments', icon: 'comment', shortcut: actionKeys('app.comments') || undefined, run: () => setDrawerOpen(true) },
-    { id: 'zen', group: 'Actions', label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone', icon: 'maximize', shortcut: actionKeys('shell.zen') || undefined, run: toggleZen },
+    {
+      id: 'zen',
+      group: 'Actions',
+      label: shell.zen ? 'Leave zen mode' : 'Zen mode: only the main zone',
+      icon: 'maximize',
+      shortcut: actionKeys('shell.zen') || undefined,
+      run: toggleZen
+    },
     { id: 'shortcuts', group: 'Actions', label: 'Keyboard shortcuts', icon: 'keyboard', shortcut: actionKeys('app.shortcuts') || undefined, run: () => setSheetOpen(true) },
     { id: 'changed', group: 'Actions', label: 'Toggle changed files', icon: 'list', shortcut: actionKeys('wt.changedFiles') || undefined, run: () => setFilesOpen(!filesOpen) },
     ...panelIds.flatMap((id): Command[] => {
       const info = panelInfo(id)
-      return info ? [{ id: `panel:${id}`, group: 'Actions', label: `Toggle ${info.label.toLowerCase()}`, icon: info.icon, shortcut: actionKeys(`panel.${id}`) || undefined, run: () => dock.toggle(id) }] : []
+      return info
+        ? [
+            {
+              id: `panel:${id}`,
+              group: 'Actions',
+              label: `Toggle ${info.label.toLowerCase()}`,
+              icon: info.icon,
+              shortcut: actionKeys(`panel.${id}`) || undefined,
+              run: () => dock.toggle(id)
+            }
+          ]
+        : []
     }),
     {
       id: 'style',
@@ -1443,7 +1579,13 @@ function App(): React.JSX.Element {
       shortcut: actionKeys('app.diffStyle') || undefined,
       run: () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split')
     },
-    { id: 'minimap', group: 'Actions', label: settings.editorMinimap ? 'Hide editor minimap' : 'Show editor minimap', icon: 'code', run: () => updateSettings({ editorMinimap: !settings.editorMinimap }) },
+    {
+      id: 'minimap',
+      group: 'Actions',
+      label: settings.editorMinimap ? 'Hide editor minimap' : 'Show editor minimap',
+      icon: 'code',
+      run: () => updateSettings({ editorMinimap: !settings.editorMinimap })
+    },
     ...(worktreeComments.length > 0
       ? ([
           {
@@ -1471,32 +1613,39 @@ function App(): React.JSX.Element {
       }
     }),
     { id: 'workspace:new', group: 'Actions', label: 'New workspace', icon: 'folder', shortcut: actionKeys('workspace.new') || undefined, run: () => setEditingWorkspace(null) },
-    ...(workspace ? [{ id: 'workspace:edit', group: 'Actions', label: `Edit ${workspace.name}`, icon: 'settings', shortcut: actionKeys('workspace.edit') || undefined, run: () => setEditingWorkspace(workspace) } satisfies Command] : []),
+    ...(workspace
+      ? [
+          {
+            id: 'workspace:edit',
+            group: 'Actions',
+            label: `Edit ${workspace.name}`,
+            icon: 'settings',
+            shortcut: actionKeys('workspace.edit') || undefined,
+            run: () => setEditingWorkspace(workspace)
+          } satisfies Command
+        ]
+      : []),
     ...(workspaceRepos ?? []).flatMap((repo) =>
-      repo.worktrees.map(
-        (candidate): Command => ({
-          id: `worktree:${candidate.path}`,
-          group: 'Worktrees',
-          label: branchLabel(candidate),
-          icon: 'branch',
-          detail: candidate.changedFiles > 0 ? `${baseName(repo.path)} · ${candidate.changedFiles} changed` : baseName(repo.path),
-          run: () => openWorktree(candidate.path)
-        })
-      )
+      repo.worktrees.map((candidate): Command => ({
+        id: `worktree:${candidate.path}`,
+        group: 'Worktrees',
+        label: branchLabel(candidate),
+        icon: 'branch',
+        detail: candidate.changedFiles > 0 ? `${baseName(repo.path)} · ${candidate.changedFiles} changed` : baseName(repo.path),
+        run: () => openWorktree(candidate.path)
+      }))
     ),
-    ...(worktreeFiles?.files ?? []).map(
-      (path): Command => ({
-        id: `file:${path}`,
-        group: 'Files',
-        label: baseName(path),
-        detail: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : undefined,
-        filePath: path,
-        run: () => {
-          setAppTab('worktrees')
-          setViewer({ path, line: null })
-        }
-      })
-    )
+    ...(worktreeFiles?.files ?? []).map((path): Command => ({
+      id: `file:${path}`,
+      group: 'Files',
+      label: baseName(path),
+      detail: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : undefined,
+      filePath: path,
+      run: () => {
+        setAppTab('worktrees')
+        setViewer({ path, line: null })
+      }
+    }))
   ]
 
   const tabDropAt = (event: React.DragEvent<HTMLElement>): string | null => {
@@ -1541,7 +1690,11 @@ function App(): React.JSX.Element {
     },
     onDragEnd: endTabDrag
   })
-  const tabDropMark = <span className="relative h-5 w-0 shrink-0"><span className="absolute inset-y-0 -left-px w-0.5 rounded-full bg-foreground/60" /></span>
+  const tabDropMark = (
+    <span className="relative h-5 w-0 shrink-0">
+      <span className="absolute inset-y-0 -left-px w-0.5 rounded-full bg-foreground/60" />
+    </span>
+  )
   const tabDropZone = draggingTab ? '[-webkit-app-region:no-drag] rounded-md outline-1 outline-border outline-dashed bg-foreground/5' : ''
   const pageTab = (tab: (typeof tabs)[number]): React.ReactNode => {
     const index = tabs.indexOf(tab)
@@ -1550,21 +1703,21 @@ function App(): React.JSX.Element {
     const digitKey = digitLabel('tabs', index + 1)
     const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
     return (
-        <button
-          key={tab.id}
-          data-page-tab={tab.id}
-          aria-current={appTab === tab.id ? 'page' : undefined}
-          title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag anywhere in the title bar`}
-          {...barItemDrag(tab.id)}
-          onClick={() => goPage(tab.id === HUB_TAB && onHub ? tabBeforeHub.current : tab.id)}
-          onContextMenu={(event) => pageTabMenu(event, tab)}
-          className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
-        >
-          {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
-          {!compact && tab.label}
-          {'Badge' in tab && tab.Badge && <tab.Badge />}
-          {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
-        </button>
+      <button
+        key={tab.id}
+        data-page-tab={tab.id}
+        aria-current={appTab === tab.id ? 'page' : undefined}
+        title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag anywhere in the title bar`}
+        {...barItemDrag(tab.id)}
+        onClick={() => goPage(tab.id === HUB_TAB && onHub ? tabBeforeHub.current : tab.id)}
+        onContextMenu={(event) => pageTabMenu(event, tab)}
+        className={`${tabClass(appTab === tab.id)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
+      >
+        {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
+        {!compact && tab.label}
+        {'Badge' in tab && tab.Badge && <tab.Badge />}
+        {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
+      </button>
     )
   }
 
@@ -1629,14 +1782,16 @@ function App(): React.JSX.Element {
         )}
         <div title="Split or unified (w)" className="flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5 ring-1 ring-border">
           {(['split', 'unified'] as const).map((style) => (
-            <button key={style} onClick={() => setDiffStyle(style)} className={`h-5 rounded px-2 text-[11px] ${diffStyle === style ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            <button
+              key={style}
+              onClick={() => setDiffStyle(style)}
+              className={`h-5 rounded px-2 text-[11px] ${diffStyle === style ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
               {style === 'split' ? 'Split' : 'Unified'}
             </button>
           ))}
         </div>
-        {worktree && (
-          <HintButton title="Terminal in this worktree (t)" icon="terminal" label="Terminal" hint="t" onClick={() => openTerminal(worktree.path)} />
-        )}
+        {worktree && <HintButton title="Terminal in this worktree (t)" icon="terminal" label="Terminal" hint="t" onClick={() => openTerminal(worktree.path)} />}
         <IconButton label={`Toggle changed files (${actionKeys('wt.changedFiles')})`} active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           <Icon name="list" />
         </IconButton>
@@ -1688,10 +1843,14 @@ function App(): React.JSX.Element {
                               title={tab}
                               onMouseDown={(event) => event.button === 1 && closeEditorTab(tab)}
                               onContextMenu={(event) =>
-                                tabMenu(event, () => closeEditorTab(tab), () => {
-                                  setEditorTabs([tab])
-                                  setViewer({ path: tab, line: null })
-                                })
+                                tabMenu(
+                                  event,
+                                  () => closeEditorTab(tab),
+                                  () => {
+                                    setEditorTabs([tab])
+                                    setViewer({ path: tab, line: null })
+                                  }
+                                )
                               }
                               className={`flex h-6 max-w-52 shrink-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-xs ${
                                 tab === viewer.path ? 'bg-foreground/8 text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -1701,16 +1860,19 @@ function App(): React.JSX.Element {
                                 <FileIcon path={tab} />
                                 <span className="truncate">{baseName(tab)}</span>
                               </button>
-                              <button aria-label={`Close ${baseName(tab)}`} title="Close (⌘W)" onClick={() => closeEditorTab(tab)} className="grid size-4 shrink-0 place-items-center rounded hover:bg-accent">
+                              <button
+                                aria-label={`Close ${baseName(tab)}`}
+                                title="Close (⌘W)"
+                                onClick={() => closeEditorTab(tab)}
+                                className="grid size-4 shrink-0 place-items-center rounded hover:bg-accent"
+                              >
                                 <Icon name="close" className="size-2.5" />
                               </button>
                             </div>
                           ))}
                         </div>
                         <CopyButton label="Copy path (y)" text={() => `${worktree.path}/${viewer.path}`} />
-                        {changedPaths.has(viewer.path) && (
-                          <HintButton title="Back to the diff (esc)" label="Diff" hint="esc" onClick={() => showDiff(viewer.path)} />
-                        )}
+                        {changedPaths.has(viewer.path) && <HintButton title="Back to the diff (esc)" label="Diff" hint="esc" onClick={() => showDiff(viewer.path)} />}
                         {isMarkdownPath(viewer.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
                         <IconButton label="Close all files" onClick={() => (setEditorTabs([]), setViewer(null))}>
                           <Icon name="close" className="size-3" />
@@ -1809,29 +1971,29 @@ function App(): React.JSX.Element {
   )
 
   const worktreeLayout = (
-      <PageLayout
-        list={
-          <Sidebar
-            repos={workspaceRepos}
-            scanning={scanning}
-            selected={selected}
-            activity={activity}
-            scope={scope}
-            onSelect={setSelected}
-            onRescan={rescan}
-            onRepoMenu={repoMenu}
-            onWorktreeMenu={worktreeMenu}
-            onBranchMenu={branchMenu}
-            onOpenBranch={(branch, repo) => openBranch(branch, repo)}
-            onNewWorktree={(repo) => setBranchDialog({ repo, worktree: true })}
-            onTerminal={openTerminal}
-            onFlash={flash}
-            folderFilter={!workspace}
-          />
-        }
-        main={worktreeMain}
-        inspector={worktreeInspector}
-      />
+    <PageLayout
+      list={
+        <Sidebar
+          repos={workspaceRepos}
+          scanning={scanning}
+          selected={selected}
+          activity={activity}
+          scope={scope}
+          onSelect={setSelected}
+          onRescan={rescan}
+          onRepoMenu={repoMenu}
+          onWorktreeMenu={worktreeMenu}
+          onBranchMenu={branchMenu}
+          onOpenBranch={(branch, repo) => openBranch(branch, repo)}
+          onNewWorktree={(repo) => setBranchDialog({ repo, worktree: true })}
+          onTerminal={openTerminal}
+          onFlash={flash}
+          folderFilter={!workspace}
+        />
+      }
+      main={worktreeMain}
+      inspector={worktreeInspector}
+    />
   )
   const worktreeView = (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1891,253 +2053,258 @@ function App(): React.JSX.Element {
 
   return (
     <HostContext.Provider value={host}>
-    <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
-    <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
-      {showTitle && (
-      <div className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'}`}>
-        <span className={`mr-1 shrink-0 ${chromeless ? '' : 'pl-[80px]'}`}>
-          <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={showRail} onClick={() => toggleShellPanel('rail')}>
-            <Icon name="panel" className="size-3.5" />
-          </IconButton>
-        </span>
-        <div {...tabDropProps} className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone}`}>
-        {barOrder.map((id) => {
-          const tab = tabs.find((candidate) => candidate.id === id)
-          return (
-            <Fragment key={id}>
-              {tabDrop?.beforeId === id && tabDropMark}
-              {/* Open documents follow the tabs before the first space */}
-              {id === SPACE_ITEMS[0] && openDocs}
-              {isSpace(id) ? <span data-bar-item={id} className="h-full min-w-2 flex-1" /> : id === SEARCH_ITEM ? searchField : tab && pageTab(tab)}
-            </Fragment>
-          )
-        })}
-        {tabDrop?.beforeId === null && tabDropMark}
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {titleBarItems(false)}
-          {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
-          {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
-            const info = panelInfo(panel)
-            const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
-            return info ? (
-              <PanelToggle
-                key={panel}
-                id={panel}
-                info={info}
-                active={dock.isVisible(panel)}
-                side={dock.sideOf(panel)}
-                badge={Badge && <Badge />}
-                onToggle={() => dock.toggle(panel)}
-                onMove={(side) => dock.move(panel, side)}
-                onDragStart={() => startPanelDrag(panel)}
-                onDragEnd={() => setDraggingPanel(null)}
-              />
-            ) : null
-          })}
-          <button
-            title={`Agent comments (${actionKeys('app.comments')})`}
-            onClick={() => setDrawerOpen(!drawerOpen)}
-            className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
-          >
-            <Icon name="comment" />
-            {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
-            <Kbd hint>{actionKeys('app.comments')}</Kbd>
-          </button>
-          <McpInstallButton flash={flash} />
-          <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} active={appTab === 'settings'} onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}>
-            <Icon name="settings" />
-          </IconButton>
-          {titleBarItems(true)}
-        </div>
-      </div>
-      )}
-
-      {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights; in zen the terminal's tab strip is that */}
-      {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
-      <div
-        className="flex min-h-0 flex-1"
-        onFocusCapture={(event) => setSplitFocused(event.target instanceof Element && event.target.closest('[data-split-pane]') !== null)}
-      >
-      {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
-      <Zone id="main" className="flex-1">
-      {/* With a split, a line over the side that has the keyboard */}
-      {splitPage && !splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70" />}
-      {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
-      <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
-      {appTab === 'worktrees' && worktreeView}
-      <Suspense fallback={<div className="flex-1" />}>
-      {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
-      {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab))}
-      {openDocTab && (
-        <TabDock placement={settings.bottomPanel} withDock={withDock}>
-          {openDocTab.content}
-        </TabDock>
-      )}
-      </Suspense>
-      </ErrorBoundary>
-      </div>
-      </Zone>
-      {splitPage && (
-        <HostContext.Provider value={splitHost}>
-          <div data-split-pane style={{ width: splitWidth }} className="relative flex min-h-0 min-w-0 shrink-0 flex-col border-l border-border">
-            <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />
-            <div className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${splitFocused ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary/70" />}
-              <Icon name={splitPage.icon} className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{splitPage.label}</span>
-              <IconButton label="Swap sides" onClick={() => goPage(splitPage.id)}>
-                <Icon name="compare" className="size-3.5" />
-              </IconButton>
-              <IconButton label="Close split" onClick={() => setSplitTab(null)}>
-                <Icon name="close" className="size-3.5" />
-              </IconButton>
-            </div>
-            <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <ErrorBoundary label={splitPage.label} resetKey={`${workspaceId}:split:${splitPage.id}`}>
-                <Suspense fallback={<div className="flex-1" />}>{splitPluginTab ? <splitPluginTab.render /> : worktreeLayout}</Suspense>
-              </ErrorBoundary>
-            </div>
-          </div>
-        </HostContext.Provider>
-      )}
-      </div>
-      <WhichKey
-        pages={[...tabs, { id: 'settings', label: 'Settings', icon: 'settings' as const }].flatMap((tab) => {
-          const letter = leaderOf(tab.id)
-          return letter ? [{ letter, label: tab.label, icon: tab.icon }] : []
-        })}
-        workspaces={workspaces.map((candidate) => candidate.name)}
-      />
-      {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
-      {drawerOpen && (
-        <AgentCommentsDrawer
-          comments={comments}
-          labelOf={checkoutLabel}
-          top={showTitle ? 36 : chromeless ? 0 : 28}
-          renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
-          onOpen={(comment) => {
-            if (comment.kind === 'reference') return
-            if (comment.kind === 'browser') return openPage(comment.filePath)
-            const line = comment.range.start > 0 ? comment.range.start : null
-            if (comment.kind === 'file') return openLocation(comment.worktreePath, comment.filePath, line)
-            setAppTab('worktrees')
-            if (comment.worktreePath !== selected) {
-              pendingFilePath.current = comment.filePath
-              return setSelected(comment.worktreePath)
-            }
-            showDiff(comment.filePath)
-          }}
-          onOpenWorktree={openWorktree}
-          onDelete={deleteComment}
-          onClearAll={() => window.confirm(`Delete all ${comments.length} agent comments in this workspace?`) && setComments([])}
-          sent={sent}
-          onRestore={restoreBatch}
-          onClose={() => setDrawerOpen(false)}
-        />
-      )}
-      {shell.zen && (
-        <button onClick={toggleZen} title={`Leave zen mode (${actionKeys('shell.zen')})`} className="fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground">
-          Zen <Kbd hint>{actionKeys('shell.zen')}</Kbd>
-        </button>
-      )}
-
-      {notice && (
-        <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground shadow-lg shadow-black/40">
-          {notice}
-        </div>
-      )}
-      {!updateDismissed && !shell.zen && <UpdateBanner onDismiss={() => setUpdateDismissed(true)} />}
-      <Suspense fallback={null}>
-        {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-      </Suspense>
-      <Tooltips />
-      {plugins.map(({ manifest, plugin }) =>
-        plugin.Root ? (
-          <ErrorBoundary key={manifest.id} label={manifest.name} resetKey={manifest.id}>
-            <plugin.Root />
-          </ErrorBoundary>
-        ) : null
-      )}
-      {editingWorkspace !== undefined && (
-        <WorkspaceDialog
-          workspace={editingWorkspace}
-          repos={repos}
-          onClose={() => setEditingWorkspace(undefined)}
-          onSaved={(saved) => {
-            setEditingWorkspace(undefined)
-            switchWorkspace(saved.id)
-          }}
-        />
-      )}
-      {historyFor && (
-        <HistoryDialog
-          {...historyFor}
-          onRestored={() => {
-            setFileReload((count) => count + 1)
-            loadWorktree(historyFor.worktreePath)
-          }}
-          onClose={() => setHistoryFor(null)}
-        />
-      )}
-      {prompt && <TextPrompt {...prompt} onClose={() => setPrompt(null)} />}
-      {cleanupOpen && (
-        <CleanupDialog
-          repos={workspaceRepos ? reposInScope(workspaceRepos, scope) : []}
-          onRemoved={(paths) => {
-            if (paths.length === 0) return
-            if (selected && paths.includes(selected)) setSelected(null)
-            flash(`Removed ${paths.length} ${paths.length === 1 ? 'worktree' : 'worktrees'}`)
-            rescan()
-          }}
-          onClose={() => setCleanupOpen(false)}
-        />
-      )}
-      {branchDialog && (
-        <BranchDialog
-          repo={branchDialog.repo}
-          initialWorktree={branchDialog.worktree}
-          initialBase={branchDialog.base}
-          onSubmit={submitBranch}
-          onClose={() => setBranchDialog(null)}
-        />
-      )}
-      <Suspense fallback={null}>
-        {searchOpen && (
-          <SearchDialog
-            worktreePaths={searchPaths}
-            scopeLabel={scopeLabel}
-            renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
-            onClose={() => setSearchOpen(false)}
-            onPick={(location) => {
-              setSearchOpen(false)
-              openLocation(location.worktreePath, location.path, location.line)
-            }}
-          />
-        )}
-        {/* After search so a references lookup from a search preview opens on top of it */}
-        {peek && (
-          <LocationsDialog
-            header={
-              <span className="min-w-0 flex-1 truncate">
-                {peek.title} <span className="font-mono text-foreground">{peek.symbol}</span> · {peek.locations.length} in{' '}
-                {new Set(peek.locations.map((location) => location.path)).size} files
+      <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
+        <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
+          {showTitle && (
+            <div className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'}`}>
+              <span className={`mr-1 shrink-0 ${chromeless ? '' : 'pl-[80px]'}`}>
+                <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={showRail} onClick={() => toggleShellPanel('rail')}>
+                  <Icon name="panel" className="size-3.5" />
+                </IconButton>
               </span>
-            }
-            locations={peek.locations}
-            matcher={matcherFor(peek.symbol, { caseSensitive: true, wholeWord: true, regex: false })}
-            renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
-            onClose={() => setPeek(null)}
-            onPick={(location) => {
-              setPeek(null)
-              openLocation(location.worktreePath, location.path, location.line)
-            }}
+              <div {...tabDropProps} className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone}`}>
+                {barOrder.map((id) => {
+                  const tab = tabs.find((candidate) => candidate.id === id)
+                  return (
+                    <Fragment key={id}>
+                      {tabDrop?.beforeId === id && tabDropMark}
+                      {/* Open documents follow the tabs before the first space */}
+                      {id === SPACE_ITEMS[0] && openDocs}
+                      {isSpace(id) ? <span data-bar-item={id} className="h-full min-w-2 flex-1" /> : id === SEARCH_ITEM ? searchField : tab && pageTab(tab)}
+                    </Fragment>
+                  )
+                })}
+                {tabDrop?.beforeId === null && tabDropMark}
+              </div>
+              <div className="flex shrink-0 items-center gap-0.5">
+                {titleBarItems(false)}
+                {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
+                {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
+                  const info = panelInfo(panel)
+                  const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
+                  return info ? (
+                    <PanelToggle
+                      key={panel}
+                      id={panel}
+                      info={info}
+                      active={dock.isVisible(panel)}
+                      side={dock.sideOf(panel)}
+                      badge={Badge && <Badge />}
+                      onToggle={() => dock.toggle(panel)}
+                      onMove={(side) => dock.move(panel, side)}
+                      onDragStart={() => startPanelDrag(panel)}
+                      onDragEnd={() => setDraggingPanel(null)}
+                    />
+                  ) : null
+                })}
+                <button
+                  title={`Agent comments (${actionKeys('app.comments')})`}
+                  onClick={() => setDrawerOpen(!drawerOpen)}
+                  className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+                >
+                  <Icon name="comment" />
+                  {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
+                  <Kbd hint>{actionKeys('app.comments')}</Kbd>
+                </button>
+                <McpInstallButton flash={flash} />
+                <IconButton
+                  label={`Settings (${actionKeys('app.settings')} or G S)`}
+                  active={appTab === 'settings'}
+                  onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}
+                >
+                  <Icon name="settings" />
+                </IconButton>
+                {titleBarItems(true)}
+              </div>
+            </div>
+          )}
+
+          {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights; in zen the terminal's tab strip is that */}
+          {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
+          <div className="flex min-h-0 flex-1" onFocusCapture={(event) => setSplitFocused(event.target instanceof Element && event.target.closest('[data-split-pane]') !== null)}>
+            {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
+            <Zone id="main" className="flex-1">
+              {/* With a split, a line over the side that has the keyboard */}
+              {splitPage && !splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70" />}
+              {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
+              <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
+                  {appTab === 'worktrees' && worktreeView}
+                  <Suspense fallback={<div className="flex-1" />}>
+                    {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
+                    {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab))}
+                    {openDocTab && (
+                      <TabDock placement={settings.bottomPanel} withDock={withDock}>
+                        {openDocTab.content}
+                      </TabDock>
+                    )}
+                  </Suspense>
+                </ErrorBoundary>
+              </div>
+            </Zone>
+            {splitPage && (
+              <HostContext.Provider value={splitHost}>
+                <div data-split-pane style={{ width: splitWidth }} className="relative flex min-h-0 min-w-0 shrink-0 flex-col border-l border-border">
+                  <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />
+                  <div
+                    className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${splitFocused ? 'text-foreground' : 'text-muted-foreground'}`}
+                  >
+                    {splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary/70" />}
+                    <Icon name={splitPage.icon} className="size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{splitPage.label}</span>
+                    <IconButton label="Swap sides" onClick={() => goPage(splitPage.id)}>
+                      <Icon name="compare" className="size-3.5" />
+                    </IconButton>
+                    <IconButton label="Close split" onClick={() => setSplitTab(null)}>
+                      <Icon name="close" className="size-3.5" />
+                    </IconButton>
+                  </div>
+                  <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <ErrorBoundary label={splitPage.label} resetKey={`${workspaceId}:split:${splitPage.id}`}>
+                      <Suspense fallback={<div className="flex-1" />}>{splitPluginTab ? <splitPluginTab.render /> : worktreeLayout}</Suspense>
+                    </ErrorBoundary>
+                  </div>
+                </div>
+              </HostContext.Provider>
+            )}
+          </div>
+          <WhichKey
+            pages={[...tabs, { id: 'settings', label: 'Settings', icon: 'settings' as const }].flatMap((tab) => {
+              const letter = leaderOf(tab.id)
+              return letter ? [{ letter, label: tab.label, icon: tab.icon }] : []
+            })}
+            workspaces={workspaces.map((candidate) => candidate.name)}
           />
-        )}
-      </Suspense>
-    </div>
-    </CodeNavigationContext.Provider>
+          {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
+          {drawerOpen && (
+            <AgentCommentsDrawer
+              comments={comments}
+              labelOf={checkoutLabel}
+              top={showTitle ? 36 : chromeless ? 0 : 28}
+              renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
+              onOpen={(comment) => {
+                if (comment.kind === 'reference') return
+                if (comment.kind === 'browser') return openPage(comment.filePath)
+                const line = comment.range.start > 0 ? comment.range.start : null
+                if (comment.kind === 'file') return openLocation(comment.worktreePath, comment.filePath, line)
+                setAppTab('worktrees')
+                if (comment.worktreePath !== selected) {
+                  pendingFilePath.current = comment.filePath
+                  return setSelected(comment.worktreePath)
+                }
+                showDiff(comment.filePath)
+              }}
+              onOpenWorktree={openWorktree}
+              onDelete={deleteComment}
+              onClearAll={() => window.confirm(`Delete all ${comments.length} agent comments in this workspace?`) && setComments([])}
+              sent={sent}
+              onRestore={restoreBatch}
+              onClose={() => setDrawerOpen(false)}
+            />
+          )}
+          {shell.zen && (
+            <button
+              onClick={toggleZen}
+              title={`Leave zen mode (${actionKeys('shell.zen')})`}
+              className="fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              Zen <Kbd hint>{actionKeys('shell.zen')}</Kbd>
+            </button>
+          )}
+
+          {notice && (
+            <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground shadow-lg shadow-black/40">
+              {notice}
+            </div>
+          )}
+          {!updateDismissed && !shell.zen && <UpdateBanner onDismiss={() => setUpdateDismissed(true)} />}
+          <Suspense fallback={null}>{paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}</Suspense>
+          <Tooltips />
+          {plugins.map(({ manifest, plugin }) =>
+            plugin.Root ? (
+              <ErrorBoundary key={manifest.id} label={manifest.name} resetKey={manifest.id}>
+                <plugin.Root />
+              </ErrorBoundary>
+            ) : null
+          )}
+          {editingWorkspace !== undefined && (
+            <WorkspaceDialog
+              workspace={editingWorkspace}
+              repos={repos}
+              onClose={() => setEditingWorkspace(undefined)}
+              onSaved={(saved) => {
+                setEditingWorkspace(undefined)
+                switchWorkspace(saved.id)
+              }}
+            />
+          )}
+          {historyFor && (
+            <HistoryDialog
+              {...historyFor}
+              onRestored={() => {
+                setFileReload((count) => count + 1)
+                loadWorktree(historyFor.worktreePath)
+              }}
+              onClose={() => setHistoryFor(null)}
+            />
+          )}
+          {prompt && <TextPrompt {...prompt} onClose={() => setPrompt(null)} />}
+          {cleanupOpen && (
+            <CleanupDialog
+              repos={workspaceRepos ? reposInScope(workspaceRepos, scope) : []}
+              onRemoved={(paths) => {
+                if (paths.length === 0) return
+                if (selected && paths.includes(selected)) setSelected(null)
+                flash(`Removed ${paths.length} ${paths.length === 1 ? 'worktree' : 'worktrees'}`)
+                rescan()
+              }}
+              onClose={() => setCleanupOpen(false)}
+            />
+          )}
+          {branchDialog && (
+            <BranchDialog
+              repo={branchDialog.repo}
+              initialWorktree={branchDialog.worktree}
+              initialBase={branchDialog.base}
+              onSubmit={submitBranch}
+              onClose={() => setBranchDialog(null)}
+            />
+          )}
+          <Suspense fallback={null}>
+            {searchOpen && (
+              <SearchDialog
+                worktreePaths={searchPaths}
+                scopeLabel={scopeLabel}
+                renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
+                onClose={() => setSearchOpen(false)}
+                onPick={(location) => {
+                  setSearchOpen(false)
+                  openLocation(location.worktreePath, location.path, location.line)
+                }}
+              />
+            )}
+            {/* After search so a references lookup from a search preview opens on top of it */}
+            {peek && (
+              <LocationsDialog
+                header={
+                  <span className="min-w-0 flex-1 truncate">
+                    {peek.title} <span className="font-mono text-foreground">{peek.symbol}</span> · {peek.locations.length} in{' '}
+                    {new Set(peek.locations.map((location) => location.path)).size} files
+                  </span>
+                }
+                locations={peek.locations}
+                matcher={matcherFor(peek.symbol, { caseSensitive: true, wholeWord: true, regex: false })}
+                renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
+                onClose={() => setPeek(null)}
+                onPick={(location) => {
+                  setPeek(null)
+                  openLocation(location.worktreePath, location.path, location.line)
+                }}
+              />
+            )}
+          </Suspense>
+        </div>
+      </CodeNavigationContext.Provider>
     </HostContext.Provider>
   )
 }
@@ -2147,7 +2314,11 @@ export default App
 /** A small outlined action that shows its shortcut */
 function HintButton({ title, icon, label, hint, onClick }: { title: string; icon?: IconName; label: string; hint: string; onClick: () => void }): React.JSX.Element {
   return (
-    <button title={title} onClick={onClick} className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground">
+    <button
+      title={title}
+      onClick={onClick}
+      className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-foreground"
+    >
       {icon && <Icon name={icon} className="size-3" />}
       {label}
       <Kbd hint>{hint}</Kbd>

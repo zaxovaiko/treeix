@@ -26,7 +26,16 @@ const adapter: ChatAdapter = {
         if (text.includes('hang')) return new Promise(() => undefined)
         if (text.includes('permission')) {
           const answer = new Promise<string | null>((resolve) => (picked = resolve))
-          emit({ type: 'permission', requestId: 'r', title: 'Edit', toolCallId: 't', options: [{ id: 'no', name: 'No', kind: 'reject_once' }, { id: 'yes', name: 'Yes', kind: 'allow_once' }] })
+          emit({
+            type: 'permission',
+            requestId: 'r',
+            title: 'Edit',
+            toolCallId: 't',
+            options: [
+              { id: 'no', name: 'No', kind: 'reject_once' },
+              { id: 'yes', name: 'Yes', kind: 'allow_once' }
+            ]
+          })
           const optionId = await answer
           emit({ type: 'permission_settled', requestId: 'r' })
           emit({ type: 'message_chunk', role: 'agent', content: { type: 'text', text: `${command}: ${optionId}` } })

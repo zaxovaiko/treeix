@@ -15,7 +15,16 @@ test('cleanupCandidates offers finished worktrees, checking fresh merged and dir
   const now = 100 * 86_400
   const worktree = (name: string, changedFiles = 0) => ({ path: `/r/${name}`, head: 'abc', branch: name, changedFiles })
   const repo: Repo = { path: '/r/main', worktrees: [worktree('main'), worktree('gone'), worktree('fresh'), worktree('old', 2), worktree('live')] }
-  const branch = (name: string, extra: Partial<Branch>, days = 0): Branch => ({ name, remote: false, ahead: 0, behind: 0, gone: false, merged: false, committedAt: now - days * 86_400, ...extra })
+  const branch = (name: string, extra: Partial<Branch>, days = 0): Branch => ({
+    name,
+    remote: false,
+    ahead: 0,
+    behind: 0,
+    gone: false,
+    merged: false,
+    committedAt: now - days * 86_400,
+    ...extra
+  })
   const branches = new Map([['/r/main', [branch('main', {}), branch('gone', { gone: true }), branch('fresh', { merged: true }, 1), branch('old', {}, 40), branch('live', {}, 2)]]])
   expect(cleanupCandidates([repo], branches, now).map(({ worktree, reason, suggested }) => [worktree.branch, reason, suggested])).toEqual([
     ['gone', 'upstream gone', true],

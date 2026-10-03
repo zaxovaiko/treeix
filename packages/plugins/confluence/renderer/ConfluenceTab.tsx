@@ -41,7 +41,8 @@ const FILTER_KINDS = FILTER_GROUPS.map((group) => group.kind)
 const directId = (text: string): string | null => pageOfUrl(text)?.id ?? (/^\d{4,}$/.test(text) ? text : null)
 
 const parseStrings = (json: string): string[] => list(parseJson(json), isString)
-const parseOpened = (json: string): PageSummary[] => list(parseJson(json), (entry): entry is PageSummary => isJson(entry) && typeof entry.id === 'string' && typeof entry.title === 'string')
+const parseOpened = (json: string): PageSummary[] =>
+  list(parseJson(json), (entry): entry is PageSummary => isJson(entry) && typeof entry.id === 'string' && typeof entry.title === 'string')
 
 /** Pages of one space together, spaces in alphabetical order with unknown ones last */
 function bySpace(list: PageSummary[]): [string, PageSummary[]][] {
@@ -56,7 +57,6 @@ type Entry =
   | { kind: 'page'; id: string; page: PageSummary; space: string }
   | { kind: 'more'; id: string; space: string; hidden: number }
 type Section = { title: string; error: string | null; count: number; entries: Entry[] }
-
 
 /** Footer and inline comments; reading them needs the API token, so a failure stays down here instead of hiding the page */
 function PageComments({ page }: { page: Page }): React.JSX.Element {
@@ -85,7 +85,21 @@ function PageComments({ page }: { page: Page }): React.JSX.Element {
   )
 }
 
-function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Page | null; parent: Page | null; error: string | null; onReload: () => void; onAgent: () => void; onCopy: () => void }): React.JSX.Element {
+function PageMain({
+  page,
+  parent,
+  error,
+  onReload,
+  onAgent,
+  onCopy
+}: {
+  page: Page | null
+  parent: Page | null
+  error: string | null
+  onReload: () => void
+  onAgent: () => void
+  onCopy: () => void
+}): React.JSX.Element {
   if (!page) return error ? <EmptyState fill icon="file" title={error} /> : <EmptyState fill title="Loading page..." />
   return (
     <MarkdownFoldScope>
@@ -93,7 +107,11 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
         <ListToggle />
         {parent && (
           <>
-            <button onClick={() => openRequest.update({ id: parent.id })} title={`Open ${parent.title}`} className="max-w-[40%] min-w-0 truncate rounded px-1 hover:text-foreground">
+            <button
+              onClick={() => openRequest.update({ id: parent.id })}
+              title={`Open ${parent.title}`}
+              className="max-w-[40%] min-w-0 truncate rounded px-1 hover:text-foreground"
+            >
               {parent.title}
             </button>
             <span className="text-muted-foreground/40">/</span>
@@ -105,7 +123,11 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
         <IconButton label="Reload page (r)" onClick={onReload}>
           <Icon name="refresh" className="size-3.5" />
         </IconButton>
-        <button onClick={onAgent} title="Add to agent comments (a)" className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] ring-1 ring-border hover:bg-accent hover:text-foreground">
+        <button
+          onClick={onAgent}
+          title="Add to agent comments (a)"
+          className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] ring-1 ring-border hover:bg-accent hover:text-foreground"
+        >
           <Icon name="comment" className="size-3" />
           To agent
           <Kbd hint>a</Kbd>
@@ -113,7 +135,11 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
         <IconButton label="Copy link (y)" onClick={onCopy}>
           <Icon name="copy" className="size-3.5" />
         </IconButton>
-        <button onClick={() => window.open(page.url, '_blank')} title="Open in Confluence (o)" className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] hover:bg-accent hover:text-foreground">
+        <button
+          onClick={() => window.open(page.url, '_blank')}
+          title="Open in Confluence (o)"
+          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] hover:bg-accent hover:text-foreground"
+        >
           <Icon name="external" className="size-3" />
           <Kbd hint>o</Kbd>
         </button>
@@ -157,7 +183,6 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
 
 /** `id` names the key in the keymap, so Settings can rebind it */
 type PageAction = { label: string; id: string; run: () => void }
-
 
 export function ConfluenceTab(): React.JSX.Element {
   const host = useHost()
@@ -204,7 +229,10 @@ export function ConfluenceTab(): React.JSX.Element {
     const summary: PageSummary = { id: shownPage.id, title: shownPage.title, space: shownPage.space, lastModified: shownPage.updatedAt }
     const list = parseOpened(openedJson)
     const known = list.some((entry) => entry.id === summary.id)
-    const next = known && cursorId !== null ? list.map((entry) => (entry.id === summary.id ? summary : entry)) : [summary, ...list.filter((entry) => entry.id !== summary.id)].slice(0, MAX_OPENED)
+    const next =
+      known && cursorId !== null
+        ? list.map((entry) => (entry.id === summary.id ? summary : entry))
+        : [summary, ...list.filter((entry) => entry.id !== summary.id)].slice(0, MAX_OPENED)
     setOpenedJson(JSON.stringify(next))
   }, [shownPage?.id, shownPage?.title, shownPage?.space])
 
@@ -249,9 +277,9 @@ export function ConfluenceTab(): React.JSX.Element {
     ...(recent?.pages ?? []).map((page) => ({ page, source: 'Recently viewed' })),
     ...(results?.pages ?? []).map((page) => ({ page, source: RESULTS }))
   ]
-  const sections = (results ? [section(RESULTS, results.pages, results.error)] : [section('Opened here', opened), section('Recently viewed', recent?.pages ?? [], recentError)]).filter(
-    (candidate) => candidate.entries.length > 0 || candidate.error
-  )
+  const sections = (
+    results ? [section(RESULTS, results.pages, results.error)] : [section('Opened here', opened), section('Recently viewed', recent?.pages ?? [], recentError)]
+  ).filter((candidate) => candidate.entries.length > 0 || candidate.error)
   const entries = sections.flatMap((candidate) => candidate.entries)
   const byCursor = cursorId === null ? -1 : entries.findIndex((entry) => entry.id === cursorId)
   const cursor = byCursor >= 0 ? byCursor : entries.findIndex((entry) => entry.kind === 'page' && entry.page.id === selectedId)
@@ -276,7 +304,12 @@ export function ConfluenceTab(): React.JSX.Element {
     const worktreePath = host.selectedWorktree
     if (!worktreePath) return host.flash('Select a worktree first')
     // The reference alone keeps the prompt short
-    addReference(host, worktreePath, { filePath: `Confluence: ${shownPage.title}`, text: `Confluence "${shownPage.title}" ${shownPage.url}`, body: shownPage.body }, shownPage.title)
+    addReference(
+      host,
+      worktreePath,
+      { filePath: `Confluence: ${shownPage.title}`, text: `Confluence "${shownPage.title}" ${shownPage.url}`, body: shownPage.body },
+      shownPage.title
+    )
   }
 
   const search: PageAction = {
@@ -305,7 +338,8 @@ export function ConfluenceTab(): React.JSX.Element {
 
   const spaceKeys = sections.flatMap((entrySection) => entrySection.entries.flatMap((entry) => (entry.kind === 'space' ? [entry.space] : [])))
   const anySpaceOpen = spaceKeys.some((key) => !collapsedSpaces.includes(key))
-  const foldAll = (): void => setCollapsedJson(JSON.stringify(anySpaceOpen ? [...new Set([...collapsedSpaces, ...spaceKeys])] : collapsedSpaces.filter((key) => !spaceKeys.includes(key))))
+  const foldAll = (): void =>
+    setCollapsedJson(JSON.stringify(anySpaceOpen ? [...new Set([...collapsedSpaces, ...spaceKeys])] : collapsedSpaces.filter((key) => !spaceKeys.includes(key))))
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (zone === 'list' && matchesAction(event, 'confluence.fold') && spaceKeys.length > 1) {
@@ -319,7 +353,10 @@ export function ConfluenceTab(): React.JSX.Element {
       return true
     }
     const all = [...actions, search]
-    const id = actionForEvent(event, all.map((action) => action.id))
+    const id = actionForEvent(
+      event,
+      all.map((action) => action.id)
+    )
     const run = all.find((action) => action.id === id)?.run
     run?.()
     return run !== undefined
@@ -330,7 +367,13 @@ export function ConfluenceTab(): React.JSX.Element {
     if (entry.kind === 'space') {
       const name = entry.space.slice(entry.space.indexOf(':') + 1)
       return (
-        <button key={entry.id} {...nav.rowProps(index)} onClick={() => fold(entry.space, entry.open)} title={entry.open ? 'Fold (←)' : 'Unfold (→)'} className={`${ROW} mt-1 h-6 px-2 text-[11px] text-muted-foreground`}>
+        <button
+          key={entry.id}
+          {...nav.rowProps(index)}
+          onClick={() => fold(entry.space, entry.open)}
+          title={entry.open ? 'Fold (←)' : 'Unfold (→)'}
+          className={`${ROW} mt-1 h-6 px-2 text-[11px] text-muted-foreground`}
+        >
           <Icon name="chevron" className={`size-3 shrink-0 ${entry.open ? 'rotate-90' : ''}`} />
           <Icon name="folder" className="size-3 shrink-0" />
           <span className="truncate">{name || 'Other'}</span>
@@ -360,9 +403,7 @@ export function ConfluenceTab(): React.JSX.Element {
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Confluence</span>
         <span className="flex-1" />
-        {spaceKeys.length > 1 && (
-          <FoldAllButton anyOpen={anySpaceOpen} groups="spaces" onClick={foldAll} />
-        )}
+        {spaceKeys.length > 1 && <FoldAllButton anyOpen={anySpaceOpen} groups="spaces" onClick={foldAll} />}
         <IconButton label={recentLoading ? 'Reloading...' : 'Reload recently viewed'} onClick={reloadRecent}>
           <Icon name="refresh" className={`size-3.5 ${recentLoading ? 'opacity-40' : ''}`} />
         </IconButton>
@@ -413,7 +454,13 @@ export function ConfluenceTab(): React.JSX.Element {
   return (
     <PageLayout
       list={listPane}
-      main={selectedId ? <PageMain page={shownPage} parent={parent} error={pageError} onReload={reloadPage} onAgent={addToComments} onCopy={copyLink} /> : <EmptyState fill icon="file" title="Pick a page or paste a Confluence link" />}
+      main={
+        selectedId ? (
+          <PageMain page={shownPage} parent={parent} error={pageError} onReload={reloadPage} onAgent={addToComments} onCopy={copyLink} />
+        ) : (
+          <EmptyState fill icon="file" title="Pick a page or paste a Confluence link" />
+        )
+      }
     />
   )
 }

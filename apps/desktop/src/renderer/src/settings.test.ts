@@ -61,7 +61,11 @@ test('parseAppearance moves the old single theme into its mode', async () => {
   expect(parseAppearance({ theme: 'nord' })).toEqual({ themeMode: 'dark', lightTheme: 'light', darkTheme: 'nord' })
   expect(parseAppearance({ theme: 'light' })).toEqual({ themeMode: 'light', lightTheme: 'light', darkTheme: 'neutral' })
   expect(parseAppearance({ theme: 'system' })).toEqual({ themeMode: 'system', lightTheme: 'light', darkTheme: 'neutral' })
-  expect(parseAppearance({ themeMode: 'system', lightTheme: 'github-light', darkTheme: 'github-dark', theme: 'nord' })).toEqual({ themeMode: 'system', lightTheme: 'github-light', darkTheme: 'github-dark' })
+  expect(parseAppearance({ themeMode: 'system', lightTheme: 'github-light', darkTheme: 'github-dark', theme: 'nord' })).toEqual({
+    themeMode: 'system',
+    lightTheme: 'github-light',
+    darkTheme: 'github-dark'
+  })
   expect(parseAppearance({})).toEqual({ themeMode: 'dark', lightTheme: 'light', darkTheme: 'neutral' })
 })
 
@@ -88,7 +92,17 @@ test('parseThemeFile reads VS Code color themes with comments and the app theme 
   }`)
   expect(vscode).toMatchObject({ label: 'Paper', mode: 'light', background: '#fafafa', card: '#fafafa', foreground: '#222222', primary: '#0066cc' })
   expect(vscode?.syntax).toMatchObject({ tokenColors: [{ scope: 'comment' }] })
-  const own = { label: 'Mine', mode: 'dark', background: '#000000', card: '#111111', popover: '#222222', foreground: '#ffffff', mutedForeground: '#888888', primary: '#ff0000', syntax: 'nord' }
+  const own = {
+    label: 'Mine',
+    mode: 'dark',
+    background: '#000000',
+    card: '#111111',
+    popover: '#222222',
+    foreground: '#ffffff',
+    mutedForeground: '#888888',
+    primary: '#ff0000',
+    syntax: 'nord'
+  }
   expect(parseThemeFile(JSON.stringify(own))).toMatchObject(own)
   expect(parseThemeFile('{"colors": {}}')).toBeNull()
   expect(parseThemeFile('not json')).toBeNull()

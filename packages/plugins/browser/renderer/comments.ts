@@ -62,7 +62,11 @@ export const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`
 const vitalValue = (vital: Vital): string => (vital.name === 'CLS' ? String(Math.round(vital.value * 100) / 100) : `${Math.round(vital.value)} ms`)
 
 export const vitalComment = (vital: Vital, guestId: number, pageUrl: string, worktreePath: string): ReviewComment =>
-  item(entryCommentId(vital, guestId), pageUrl, worktreePath, `Performance: ${vital.name} ${vitalValue(vital)}${vital.start ? ` at ${seconds(vital.start)}` : ''}`,
+  item(
+    entryCommentId(vital, guestId),
+    pageUrl,
+    worktreePath,
+    `Performance: ${vital.name} ${vitalValue(vital)}${vital.start ? ` at ${seconds(vital.start)}` : ''}`,
     [vital.element && `Caused by: ${vital.element}`, vital.detail].filter(Boolean).join('\n')
   )
 

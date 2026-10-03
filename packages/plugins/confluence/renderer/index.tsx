@@ -47,7 +47,13 @@ function PagePreview({ url }: { url: string }): React.JSX.Element {
         >
           Open
         </button>
-        <a href={url} target="_blank" rel="noreferrer" title="Open in Confluence" className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          title="Open in Confluence"
+          className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <Icon name="external" className="size-3" />
         </a>
       </div>

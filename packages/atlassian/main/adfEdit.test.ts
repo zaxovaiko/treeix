@@ -15,7 +15,14 @@ test('editedAdf keeps untouched blocks as they were and parses the edited text',
   const result = editedAdf(doc, original, edited, mediaSource)
   const content = result.content as unknown[]
   expect(content.slice(0, 4)).toEqual([toc, p('Intro'), status, image])
-  expect(content[4]).toEqual({ type: 'paragraph', content: [{ type: 'text', text: 'New ' }, { type: 'text', text: 'bold', marks: [{ type: 'strong' }] }, { type: 'text', text: ' text' }] })
+  expect(content[4]).toEqual({
+    type: 'paragraph',
+    content: [
+      { type: 'text', text: 'New ' },
+      { type: 'text', text: 'bold', marks: [{ type: 'strong' }] },
+      { type: 'text', text: ' text' }
+    ]
+  })
   expect(content[5]).toMatchObject({ type: 'taskList', content: [{ type: 'taskItem', attrs: { state: 'TODO' }, content: [{ type: 'text', text: 'todo' }] }] })
   expect(content[6]).toEqual({ type: 'mediaSingle', attrs: { layout: 'center' }, content: [{ type: 'media', attrs: { id: 'f1', alt: 'shot.png' } }] })
   expect(content[7]).toEqual({ type: 'expand', attrs: { title: 'More' }, content: [p('hidden')] })

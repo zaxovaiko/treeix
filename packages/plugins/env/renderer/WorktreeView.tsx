@@ -175,7 +175,10 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
     return (
       <div key={path}>
         {multi && (
-          <button onClick={toggle} className="sticky top-0 z-10 mx-2 mt-2 flex h-7 w-[calc(100%-16px)] items-center gap-1.5 rounded-md bg-background/95 px-1.5 text-left text-[11.5px] backdrop-blur hover:bg-accent">
+          <button
+            onClick={toggle}
+            className="sticky top-0 z-10 mx-2 mt-2 flex h-7 w-[calc(100%-16px)] items-center gap-1.5 rounded-md bg-background/95 px-1.5 text-left text-[11.5px] backdrop-blur hover:bg-accent"
+          >
             <Icon name="chevron" className={`size-3 text-muted-foreground/65 ${open ? 'rotate-90' : ''}`} />
             <span className="font-mono">
               <span className="text-muted-foreground">{folder === '.' ? '' : `${folder}/`}</span>
@@ -205,7 +208,11 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
         <Icon name={isMain ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
         <span className="font-mono text-[12.5px]">{branchLabel(target.worktree)}</span>
         <span className="text-muted-foreground">{baseName(target.repo.path)}</span>
-        {multi ? <span className="text-[11px] text-muted-foreground/60">{paths.length} files</span> : <span className="font-mono text-[11px] text-muted-foreground/70">{paths[0]}</span>}
+        {multi ? (
+          <span className="text-[11px] text-muted-foreground/60">{paths.length} files</span>
+        ) : (
+          <span className="font-mono text-[11px] text-muted-foreground/70">{paths[0]}</span>
+        )}
         <span className="flex-1" />
         <span className="flex items-center rounded-md ring-1 ring-border">
           {KIND_ORDER.filter((kind) => counts.get(kind)).map((kind) => (
@@ -310,12 +317,16 @@ export function FreshMain({ target, onDismiss }: { target: ScopedWorktree; onDis
     setBusy(true)
     if (always) envSettings.update({ autoCopy: { ...envSettings.get().autoCopy, [target.repo.path]: mode } })
     copyFromMain(target, mode, [...chosen])
-      .then((created) => host.flash(created ? `${done} ${created} env file${created === 1 ? '' : 's'}` : 'Nothing created: the files exist already, or no .env.example sits next to them'))
+      .then((created) =>
+        host.flash(created ? `${done} ${created} env file${created === 1 ? '' : 's'}` : 'Nothing created: the files exist already, or no .env.example sits next to them')
+      )
       .catch((reason: unknown) => host.flash(errorMessage(reason)))
       .finally(() => setBusy(false))
   }
   const check = (on: boolean): React.JSX.Element => (
-    <span className={`flex size-3.5 items-center justify-center rounded-sm ${on ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>{on && <Icon name="check" className="size-2.5" />}</span>
+    <span className={`flex size-3.5 items-center justify-center rounded-sm ${on ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
+      {on && <Icon name="check" className="size-2.5" />}
+    </span>
   )
   return (
     <>
@@ -348,7 +359,11 @@ export function FreshMain({ target, onDismiss }: { target: ScopedWorktree; onDis
                 ['example', 'From .env.example']
               ] as const
             ).map(([option, label]) => (
-              <button key={option} onClick={() => setMode(option)} className={`flex-1 rounded ${mode === option ? 'bg-foreground/8 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              <button
+                key={option}
+                onClick={() => setMode(option)}
+                className={`flex-1 rounded ${mode === option ? 'bg-foreground/8 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
                 {label}
               </button>
             ))}

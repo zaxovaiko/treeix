@@ -14,9 +14,7 @@ const paths = {
   arrowRight: <path d="M5 12h14M12 5l7 7-7 7" />,
   pointer: <path d="M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.95l-6.12 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.12a.5.5 0 0 1-.95.06z" />,
   code: <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />,
-  folder: (
-    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-  ),
+  folder: <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />,
   branch: (
     <>
       <path d="M6 3v12" />
@@ -365,11 +363,7 @@ export function FileIcon({ path }: { path: string }): React.JSX.Element {
     )
   }
   return (
-    <span
-      aria-hidden
-      style={{ color }}
-      className="inline-flex h-3.5 w-5 shrink-0 items-center justify-center font-mono text-[8.5px] leading-none font-bold tracking-tight"
-    >
+    <span aria-hidden style={{ color }} className="inline-flex h-3.5 w-5 shrink-0 items-center justify-center font-mono text-[8.5px] leading-none font-bold tracking-tight">
       {label}
     </span>
   )

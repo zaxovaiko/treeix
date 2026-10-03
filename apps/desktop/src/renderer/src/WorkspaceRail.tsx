@@ -9,18 +9,7 @@ import { type Activity, ActivityMark, NEWS } from './activity'
 import { activityOf } from './sessionUi'
 import { useSessions } from './plugins'
 import { Dialog } from './ui'
-import {
-  deleteWorkspace,
-  initials,
-  inWorkspace,
-  moveWorkspace,
-  saveWorkspace,
-  suggestWorkspaceName,
-  useWorkspaces,
-  type Workspace,
-  shades,
-  WORKSPACE_COLORS
-} from './workspaces'
+import { deleteWorkspace, initials, inWorkspace, moveWorkspace, saveWorkspace, suggestWorkspaceName, useWorkspaces, type Workspace, shades, WORKSPACE_COLORS } from './workspaces'
 
 const workspaceActivity = (sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): Activity =>
   activityOf(sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces)))
@@ -95,7 +84,13 @@ export function WorkspaceRail({
   const [cursor, setCursor] = useState(-1)
   const currentIndex = workspaces.findIndex((workspace) => workspace.id === currentId)
   useEffect(() => setCursor(-1), [currentId])
-  const nav = useListNav({ zone: 'rail', count: workspaces.length, index: cursor < 0 ? currentIndex : cursor, onSelect: setCursor, onOpen: (index) => onSwitch(workspaces[index].id) })
+  const nav = useListNav({
+    zone: 'rail',
+    count: workspaces.length,
+    index: cursor < 0 ? currentIndex : cursor,
+    onSelect: setCursor,
+    onOpen: (index) => onSwitch(workspaces[index].id)
+  })
   const [drop, setDrop] = useState<{ id: string; edge: 'top' | 'bottom' } | null>(null)
   const WORKSPACE_MIME = 'application/x-treeix-workspace'
   const dragProps = (workspace: Workspace, index: number) => ({
@@ -254,7 +249,11 @@ export function WorkspaceDialog({
       <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-4">
         <div className="flex items-end gap-3">
           <div className="flex shrink-0 flex-col items-center gap-1.5">
-            <label title="Upload an image" style={{ background: color }} className="grid size-11 cursor-pointer place-items-center overflow-hidden rounded-xl text-base font-bold text-white">
+            <label
+              title="Upload an image"
+              style={{ background: color }}
+              className="grid size-11 cursor-pointer place-items-center overflow-hidden rounded-xl text-base font-bold text-white"
+            >
               <Avatar workspace={{ name: finalName || '?', avatarText: avatarText.trim(), avatarImage }} />
               <input type="file" accept="image/*" aria-label="Avatar image" className="hidden" onChange={(event) => pickImage(event.target.files?.[0])} />
             </label>
@@ -296,7 +295,10 @@ export function WorkspaceDialog({
                   {color === swatch && <Icon name="check" className="size-3" />}
                 </button>
               ))}
-              <label title="Any colour or shade" className="grid size-5 cursor-pointer place-items-center rounded-md text-muted-foreground ring-1 ring-border hover:text-foreground">
+              <label
+                title="Any colour or shade"
+                className="grid size-5 cursor-pointer place-items-center rounded-md text-muted-foreground ring-1 ring-border hover:text-foreground"
+              >
                 <Icon name="plus" className="size-3" />
                 <input type="color" aria-label="Custom colour" value={color} onChange={(event) => pickColor(event.target.value)} className="sr-only" />
               </label>
@@ -348,10 +350,7 @@ export function WorkspaceDialog({
                 return (
                   <div key={folder} className="mb-0.5">
                     <div className="flex h-8 items-center gap-1 rounded-md pr-2 hover:bg-accent">
-                      <button
-                        onClick={() => toggleFolder(folder)}
-                        className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left text-xs text-muted-foreground"
-                      >
+                      <button onClick={() => toggleFolder(folder)} className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left text-xs text-muted-foreground">
                         <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
                         <Icon name="folder" className="size-3.5 shrink-0" />
                         <span className="truncate text-foreground/85">{folder.replace(window.api.home, '~')}</span>

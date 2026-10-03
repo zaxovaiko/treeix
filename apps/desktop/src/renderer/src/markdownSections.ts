@@ -32,6 +32,8 @@ export function sectionize(nodes: Node[]): Node[] {
 }
 
 /** remark plugin: `() => (tree) => ...` */
-export const remarkSections = () => (tree: Node): void => {
-  tree.children = sectionize(tree.children ?? [])
-}
+export const remarkSections =
+  () =>
+  (tree: Node): void => {
+    tree.children = sectionize(tree.children ?? [])
+  }

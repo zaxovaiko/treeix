@@ -28,11 +28,8 @@ function loadAddon(): MacWindowAddon | null {
 const addon = loadAddon()
 
 /** Null when the native add-on is unavailable, so callers can fall back to Electron's globalShortcut */
-export const nativeHotkeys = addon
-  ? { register: addon.registerHotkey, unregister: addon.unregisterHotkey }
-  : null
+export const nativeHotkeys = addon ? { register: addon.registerHotkey, unregister: addon.unregisterHotkey } : null
 
 export const setDockHidden = (hidden: boolean): void => addon?.setDockHidden(hidden)
 
-export const setSquareCorners = (window: BrowserWindow, square: boolean): void =>
-  addon?.setSquareCorners(window.getNativeWindowHandle(), square)
+export const setSquareCorners = (window: BrowserWindow, square: boolean): void => addon?.setSquareCorners(window.getNativeWindowHandle(), square)

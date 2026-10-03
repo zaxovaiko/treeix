@@ -16,7 +16,7 @@ export async function run(args: string[]): Promise<string> {
   try {
     return (await exec('acli', args, { timeout: TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 })).stdout
   } catch (reason) {
-    throw new Error(failure(reason))
+    throw new Error(failure(reason), { cause: reason })
   }
 }
 

@@ -6,21 +6,10 @@ import { Icon } from './Icon'
 import { baseName } from './Sidebar'
 import { Dialog, EmptyState, errorMessage } from './ui'
 
-const timeLabel = (at: number): string =>
-  new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+const timeLabel = (at: number): string => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 /** Local snapshots taken before autosave overwrote the file, diffed against what is on disk now */
-export function HistoryDialog({
-  worktreePath,
-  path,
-  onRestored,
-  onClose
-}: {
-  worktreePath: string
-  path: string
-  onRestored: () => void
-  onClose: () => void
-}): React.JSX.Element {
+export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { worktreePath: string; path: string; onRestored: () => void; onClose: () => void }): React.JSX.Element {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<string | null>(null)
@@ -28,11 +17,17 @@ export function HistoryDialog({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.api.listHistory(worktreePath, path).then((list) => {
-      setEntries(list)
-      setSelected(list[0]?.id ?? null)
-    }, (reason: unknown) => setError(errorMessage(reason)))
-    window.api.readFile(worktreePath, path).then((text) => setCurrent(text ?? ''), () => setCurrent(''))
+    window.api.listHistory(worktreePath, path).then(
+      (list) => {
+        setEntries(list)
+        setSelected(list[0]?.id ?? null)
+      },
+      (reason: unknown) => setError(errorMessage(reason))
+    )
+    window.api.readFile(worktreePath, path).then(
+      (text) => setCurrent(text ?? ''),
+      () => setCurrent('')
+    )
   }, [worktreePath, path])
 
   useEffect(() => {
@@ -53,10 +48,13 @@ export function HistoryDialog({
 
   const restore = (): void => {
     if (snapshot === null || !window.confirm(`Restore ${baseName(path)} to this version? The current version is kept in history.`)) return
-    window.api.saveFile(worktreePath, path, snapshot, null).then(() => {
-      onRestored()
-      onClose()
-    }, (reason: unknown) => setError(errorMessage(reason)))
+    window.api.saveFile(worktreePath, path, snapshot, null).then(
+      () => {
+        onRestored()
+        onClose()
+      },
+      (reason: unknown) => setError(errorMessage(reason))
+    )
   }
 
   return (
@@ -67,11 +65,7 @@ export function HistoryDialog({
         </span>
         <span className="flex-1" />
         {error && <span className="text-red-400">{error}</span>}
-        <button
-          onClick={restore}
-          disabled={snapshot === null}
-          className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:opacity-40"
-        >
+        <button onClick={restore} disabled={snapshot === null} className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:opacity-40">
           Restore this version
         </button>
         <button onClick={onClose} aria-label="Close" className="grid size-7 place-items-center rounded-md hover:bg-accent">
@@ -80,7 +74,9 @@ export function HistoryDialog({
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="w-60 shrink-0 overflow-y-auto border-r border-border p-1">
-          {entries?.length === 0 && <p className="px-3 py-6 text-center text-xs text-muted-foreground">No earlier versions yet. Snapshots are taken while you edit here, at most one a minute.</p>}
+          {entries?.length === 0 && (
+            <p className="px-3 py-6 text-center text-xs text-muted-foreground">No earlier versions yet. Snapshots are taken while you edit here, at most one a minute.</p>
+          )}
           {entries?.map((entry) => (
             <button
               key={entry.id}

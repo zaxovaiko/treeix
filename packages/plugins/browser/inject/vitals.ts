@@ -5,7 +5,10 @@ type VitalMessage = { name: 'LCP' | 'INP' | 'CLS' | 'Long task'; value: number; 
 const describe = (node: Node | null | undefined): string => {
   if (!(node instanceof Element)) return ''
   const id = node.id ? `#${node.id}` : ''
-  const classes = [...node.classList].slice(0, 2).map((name) => `.${name}`).join('')
+  const classes = [...node.classList]
+    .slice(0, 2)
+    .map((name) => `.${name}`)
+    .join('')
   return `${node.tagName.toLowerCase()}${id}${classes}`
 }
 
@@ -61,7 +64,14 @@ export function watchVitals(): void {
       const container = entry.attribution?.[0]
       const frame = container?.containerSrc ? fileOf(container.containerSrc) : container?.containerName || ''
       const element = entry.name === 'self' ? 'main thread' : `${entry.name}${frame ? ` ${frame}` : ''}`
-      send({ name: 'Long task', value: entry.duration, element, detail: container?.containerType && container.containerType !== 'window' ? container.containerType : '', start: entry.startTime, time: Date.now() })
+      send({
+        name: 'Long task',
+        value: entry.duration,
+        element,
+        detail: container?.containerType && container.containerType !== 'window' ? container.containerType : '',
+        start: entry.startTime,
+        time: Date.now()
+      })
     }
   })
 }

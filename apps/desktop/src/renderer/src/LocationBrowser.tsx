@@ -69,7 +69,6 @@ function CodeLine({ text, path, matcher }: { text: string; path: string; matcher
   return <>{parts}</>
 }
 
-
 const GROUP_HEIGHT = 28
 const ROW_HEIGHT = 24
 const OVERSCAN = 10
@@ -240,12 +239,7 @@ export function LocationsDialog({
   }, [])
 
   return (
-    <div
-      ref={rootRef}
-      data-locations-dialog
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[8vh] backdrop-blur-[2px]"
-      onClick={onClose}
-    >
+    <div ref={rootRef} data-locations-dialog className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[8vh] backdrop-blur-[2px]" onClick={onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
         className="flex h-[76vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl"
@@ -259,11 +253,7 @@ export function LocationsDialog({
           </button>
         </div>
         <div className="flex min-h-0 flex-1">
-          <div
-            ref={listRef}
-            onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-            className="w-[400px] shrink-0 overflow-y-auto border-r border-border px-1"
-          >
+          <div ref={listRef} onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)} className="w-[400px] shrink-0 overflow-y-auto border-r border-border px-1">
             {locations.length === 0 && emptyText && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{emptyText}</p>}
             <div className="relative" style={{ height: offsets[items.length] }}>
               {items.slice(firstItem, lastItem).map((item, offset) => {
@@ -335,7 +325,10 @@ export function LocationsDialog({
                     <span className="text-muted-foreground">:{current.line}</span>
                   </span>
                   <span className="flex-1" />
-                  <button onClick={() => onPick(current)} className="h-6 shrink-0 rounded-md border border-border px-2 whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-foreground">
+                  <button
+                    onClick={() => onPick(current)}
+                    className="h-6 shrink-0 rounded-md border border-border px-2 whitespace-nowrap text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
                     Open file
                   </button>
                 </div>
@@ -437,11 +430,13 @@ export function SearchDialog({
             className="h-10 min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
           />
           <span className="shrink-0 text-[11px] tabular-nums">
-            {status === 'searching'
-              ? 'Searching...'
-              : error
-                ? <span className="text-red-400">Invalid pattern</span>
-                : query && `${result.matches.length}${result.truncated ? '+' : ''} results in ${fileCount} files`}
+            {status === 'searching' ? (
+              'Searching...'
+            ) : error ? (
+              <span className="text-red-400">Invalid pattern</span>
+            ) : (
+              query && `${result.matches.length}${result.truncated ? '+' : ''} results in ${fileCount} files`
+            )}
           </span>
           <Toggle label="Aa" title="Match case" on={caseSensitive} onChange={setCaseSensitive} />
           <Toggle label="ab" title="Match whole word" on={wholeWord} onChange={setWholeWord} />

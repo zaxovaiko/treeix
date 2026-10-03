@@ -35,7 +35,9 @@ function frames(stackTrace: unknown): { source: string; stack: string } {
 export function consoleFromApi(params: unknown): ConsoleEntry | null {
   const event = record(params)
   if (typeof event.type !== 'string' || !Array.isArray(event.args)) return null
-  const args = list(event.args).map(record).map((arg) => (arg.value !== undefined ? String(arg.value) : text(arg.description) || text(arg.type)))
+  const args = list(event.args)
+    .map(record)
+    .map((arg) => (arg.value !== undefined ? String(arg.value) : text(arg.description) || text(arg.type)))
   return { kind: 'console', id: nextId(), level: LEVELS[event.type] ?? 'log', text: args.join(' '), ...frames(event.stackTrace), time: number(event.timestamp) ?? Date.now() }
 }
 

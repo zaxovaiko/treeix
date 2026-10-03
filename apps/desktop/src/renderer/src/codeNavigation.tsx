@@ -76,7 +76,9 @@ export function navigationKindForKey(event: KeyboardEvent): NavigationKind | nul
 
 // Keywords tokenize like identifiers but never resolve, so they don't get the link affordance
 const KEYWORDS = new Set(
-  'abstract as async await break case catch class const continue debugger declare default delete do else enum export extends false finally for from function get if implements import in infer instanceof interface is keyof let namespace new null of private protected public readonly return satisfies set static super switch this throw true try type typeof undefined unique var void while with yield def fn func pub struct impl use mod self nil None True False elif lambda pass'.split(' ')
+  'abstract as async await break case catch class const continue debugger declare default delete do else enum export extends false finally for from function get if implements import in infer instanceof interface is keyof let namespace new null of private protected public readonly return satisfies set static super switch this throw true try type typeof undefined unique var void while with yield def fn func pub struct impl use mod self nil None True False elif lambda pass'.split(
+    ' '
+  )
 )
 
 /**
@@ -136,17 +138,7 @@ function targetFromToken(path: string, token: TokenEvent, exact: boolean): Symbo
 }
 
 /** Token handlers for @pierre/diffs views plus the hover card and right-click menu they drive */
-export function useSymbolNavigation({
-  worktreePath,
-  path,
-  exact = true,
-  onNavigate
-}: {
-  worktreePath: string
-  path: string
-  exact?: boolean
-  onNavigate: Navigate
-}): {
+export function useSymbolNavigation({ worktreePath, path, exact = true, onNavigate }: { worktreePath: string; path: string; exact?: boolean; onNavigate: Navigate }): {
   tokenOptions: {
     useTokenTransformer: true
     onTokenClick: (token: TokenEvent, event: MouseEvent) => void
@@ -223,10 +215,7 @@ export function useSymbolNavigation({
       className="max-h-80 w-max max-w-[560px] overflow-auto rounded-lg border border-input bg-popover backdrop-blur-2xl"
     >
       {card.html ? (
-        <div
-          className="px-3 py-2 font-mono text-[12px] [&_pre]:!bg-transparent [&_pre]:whitespace-pre-wrap"
-          dangerouslySetInnerHTML={{ __html: card.html }}
-        />
+        <div className="px-3 py-2 font-mono text-[12px] [&_pre]:!bg-transparent [&_pre]:whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: card.html }} />
       ) : (
         <pre className="px-3 py-2 font-mono text-[12px] whitespace-pre-wrap text-foreground/90">{card.info.signature}</pre>
       )}

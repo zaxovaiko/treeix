@@ -3,7 +3,21 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { addWorktree, createBranch, deleteBranch, discardChanges, isDefinitionLine, listBranches, parseTrack, parseWorktreeList, readPdf, removeWorktree, searchText, splitPatch, worktreeDir } from './git'
+import {
+  addWorktree,
+  createBranch,
+  deleteBranch,
+  discardChanges,
+  isDefinitionLine,
+  listBranches,
+  parseTrack,
+  parseWorktreeList,
+  readPdf,
+  removeWorktree,
+  searchText,
+  splitPatch,
+  worktreeDir
+} from './git'
 
 test('parseWorktreeList', () => {
   const porcelain = `worktree /repo
@@ -57,12 +71,7 @@ test('isDefinitionLine', () => {
     'func (s *Server) resolveBase() error {',
     'export class resolveBase extends Base {'
   ]
-  const usages = [
-    'const base = await resolveBase(repo)',
-    'resolveBase(repo, () => {',
-    "import { resolveBase } from './base'",
-    'return resolveBase(repo);'
-  ]
+  const usages = ['const base = await resolveBase(repo)', 'resolveBase(repo, () => {', "import { resolveBase } from './base'", 'return resolveBase(repo);']
   expect(definitions.filter((line) => !isDefinitionLine(line, 'resolveBase'))).toEqual([])
   expect(usages.filter((line) => isDefinitionLine(line, 'resolveBase'))).toEqual([])
 })

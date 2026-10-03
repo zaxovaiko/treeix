@@ -29,7 +29,10 @@ function Root(): null {
   const known = envs.use()
   const scoped = scopedWorktrees(host, known)
   const pathsKey = scoped.map(({ worktree }) => worktree.path).join('\n')
-  const mainsKey = scoped.filter(({ isMain }) => isMain).map(({ worktree }) => worktree.path).join('\n')
+  const mainsKey = scoped
+    .filter(({ isMain }) => isMain)
+    .map(({ worktree }) => worktree.path)
+    .join('\n')
   // A scan walks the whole tree, so only worktrees not scanned yet: a workspace can hold a hundred of them
   useEffect(() => void rescan(pathsKey.split('\n').filter((path) => path && !envs.get().has(path))).catch(() => undefined), [pathsKey])
 

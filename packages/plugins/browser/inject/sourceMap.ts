@@ -51,7 +51,10 @@ export function originalPlace(map: SourceMap, line: number, column: number): { s
 /** A bundler's source name as a project path: `turbopack:///[project]/src/a.tsx`, `webpack://_N_E/./src/a.tsx`, `../src/a.tsx` */
 export function projectPath(source: string, mapUrl: string): string {
   const path = /^[a-z-]+:/.test(source) ? source.replace(/^[a-z-]+:\/*/, '') : decodeURIComponent(new URL(source, mapUrl).pathname)
-  return path.replace(/^\/+/, '').replace(/^(\[project\]|_N_E|\([^)]*\))\//, '').replace(/^\.\//, '')
+  return path
+    .replace(/^\/+/, '')
+    .replace(/^(\[project\]|_N_E|\([^)]*\))\//, '')
+    .replace(/^\.\//, '')
 }
 
 async function mapOf(scriptUrl: string): Promise<{ map: SourceMap; url: string } | null> {

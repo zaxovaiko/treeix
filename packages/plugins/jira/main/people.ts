@@ -9,7 +9,10 @@ import { avatarOf, checkedKey } from './acli'
 export async function assignableUsers(key: string, query: string): Promise<JiraPerson[]> {
   const credentials = await loadCredentials()
   if (!credentials) return []
-  const response = await restFetch(`/rest/api/3/user/assignable/search?issueKey=${encodeURIComponent(checkedKey(key))}&query=${encodeURIComponent(query)}&maxResults=50`, credentials)
+  const response = await restFetch(
+    `/rest/api/3/user/assignable/search?issueKey=${encodeURIComponent(checkedKey(key))}&query=${encodeURIComponent(query)}&maxResults=50`,
+    credentials
+  )
   const users: unknown = await response.json()
   return (Array.isArray(users) ? users : [])
     .map(object)
@@ -17,4 +20,3 @@ export async function assignableUsers(key: string, query: string): Promise<JiraP
     .map((user) => ({ accountId: text(user.accountId), name: text(user.displayName), avatar: avatarOf(user) }))
     .filter((person) => person.accountId && person.name)
 }
-

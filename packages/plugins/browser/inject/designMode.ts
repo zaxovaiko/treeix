@@ -88,7 +88,14 @@ const onKey = (event: KeyboardEvent): void => {
 function setDesignMode(on: boolean): void {
   if (on && !outline) {
     outline = document.createElement('div')
-    Object.assign(outline.style, { position: 'fixed', zIndex: '2147483647', pointerEvents: 'none', outline: '2px solid #3b82f6', background: 'rgb(59 130 246 / 0.08)', display: 'none' })
+    Object.assign(outline.style, {
+      position: 'fixed',
+      zIndex: '2147483647',
+      pointerEvents: 'none',
+      outline: '2px solid #3b82f6',
+      background: 'rgb(59 130 246 / 0.08)',
+      display: 'none'
+    })
     document.documentElement.append(outline)
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('click', clickListener, true)

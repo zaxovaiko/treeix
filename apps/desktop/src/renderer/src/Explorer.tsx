@@ -85,12 +85,9 @@ export function Explorer({
   const tree = useMemo(() => buildTree(allPaths), [allPaths])
   const ignoredDirs = useMemo(() => (files?.ignored ?? []).filter((path) => path.endsWith('/')), [files])
   const ignoredFiles = useMemo(() => new Set(files?.ignored ?? []), [files])
-  const isIgnored = (path: string): boolean =>
-    ignoredFiles.has(path) || ignoredFiles.has(`${path}/`) || ignoredDirs.some((dir) => path.startsWith(dir))
+  const isIgnored = (path: string): boolean => ignoredFiles.has(path) || ignoredFiles.has(`${path}/`) || ignoredDirs.some((dir) => path.startsWith(dir))
   const needle = filter.trim().toLowerCase()
-  const matches = needle
-    ? allPaths.filter((path) => !path.endsWith('/') && path.toLowerCase().includes(needle))
-    : []
+  const matches = needle ? allPaths.filter((path) => !path.endsWith('/') && path.toLowerCase().includes(needle)) : []
 
   useEffect(() => {
     if (activePath) setExpanded((current) => new Set([...current, ...ancestors(activePath)]))
@@ -156,11 +153,15 @@ export function Explorer({
       const open = row !== undefined && row.dir !== null && expanded.has(row.path)
       const parent = row?.path.split('/').slice(0, -1).join('/')
       const action =
-        event.key === 'z' && canFoldAll ? foldAll
-        : !row ? null
-        : event.key === 'h' || event.key === 'ArrowLeft' ? () => (open ? toggle(row.path) : parent && setCursorPath(parent))
-        : (event.key === 'l' || event.key === 'ArrowRight') && row.dir && !open && !emptyIgnored(row) ? () => toggle(row.path)
-        : null
+        event.key === 'z' && canFoldAll
+          ? foldAll
+          : !row
+            ? null
+            : event.key === 'h' || event.key === 'ArrowLeft'
+              ? () => (open ? toggle(row.path) : parent && setCursorPath(parent))
+              : (event.key === 'l' || event.key === 'ArrowRight') && row.dir && !open && !emptyIgnored(row)
+                ? () => toggle(row.path)
+                : null
       if (!action) return
       event.preventDefault()
       action()
@@ -260,12 +261,22 @@ export function Explorer({
 }
 
 /** A folder outside the selected worktree, e.g. home or where a terminal is; folders load when opened, since listing everything at once is too slow */
-export function FolderExplorer({ root, activePath, onOpen, onParent }: { root: string; activePath: string | null; onOpen: (path: string) => void; onParent?: () => void }): React.JSX.Element {
+export function FolderExplorer({
+  root,
+  activePath,
+  onOpen,
+  onParent
+}: {
+  root: string
+  activePath: string | null
+  onOpen: (path: string) => void
+  onParent?: () => void
+}): React.JSX.Element {
   const [files, setFiles] = useState<string[] | null>(null)
   const load = (folder: string): void => {
-    window.api.listDirectory(root, folder).then((entries) =>
-      setFiles((current) => [...new Set([...(current ?? []).filter((path) => !folder || !path.startsWith(`${folder}/`)), ...entries])])
-    )
+    window.api
+      .listDirectory(root, folder)
+      .then((entries) => setFiles((current) => [...new Set([...(current ?? []).filter((path) => !folder || !path.startsWith(`${folder}/`)), ...entries])]))
   }
   // A repository lists everything at once through git, so the filter finds files in folders not opened yet
   const [repoFiles, setRepoFiles] = useState<WorktreeFiles | null>(null)
@@ -275,7 +286,17 @@ export function FolderExplorer({ root, activePath, onOpen, onParent }: { root: s
     window.api.listFiles(root).then(setRepoFiles, () => load(''))
   }, [root])
   const tree = useMemo(() => repoFiles ?? (files ? { files, ignored: [] } : null), [repoFiles, files])
-  return <Explorer files={tree} rootPath={repoFiles ? root : undefined} changed={NOTHING_CHANGED} activePath={activePath} onOpen={onOpen} onExpand={repoFiles ? undefined : load} onParent={onParent} />
+  return (
+    <Explorer
+      files={tree}
+      rootPath={repoFiles ? root : undefined}
+      changed={NOTHING_CHANGED}
+      activePath={activePath}
+      onOpen={onOpen}
+      onExpand={repoFiles ? undefined : load}
+      onParent={onParent}
+    />
+  )
 }
 
 const NOTHING_CHANGED = new Set<string>()

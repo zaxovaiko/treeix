@@ -5,7 +5,13 @@ import { type ActionDef, defineActions, key } from '../../shared/keymap'
  * Movement inside a zone (j k, arrows, ⏎, esc) is the focus model rather than an action, so it stays fixed.
  */
 export const CORE_ACTIONS: ActionDef[] = defineActions([
-  { id: 'app.palette', label: 'Search everything: commands, workspaces, files, pull requests, tasks, settings', menuLabel: 'Search everything', section: 'Go to', keys: key('KeyK', { meta: true }) },
+  {
+    id: 'app.palette',
+    label: 'Search everything: commands, workspaces, files, pull requests, tasks, settings',
+    menuLabel: 'Search everything',
+    section: 'Go to',
+    keys: key('KeyK', { meta: true })
+  },
   { id: 'app.paletteAlt', label: 'Search everything, second key', section: 'Go to', keys: key('KeyP', { meta: true, shift: true }) },
   { id: 'app.leader', label: 'Leader: G then a letter, from anywhere including terminals', section: 'Go to', keys: key('KeyG', { meta: true }) },
   { id: 'app.settings', label: 'Settings', section: 'Go to', keys: key('Comma', { meta: true }) },

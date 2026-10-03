@@ -2,7 +2,22 @@ import { type DiffLineAnnotation, PatchDiff, Virtualizer } from '@pierre/diffs/r
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { LineRange } from '@treeix/shared/comments'
 import type { FilePatch, Repo } from '@treeix/shared/types'
-import { type ConflictResult, type MergeMethod, type PullRequest, type PullRequestComment, type Person, type PullRequestDetail, type PullRequestList, type PullRequestState, REACTIONS, type Reaction, type Reviewer, type ReviewEvent, type ReviewThread, type ThreadComment } from '../shared/types'
+import {
+  type ConflictResult,
+  type MergeMethod,
+  type PullRequest,
+  type PullRequestComment,
+  type Person,
+  type PullRequestDetail,
+  type PullRequestList,
+  type PullRequestState,
+  REACTIONS,
+  type Reaction,
+  type Reviewer,
+  type ReviewEvent,
+  type ReviewThread,
+  type ThreadComment
+} from '../shared/types'
 import { allFolders, ChangedFileList, folderPaths } from '@treeix/app/ChangedFiles'
 import { groupOpen } from '@treeix/app/settings'
 import { api, imageResolver, prSettings } from './api'
@@ -16,7 +31,29 @@ import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } fr
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { CommentDraft, orderRange } from '@treeix/app/Comments'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
-import { ConflictMark, conversationFeed, groupPullRequests, PipelineDot, PipelineLink, involvesYou, isPullRequestSort, localWorktreeFor, markdownBase, prLabel, ProviderMark, PULL_REQUEST_SORTS, type PullRequestSort, pullRequestKey, ReviewMark, reviewSettled, sortPullRequests, STATE_STYLE, StateBadge, timeAgo, UserAvatar } from './pullRequestUtils'
+import {
+  ConflictMark,
+  conversationFeed,
+  groupPullRequests,
+  PipelineDot,
+  PipelineLink,
+  involvesYou,
+  isPullRequestSort,
+  localWorktreeFor,
+  markdownBase,
+  prLabel,
+  ProviderMark,
+  PULL_REQUEST_SORTS,
+  type PullRequestSort,
+  pullRequestKey,
+  ReviewMark,
+  reviewSettled,
+  sortPullRequests,
+  STATE_STYLE,
+  StateBadge,
+  timeAgo,
+  UserAvatar
+} from './pullRequestUtils'
 import { FilterSearch, matchesFilters, parseFilters, type PullRequestFilter } from './PullRequestFilter'
 import { usePullRequestKeys } from './keys'
 import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
@@ -201,7 +238,10 @@ export function PullRequestsView({
 
   const byProvider = (data?.pullRequests ?? []).filter((pr) => provider === 'all' || pr.provider === provider)
   const inScope = byProvider.filter((pr) => matchesFilters(pr, filters) && (!involved || involvesYou(pr)))
-  const visible = sortPullRequests(inScope.filter((pr) => pr.state === status), sort)
+  const visible = sortPullRequests(
+    inScope.filter((pr) => pr.state === status),
+    sort
+  )
   // Only open pull requests are grouped; merged and closed ones have nothing left to do
   const groups = status === 'open' ? groupPullRequests(visible) : [{ id: 'all', label: '', pullRequests: visible }]
   const [foldedJson, setFoldedJson] = usePersisted<string>(workspaceKey('prs.folded'), '[]')
@@ -267,9 +307,7 @@ export function PullRequestsView({
       >
         <div className="flex min-w-0 items-center gap-2">
           <ProviderMark provider={pr.provider} className="size-3.5" />
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-            {prLabel(pr)}
-          </span>
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{prLabel(pr)}</span>
           <span title={pr.title} className={`min-w-0 flex-1 truncate text-[12.5px] ${settled ? '' : 'font-medium'}`}>
             {pr.title}
           </span>
@@ -402,10 +440,7 @@ export function PullRequestsView({
       {selected ? (
         <PullRequestDetailView pr={selected} list={list} {...detailProps} />
       ) : (
-        <PageLayout
-          list={list}
-          main={<EmptyState fill icon="pullRequest" title={data ? 'No pull request selected' : 'Loading...'} />}
-        />
+        <PageLayout list={list} main={<EmptyState fill icon="pullRequest" title={data ? 'No pull request selected' : 'Loading...'} />} />
       )}
       {sortOpen && (
         <Picker
@@ -531,7 +566,11 @@ const REVIEWER_LOOK: Record<Reviewer['state'], { label: string; className: strin
 function ReviewerMark({ state }: { state: Reviewer['state'] }): React.JSX.Element {
   return (
     <span className={`absolute -right-0.5 -bottom-0.5 grid size-2.5 place-items-center rounded-full bg-background ${REVIEWER_LOOK[state].className}`}>
-      {state === 'requested' ? <span className="size-1.5 rounded-full bg-current" /> : <Icon name={state === 'approved' ? 'check' : state === 'changes' ? 'alert' : 'comment'} className="size-2" />}
+      {state === 'requested' ? (
+        <span className="size-1.5 rounded-full bg-current" />
+      ) : (
+        <Icon name={state === 'approved' ? 'check' : state === 'changes' ? 'alert' : 'comment'} className="size-2" />
+      )}
     </span>
   )
 }
@@ -557,7 +596,17 @@ function ReviewEventRow({ event }: { event: ReviewEvent }): React.JSX.Element {
 }
 
 /** A reviewer with their state; anyone who already reviewed can be asked to look again */
-function ReviewerRow({ reviewer, pr, onRequested, onError }: { reviewer: Reviewer; pr: PullRequest; onRequested: () => Promise<void>; onError: (message: string) => void }): React.JSX.Element {
+function ReviewerRow({
+  reviewer,
+  pr,
+  onRequested,
+  onError
+}: {
+  reviewer: Reviewer
+  pr: PullRequest
+  onRequested: () => Promise<void>
+  onError: (message: string) => void
+}): React.JSX.Element {
   // Shown as requested straight away; put back if the provider refuses
   const [requested, setRequested] = useState(false)
   const state = requested ? 'requested' : reviewer.state
@@ -600,7 +649,11 @@ function PersonRow({ person, children }: { person: Person; children: React.React
 function AssigneeRow({ person, onRemove }: { person: Person; onRemove: () => void }): React.JSX.Element {
   return (
     <PersonRow person={person}>
-      <button onClick={onRemove} title={`Unassign ${person.login}`} className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+      <button
+        onClick={onRemove}
+        title={`Unassign ${person.login}`}
+        className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
         <Icon name="close" className="size-3" />
       </button>
     </PersonRow>
@@ -646,7 +699,17 @@ function PendingCommentView({ comment, onRetry, onDiscard }: { comment: PendingC
   )
 }
 
-function ThreadButton({ onClick, disabled = false, keys, children }: { onClick: () => void; disabled?: boolean; keys: string | null; children: React.ReactNode }): React.JSX.Element {
+function ThreadButton({
+  onClick,
+  disabled = false,
+  keys,
+  children
+}: {
+  onClick: () => void
+  disabled?: boolean
+  keys: string | null
+  children: React.ReactNode
+}): React.JSX.Element {
   return (
     <button
       onClick={onClick}
@@ -710,7 +773,10 @@ function ThreadCard({
   const keys = (key: string): string | null => (cursor['data-cursor'] === '' ? key : null)
   const showHeader = (withPath && thread.path) || thread.resolved === true || (withPath && thread.resolved === false)
   return (
-    <div {...cursor} className={`rounded-md border border-border font-sans text-[13px] text-foreground ${cursor['data-cursor'] === '' ? 'bg-foreground/[.04]' : 'bg-card'} ${thread.resolved ? 'opacity-70' : ''}`}>
+    <div
+      {...cursor}
+      className={`rounded-md border border-border font-sans text-[13px] text-foreground ${cursor['data-cursor'] === '' ? 'bg-foreground/[.04]' : 'bg-card'} ${thread.resolved ? 'opacity-70' : ''}`}
+    >
       {showHeader && (
         <div className="flex h-7 min-w-0 items-center gap-2 border-b border-border px-3 text-[11px] text-muted-foreground">
           {withPath && thread.path && (
@@ -1274,13 +1340,10 @@ export function PullRequestDetailView({
   const isDraft = draftNow ?? pr.draft
   const setDraftState = (draft: boolean): void => {
     setDraftNow(draft)
-    api.setDraft(pr, draft).then(
-      refreshScope,
-      (failure: unknown) => {
-        setDraftNow(null)
-        setError(`${draft ? 'Not converted to draft' : 'Not marked ready for review'}: ${errorMessage(failure)}`)
-      }
-    )
+    api.setDraft(pr, draft).then(refreshScope, (failure: unknown) => {
+      setDraftNow(null)
+      setError(`${draft ? 'Not converted to draft' : 'Not marked ready for review'}: ${errorMessage(failure)}`)
+    })
   }
   // Assignment shows straight away; the reload after it brings the provider's view back (GitLab Free keeps one assignee)
   const [assigneesNow, setAssigneesNow] = useScopedState<Person[] | null>(pr.url, null)
@@ -1306,10 +1369,10 @@ export function PullRequestDetailView({
   const close = (): void => {
     if (closing || !window.confirm(`Close ${prLabel(pr)} without merging?`)) return
     setClosing(true)
-    api.close(pr).then(
-      refreshScope,
-      (failure: unknown) => setError(`Not closed: ${errorMessage(failure)}`)
-    ).finally(() => setClosing(false))
+    api
+      .close(pr)
+      .then(refreshScope, (failure: unknown) => setError(`Not closed: ${errorMessage(failure)}`))
+      .finally(() => setClosing(false))
   }
   const showReviewers = (): void => {
     if (!panels.inspector) panels.toggle('inspector')
@@ -1377,7 +1440,14 @@ export function PullRequestDetailView({
     }
     if (picker === 'review') {
       return [
-        { id: 'approve', group: `Review ${title}`, label: myReview === 'approved' ? 'Approved' : 'Approve', detail: 'Marks the changes as good to merge', icon: 'check', run: () => myReview !== 'approved' && approve() },
+        {
+          id: 'approve',
+          group: `Review ${title}`,
+          label: myReview === 'approved' ? 'Approved' : 'Approve',
+          detail: 'Marks the changes as good to merge',
+          icon: 'check',
+          run: () => myReview !== 'approved' && approve()
+        },
         { id: 'changes', group: `Review ${title}`, label: 'Request changes', detail: 'Asks for a reason and blocks the merge', icon: 'alert', run: () => setReason('') }
       ]
     }
@@ -1523,7 +1593,9 @@ export function PullRequestDetailView({
               <span className="text-emerald-400">+{patch.additions}</span> <span className="text-red-400">-{patch.deletions}</span>
             </span>
             {/* The hint gives way first, so the Viewed toggle stays visible in narrow panes */}
-            <span className="ml-auto min-w-0 shrink-[2] truncate font-sans text-[11px] text-muted-foreground">{!collapsed && preview ? `Rendered from ${pr.sourceBranch}` : ''}</span>
+            <span className="ml-auto min-w-0 shrink-[2] truncate font-sans text-[11px] text-muted-foreground">
+              {!collapsed && preview ? `Rendered from ${pr.sourceBranch}` : ''}
+            </span>
             {isMarkdownPath(patch.path) && !collapsed && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
             <button
               onClick={() => setFileCommentPath(fileCommentPath === patch.path ? null : patch.path)}
@@ -1559,9 +1631,7 @@ export function PullRequestDetailView({
             </button>
           </div>
           {fileCommentPath === patch.path && (
-            <div className="p-3">
-              {reviewDraft(`Comment on ${baseName(patch.path)}`, 'Write a comment about the whole file', null, closeFileComment)}
-            </div>
+            <div className="p-3">{reviewDraft(`Comment on ${baseName(patch.path)}`, 'Write a comment about the whole file', null, closeFileComment)}</div>
           )}
           {/* Whole-file threads have no line to anchor to, so they sit above the diff */}
           {!collapsed &&
@@ -1589,11 +1659,7 @@ export function PullRequestDetailView({
               renderAnnotation={({ metadata }) => {
                 const thread = fileThreads.find((candidate) => candidate.id === metadata.threadId)
                 if (thread) return <div className="mx-3 my-2">{threadCard(thread, false)}</div>
-                return fileDraft ? (
-                  <div className="mx-3 my-2">
-                    {reviewDraft(`Comment on line ${fileDraft.end}`, 'Write a review comment', fileDraft, closeDraft)}
-                  </div>
-                ) : null
+                return fileDraft ? <div className="mx-3 my-2">{reviewDraft(`Comment on line ${fileDraft.end}`, 'Write a review comment', fileDraft, closeDraft)}</div> : null
               }}
               options={{
                 ...codeThemeOptions(),
@@ -1627,9 +1693,7 @@ export function PullRequestDetailView({
         <span title={pr.repoPath} className="min-w-0 truncate">
           {baseName(pr.repoPath)}
         </span>
-        <span className="shrink-0 font-mono">
-          {prLabel(pr)}
-        </span>
+        <span className="shrink-0 font-mono">{prLabel(pr)}</span>
         <StateBadge pr={isDraft === pr.draft ? pr : { ...pr, draft: isDraft }} />
         <ReviewMark review={pr.review} />
         <ConflictMark pr={pr} />
@@ -1701,7 +1765,10 @@ export function PullRequestDetailView({
               <span className="truncate">Delete {pr.sourceBranch}</span>
             </label>
             <span className="flex-1" />
-            <button onClick={cancelMerge} className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent">
+            <button
+              onClick={cancelMerge}
+              className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent"
+            >
               Cancel
               <Kbd hint>esc</Kbd>
             </button>
@@ -1718,7 +1785,11 @@ export function PullRequestDetailView({
           <span className="whitespace-nowrap">updated {timeAgo(pr.updatedAt)} ago</span>
           <PipelineLink pipeline={pr.pipeline} />
           {pr.pipeline?.status === 'failed' && (
-            <button title="Add the failed jobs' logs to agent comments" onClick={() => onAddPipelineFailure(pr)} className="flex shrink-0 items-center gap-1 rounded px-1 whitespace-nowrap hover:bg-accent hover:text-foreground">
+            <button
+              title="Add the failed jobs' logs to agent comments"
+              onClick={() => onAddPipelineFailure(pr)}
+              className="flex shrink-0 items-center gap-1 rounded px-1 whitespace-nowrap hover:bg-accent hover:text-foreground"
+            >
               <Icon name="plus" className="size-3" />
               agent
             </button>
@@ -1808,7 +1879,12 @@ export function PullRequestDetailView({
           </div>
         )}
         {/* Always open, like GitHub; composing tracks whether it holds focus so page keys and Esc leave it alone */}
-        <div data-new-comment className="[&>div]:m-0" onFocus={() => setComposing(true)} onBlur={(event) => !event.currentTarget.contains(event.relatedTarget) && setComposing(false)}>
+        <div
+          data-new-comment
+          className="[&>div]:m-0"
+          onFocus={() => setComposing(true)}
+          onBlur={(event) => !event.currentTarget.contains(event.relatedTarget) && setComposing(false)}
+        >
           <CommentDraft
             key={pr.url}
             persistent
@@ -1954,8 +2030,12 @@ export function PullRequestDetailView({
           <ActionRow icon="external" label={`Open on ${providerName(pr)}`} keys="o" onClick={openInBrowser} />
           <ActionRow icon="copy" label="Copy link" keys="y" onClick={copyLink} />
           {pr.state === 'open' && <ActionRow icon="user" label="Assign people" keys="⇧A" onClick={openAssign} />}
-          {pr.state === 'open' && own && <ActionRow icon={isDraft ? 'check' : 'pencil'} label={isDraft ? 'Mark ready for review' : 'Convert to draft'} keys="⇧R" onClick={() => setDraftState(!isDraft)} />}
-          {pr.state === 'open' && <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />}
+          {pr.state === 'open' && own && (
+            <ActionRow icon={isDraft ? 'check' : 'pencil'} label={isDraft ? 'Mark ready for review' : 'Convert to draft'} keys="⇧R" onClick={() => setDraftState(!isDraft)} />
+          )}
+          {pr.state === 'open' && (
+            <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />
+          )}
         </div>
       </div>
       {renderComments && (

@@ -40,7 +40,12 @@ export function McpSetup(): React.JSX.Element {
       .then(setMessage, (reason: unknown) => setMessage(errorMessage(reason)))
       .finally(() => setBusy(false))
   }
-  const state = status.length === 0 ? 'Neither Claude Code nor Codex found' : pending.length ? `Not set up in ${describe(pending)}` : `Set up in ${status.map((agent) => agent.agent).join(' and ')}`
+  const state =
+    status.length === 0
+      ? 'Neither Claude Code nor Codex found'
+      : pending.length
+        ? `Not set up in ${describe(pending)}`
+        : `Set up in ${status.map((agent) => agent.agent).join(' and ')}`
   return (
     <div className="flex items-center gap-3">
       <span className="text-xs text-muted-foreground">{message || state}</span>

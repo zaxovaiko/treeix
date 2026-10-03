@@ -11,7 +11,19 @@ const MAX_AGENTS = 3
 const EVENTS_DELAY_MS = 250
 const TITLE_CHARS = 80
 // Options, commands and usage are session state, not part of what the agent did
-const LOGGED = new Set<ChatEvent['type']>(['message_chunk', 'thought_chunk', 'tool_call', 'tool_call_update', 'plan', 'permission', 'permission_settled', 'turn_start', 'turn_end', 'error', 'disconnected'])
+const LOGGED = new Set<ChatEvent['type']>([
+  'message_chunk',
+  'thought_chunk',
+  'tool_call',
+  'tool_call_update',
+  'plan',
+  'permission',
+  'permission_settled',
+  'turn_start',
+  'turn_end',
+  'error',
+  'disconnected'
+])
 
 type Active = {
   run: Run
@@ -72,7 +84,9 @@ export function createEngine(deps: {
   const end = (entry: Active, status: RunStatus, error: Error | null = null): void => {
     if (entry.run.status !== 'running') return
     const now = Date.now()
-    const nodes = Object.fromEntries(Object.entries(entry.run.nodes).map(([id, node]) => [id, node.status === 'running' ? { ...node, status: 'cancelled' as const, endedAt: now, waiting: null } : node]))
+    const nodes = Object.fromEntries(
+      Object.entries(entry.run.nodes).map(([id, node]) => [id, node.status === 'running' ? { ...node, status: 'cancelled' as const, endedAt: now, waiting: null } : node])
+    )
     const outputs = entry.run.workflow.nodes.flatMap((node) => (node.kind === 'output' && nodes[node.id].status === 'done' ? [nodes[node.id].output ?? ''] : []))
     entry.run = { ...entry.run, status, endedAt: now, nodes, output: outputs.length ? outputs.join('\n\n') : null }
     if (error) entry.stop(error)
@@ -91,10 +105,20 @@ export function createEngine(deps: {
     if (!adapter) throw new Error(`Nothing runs ${runtime.adapter} agents; is its plugin on?`)
     const autoApprove = await deps.autoApprove(node.agent)
     entry.log({ node: node.id, at: Date.now(), event: { type: 'message_chunk', role: 'user', content: { type: 'text', text: prompt } } })
-    const connecting = adapter.connect({ command: runtime.command, instructions: runtime.instructions, preset: runtime.preset, cwd: node.folder ?? runtime.cwd, env: entry.delegated ? {} : await deps.sessionEnv(), resume: null })
+    const connecting = adapter.connect({
+      command: runtime.command,
+      instructions: runtime.instructions,
+      preset: runtime.preset,
+      cwd: node.folder ?? runtime.cwd,
+      env: entry.delegated ? {} : await deps.sessionEnv(),
+      resume: null
+    })
     const connection = await Promise.race([connecting, entry.stopped]).catch((error: unknown) => {
       // Stopped while the agent was starting: close it once it's up
-      connecting.then((late) => late.close(), () => undefined)
+      connecting.then(
+        (late) => late.close(),
+        () => undefined
+      )
       throw error
     })
     entry.connections.set(node.id, connection)
@@ -157,7 +181,7 @@ export function createEngine(deps: {
 
   /** Starts every node whose inputs are in, skips what can't run, and ends the run once nothing is left */
   function step(entry: Active): void {
-    for (let progress = true; progress && entry.run.status === 'running'; ) {
+    for (let progress = true; progress && entry.run.status === 'running';) {
       const { ready, skip } = nextSteps(entry.run.workflow, entry.run.nodes)
       progress = ready.length + skip.length > 0
       for (const id of skip) set(entry, id, { status: 'skipped' })
@@ -298,7 +322,9 @@ export function createEngine(deps: {
           track(run, await deps.runs.events(run.id), false)
           continue
         }
-        const nodes = Object.fromEntries(Object.entries(run.nodes).map(([id, node]) => [id, node.status === 'running' ? { ...node, status: 'cancelled' as const, waiting: null } : node]))
+        const nodes = Object.fromEntries(
+          Object.entries(run.nodes).map(([id, node]) => [id, node.status === 'running' ? { ...node, status: 'cancelled' as const, waiting: null } : node])
+        )
         void deps.runs.save({ ...run, status: 'interrupted', nodes })
       }
     },

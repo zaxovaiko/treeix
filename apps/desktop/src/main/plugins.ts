@@ -49,7 +49,13 @@ function activate(pluginId: string, plugin: MainPlugin, userData: string): { dis
     chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null
   }
   plugin.activate?.(context)
-  return { dispose: () => disposers.splice(0).reverse().forEach((dispose) => dispose()) }
+  return {
+    dispose: () =>
+      disposers
+        .splice(0)
+        .reverse()
+        .forEach((dispose) => dispose())
+  }
 }
 
 /** Brings main modules in line with the plugins enabled in the renderer */

@@ -26,10 +26,7 @@ export function setupUpdates(): void {
     if (status.phase === 'ready') autoUpdater.quitAndInstall()
   })
 
-  const unsupported =
-    !app.isPackaged ? 'Updates are for packaged builds; this is a development run'
-    : process.mas ? 'The Mac App Store delivers updates for this build'
-    : null
+  const unsupported = !app.isPackaged ? 'Updates are for packaged builds; this is a development run' : process.mas ? 'The Mac App Store delivers updates for this build' : null
   if (unsupported) {
     publish({ phase: 'unsupported', message: unsupported })
     ipcMain.handle('updates:check', () => status)

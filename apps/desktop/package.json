@@ -1,10 +1,9 @@
 {
   "name": "treeix",
-  "productName": "Treeix",
   "version": "0.5.20",
+  "private": true,
   "description": "Your AI workspace. Everything you use daily, in one app: agents, worktrees, diffs, pull requests and tickets.",
   "author": "zaxovaiko",
-  "private": true,
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -12,6 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "test": "bun test . ../../packages",
     "lint": "cd ../.. && oxlint --deny-warnings apps/desktop packages",
+    "format": "cd ../.. && oxfmt apps packages .oxlintrc.json .oxfmtrc.json",
+    "format:check": "cd ../.. && oxfmt apps packages .oxlintrc.json .oxfmtrc.json --check",
     "e2e": "electron-vite build && playwright test",
     "stress": "bun run build && bun scripts/stress.ts",
     "build": "bun run typecheck && electron-vite build",
@@ -56,6 +57,7 @@
     "mermaid": "12.0.0",
     "micromark-extension-gfm": "3.0.0",
     "monaco-editor": "0.57.0",
+    "oxfmt": "0.71.0",
     "oxlint": "1.86.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -67,5 +69,6 @@
     "tailwindcss": "4.3.3",
     "vite": "7.3.6",
     "zod": "4.6.5"
-  }
+  },
+  "productName": "Treeix"
 }

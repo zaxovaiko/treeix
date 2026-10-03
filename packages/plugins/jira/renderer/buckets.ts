@@ -51,8 +51,7 @@ const statusRank = (item: WorkItem): number => {
 
 /** Updated and created come from the query's ORDER BY, so they keep the order Jira returned */
 export function sortItems(items: WorkItem[], sort: ItemSort): WorkItem[] {
-  const rank = (item: WorkItem): number =>
-    sort === 'status' ? statusRank(item) * 10 + priorityRank(item.priority) : sort === 'priority' ? priorityRank(item.priority) : 0
+  const rank = (item: WorkItem): number => (sort === 'status' ? statusRank(item) * 10 + priorityRank(item.priority) : sort === 'priority' ? priorityRank(item.priority) : 0)
   return items
     .map((item, index) => ({ item, index }))
     .sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index)

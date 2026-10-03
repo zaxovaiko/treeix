@@ -11,7 +11,14 @@ const LIMIT = 30
 const isSentBatch = (value: unknown): value is SentBatch => {
   if (typeof value !== 'object' || value === null) return false
   const batch = value as Partial<SentBatch>
-  return typeof batch.id === 'string' && typeof batch.sentAt === 'string' && typeof batch.worktreePath === 'string' && typeof batch.message === 'string' && Array.isArray(batch.comments) && batch.comments.every(isReviewComment)
+  return (
+    typeof batch.id === 'string' &&
+    typeof batch.sentAt === 'string' &&
+    typeof batch.worktreePath === 'string' &&
+    typeof batch.message === 'string' &&
+    Array.isArray(batch.comments) &&
+    batch.comments.every(isReviewComment)
+  )
 }
 
 export const loadSent = (): SentBatch[] => list(readStored(KEY), isSentBatch)

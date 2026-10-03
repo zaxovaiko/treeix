@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, type Rectangle, screen } from 'electron'
+import { app, type BrowserWindow, globalShortcut, type Rectangle, screen } from 'electron'
 import { carbonModifiers, isShortcut, macKeyCode, toAccelerator } from '../shared/shortcut'
 import type { HotkeyOptions } from '../shared/types'
 import { nativeHotkeys, setDockHidden, setSquareCorners } from './macWindow'
@@ -68,8 +68,7 @@ function restore(window: BrowserWindow): void {
 }
 
 /** Focus went to a window on another display, so the hotkey window is not in its way and stays up */
-const clickedOtherDisplay = (window: BrowserWindow): boolean =>
-  screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id !== screen.getDisplayMatching(window.getBounds()).id
+const clickedOtherDisplay = (window: BrowserWindow): boolean => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id !== screen.getDisplayMatching(window.getBounds()).id
 
 function dismiss(window: BrowserWindow): void {
   // Hiding the app hands focus back to whatever was in front before

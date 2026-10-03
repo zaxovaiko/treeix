@@ -15,34 +15,15 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "types": [
-      "electron-vite/node",
-      "bun",
-      "vite/client"
-    ],
+    "types": ["electron-vite/node", "bun", "vite/client"],
     "paths": {
-      "@treeix/sdk": [
-        "../../packages/sdk/src/index.ts"
-      ],
-      "@treeix/sdk/main": [
-        "../../packages/sdk/src/main.ts"
-      ],
-      "@treeix/shared/*": [
-        "./src/shared/*"
-      ],
-      "@treeix/host/*": [
-        "./src/main/*"
-      ],
-      "@treeix/app/*": [
-        "./src/renderer/src/*"
-      ],
-      "*": [
-        "./node_modules/@types/*",
-        "./node_modules/*"
-      ],
-      "@treeix/atlassian/*": [
-        "../../packages/atlassian/*"
-      ]
+      "@treeix/sdk": ["../../packages/sdk/src/index.ts"],
+      "@treeix/sdk/main": ["../../packages/sdk/src/main.ts"],
+      "@treeix/shared/*": ["./src/shared/*"],
+      "@treeix/host/*": ["./src/main/*"],
+      "@treeix/app/*": ["./src/renderer/src/*"],
+      "*": ["./node_modules/@types/*", "./node_modules/*"],
+      "@treeix/atlassian/*": ["../../packages/atlassian/*"]
     }
   }
 }

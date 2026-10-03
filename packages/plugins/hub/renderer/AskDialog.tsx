@@ -19,7 +19,19 @@ export function useEscape(onClose: () => void): void {
   }, [onClose])
 }
 
-function PromptForm({ title, placeholder, optional = false, onSend, onClose }: { title: string; placeholder: string; optional?: boolean; onSend: (text: string) => void; onClose: () => void }): React.JSX.Element {
+function PromptForm({
+  title,
+  placeholder,
+  optional = false,
+  onSend,
+  onClose
+}: {
+  title: string
+  placeholder: string
+  optional?: boolean
+  onSend: (text: string) => void
+  onClose: () => void
+}): React.JSX.Element {
   const [message, setMessage] = useState('')
   useEscape(onClose)
   const ready = optional || message.trim() !== ''
@@ -78,9 +90,27 @@ export function AskDialog(): React.JSX.Element | null {
     )
 
   const agent = agents.find((candidate) => request.target === `agent:${candidate.id}`)
-  if (agent) return <PromptForm key={request.target} title={`Ask ${agent.name}`} placeholder="A one-off question; the answer is kept under Runs" onSend={(text) => follow(hubApi.ask(agent.id, text))} onClose={close} />
+  if (agent)
+    return (
+      <PromptForm
+        key={request.target}
+        title={`Ask ${agent.name}`}
+        placeholder="A one-off question; the answer is kept under Runs"
+        onSend={(text) => follow(hubApi.ask(agent.id, text))}
+        onClose={close}
+      />
+    )
   const workflow = workflows.find((candidate) => request.target === `workflow:${candidate.id}`)
   if (workflow)
-    return <PromptForm key={request.target} optional title={`Run ${workflow.name}`} placeholder="The input, {{input}} in its steps" onSend={(text) => follow(hubApi.runWorkflow(workflow.id, text))} onClose={close} />
+    return (
+      <PromptForm
+        key={request.target}
+        optional
+        title={`Run ${workflow.name}`}
+        placeholder="The input, {{input}} in its steps"
+        onSend={(text) => follow(hubApi.runWorkflow(workflow.id, text))}
+        onClose={close}
+      />
+    )
   return null
 }

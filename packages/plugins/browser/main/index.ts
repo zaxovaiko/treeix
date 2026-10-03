@@ -13,7 +13,13 @@ import { devServerCommand } from './devServer'
 
 const isImportInfo = (value: unknown): value is ImportInfo =>
   value === null ||
-  (typeof value === 'object' && 'browser' in value && typeof value.browser === 'string' && 'profile' in value && typeof value.profile === 'string' && 'at' in value && typeof value.at === 'number')
+  (typeof value === 'object' &&
+    'browser' in value &&
+    typeof value.browser === 'string' &&
+    'profile' in value &&
+    typeof value.profile === 'string' &&
+    'at' in value &&
+    typeof value.at === 'number')
 
 /** Only pages embedded by the window asking may be reached, so one window can't reach another's pages */
 function ownGuest(event: IpcMainInvokeEvent, guestId: number): WebContents | null {

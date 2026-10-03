@@ -44,10 +44,7 @@ const openPlan = (host: HostApi, plan: Plan): void => {
 function PlanButton({ startedAt, name }: { startedAt: number; name?: string | null }): React.JSX.Element | null {
   const host = useHost()
   const [plan, setPlan] = useState<Plan | null>(null)
-  useEffect(
-    () => subscribePlans((plans) => setPlan(plans.find((candidate) => (name ? candidate.name === name : candidate.modifiedAt >= startedAt)) ?? null)),
-    [startedAt, name]
-  )
+  useEffect(() => subscribePlans((plans) => setPlan(plans.find((candidate) => (name ? candidate.name === name : candidate.modifiedAt >= startedAt)) ?? null)), [startedAt, name])
   if (!plan) return null
   return (
     <button
@@ -63,7 +60,11 @@ function PlanButton({ startedAt, name }: { startedAt: number; name?: string | nu
 
 // ponytail: the palette lists plans from the previous open, refreshed each time; fine while plans change slowly
 let knownPlans: Plan[] = []
-const refreshPlans = (): void => void listPlans().then((plans) => (knownPlans = plans), () => undefined)
+const refreshPlans = (): void =>
+  void listPlans().then(
+    (plans) => (knownPlans = plans),
+    () => undefined
+  )
 
 const plugin: RendererPlugin = {
   Root: () => {

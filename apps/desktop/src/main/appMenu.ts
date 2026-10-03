@@ -19,13 +19,26 @@ const focusedPage = (): WebContents | undefined => {
  */
 export function buildMenu(window: BrowserWindow, actions: MenuAction[]): void {
   const run = (id: string) => (): void => window.webContents.send('run-action', id)
-  const settings: MenuItemConstructorOptions[] = [
-    { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => window.webContents.send('open-settings') },
-    { type: 'separator' }
-  ]
+  const settings: MenuItemConstructorOptions[] = [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => window.webContents.send('open-settings') }, { type: 'separator' }]
   // macOS expects Settings in the app menu next to About and Quit; everywhere else it belongs in File
   const appMenu: MenuItemConstructorOptions[] = isMac
-    ? [{ role: 'appMenu', submenu: [{ role: 'about' }, { type: 'separator' }, ...settings, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
+    ? [
+        {
+          role: 'appMenu',
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            ...settings,
+            { role: 'services' },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' }
+          ]
+        }
+      ]
     : [{ label: 'File', submenu: [...settings, { role: 'quit' }] }]
 
   const fromActions = MENU_SECTIONS.flatMap(([section, label]): MenuItemConstructorOptions[] => {
@@ -57,7 +70,7 @@ export function buildMenu(window: BrowserWindow, actions: MenuAction[]): void {
     { type: 'separator' },
     { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => (focusedPage() ?? window.webContents).reload() },
     { label: 'Force Reload', accelerator: 'Shift+CmdOrCtrl+R', click: () => (focusedPage() ?? window.webContents).reloadIgnoringCache() },
-    { label: 'Toggle Developer Tools', accelerator: 'Alt+CmdOrCtrl+I', click: () => (focusedPage() ?? window.webContents).toggleDevTools() },
+    { label: 'Toggle Developer Tools', accelerator: 'Alt+CmdOrCtrl+I', click: () => (focusedPage() ?? window.webContents).toggleDevTools() }
   ]
   // The panels menu is the app's own View, so the stock view commands join it rather than starting a second one
   const withExtras = fromActions.map((menu) => (menu.label === 'View' ? { ...menu, submenu: [...(menu.submenu as MenuItemConstructorOptions[]), ...viewExtras] } : menu))

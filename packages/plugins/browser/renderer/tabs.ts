@@ -28,7 +28,20 @@ export type BrowserState = { tabs: BrowserTab[]; activeId: string | null; /** Ne
 
 const CLOSED_LIMIT = 20
 
-const newTab = (url: string, id: string): BrowserTab => ({ id, url, title: '', favicon: null, loading: false, canGoBack: false, canGoForward: false, guestId: null, crashed: false, status: null, error: null, committed: false })
+const newTab = (url: string, id: string): BrowserTab => ({
+  id,
+  url,
+  title: '',
+  favicon: null,
+  loading: false,
+  canGoBack: false,
+  canGoForward: false,
+  guestId: null,
+  crashed: false,
+  status: null,
+  error: null,
+  committed: false
+})
 
 export function openTab(state: BrowserState, url: string, id: string = crypto.randomUUID()): BrowserState {
   const at = state.tabs.findIndex((tab) => tab.id === state.activeId)
@@ -42,7 +55,7 @@ export function closeTab(state: BrowserState, id: string): BrowserState {
   const at = state.tabs.findIndex((tab) => tab.id === id)
   if (at === -1) return state
   const tabs = state.tabs.filter((tab) => tab.id !== id)
-  const activeId = state.activeId === id ? (tabs[at] ?? tabs[at - 1])?.id ?? null : state.activeId
+  const activeId = state.activeId === id ? ((tabs[at] ?? tabs[at - 1])?.id ?? null) : state.activeId
   return { ...state, tabs, activeId, closed: [state.tabs[at].url, ...state.closed].slice(0, CLOSED_LIMIT) }
 }
 

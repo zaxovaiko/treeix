@@ -118,8 +118,18 @@ function baseState(): Record<string, unknown> {
       terminalFontSize: 12,
       plugins: { 'usage-limits': false, jira: true, confluence: true }
     },
-    'shell.panels': { rail: true, title: true, status: true, pages: { worktrees: { list: true, inspector: true, listWidth: 300, inspectorWidth: 280 }, terminal: { list: true, inspector: true, listWidth: 320, inspectorWidth: 280 } } },
-    layout: { docks: { left: [], right: [], bottom: ['terminal'] }, active: { left: null, right: null, bottom: null }, hidden: ['terminal'], sizes: { left: 320, right: 380, bottom: 320 } },
+    'shell.panels': {
+      rail: true,
+      title: true,
+      status: true,
+      pages: { worktrees: { list: true, inspector: true, listWidth: 300, inspectorWidth: 280 }, terminal: { list: true, inspector: true, listWidth: 320, inspectorWidth: 280 } }
+    },
+    layout: {
+      docks: { left: [], right: [], bottom: ['terminal'] },
+      active: { left: null, right: null, bottom: null },
+      hidden: ['terminal'],
+      sizes: { left: 320, right: 380, bottom: 320 }
+    },
     'app.place@all': { appTab: 'worktrees', selected: invoices, viewer: null },
     comments: [
       {
@@ -130,7 +140,7 @@ function baseState(): Record<string, unknown> {
         code: '',
         text: 'Stripe paginates past 100 invoices. Use auto-pagination here so a busy account still lists everything.'
       }
-    ],
+    ]
   }
 }
 
@@ -161,7 +171,14 @@ function terminalState(): Record<string, unknown> {
   }
 }
 
-const comment = (id: string, filePath: string, start: number, end: number, code: string, text: string): Json => ({ id, worktreePath: invoices, filePath, range: { start, end, side: 'additions' }, code, text })
+const comment = (id: string, filePath: string, start: number, end: number, code: string, text: string): Json => ({
+  id,
+  worktreePath: invoices,
+  filePath,
+  range: { start, end, side: 'additions' },
+  code,
+  text
+})
 
 /** What --uniform lays over every scene: the terminal sessions, three queued comments and the usage limits pill */
 function uniformState(state: Record<string, unknown>): Record<string, unknown> {
@@ -174,7 +191,14 @@ function uniformState(state: Record<string, unknown>): Record<string, unknown> {
     comments: [
       ...(baseState().comments as Json[]),
       comment('c-2', 'src/billing/portal.ts', 30, 36, '+function toInvoice(invoice: Stripe.Invoice): Invoice {', 'Write a unit test for toInvoice, an unpaid invoice included.'),
-      comment('c-3', 'src/billing/invoices.test.ts', 9, 12, "+test('converts cents and keeps unpaid invoices', async () => {", 'Add a refunded invoice, Stripe sends a negative total for it.')
+      comment(
+        'c-3',
+        'src/billing/invoices.test.ts',
+        9,
+        12,
+        "+test('converts cents and keeps unpaid invoices', async () => {",
+        'Add a refunded invoice, Stripe sends a negative total for it.'
+      )
     ]
   }
 }
@@ -212,7 +236,10 @@ const TRAFFIC_LIGHTS = `() => {
 }`
 
 async function main(): Promise<void> {
-  const busy = await fetch(`${endpoint}/json/version`).then(() => true, () => false)
+  const busy = await fetch(`${endpoint}/json/version`).then(
+    () => true,
+    () => false
+  )
   if (busy) throw new Error(`something already listens on ${endpoint}, quit it first`)
   await mkdir(outDir, { recursive: true })
 
@@ -223,7 +250,8 @@ async function main(): Promise<void> {
     await writeEnvFixtures(repo, invoices)
     await ignoreEnvFixtures(repo)
   }
-  const devServer = only.length && !only.includes('browser') ? null : Bun.serve({ port: 3000, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
+  const devServer =
+    only.length && !only.includes('browser') ? null : Bun.serve({ port: 3000, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
   const child = Bun.spawn([await electronBinary(), appDir, `--remote-debugging-port=${port}`], {
     cwd: appDir,
     env: { ...process.env, HOME: home, PATH: `${home}/bin:${process.env.PATH ?? ''}` },
@@ -308,7 +336,9 @@ async function main(): Promise<void> {
     /** Drags down the new-side line numbers, as a mouse would, to open a comment on the range */
     const dragLines = async (from: number, to: number): Promise<void> => {
       const centre = async (line: number): Promise<[number, number]> =>
-        (await evaluate(`(() => { const cell = [...((${DEEP})('[data-column-number="${line}"]')?.getRootNode()?.querySelectorAll('[data-column-number="${line}"]') ?? [])].at(-1); const box = cell?.getBoundingClientRect(); return box ? [box.x + box.width / 2, box.y + box.height / 2] : [0, 0] })()`)) as [number, number]
+        (await evaluate(
+          `(() => { const cell = [...((${DEEP})('[data-column-number="${line}"]')?.getRootNode()?.querySelectorAll('[data-column-number="${line}"]') ?? [])].at(-1); const box = cell?.getBoundingClientRect(); return box ? [box.x + box.width / 2, box.y + box.height / 2] : [0, 0] })()`
+        )) as [number, number]
       const [x1, y1] = await centre(from)
       const [x2, y2] = await centre(to)
       await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x1, y: y1 })
@@ -416,7 +446,11 @@ async function main(): Promise<void> {
         name: 'limits',
         run: async () => {
           await writeLimitFixtures(home)
-          await seed({ ...page('terminal'), settings: { ...object(baseState().settings), plugins: { ...object(object(baseState().settings).plugins), 'usage-limits': true } }, 'plugin.usage-limits.settings': { usageLabel: 'reset' } })
+          await seed({
+            ...page('terminal'),
+            settings: { ...object(baseState().settings), plugins: { ...object(object(baseState().settings).plugins), 'usage-limits': true } },
+            'plugin.usage-limits.settings': { usageLabel: 'reset' }
+          })
           await until(`!!document.body.textContent?.includes('wk')`)
           await settle(2500)
         }

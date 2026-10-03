@@ -78,7 +78,10 @@ const ISSUE_KEY = /^[A-Z][A-Z0-9_]*-\d+$/i
 export function textClause(text: string): string | null {
   const trimmed = text.trim()
   // Lucene syntax characters would turn words into operators, and quotes would end the JQL string
-  const words = trimmed.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, ' ').replace(/\s+/g, ' ').trim()
+  const words = trimmed
+    .replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (ISSUE_KEY.test(trimmed)) return `(key = ${trimmed.toUpperCase()} OR text ~ "${words}")`
   return words ? `text ~ "${words}*"` : null
 }
@@ -87,6 +90,8 @@ export const jiraSettings = definePluginSettings('jira', (stored) => ({
   jql: typeof stored.jql === 'string' && stored.jql.trim() ? withoutAssignee(stored.jql) : DEFAULT_JQL,
   /** Statuses moved to another bucket by hand, by status name */
   statusBuckets: Object.fromEntries(
-    Object.entries(typeof stored.statusBuckets === 'object' && stored.statusBuckets !== null ? stored.statusBuckets : {}).filter((entry): entry is [string, Bucket] => isBucket(entry[1]))
+    Object.entries(typeof stored.statusBuckets === 'object' && stored.statusBuckets !== null ? stored.statusBuckets : {}).filter((entry): entry is [string, Bucket] =>
+      isBucket(entry[1])
+    )
   )
 }))

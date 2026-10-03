@@ -16,7 +16,8 @@ const DETECT_TIMEOUT_MS = 60_000
 const MINUTE_MS = 60_000
 const NOTICE_CHARS = 300
 
-const isAgentRuntime = (value: unknown): value is AgentRuntime => isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
+const isAgentRuntime = (value: unknown): value is AgentRuntime =>
+  isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
 
 const argument = (args: Record<string, unknown>, name: string): string => {
   const value = args[name]
@@ -24,7 +25,8 @@ const argument = (args: Record<string, unknown>, name: string): string => {
   return value
 }
 
-const upsert = <T extends { id: string }>(items: T[], item: T): T[] => (items.some((entry) => entry.id === item.id) ? items.map((entry) => (entry.id === item.id ? item : entry)) : [...items, item])
+const upsert = <T extends { id: string }>(items: T[], item: T): T[] =>
+  items.some((entry) => entry.id === item.id) ? items.map((entry) => (entry.id === item.id ? item : entry)) : [...items, item]
 
 let keys: ReturnType<typeof createKeys> | null = null
 
@@ -105,7 +107,10 @@ const plugin: MainPlugin = {
     context.handle('runWorkflow', async (_, id: string, input: string) => {
       const workflow = (await workflows.get()).find((entry) => entry.id === id)
       if (!workflow) throw new Error('The workflow is gone')
-      const problem = validate(workflow, (await agents.get()).map((agent) => agent.id))[0]
+      const problem = validate(
+        workflow,
+        (await agents.get()).map((agent) => agent.id)
+      )[0]
       if (problem) throw new Error(problem.message)
       return engine.launch('workflow', workflow.name, workflow, input).id
     })
@@ -115,7 +120,10 @@ const plugin: MainPlugin = {
     const notify = (agent: HubAgent, run: Run): void => {
       if (!Notification.isSupported()) return
       const failed = run.status !== 'done'
-      const notice = new Notification({ title: failed ? `${agent.name}'s scheduled run ${run.status}` : agent.name, body: ((failed ? run.nodes.agent?.error : run.output) ?? '').slice(0, NOTICE_CHARS) })
+      const notice = new Notification({
+        title: failed ? `${agent.name}'s scheduled run ${run.status}` : agent.name,
+        body: ((failed ? run.nodes.agent?.error : run.output) ?? '').slice(0, NOTICE_CHARS)
+      })
       notices.add(notice)
       notice.on('click', () => (notices.delete(notice), context.broadcast('openRun', run.id)))
       notice.on('close', () => notices.delete(notice))
@@ -134,10 +142,13 @@ const plugin: MainPlugin = {
     let timer: ReturnType<typeof setTimeout> | undefined
     // Re-aimed at each minute's start, so the clock never drifts past one
     const tick = (): void => {
-      timer = setTimeout(() => {
-        void fireSchedules(new Date())
-        tick()
-      }, MINUTE_MS - (Date.now() % MINUTE_MS))
+      timer = setTimeout(
+        () => {
+          void fireSchedules(new Date())
+          tick()
+        },
+        MINUTE_MS - (Date.now() % MINUTE_MS)
+      )
     }
     tick()
     context.onDispose(() => clearTimeout(timer))
@@ -151,7 +162,9 @@ const plugin: MainPlugin = {
       name: 'hub_agents',
       description: "Lists the user's AI Hub agents, which hub_ask can ask: each one's name and instructions.",
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      run: async () => (await agents.get()).map((agent) => `${agent.name}: ${agent.instructions.trim() || '(no instructions)'}`).join('\n\n') || 'No agents yet; the user creates them in the AI Hub tab'
+      run: async () =>
+        (await agents.get()).map((agent) => `${agent.name}: ${agent.instructions.trim() || '(no instructions)'}`).join('\n\n') ||
+        'No agents yet; the user creates them in the AI Hub tab'
     })
     context.mcpTool({
       name: 'hub_ask',
@@ -162,7 +175,7 @@ const plugin: MainPlugin = {
         properties: {
           agent: { type: 'string', description: 'The agent name' },
           message: { type: 'string' },
-          folder: { type: 'string', description: "Absolute path the agent works in; its own folder by default" }
+          folder: { type: 'string', description: 'Absolute path the agent works in; its own folder by default' }
         },
         required: ['agent', 'message'],
         additionalProperties: false

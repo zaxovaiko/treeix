@@ -47,7 +47,12 @@ export function TaskList({
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Groups</span>
         {waiting > 0 && <span className="shrink-0 rounded-full bg-amber-400/15 px-1.5 text-[10.5px] text-amber-400">{waiting} waiting</span>}
         <span className="flex-1" />
-        <button title="New group (⌘⇧T)" aria-label="New group" onClick={onNew} className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          title="New group (⌘⇧T)"
+          aria-label="New group"
+          onClick={onNew}
+          className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           <Icon name="plus" className="size-3.5" />
         </button>
       </div>
@@ -83,7 +88,12 @@ export function TaskList({
               <div className="flex h-5 min-w-0 items-center gap-2">
                 <ActivityMark activity={status} />
                 {renamingId === task.id ? (
-                  <NameInput value={taskLabel(task, repos)} label="Group name" onSave={(name) => name !== task.name && renameTask(task.id, name)} onDone={(input) => input.closest<HTMLElement>('[data-task-list]')?.focus()} />
+                  <NameInput
+                    value={taskLabel(task, repos)}
+                    label="Group name"
+                    onSave={(name) => name !== task.name && renameTask(task.id, name)}
+                    onDone={(input) => input.closest<HTMLElement>('[data-task-list]')?.focus()}
+                  />
                 ) : (
                   <>
                     <span className={`min-w-0 truncate text-xs ${selected ? 'font-medium text-foreground' : 'text-foreground/80'}`}>{taskLabel(task, repos)}</span>
@@ -151,14 +161,20 @@ export function TaskList({
       {history.length > 0 && (
         <div className="flex max-h-[40%] min-h-0 shrink-0 flex-col border-t border-border">
           <div className="group/history flex h-8 shrink-0 items-center pr-1.5">
-            <button onClick={() => setHistoryOpen(!historyOpen)} className="flex h-8 min-w-0 flex-1 items-center gap-1.5 px-3 text-left text-[11px] font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground">
+            <button
+              onClick={() => setHistoryOpen(!historyOpen)}
+              className="flex h-8 min-w-0 flex-1 items-center gap-1.5 px-3 text-left text-[11px] font-medium tracking-wide text-muted-foreground uppercase hover:text-foreground"
+            >
               <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
               History
               <span className="font-normal normal-case tabular-nums">{history.length}</span>
             </button>
             <button
               title="Clear history"
-              onClick={() => window.confirm(`Remove ${history.length} closed ${history.length === 1 ? 'session' : 'sessions'} from history?`) && clearClosedSessions(history.map((entry) => entry.id))}
+              onClick={() =>
+                window.confirm(`Remove ${history.length} closed ${history.length === 1 ? 'session' : 'sessions'} from history?`) &&
+                clearClosedSessions(history.map((entry) => entry.id))
+              }
               className="h-6 shrink-0 rounded px-1.5 text-[10.5px] text-muted-foreground opacity-0 group-hover/history:opacity-100 hover:text-red-400 focus-visible:opacity-100"
             >
               Clear

@@ -5,7 +5,25 @@ import { Icon, ICON_NAMES, type IconName } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
 import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
-import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, hotkeyOptions, SYSTEM_FONTS, TERMINAL_CONTRASTS, TERMINAL_FONT_WEIGHTS, type TerminalFontWeight as TerminalFontWeightChoice, updateSettings, useSettings } from './settings'
+import {
+  BORDER_STRENGTHS,
+  clampOpacity,
+  DIGIT_MODIFIERS,
+  type DigitModifier,
+  type DigitTarget,
+  FONT_SIZE_RANGE,
+  fontStack,
+  getSettings,
+  MIN_OPACITY,
+  type Settings,
+  hotkeyOptions,
+  SYSTEM_FONTS,
+  TERMINAL_CONTRASTS,
+  TERMINAL_FONT_WEIGHTS,
+  type TerminalFontWeight as TerminalFontWeightChoice,
+  updateSettings,
+  useSettings
+} from './settings'
 import { type Agent, useAgents } from './agents'
 import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile, removeCustomTheme, type Theme } from './themes'
 import { EmptyState, Popup, useMenuKeys } from './ui'
@@ -17,8 +35,6 @@ import { copyText } from './contextMenu'
 import { McpSetup } from './mcpInstall'
 import { useKeyExtras, useShortcuts } from './Shell'
 import { checkForUpdates, updateSummary, useUpdates } from './updates'
-
-
 
 /** Click or ⏎, then press the combination; Esc cancels. Bare keys like § or F12 are allowed. */
 function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChange: (shortcut: Shortcut | null) => void }): React.JSX.Element {
@@ -65,7 +81,11 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
         {recording ? 'Press keys, esc cancels' : value ? shortcutLabel(value) : 'Record shortcut'}
       </button>
       {value && !recording && (
-        <button title="Turn off" onClick={() => onChange(null)} className="grid size-8 place-items-center rounded-lg text-muted-foreground ring-1 ring-border hover:text-foreground">
+        <button
+          title="Turn off"
+          onClick={() => onChange(null)}
+          className="grid size-8 place-items-center rounded-lg text-muted-foreground ring-1 ring-border hover:text-foreground"
+        >
           <Icon name="close" className="size-3.5" />
         </button>
       )}
@@ -92,14 +112,29 @@ function FontSize({ value, fallback, label, onChange }: { value: number; fallbac
   const step = (delta: number): void => onChange(Math.min(FONT_SIZE_RANGE.max, Math.max(FONT_SIZE_RANGE.min, value + delta)))
   return (
     <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
-      <button onClick={() => step(-1)} disabled={value <= FONT_SIZE_RANGE.min} aria-label={`Smaller ${label}`} className="h-6 w-7 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40">
+      <button
+        onClick={() => step(-1)}
+        disabled={value <= FONT_SIZE_RANGE.min}
+        aria-label={`Smaller ${label}`}
+        className="h-6 w-7 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+      >
         −
       </button>
       <span className="w-12 text-center text-xs tabular-nums">{value}px</span>
-      <button onClick={() => step(1)} disabled={value >= FONT_SIZE_RANGE.max} aria-label={`Larger ${label}`} className="h-6 w-7 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40">
+      <button
+        onClick={() => step(1)}
+        disabled={value >= FONT_SIZE_RANGE.max}
+        aria-label={`Larger ${label}`}
+        className="h-6 w-7 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+      >
         +
       </button>
-      <button onClick={() => onChange(fallback)} disabled={value === fallback} title="Reset" className="grid h-6 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-0">
+      <button
+        onClick={() => onChange(fallback)}
+        disabled={value === fallback}
+        title="Reset"
+        className="grid h-6 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-0"
+      >
         <Icon name="refresh" className="size-3" />
       </button>
     </div>
@@ -196,7 +231,12 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
         className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
       />
       {value && (
-        <button onMouseDown={(event) => event.preventDefault()} onClick={() => commit('')} title="Use default" className="absolute top-2 right-2 text-muted-foreground hover:text-foreground">
+        <button
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => commit('')}
+          title="Use default"
+          className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+        >
           <Icon name="close" className="size-3.5" />
         </button>
       )}
@@ -250,7 +290,10 @@ function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorL
   }
 }
 
-function toggle(key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'codexSkipPermissions' | 'agentNotifications', label: string): ComponentType {
+function toggle(
+  key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'codexSkipPermissions' | 'agentNotifications',
+  label: string
+): ComponentType {
   return function SettingSwitch() {
     const value = useSettings()[key]
     return <Switch checked={value} label={label} onChange={() => updateSettings({ [key]: !value })} />
@@ -282,7 +325,9 @@ function Transparency(): React.JSX.Element {
         value={opacity}
         aria-label="Window opacity"
         onChange={(event) => updateSettings({ opacity: clampOpacity(Number(event.target.value)) })}
-        style={{ background: `linear-gradient(to right, var(--color-primary) ${((opacity - MIN_OPACITY) / (100 - MIN_OPACITY)) * 100}%, color-mix(in srgb, var(--color-foreground) 12%, transparent) 0)` }}
+        style={{
+          background: `linear-gradient(to right, var(--color-primary) ${((opacity - MIN_OPACITY) / (100 - MIN_OPACITY)) * 100}%, color-mix(in srgb, var(--color-foreground) 12%, transparent) 0)`
+        }}
         className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
       />
       <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">{100 - opacity}%</span>
@@ -301,7 +346,10 @@ function UpdateControl(): React.JSX.Element {
   }
   if (status.phase === 'ready') {
     return (
-      <button onClick={() => window.api.updates.install()} className="h-7 shrink-0 rounded-md bg-foreground/10 px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent">
+      <button
+        onClick={() => window.api.updates.install()}
+        className="h-7 shrink-0 rounded-md bg-foreground/10 px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent"
+      >
         Restart and install {status.version}
       </button>
     )
@@ -328,7 +376,8 @@ const SETTINGS: SettingSpec[] = [
     section: 'General',
     card: 'Updates',
     label: 'Version',
-    description: 'Treeix checks GitHub for a new build on launch, every 30 minutes and when you come back to the app, downloads it in the background, and installs it when you restart.',
+    description:
+      'Treeix checks GitHub for a new build on launch, every 30 minutes and when you come back to the app, downloads it in the background, and installs it when you restart.',
     Control: function Updates() {
       const status = useUpdates()
       return (
@@ -469,7 +518,13 @@ const SETTINGS: SettingSpec[] = [
       ['off', 'Off']
     ])
   },
-  { section: 'Editor', card: 'Editor', label: 'Word wrap', description: 'Long lines wrap at the editor width instead of scrolling sideways.', Control: toggle('editorWordWrap', 'Word wrap') },
+  {
+    section: 'Editor',
+    card: 'Editor',
+    label: 'Word wrap',
+    description: 'Long lines wrap at the editor width instead of scrolling sideways.',
+    Control: toggle('editorWordWrap', 'Word wrap')
+  },
   {
     section: 'Terminal',
     card: 'Font',
@@ -485,7 +540,13 @@ const SETTINGS: SettingSpec[] = [
     Control: function TerminalFontWeight() {
       const { terminalFontWeight } = useSettings()
       const labels: Record<TerminalFontWeightChoice, string> = { auto: 'Auto', '300': 'Light', '400': 'Regular', '500': 'Medium', '600': 'Semibold' }
-      return <Segmented value={terminalFontWeight} options={TERMINAL_FONT_WEIGHTS.map((weight) => [weight, labels[weight]])} onChange={(next) => updateSettings({ terminalFontWeight: next })} />
+      return (
+        <Segmented
+          value={terminalFontWeight}
+          options={TERMINAL_FONT_WEIGHTS.map((weight) => [weight, labels[weight]])}
+          onChange={(next) => updateSettings({ terminalFontWeight: next })}
+        />
+      )
     }
   },
   {
@@ -515,7 +576,8 @@ const SETTINGS: SettingSpec[] = [
     section: 'Codex',
     card: 'Sessions',
     label: 'Skip Codex approvals and sandbox',
-    description: 'Starts Codex terminal sessions with --dangerously-bypass-approvals-and-sandbox, so it runs every command without asking or sandboxing. Applies to sessions started after the change.',
+    description:
+      'Starts Codex terminal sessions with --dangerously-bypass-approvals-and-sandbox, so it runs every command without asking or sandboxing. Applies to sessions started after the change.',
     Control: toggle('codexSkipPermissions', 'Skip Codex approvals and sandbox')
   },
   {
@@ -565,7 +627,13 @@ const SETTINGS: SettingSpec[] = [
     Control: function Scrollback() {
       const { terminalScrollback } = useSettings()
       const lines = ['1000', '3000', '5000', '10000', '20000'] as const
-      return <Segmented value={`${terminalScrollback}`} options={lines.map((count) => [count, Number(count).toLocaleString('en-US')])} onChange={(count) => updateSettings({ terminalScrollback: Number(count) })} />
+      return (
+        <Segmented
+          value={`${terminalScrollback}`}
+          options={lines.map((count) => [count, Number(count).toLocaleString('en-US')])}
+          onChange={(count) => updateSettings({ terminalScrollback: Number(count) })}
+        />
+      )
     }
   },
   {
@@ -579,41 +647,37 @@ const SETTINGS: SettingSpec[] = [
       return <Segmented value={`${highlightWorkers}`} options={counts.map((count) => [count, count])} onChange={(count) => updateSettings({ highlightWorkers: Number(count) })} />
     }
   },
-  ...DIGIT_TARGETS.map(
-    ({ target, label, description }): SettingSpec => ({
-      section: 'Terminal',
-      card: 'Number shortcuts',
-      label,
-      description,
-      note: ({ digitShortcuts }) => {
-        const modifier = digitShortcuts[target]
-        const clash = modifier !== 'off' && DIGIT_TARGETS.some((other) => other.target !== target && digitShortcuts[other.target] === modifier)
-        return clash ? ' Same modifier as another row, so only one of them works.' : ''
-      },
-      Control: function DigitModifierControl() {
-        const { digitShortcuts } = useSettings()
-        return (
-          <Segmented
-            value={digitShortcuts[target]}
-            options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, name])}
-            onChange={(next) => updateSettings({ digitShortcuts: { ...getSettings().digitShortcuts, [target]: next } })}
-          />
-        )
-      }
-    })
-  ),
-  ...NAVIGATION_ACTIONS.map(
-    ({ kind, label, description }): SettingSpec => ({
-      section: 'Keyboard',
-      card: 'Code navigation',
-      label,
-      description,
-      Control: function NavigationKey() {
-        const { navigationKeys } = useSettings()
-        return <ShortcutRecorder value={navigationKeys[kind]} onChange={(next) => updateSettings({ navigationKeys: { ...getSettings().navigationKeys, [kind]: next } })} />
-      }
-    })
-  )
+  ...DIGIT_TARGETS.map(({ target, label, description }): SettingSpec => ({
+    section: 'Terminal',
+    card: 'Number shortcuts',
+    label,
+    description,
+    note: ({ digitShortcuts }) => {
+      const modifier = digitShortcuts[target]
+      const clash = modifier !== 'off' && DIGIT_TARGETS.some((other) => other.target !== target && digitShortcuts[other.target] === modifier)
+      return clash ? ' Same modifier as another row, so only one of them works.' : ''
+    },
+    Control: function DigitModifierControl() {
+      const { digitShortcuts } = useSettings()
+      return (
+        <Segmented
+          value={digitShortcuts[target]}
+          options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, name])}
+          onChange={(next) => updateSettings({ digitShortcuts: { ...getSettings().digitShortcuts, [target]: next } })}
+        />
+      )
+    }
+  })),
+  ...NAVIGATION_ACTIONS.map(({ kind, label, description }): SettingSpec => ({
+    section: 'Keyboard',
+    card: 'Code navigation',
+    label,
+    description,
+    Control: function NavigationKey() {
+      const { navigationKeys } = useSettings()
+      return <ShortcutRecorder value={navigationKeys[kind]} onChange={(next) => updateSettings({ navigationKeys: { ...getSettings().navigationKeys, [kind]: next } })} />
+    }
+  }))
 ]
 
 function SettingRow({ spec: { label, description, note, Control } }: { spec: SettingSpec }): React.JSX.Element {
@@ -841,12 +905,17 @@ function TabIcons(): React.JSX.Element {
   const { titleBarTabs } = useSettings()
   const { loaded } = usePlugins()
   const pages = [WORKTREES_TAB, ...loaded.flatMap(({ plugin }) => plugin.tabs ?? [])].sort((a, b) => a.order - b.order)
-  const order = arrangeBar(pages.map((page) => page.id), titleBarTabs)
+  const order = arrangeBar(
+    pages.map((page) => page.id),
+    titleBarTabs
+  )
   return (
     <Card title="Tab icons">
-      {pages.toSorted((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map((tab) => (
-        <TabIconRow key={tab.id} tab={tab} />
-      ))}
+      {pages
+        .toSorted((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+        .map((tab) => (
+          <TabIconRow key={tab.id} tab={tab} />
+        ))}
     </Card>
   )
 }
@@ -891,7 +960,11 @@ function ActionRow({ action }: { action: ActionDef }): React.JSX.Element | null 
       </span>
       <ShortcutRecorder value={current} onChange={rebind} />
       {isRebound(action.id) && (
-        <button onClick={reset} title="Back to the key it ships with" className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button
+          onClick={reset}
+          title="Back to the key it ships with"
+          className="shrink-0 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
           Reset
         </button>
       )}
@@ -911,16 +984,20 @@ function Shortcuts(): React.JSX.Element {
     <>
       {sections.map((section) => (
         <Card key={section} title={`${section} shortcuts`}>
-          {actions.filter((action) => action.section === section).map((action) => (
-            <ActionRow key={action.id} action={action} />
-          ))}
+          {actions
+            .filter((action) => action.section === section)
+            .map((action) => (
+              <ActionRow key={action.id} action={action} />
+            ))}
         </Card>
       ))}
       {extraSections.map((section) => (
         <Card key={`fixed:${section}`} title={`${section}: fixed keys`}>
-          {extras.filter((shortcut) => shortcut.section === section).map(({ keys, label }) => (
-            <ShortcutRow key={`${keys}:${label}`} keys={keys} action={label} />
-          ))}
+          {extras
+            .filter((shortcut) => shortcut.section === section)
+            .map(({ keys, label }) => (
+              <ShortcutRow key={`${keys}:${label}`} keys={keys} action={label} />
+            ))}
         </Card>
       ))}
     </>
@@ -1036,7 +1113,11 @@ function Tools(): React.JSX.Element {
   return (
     <Card title="Command line tools">
       <Row label="Check again" description="Looks for the tools in your login shell again, after installing one or signing in.">
-        <button disabled={checking} onClick={() => void check()} className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground disabled:opacity-70">
+        <button
+          disabled={checking}
+          onClick={() => void check()}
+          className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground disabled:opacity-70"
+        >
           {checking ? 'Checking…' : 'Check'}
         </button>
       </Row>
@@ -1122,8 +1203,7 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
   const write = (next: Agent[]): void => updateSettings({ customAgents: next })
   const edit = (key: AgentField, value: string): void =>
     write(custom.map((entry) => (entry.id === agent.id ? { ...entry, [key]: key === 'command' && !value ? null : value } : entry)))
-  const editChat = (command: string): void =>
-    write(custom.map((entry) => (entry.id === agent.id ? { ...entry, chat: command ? { adapter: 'acp', command } : undefined } : entry)))
+  const editChat = (command: string): void => write(custom.map((entry) => (entry.id === agent.id ? { ...entry, chat: command ? { adapter: 'acp', command } : undefined } : entry)))
   return (
     <SearchGroup title={`${agent.label} ${agent.command ?? ''}`} className="border-b border-border last:border-b-0">
       <Row label={agent.label} description={agent.command ?? 'Runs your login shell'}>
@@ -1132,7 +1212,10 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
             Override
           </button>
         ) : builtin ? null : (
-          <button onClick={() => write(custom.filter((entry) => entry.id !== agent.id))} className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-red-400">
+          <button
+            onClick={() => write(custom.filter((entry) => entry.id !== agent.id))}
+            className="h-6 rounded-md px-2 text-[11px] text-muted-foreground ring-1 ring-border hover:text-red-400"
+          >
             Remove
           </button>
         )}
@@ -1387,7 +1470,11 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
                 }}
                 className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
               />
-              {!query && <kbd data-key-hint="" className="kbd">/</kbd>}
+              {!query && (
+                <kbd data-key-hint="" className="kbd">
+                  /
+                </kbd>
+              )}
             </label>
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -1443,7 +1530,9 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
                   )}
                 </SettingsSearch>
               </div>
-              <p className={`hidden py-12 text-center text-[13px] break-words text-muted-foreground ${needle ? 'peer-[:not(:has([data-setting]))]:block' : ''}`}>No settings match “{needle}”</p>
+              <p className={`hidden py-12 text-center text-[13px] break-words text-muted-foreground ${needle ? 'peer-[:not(:has([data-setting]))]:block' : ''}`}>
+                No settings match “{needle}”
+              </p>
             </div>
           </div>
         </>

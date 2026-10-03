@@ -46,9 +46,10 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
   const open = (resume: string | null): void => {
     if (!chat || !persona?.chat) return
     // The chat shows a failed start itself
-    chat
-      .start(chatId, { agent: persona.id, ...persona.chat, cwd: agent.folder ?? host.defaultCwd, resume })
-      .then((sessionId) => setConversation(agent.id, sessionId), () => undefined)
+    chat.start(chatId, { agent: persona.id, ...persona.chat, cwd: agent.folder ?? host.defaultCwd, resume }).then(
+      (sessionId) => setConversation(agent.id, sessionId),
+      () => undefined
+    )
   }
   const ready = persona !== undefined
   useEffect(() => {

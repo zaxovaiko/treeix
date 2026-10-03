@@ -20,7 +20,11 @@ function loginShell(args: string[]): Promise<{ stdout: string; stderr: string }>
 
 type Tool = ToolDefinition
 
-const semver = (text: string): number[] | null => text.match(/(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number) ?? null
+const semver = (text: string): number[] | null =>
+  text
+    .match(/(\d+)\.(\d+)\.(\d+)/)
+    ?.slice(1)
+    .map(Number) ?? null
 
 /** The latest version when it's newer than the installed one */
 export function newerVersion(installed: string, latest: string): string | null {
@@ -54,8 +58,9 @@ async function inLoginShell(command: string): Promise<{ output: string; failed: 
   }
 }
 
-export const signedInAccounts = (output: string): string[] =>
-  [...new Set([...output.matchAll(/Logged in to (\S+)(?: account| as)? (\S+)/g)].map(([, host, account]) => `${account} @ ${host}`))]
+export const signedInAccounts = (output: string): string[] => [
+  ...new Set([...output.matchAll(/Logged in to (\S+)(?: account| as)? (\S+)/g)].map(([, host, account]) => `${account} @ ${host}`))
+]
 
 /** How the tool was installed decides how it updates: Homebrew, its own updater, else we don't guess */
 export async function updateCommandFor(tool: Tool): Promise<string | null> {

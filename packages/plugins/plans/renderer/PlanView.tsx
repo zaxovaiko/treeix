@@ -47,8 +47,7 @@ export function PlanView({
     })
   }, [plan.name])
 
-  const prompt = (): string =>
-    `Review comments on the plan ${plan.path}. Update the plan to address each one:\n\n${formatComments(comments)}\n`
+  const prompt = (): string => `Review comments on the plan ${plan.path}. Update the plan to address each one:\n\n${formatComments(comments)}\n`
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -68,9 +67,7 @@ export function PlanView({
               <button
                 key={value}
                 onClick={() => setMode(value)}
-                className={`rounded-[5px] px-2 py-0.5 text-xs ${
-                  mode === value ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`rounded-[5px] px-2 py-0.5 text-xs ${mode === value ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 {value === 'source' ? 'Source' : 'Preview'}
               </button>
@@ -107,15 +104,7 @@ export function PlanView({
 
         {comments.length > 0 && (
           <div className="absolute right-4 bottom-4 z-30">
-            <SendButton
-              repos={repos}
-              worktreePath={sendFrom}
-              count={comments.length}
-              prompt={prompt}
-              variant="pill"
-              onDone={onDone}
-              onClear={onClearComments}
-            />
+            <SendButton repos={repos} worktreePath={sendFrom} count={comments.length} prompt={prompt} variant="pill" onDone={onDone} onClear={onClearComments} />
           </div>
         )}
       </MarkdownFoldScope>

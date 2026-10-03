@@ -48,5 +48,10 @@ export function reactOf(element: Element | null): ReactSource | null {
 
 export const isReactSource = (value: unknown): value is ReactSource => {
   const candidate = value as Partial<ReactSource> | null
-  return !!candidate && Array.isArray(candidate.components) && candidate.components.every((name) => typeof name === 'string') && (candidate.source === null || typeof candidate.source === 'string')
+  return (
+    !!candidate &&
+    Array.isArray(candidate.components) &&
+    candidate.components.every((name) => typeof name === 'string') &&
+    (candidate.source === null || typeof candidate.source === 'string')
+  )
 }

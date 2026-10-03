@@ -44,7 +44,10 @@ export function TypeMark({ type }: { type: string }): React.JSX.Element {
 
 /** Long custom status names truncate inside the pill; the full name is in the tooltip */
 export const StatusPill = ({ item }: { item: Pick<WorkItem, 'status' | 'statusCategory'> }): React.JSX.Element => (
-  <span title={item.status} className={`h-[18px] max-w-36 min-w-0 truncate rounded px-1.5 text-[10.5px] leading-[18px] font-medium whitespace-nowrap ${CATEGORY_STYLE[item.statusCategory]}`}>
+  <span
+    title={item.status}
+    className={`h-[18px] max-w-36 min-w-0 truncate rounded px-1.5 text-[10.5px] leading-[18px] font-medium whitespace-nowrap ${CATEGORY_STYLE[item.statusCategory]}`}
+  >
     {item.status}
   </span>
 )
@@ -85,7 +88,10 @@ export const EpicChip = ({ summary, onClick }: { summary: string; onClick?: () =
 /** Done children of an epic out of all of them */
 export function EpicProgress({ done, total }: { done: number; total: number }): React.JSX.Element {
   return (
-    <span title={`${done} of ${total} done`} className="flex shrink-0 items-center gap-1.5 text-[10.5px] font-normal tracking-normal text-muted-foreground normal-case tabular-nums">
+    <span
+      title={`${done} of ${total} done`}
+      className="flex shrink-0 items-center gap-1.5 text-[10.5px] font-normal tracking-normal text-muted-foreground normal-case tabular-nums"
+    >
       <span className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10">
         <span className="block h-full rounded-full bg-emerald-400" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
       </span>

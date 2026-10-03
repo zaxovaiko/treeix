@@ -11,7 +11,12 @@ test('originalPlace finds the source line of a generated position', () => {
 })
 
 test('originalPlace follows the section of an index map', () => {
-  const index = { sections: [{ offset: { line: 0, column: 0 }, map: { sources: ['x.ts'], mappings: 'AAAA' } }, { offset: { line: 10, column: 0 }, map }] }
+  const index = {
+    sections: [
+      { offset: { line: 0, column: 0 }, map: { sources: ['x.ts'], mappings: 'AAAA' } },
+      { offset: { line: 10, column: 0 }, map }
+    ]
+  }
   expect(originalPlace(index, 11, 6)).toMatchObject({ line: 3, map })
 })
 

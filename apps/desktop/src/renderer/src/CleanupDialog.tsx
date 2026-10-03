@@ -66,7 +66,11 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
         {candidates === null && <p className="text-xs text-muted-foreground">Checking branches…</p>}
         {candidates?.length === 0 && <p className="text-xs text-muted-foreground">Nothing to clean up: every worktree is on a live branch with recent commits.</p>}
         {candidates?.map(({ repo, worktree, reason }) => (
-          <button key={worktree.path} onClick={() => toggle(worktree.path)} className="flex h-8 w-full items-center gap-2.5 rounded-md px-1.5 text-left text-[13px] hover:bg-accent">
+          <button
+            key={worktree.path}
+            onClick={() => toggle(worktree.path)}
+            className="flex h-8 w-full items-center gap-2.5 rounded-md px-1.5 text-left text-[13px] hover:bg-accent"
+          >
             <span className={`grid size-4 shrink-0 place-items-center rounded ${checked.has(worktree.path) ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
               {checked.has(worktree.path) && <Icon name="check" className="size-3" />}
             </span>
@@ -84,7 +88,11 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
         <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
-        <button onClick={() => void remove()} disabled={checked.size === 0 || busy} className="flex h-7 items-center gap-1.5 rounded-md bg-red-500/90 px-3 text-xs font-medium text-white disabled:opacity-40">
+        <button
+          onClick={() => void remove()}
+          disabled={checked.size === 0 || busy}
+          className="flex h-7 items-center gap-1.5 rounded-md bg-red-500/90 px-3 text-xs font-medium text-white disabled:opacity-40"
+        >
           {busy ? 'Removing…' : `Remove ${checked.size} ${checked.size === 1 ? 'worktree' : 'worktrees'}`}
           <Kbd hint>⌘⏎</Kbd>
         </button>

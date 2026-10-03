@@ -5,7 +5,8 @@ export type FileLink = { start: number; end: number; path: string; line: number 
 const FILE_PATH = /(?<![\w/.~-])((?:~|\.{1,2})?\/?[\w@+-][\w.@+-]*(?:\/[\w.@+-]+)+)(?::(\d+)(?::\d+)?)?/g
 
 // A bare file name like pty.ts:42; only code and doc extensions, so example.com and v1.2 stay text
-const FILE_NAME = /(?<![\w/.~@-])([\w-][\w.-]*\.(?:tsx?|jsx?|mjs|cjs|json|mdx?|css|scss|html|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cs|php|sh|ya?ml|toml|sql|vue|svelte|txt|lock))(?::(\d+)(?::\d+)?)?(?![\w/])/g
+const FILE_NAME =
+  /(?<![\w/.~@-])([\w-][\w.-]*\.(?:tsx?|jsx?|mjs|cjs|json|mdx?|css|scss|html|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cs|php|sh|ya?ml|toml|sql|vue|svelte|txt|lock))(?::(\d+)(?::\d+)?)?(?![\w/])/g
 
 /** File paths in one line of terminal text; `start` is the index of the first character, `end` the one after the last */
 export function findFileLinks(text: string): FileLink[] {
@@ -37,7 +38,12 @@ export function findInFiles(path: string, files: string[]): string | null {
 export type IssueLink = { start: number; end: number; key: string; project: string }
 
 export function findIssueLinks(text: string): IssueLink[] {
-  return [...text.matchAll(/(?<![\w-])([A-Z][A-Z0-9_]+)-\d+(?![\w-])/g)].map((match) => ({ start: match.index ?? 0, end: (match.index ?? 0) + match[0].length, key: match[0], project: match[1] }))
+  return [...text.matchAll(/(?<![\w-])([A-Z][A-Z0-9_]+)-\d+(?![\w-])/g)].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+    key: match[0],
+    project: match[1]
+  }))
 }
 
 /** An absolute path for `path` as the shell in `cwd` would read it */

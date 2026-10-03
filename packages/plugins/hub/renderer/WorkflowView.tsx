@@ -34,7 +34,10 @@ const ROW = 120
 const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 const LABEL = 'flex flex-col gap-1.5 text-xs text-muted-foreground'
 const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', approval: 'lock', output: 'check' }
-const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the pattern', empty: 'is empty' } as const satisfies Record<Extract<WorkflowNode, { kind: 'condition' }>['test'], string>
+const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the pattern', empty: 'is empty' } as const satisfies Record<
+  Extract<WorkflowNode, { kind: 'condition' }>['test'],
+  string
+>
 // Follows the app theme instead of React Flow's own light colors
 const THEME = {
   '--xy-edge-stroke': 'var(--color-muted-foreground)',
@@ -54,7 +57,13 @@ const THEME = {
 const CanvasContext = createContext<{ run: Record<string, NodeRun>; problems: Map<string, string[]> }>({ run: {}, problems: new Map() })
 
 const toFlow = (workflow: Workflow): { nodes: StepNode[]; edges: FlowEdge[] } => ({
-  nodes: workflow.nodes.map((step, index) => ({ id: step.id, type: 'step', position: workflow.layout[step.id] ?? { x: index * COLUMN, y: 0 }, data: { step }, deletable: step.kind !== 'input' })),
+  nodes: workflow.nodes.map((step, index) => ({
+    id: step.id,
+    type: 'step',
+    position: workflow.layout[step.id] ?? { x: index * COLUMN, y: 0 },
+    data: { step },
+    deletable: step.kind !== 'input'
+  })),
   edges: workflow.edges.map((edge) => ({ id: edge.id, source: edge.from, target: edge.to, sourceHandle: edge.branch }))
 })
 
@@ -62,10 +71,14 @@ const fromFlow = (base: Workflow, name: string, nodes: StepNode[], edges: FlowEd
   ...base,
   name,
   nodes: nodes.map((node) => node.data.step),
-  edges: edges.map((edge) => ({ id: edge.id, from: edge.source, to: edge.target, branch: edge.sourceHandle === 'true' || edge.sourceHandle === 'false' ? edge.sourceHandle : null })),
+  edges: edges.map((edge) => ({
+    id: edge.id,
+    from: edge.source,
+    to: edge.target,
+    branch: edge.sourceHandle === 'true' || edge.sourceHandle === 'false' ? edge.sourceHandle : null
+  })),
   layout: Object.fromEntries(nodes.map((node) => [node.id, { x: Math.round(node.position.x), y: Math.round(node.position.y) }]))
 })
-
 
 function blankStep(kind: Exclude<WorkflowNode['kind'], 'input'>, id: string, agent: string): WorkflowNode {
   switch (kind) {
@@ -88,7 +101,15 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
   const issues = problems.get(id)
   const title = step.kind === 'agent' ? (agent?.name ?? 'Pick an agent') : KIND_LABEL[step.kind]
   const detail =
-    step.kind === 'input' ? 'What the run starts with' : step.kind === 'agent' ? step.prompt : step.kind === 'condition' ? `${step.source} ${TESTS[step.test]} ${step.test === 'empty' ? '' : step.value}` : step.kind === 'approval' ? step.message : step.template
+    step.kind === 'input'
+      ? 'What the run starts with'
+      : step.kind === 'agent'
+        ? step.prompt
+        : step.kind === 'condition'
+          ? `${step.source} ${TESTS[step.test]} ${step.test === 'empty' ? '' : step.value}`
+          : step.kind === 'approval'
+            ? step.message
+            : step.template
 
   return (
     <div
@@ -119,7 +140,17 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
 const NODE_TYPES = { step: StepCard }
 
 /** A template box with a menu that appends a reference to the input, what flows in, or an earlier step */
-function TemplateField({ label, value, sources, onChange }: { label: string; value: string; sources: { id: string; label: string }[]; onChange: (value: string) => void }): React.JSX.Element {
+function TemplateField({
+  label,
+  value,
+  sources,
+  onChange
+}: {
+  label: string
+  value: string
+  sources: { id: string; label: string }[]
+  onChange: (value: string) => void
+}): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const references = [
     { id: 'input', label: "The run's input" },
@@ -152,7 +183,17 @@ function TemplateField({ label, value, sources, onChange }: { label: string; val
   )
 }
 
-function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; sources: { id: string; label: string }[]; onChange: (step: WorkflowNode) => void; onDelete: () => void }): React.JSX.Element {
+function Inspector({
+  step,
+  sources,
+  onChange,
+  onDelete
+}: {
+  step: WorkflowNode
+  sources: { id: string; label: string }[]
+  onChange: (step: WorkflowNode) => void
+  onDelete: () => void
+}): React.JSX.Element {
   const agents = hubAgents.use()
   return (
     <div className="flex flex-col gap-3">
@@ -180,16 +221,34 @@ function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; 
           <TemplateField label="Prompt" value={step.prompt} sources={sources} onChange={(prompt) => onChange({ ...step, prompt })} />
           <label className={LABEL}>
             Folder
-            <input value={step.folder ?? ''} onChange={(event) => onChange({ ...step, folder: event.target.value.trim() || null })} placeholder="The agent's own" className={`${FIELD} h-8 font-mono text-xs`} />
+            <input
+              value={step.folder ?? ''}
+              onChange={(event) => onChange({ ...step, folder: event.target.value.trim() || null })}
+              placeholder="The agent's own"
+              className={`${FIELD} h-8 font-mono text-xs`}
+            />
           </label>
           <div className="flex gap-2">
             <label className={`${LABEL} flex-1`}>
               Retries
-              <input type="number" min={0} max={5} value={step.retries} onChange={(event) => onChange({ ...step, retries: Math.max(0, Number(event.target.value) || 0) })} className={`${FIELD} h-8`} />
+              <input
+                type="number"
+                min={0}
+                max={5}
+                value={step.retries}
+                onChange={(event) => onChange({ ...step, retries: Math.max(0, Number(event.target.value) || 0) })}
+                className={`${FIELD} h-8`}
+              />
             </label>
             <label className={`${LABEL} flex-1`}>
               Timeout, min
-              <input type="number" min={1} value={step.timeoutMin} onChange={(event) => onChange({ ...step, timeoutMin: Math.max(1, Number(event.target.value) || 1) })} className={`${FIELD} h-8`} />
+              <input
+                type="number"
+                min={1}
+                value={step.timeoutMin}
+                onChange={(event) => onChange({ ...step, timeoutMin: Math.max(1, Number(event.target.value) || 1) })}
+                className={`${FIELD} h-8`}
+              />
             </label>
           </div>
           <div className={LABEL}>
@@ -212,7 +271,9 @@ function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; 
           <p className="text-xs text-muted-foreground">The run waits here until you approve it from the run's page; what came in goes on. Reject fails the run.</p>
         </>
       )}
-      {(step.kind === 'merge' || step.kind === 'output') && <TemplateField label="Template" value={step.template} sources={sources} onChange={(template) => onChange({ ...step, template })} />}
+      {(step.kind === 'merge' || step.kind === 'output') && (
+        <TemplateField label="Template" value={step.template} sources={sources} onChange={(template) => onChange({ ...step, template })} />
+      )}
       {step.kind === 'condition' && (
         <>
           <TemplateField label="Check" value={step.source} sources={sources} onChange={(source) => onChange({ ...step, source })} />
@@ -251,7 +312,14 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
   const [nodes, setNodes] = useState(() => toFlow(workflow).nodes)
   const [edges, setEdges] = useState(() => toFlow(workflow).edges)
   const draft = useMemo(() => fromFlow(opened, name, nodes, edges), [opened, name, nodes, edges])
-  const problems: Problem[] = useMemo(() => validate(draft, agents.map((agent) => agent.id)), [draft, agents])
+  const problems: Problem[] = useMemo(
+    () =>
+      validate(
+        draft,
+        agents.map((agent) => agent.id)
+      ),
+    [draft, agents]
+  )
   const lastRun = hubRuns.use().find((run) => run.kind === 'workflow' && run.workflow.id === workflow.id)
   const canvas = useMemo(() => {
     const byNode = new Map<string, string[]>()
@@ -326,7 +394,8 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
   }, [])
 
   const selected = nodes.find((node) => node.selected) ?? null
-  const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agents.find((agent) => agent.id === step.agent)?.name ?? step.id) : `${KIND_LABEL[step.kind]} (${step.id})`)
+  const labelOf = (step: WorkflowNode): string =>
+    step.kind === 'agent' ? (agents.find((agent) => agent.id === step.agent)?.name ?? step.id) : `${KIND_LABEL[step.kind]} (${step.id})`
   const sources = selected
     ? [...ancestors(draft, selected.id)].flatMap((id) => {
         const step = draft.nodes.find((node) => node.id === id)
@@ -347,7 +416,8 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     setNodes([...nodes.map((node) => ({ ...node, selected: false })), { id, type: 'step', position, data: { step: blankStep(kind, id, agents[0]?.id ?? '') }, selected: true }])
     if (!after) return
     const branching = after.data.step.kind === 'condition'
-    const moved = branching || kind === 'output' ? edges : edges.map((edge) => (edge.source === after.id ? { ...edge, source: id, sourceHandle: kind === 'condition' ? 'true' : null } : edge))
+    const moved =
+      branching || kind === 'output' ? edges : edges.map((edge) => (edge.source === after.id ? { ...edge, source: id, sourceHandle: kind === 'condition' ? 'true' : null } : edge))
     setEdges([...moved, { id: crypto.randomUUID(), source: after.id, target: id, sourceHandle: branching ? 'true' : null }])
   }
 
@@ -370,9 +440,17 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     <div ref={root} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col outline-none">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
         <Icon name="layers" className="size-4 text-muted-foreground" />
-        <input aria-label="Workflow name" value={name} onChange={(event) => setName(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none" />
+        <input
+          aria-label="Workflow name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
+        />
         {lastRun && (
-          <button onClick={() => hubSelection.set(`run:${lastRun.id}`)} className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button
+            onClick={() => hubSelection.set(`run:${lastRun.id}`)}
+            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
             <StatusIcon status={lastRun.status} className="size-3" />
             Last run {timeAgo(new Date(lastRun.startedAt).toISOString())}
           </button>
@@ -443,7 +521,8 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Select a step to edit it, or add one with the buttons on the canvas; it goes after the selected step. Drag from a step's right edge to another to connect them, and press Backspace to delete what's selected. ⌘Z undoes.
+              Select a step to edit it, or add one with the buttons on the canvas; it goes after the selected step. Drag from a step's right edge to another to connect them, and
+              press Backspace to delete what's selected. ⌘Z undoes.
             </p>
           )}
         </aside>

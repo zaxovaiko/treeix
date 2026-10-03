@@ -28,7 +28,9 @@ const object = (value: unknown): Json => (typeof value === 'object' && value !==
 
 async function pageTarget(): Promise<string> {
   for (let attempt = 0; attempt < 150; attempt++) {
-    const list: unknown = await fetch(`${endpoint}/json/list`).then((response) => response.json()).catch(() => [])
+    const list: unknown = await fetch(`${endpoint}/json/list`)
+      .then((response) => response.json())
+      .catch(() => [])
     const page = (Array.isArray(list) ? list.map(object) : []).find((target) => target.type === 'page' && String(target.url).includes('index.html'))
     if (page) return String(page.webSocketDebuggerUrl)
     await sleep(200)
@@ -159,7 +161,9 @@ const COLOR_REDRAW = `for i in $(seq 1 300); do printf '\\033[H'; for j in $(seq
 
 /** Settings apply on load, so the theme mode is written and the window reloaded; `null` puts back the default */
 async function reloadWithThemeMode(driver: Driver, mode: string | null): Promise<void> {
-  await driver.evaluate(`(() => { const settings = JSON.parse(localStorage.getItem('settings') ?? '{}'); if (${JSON.stringify(mode)} === null) delete settings.themeMode; else settings.themeMode = ${JSON.stringify(mode)}; localStorage.setItem('settings', JSON.stringify(settings)); location.reload() })()`)
+  await driver.evaluate(
+    `(() => { const settings = JSON.parse(localStorage.getItem('settings') ?? '{}'); if (${JSON.stringify(mode)} === null) delete settings.themeMode; else settings.themeMode = ${JSON.stringify(mode)}; localStorage.setItem('settings', JSON.stringify(settings)); location.reload() })()`
+  )
   await sleep(1500)
   await driver.until(`!!document.querySelector('[data-zone]')`, 30_000)
   await sleep(1500)
@@ -292,7 +296,9 @@ const CASES: Case[] = [
       await driver.evaluate(clickTitle('Terminal'))
       await driver.frames()
       await sleep(600)
-      await driver.evaluate(`(() => { if (window.__revisit) return; window.__revisit = []; new PerformanceObserver((list) => list.getEntries().forEach((entry) => window.__revisit.push(entry.duration))).observe({ type: 'longtask' }) })()`)
+      await driver.evaluate(
+        `(() => { if (window.__revisit) return; window.__revisit = []; new PerformanceObserver((list) => list.getEntries().forEach((entry) => window.__revisit.push(entry.duration))).observe({ type: 'longtask' }) })()`
+      )
       await driver.evaluate(`window.__revisit = []`)
       await driver.evaluate(clickTitle('Pull requests'))
       await driver.frames()
@@ -327,7 +333,9 @@ const CASES: Case[] = [
       await driver.evaluate(clickTitle('Terminal'))
       await driver.frames()
       await sleep(800)
-      const shown = await driver.evaluate(`[...document.querySelectorAll('[data-session-id] .xterm-screen')].some((screen) => screen.checkVisibility() && screen.getBoundingClientRect().width > 0)`)
+      const shown = await driver.evaluate(
+        `[...document.querySelectorAll('[data-session-id] .xterm-screen')].some((screen) => screen.checkVisibility() && screen.getBoundingClientRect().width > 0)`
+      )
       return [shown ? 'the Terminal page shows its terminal again' : 'FAIL the Terminal page came back empty']
     }
   },
@@ -342,11 +350,16 @@ const CASES: Case[] = [
       await driver.evaluate(`(window.__stress.frames = [], window.__stress.longTasks = [], window.__stress.last = 0)`)
       await driver.type(COLOR_REDRAW)
       await sleep(6000)
-      const gpu = await driver.evaluate(`[...document.querySelectorAll('[data-session-id] .xterm')].some((terminal) => terminal.checkVisibility() && terminal.querySelector('canvas'))`)
+      const gpu = await driver.evaluate(
+        `[...document.querySelectorAll('[data-session-id] .xterm')].some((terminal) => terminal.checkVisibility() && terminal.querySelector('canvas'))`
+      )
       const frames = (await driver.evaluate(`window.__stress.frames`)) as number[]
       await reloadWithThemeMode(driver, mode || null)
       const slow = frames.filter((gap) => gap > 50).length
-      return [gpu ? 'light theme draws with WebGL' : 'FAIL light theme fell back to the DOM renderer', slow <= 5 ? `${slow} frames over 50 ms while redrawing` : `FAIL ${slow} frames over 50 ms while redrawing`]
+      return [
+        gpu ? 'light theme draws with WebGL' : 'FAIL light theme fell back to the DOM renderer',
+        slow <= 5 ? `${slow} frames over 50 ms while redrawing` : `FAIL ${slow} frames over 50 ms while redrawing`
+      ]
     }
   },
   {
@@ -395,14 +408,18 @@ const CASES: Case[] = [
       await sleep(2500)
       const opened = Number(await driver.evaluate(browserTabs))
       // Every tab once, then close ten and bring them back with ⌘⇧T, focus on the body as after a click on ×
-      for (let index = 0; index < opened; index++) await driver.evaluate(`document.querySelectorAll('[data-browser] .group.flex.h-6')[${index}]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`)
+      for (let index = 0; index < opened; index++)
+        await driver.evaluate(`document.querySelectorAll('[data-browser] .group.flex.h-6')[${index}]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`)
       for (let index = 0; index < 10; index++) await driver.evaluate(`document.querySelector('[data-browser] [aria-label="Close tab"]').click()`)
       await driver.evaluate(`document.activeElement?.blur()`)
       const afterClose = Number(await driver.evaluate(browserTabs))
       for (let index = 0; index < 10; index++) await driver.press('KeyT', { meta: true, shift: true })
       await sleep(2000)
       const reopened = Number(await driver.evaluate(browserTabs))
-      const checks = [`${opened} tabs, ${afterClose} after closing ten, ${reopened} after ⌘⇧T ×10`, errorPage ? 'refused port shows the error page' : 'FAIL no error page for the refused port']
+      const checks = [
+        `${opened} tabs, ${afterClose} after closing ten, ${reopened} after ⌘⇧T ×10`,
+        errorPage ? 'refused port shows the error page' : 'FAIL no error page for the refused port'
+      ]
       if (reopened !== opened) checks.push('FAIL ⌘⇧T did not bring every closed tab back')
       return checks
     }
@@ -482,7 +499,13 @@ const percentile = (values: number[], share: number): number => {
 }
 
 async function main(): Promise<void> {
-  if (await fetch(`${endpoint}/json/version`).then(() => true, () => false)) throw new Error(`something already listens on ${endpoint}, quit it first`)
+  if (
+    await fetch(`${endpoint}/json/version`).then(
+      () => true,
+      () => false
+    )
+  )
+    throw new Error(`something already listens on ${endpoint}, quit it first`)
   const home = await fakeHome()
   const pages = pageServer()
   // Another window over this one would mark it hidden and stop its frames, which is every number this run reads
@@ -499,7 +522,8 @@ async function main(): Promise<void> {
     await cdp('Runtime.enable')
     const evaluate = async (expression: string): Promise<unknown> => {
       const result = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
-      if (result.exceptionDetails) throw new Error(`${expression.slice(0, 80)}: ${JSON.stringify(object(result.exceptionDetails).exception ?? result.exceptionDetails).slice(0, 200)}`)
+      if (result.exceptionDetails)
+        throw new Error(`${expression.slice(0, 80)}: ${JSON.stringify(object(result.exceptionDetails).exception ?? result.exceptionDetails).slice(0, 200)}`)
       return object(result.result).value
     }
     const until = async (expression: string, ms = 15_000): Promise<void> => {

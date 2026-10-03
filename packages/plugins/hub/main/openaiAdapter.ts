@@ -51,7 +51,11 @@ export function createOpenAiAdapter(keyFor: (baseUrl: string) => Promise<string 
                 name: 'Model',
                 category: 'model',
                 currentValue: model,
-                values: [...(models.some((entry) => entry.id === model) ? [] : [{ id: model, name: model }]), ...models].map((entry) => ({ value: entry.id, name: entry.name, description: null }))
+                values: [...(models.some((entry) => entry.id === model) ? [] : [{ id: model, name: model }]), ...models].map((entry) => ({
+                  value: entry.id,
+                  name: entry.name,
+                  description: null
+                }))
               }
             ]
           : []

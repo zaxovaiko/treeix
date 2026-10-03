@@ -22,7 +22,8 @@ function toolOutput(value: unknown): ToolOutput | null {
     const content = chatContent(item.content)
     return content
   }
-  if (item.type === 'diff' && typeof item.path === 'string' && typeof item.newText === 'string') return { type: 'diff', path: item.path, oldText: nullableText(item.oldText), newText: item.newText }
+  if (item.type === 'diff' && typeof item.path === 'string' && typeof item.newText === 'string')
+    return { type: 'diff', path: item.path, oldText: nullableText(item.oldText), newText: item.newText }
   if (item.type === 'terminal' && typeof item.terminalId === 'string') return { type: 'terminal', terminalId: item.terminalId }
   return null
 }
@@ -148,7 +149,15 @@ export function optionsFrom(response: unknown): ChatOption[] {
       const option = record(entry)
       if (option.type !== 'select') return []
       const values = selectValues(option.options)
-      return [{ id: text(option.id), name: text(option.name), category: option.category === 'model' ? 'model' : option.category === 'mode' ? 'mode' : 'other', currentValue: text(option.currentValue), values }]
+      return [
+        {
+          id: text(option.id),
+          name: text(option.name),
+          category: option.category === 'model' ? 'model' : option.category === 'mode' ? 'mode' : 'other',
+          currentValue: text(option.currentValue),
+          values
+        }
+      ]
     })
   }
 

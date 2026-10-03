@@ -6,7 +6,16 @@ const WINDOWS_EPOCH_OFFSET = 11644473600
 /** From this cookie database version on, the plaintext starts with a SHA-256 of the cookie's host */
 const HOST_HASH_VERSION = 24
 
-export type ChromiumRow = { host_key: string; name: string; path: string; expires_utc: number | bigint; is_secure: number; is_httponly: number; samesite: number; has_expires: number }
+export type ChromiumRow = {
+  host_key: string
+  name: string
+  path: string
+  expires_utc: number | bigint
+  is_secure: number
+  is_httponly: number
+  samesite: number
+  has_expires: number
+}
 
 /** macOS Chromium: PBKDF2-SHA1 over the Keychain password, salt "saltysalt", 1003 rounds, 16 bytes */
 export const chromiumKey = (password: string): Buffer => pbkdf2Sync(password, 'saltysalt', 1003, 16, 'sha1')

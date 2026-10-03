@@ -3,9 +3,7 @@ import { commandExists, isSafeCommandName, newerVersion, signedInAccounts } from
 
 test('signedInAccounts reads gh and glab auth output', () => {
   expect(signedInAccounts('github.com\n  ✓ Logged in to github.com account zaxovaiko (keyring)')).toEqual(['zaxovaiko @ github.com'])
-  expect(signedInAccounts('gitlab.blurify.com\n  ✓ Logged in to gitlab.blurify.com as vlad (/Users/x/config.yml)')).toEqual([
-    'vlad @ gitlab.blurify.com'
-  ])
+  expect(signedInAccounts('gitlab.blurify.com\n  ✓ Logged in to gitlab.blurify.com as vlad (/Users/x/config.yml)')).toEqual(['vlad @ gitlab.blurify.com'])
   expect(signedInAccounts('You are not logged into any GitHub hosts')).toEqual([])
 })
 

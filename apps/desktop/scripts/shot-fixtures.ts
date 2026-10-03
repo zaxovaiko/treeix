@@ -8,10 +8,7 @@
 const hoursAgo = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString()
 
 /** A cache entry as `persistentCache` stores it: `cache.<name>` holds [id, { value, fetchedAt }] pairs */
-const cache = (name: string, entries: [string, unknown][]): [string, unknown] => [
-  `cache.${name}`,
-  entries.map(([id, value]) => [id, { value, fetchedAt: Date.now() }])
-]
+const cache = (name: string, entries: [string, unknown][]): [string, unknown] => [`cache.${name}`, entries.map(([id, value]) => [id, { value, fetchedAt: Date.now() }])]
 
 /** The query JiraTasks builds from its defaults: the saved JQL, narrowed to your own items */
 const JQL = 'assignee = currentUser() AND (statusCategory != Done) ORDER BY updated DESC'
@@ -28,10 +25,42 @@ type Item = {
 }
 
 const ITEMS: Item[] = [
-  { key: 'ORB-142', summary: 'Show usage invoices in billing settings', status: 'In Progress', statusCategory: 'indeterminate', type: 'Story', priority: 'High', updatedAt: hoursAgo(1) },
-  { key: 'ORB-147', summary: 'Sessions expire after an hour of work', status: 'In Progress', statusCategory: 'indeterminate', type: 'Bug', priority: 'Highest', updatedAt: hoursAgo(3) },
-  { key: 'ORB-139', summary: 'Rate limit the public metrics endpoint', status: 'Code Review', statusCategory: 'indeterminate', type: 'Task', priority: 'Medium', updatedAt: hoursAgo(6) },
-  { key: 'ORB-151', summary: 'Invoice PDF misses the tax line for EU accounts', status: 'QA Blocked', statusCategory: 'indeterminate', type: 'Bug', priority: 'High', updatedAt: hoursAgo(22) },
+  {
+    key: 'ORB-142',
+    summary: 'Show usage invoices in billing settings',
+    status: 'In Progress',
+    statusCategory: 'indeterminate',
+    type: 'Story',
+    priority: 'High',
+    updatedAt: hoursAgo(1)
+  },
+  {
+    key: 'ORB-147',
+    summary: 'Sessions expire after an hour of work',
+    status: 'In Progress',
+    statusCategory: 'indeterminate',
+    type: 'Bug',
+    priority: 'Highest',
+    updatedAt: hoursAgo(3)
+  },
+  {
+    key: 'ORB-139',
+    summary: 'Rate limit the public metrics endpoint',
+    status: 'Code Review',
+    statusCategory: 'indeterminate',
+    type: 'Task',
+    priority: 'Medium',
+    updatedAt: hoursAgo(6)
+  },
+  {
+    key: 'ORB-151',
+    summary: 'Invoice PDF misses the tax line for EU accounts',
+    status: 'QA Blocked',
+    statusCategory: 'indeterminate',
+    type: 'Bug',
+    priority: 'High',
+    updatedAt: hoursAgo(22)
+  },
   { key: 'ORB-155', summary: 'Let an account change its billing email', status: 'To Do', statusCategory: 'new', type: 'Story', priority: 'Medium', updatedAt: hoursAgo(27) },
   { key: 'ORB-158', summary: 'Retry failed Stripe webhooks with a backoff', status: 'To Do', statusCategory: 'new', type: 'Task', priority: 'Low', updatedAt: hoursAgo(30) },
   { key: 'ORB-160', summary: 'Design the plan comparison table', status: 'Backlog', statusCategory: 'new', type: 'Story', priority: 'Low', updatedAt: hoursAgo(50) }
@@ -172,7 +201,10 @@ export async function writeLimitFixtures(home: string): Promise<void> {
   )
   const codexWindow = (minutes: number, used: number, hours: number) => ({ window_minutes: minutes, used_percent: used, resets_at: now + Math.round(hours * 3600) })
   const day = new Date().toISOString().slice(0, 10).split('-').join('/')
-  const event = { timestamp: new Date((now - 120) * 1000).toISOString(), payload: { rate_limits: { primary: codexWindow(300, 18, 3.8), secondary: codexWindow(10_080, 34, 5 * 24 + 2) } } }
+  const event = {
+    timestamp: new Date((now - 120) * 1000).toISOString(),
+    payload: { rate_limits: { primary: codexWindow(300, 18, 3.8), secondary: codexWindow(10_080, 34, 5 * 24 + 2) } }
+  }
   await Bun.write(`${home}/.codex/sessions/${day}/rollout-demo.jsonl`, `${JSON.stringify(event)}\n`)
 }
 
@@ -190,7 +222,7 @@ const PACKAGE_JSON = JSON.stringify({ name: 'orbit-web', private: true, dependen
 /** Env tab: main has every variable, the invoices worktree lacks the webhook secret, drifts on one URL and leaks a key to the browser */
 export async function writeEnvFixtures(main: string, worktree: string): Promise<void> {
   const env = (extra: Record<string, string>): string =>
-    Object.entries({
+    `${Object.entries({
       STRIPE_SECRET_KEY: 'sk_test_51Demo0rbitK3yNotReal000',
       STRIPE_WEBHOOK_SECRET: 'whsec_demo_orbit_local',
       DATABASE_URL: 'postgres://orbit:orbit-dev@localhost:5432/orbit',
@@ -202,7 +234,7 @@ export async function writeEnvFixtures(main: string, worktree: string): Promise<
     })
       .filter(([, value]) => value !== '')
       .map(([name, value]) => `${name}=${value}`)
-      .join('\n') + '\n'
+      .join('\n')}\n`
   for (const root of [main, worktree]) {
     await Bun.write(`${root}/.env.example`, ENV_EXAMPLE)
     await Bun.write(`${root}/package.json`, PACKAGE_JSON)
@@ -243,7 +275,9 @@ td.num{font-variant-numeric:tabular-nums}a{color:#4f46e5;text-decoration:none}
 /** Ignored, so the Env tab still reads them but the worktree diff and changed-file counts stay as they were */
 export async function ignoreEnvFixtures(main: string): Promise<void> {
   const exclude = `${main}/.git/info/exclude`
-  const current = await Bun.file(exclude).text().catch(() => '')
+  const current = await Bun.file(exclude)
+    .text()
+    .catch(() => '')
   if (!current.includes('.env*')) await Bun.write(exclude, `${current}.env*\npackage.json\n`)
 }
 
@@ -287,9 +321,36 @@ export async function writePullRequestFixtures(home: string, web: string, api: s
         viewer: { login: 'ada.park' },
         search: {
           nodes: [
-            { number: 482, author: { login: 'ada.park' }, reviewRequests: { nodes: [] }, latestReviews: { nodes: [] }, commits: { nodes: [] }, head: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS' } } }] }, comments: { totalCount: 1 }, reviewThreads: { totalCount: 2 } },
-            { number: 479, author: { login: 'ada.park' }, reviewRequests: { nodes: [] }, latestReviews: { nodes: [] }, commits: { nodes: [] }, head: { nodes: [] }, comments: { totalCount: 0 }, reviewThreads: { totalCount: 0 } },
-            { number: 471, author: { login: 'noor.haddad' }, reviewRequests: { nodes: [{ requestedReviewer: { login: 'ada.park' } }] }, latestReviews: { nodes: [] }, commits: { nodes: [] }, head: { nodes: [{ commit: { statusCheckRollup: { state: 'PENDING' } } }] }, comments: { totalCount: 2 }, reviewThreads: { totalCount: 0 } }
+            {
+              number: 482,
+              author: { login: 'ada.park' },
+              reviewRequests: { nodes: [] },
+              latestReviews: { nodes: [] },
+              commits: { nodes: [] },
+              head: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS' } } }] },
+              comments: { totalCount: 1 },
+              reviewThreads: { totalCount: 2 }
+            },
+            {
+              number: 479,
+              author: { login: 'ada.park' },
+              reviewRequests: { nodes: [] },
+              latestReviews: { nodes: [] },
+              commits: { nodes: [] },
+              head: { nodes: [] },
+              comments: { totalCount: 0 },
+              reviewThreads: { totalCount: 0 }
+            },
+            {
+              number: 471,
+              author: { login: 'noor.haddad' },
+              reviewRequests: { nodes: [{ requestedReviewer: { login: 'ada.park' } }] },
+              latestReviews: { nodes: [] },
+              commits: { nodes: [] },
+              head: { nodes: [{ commit: { statusCheckRollup: { state: 'PENDING' } } }] },
+              comments: { totalCount: 2 },
+              reviewThreads: { totalCount: 0 }
+            }
           ]
         }
       }
@@ -308,17 +369,58 @@ export async function writePullRequestFixtures(home: string, web: string, api: s
     },
     diff: tracked + added,
     reviewComments: [
-      { id: 101, user: user('noor.haddad'), path: 'src/billing/portal.ts', line: 25, side: 'RIGHT', created_at: hoursAgo(5), reactions: { '+1': 2, eyes: 1 }, body: 'Stripe caps `invoices.list` at 100 per page. A busy account would silently lose the older ones - use auto-pagination here.' },
-      { id: 102, in_reply_to_id: 101, user: user('ada.park'), path: 'src/billing/portal.ts', line: 25, side: 'RIGHT', created_at: hoursAgo(2), reactions: {}, body: 'Twelve is the product cap for now, but agreed it should not depend on the page size. Switching to `autoPagingToArray` and slicing after.' },
-      { id: 103, user: user('lena.ko'), path: 'src/billing/invoices.test.ts', line: 12, side: 'RIGHT', created_at: hoursAgo(9), reactions: {}, body: 'Worth one more case for a refunded invoice - the total comes back negative there.' }
+      {
+        id: 101,
+        user: user('noor.haddad'),
+        path: 'src/billing/portal.ts',
+        line: 25,
+        side: 'RIGHT',
+        created_at: hoursAgo(5),
+        reactions: { '+1': 2, eyes: 1 },
+        body: 'Stripe caps `invoices.list` at 100 per page. A busy account would silently lose the older ones - use auto-pagination here.'
+      },
+      {
+        id: 102,
+        in_reply_to_id: 101,
+        user: user('ada.park'),
+        path: 'src/billing/portal.ts',
+        line: 25,
+        side: 'RIGHT',
+        created_at: hoursAgo(2),
+        reactions: {},
+        body: 'Twelve is the product cap for now, but agreed it should not depend on the page size. Switching to `autoPagingToArray` and slicing after.'
+      },
+      {
+        id: 103,
+        user: user('lena.ko'),
+        path: 'src/billing/invoices.test.ts',
+        line: 12,
+        side: 'RIGHT',
+        created_at: hoursAgo(9),
+        reactions: {},
+        body: 'Worth one more case for a refunded invoice - the total comes back negative there.'
+      }
     ],
-    issueComments: [{ id: 201, user: user('noor.haddad'), created_at: hoursAgo(9), reactions: { rocket: 1 }, body: 'Design signed off on the table in the Confluence page. Ship it behind the existing billing flag.' }],
+    issueComments: [
+      {
+        id: 201,
+        user: user('noor.haddad'),
+        created_at: hoursAgo(9),
+        reactions: { rocket: 1 },
+        body: 'Design signed off on the table in the Confluence page. Ship it behind the existing billing flag.'
+      }
+    ],
     extra: {
       data: {
         viewer: { login: 'ada.park' },
         repository: {
           pullRequest: {
-            reviewThreads: { nodes: [{ id: 'PRRT_1', isResolved: false, comments: { nodes: [{ databaseId: 101 }] } }, { id: 'PRRT_2', isResolved: false, comments: { nodes: [{ databaseId: 103 }] } }] },
+            reviewThreads: {
+              nodes: [
+                { id: 'PRRT_1', isResolved: false, comments: { nodes: [{ databaseId: 101 }] } },
+                { id: 'PRRT_2', isResolved: false, comments: { nodes: [{ databaseId: 103 }] } }
+              ]
+            },
             files: { nodes: [] },
             author: { login: 'ada.park' },
             reviewRequests: { nodes: [{ requestedReviewer: { login: 'noor.haddad', avatarUrl: null } }] },
@@ -344,7 +446,10 @@ export async function writePullRequestFixtures(home: string, web: string, api: s
     has_conflicts: false
   })
   const gitlab = {
-    list: [mr(212, 'Sliding window rate limiter for the public API', 'lena.ko', 'feat/sliding-window', 3, 4), mr(208, 'Retry Stripe webhooks with a backoff', 'ada.park', 'feat/webhook-retry', 26, 2, 'merged')],
+    list: [
+      mr(212, 'Sliding window rate limiter for the public API', 'lena.ko', 'feat/sliding-window', 3, 4),
+      mr(208, 'Retry Stripe webhooks with a backoff', 'ada.park', 'feat/webhook-retry', 26, 2, 'merged')
+    ],
     pipelines: { data: { project: { mergeRequests: { nodes: [{ iid: '212', headPipeline: { status: 'RUNNING', path: '/orbit-labs/orbit-api/-/pipelines/9912' } }] } } } }
   }
   const script = (answers: unknown, routes: string): string => `#!${process.execPath}

@@ -84,7 +84,11 @@ export function VariableMain({ name, places, scoped, state }: { name: string; pl
           const folder = folderOf(place.file)
           return (
             <div key={key}>
-              <div title={place.file} onClick={() => state.onSelect(key)} className={`group mx-2 flex h-8 items-center gap-2 rounded-md px-2.5 ${key === state.selected ? 'bg-accent' : 'hover:bg-accent'}`}>
+              <div
+                title={place.file}
+                onClick={() => state.onSelect(key)}
+                className={`group mx-2 flex h-8 items-center gap-2 rounded-md px-2.5 ${key === state.selected ? 'bg-accent' : 'hover:bg-accent'}`}
+              >
                 <span className={`size-2 shrink-0 rounded-full ${missing ? 'ring-1 ring-red-400' : dot(place.value ?? '')}`} />
                 <span className="flex w-[340px] min-w-0 shrink-0 items-center gap-1.5 text-[11.5px]">
                   <span className="text-muted-foreground">{owner ? baseName(owner.repo.path) : ''}</span>

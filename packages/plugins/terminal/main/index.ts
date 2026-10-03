@@ -11,7 +11,13 @@ const NO_MCP = { TREEIX_CLAUDE_MCP: '{"mcpServers":{}}', TREEIX_CODEX_MCP: 'mcp_
 
 const plugin: MainPlugin = {
   tools: [
-    { name: 'claude', purpose: 'Claude Code sessions', auth: false, releases: { url: 'https://registry.npmjs.org/@anthropic-ai/claude-code/latest', field: 'version' }, selfUpdate: 'claude update' },
+    {
+      name: 'claude',
+      purpose: 'Claude Code sessions',
+      auth: false,
+      releases: { url: 'https://registry.npmjs.org/@anthropic-ai/claude-code/latest', field: 'version' },
+      selfUpdate: 'claude update'
+    },
     { name: 'codex', purpose: 'Codex sessions', auth: false, releases: { url: 'https://registry.npmjs.org/@openai/codex/latest', field: 'version' }, selfUpdate: 'codex update' }
   ],
   activate: (context) => {

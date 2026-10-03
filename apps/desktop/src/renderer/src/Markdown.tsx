@@ -36,10 +36,7 @@ function Section({ children }: { children?: React.ReactNode }): React.JSX.Elemen
         onMouseDown={(event) => event.detail > 1 && event.preventDefault()}
         className="group/section flex w-full cursor-pointer items-center gap-1 text-left [&>div>:first-child]:my-0"
       >
-        <Icon
-          name="chevron"
-          className={`size-3 shrink-0 translate-y-[3px] text-muted-foreground/50 group-hover/section:text-foreground ${open ? 'rotate-90' : ''}`}
-        />
+        <Icon name="chevron" className={`size-3 shrink-0 translate-y-[3px] text-muted-foreground/50 group-hover/section:text-foreground ${open ? 'rotate-90' : ''}`} />
         <div className="min-w-0 flex-1">{heading}</div>
       </button>
       {open && <div className="pl-4">{body}</div>}
@@ -75,16 +72,16 @@ function ResizableTable({ children }: { children?: React.ReactNode }): React.JSX
   return (
     <ColumnResize.Provider value={startResize}>
       <div className="overflow-x-auto">
-      <table ref={table} style={widths ? { tableLayout: 'fixed', width: widths.reduce((sum, width) => sum + width, 0) } : undefined}>
-        {widths && (
-          <colgroup>
-            {widths.map((width, index) => (
-              <col key={index} style={{ width }} />
-            ))}
-          </colgroup>
-        )}
-        {children}
-      </table>
+        <table ref={table} style={widths ? { tableLayout: 'fixed', width: widths.reduce((sum, width) => sum + width, 0) } : undefined}>
+          {widths && (
+            <colgroup>
+              {widths.map((width, index) => (
+                <col key={index} style={{ width }} />
+              ))}
+            </colgroup>
+          )}
+          {children}
+        </table>
       </div>
     </ColumnResize.Provider>
   )
@@ -156,7 +153,11 @@ export function Markdown({ children, baseUrl, resolveImage }: { children: string
         rehypePlugins={[rehypeRaw, [rehypeSanitize, SCHEMA]]}
         urlTransform={(url) => defaultUrlTransform(baseUrl && url.startsWith('/') ? `${baseUrl}${url}` : url)}
         components={{
-          a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+          a: ({ node: _node, children, ...props }) => (
+            <a {...props} target="_blank" rel="noreferrer">
+              {children}
+            </a>
+          ),
           section: ({ node: _node, children }) => <Section>{children}</Section>,
           table: ({ node: _node, children }) => <ResizableTable>{children}</ResizableTable>,
           th: ({ node: _node, ...props }) => <ResizableHeader {...props} />,

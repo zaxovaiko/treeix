@@ -2,7 +2,21 @@ import { handleAtlassianShared } from '@treeix/atlassian/main/handlers'
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { Mention } from '@treeix/atlassian/shared'
 import type { WorkItemEdit } from '../shared/types'
-import { assignWorkItem, commentOnWorkItem, currentUserName, deleteComment, updateComment, editDescription, editWorkItem, openEpics, projectKeys, searchWorkItems, transitionWorkItem, workItemDetail, workItemSummary } from './acli'
+import {
+  assignWorkItem,
+  commentOnWorkItem,
+  currentUserName,
+  deleteComment,
+  updateComment,
+  editDescription,
+  editWorkItem,
+  openEpics,
+  projectKeys,
+  searchWorkItems,
+  transitionWorkItem,
+  workItemDetail,
+  workItemSummary
+} from './acli'
 import { assignableUsers } from './people'
 
 const plugin: MainPlugin = {

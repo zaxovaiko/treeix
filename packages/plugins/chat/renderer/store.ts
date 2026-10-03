@@ -163,7 +163,13 @@ export function listen(chatBridge: Bridge): void {
   chatBridge.on('closed', (chatId, reason) => {
     if (typeof chatId !== 'string') return
     const text = typeof reason === 'string' ? reason : 'The agent disconnected'
-    update(chatId, (state) => ({ ...state, connected: false, sending: false, error: 'Disconnected', feed: reduce(state.feed, { type: 'disconnected', message: text }, Date.now()) }))
+    update(chatId, (state) => ({
+      ...state,
+      connected: false,
+      sending: false,
+      error: 'Disconnected',
+      feed: reduce(state.feed, { type: 'disconnected', message: text }, Date.now())
+    }))
     replayed(chatId)
   })
 }
@@ -259,8 +265,7 @@ export function send(chatId: string, content: ChatContent[]): void {
   prompt(chatId, content)
 }
 
-export const unqueue = (chatId: string, index: number): void =>
-  update(chatId, (state) => ({ ...state, queue: state.queue.filter((_, at) => at !== index) }))
+export const unqueue = (chatId: string, index: number): void => update(chatId, (state) => ({ ...state, queue: state.queue.filter((_, at) => at !== index) }))
 
 export const setDraft = (chatId: string, draft: string): void => update(chatId, (state) => (state.draft === draft ? state : { ...state, draft }))
 

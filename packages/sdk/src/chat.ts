@@ -23,7 +23,13 @@ export type ToolCall = {
 
 export type PlanEntry = { content: string; priority: 'high' | 'medium' | 'low'; status: 'pending' | 'in_progress' | 'completed' }
 
-export type ChatOption = { id: string; name: string; category: 'mode' | 'model' | 'other'; currentValue: string; values: { value: string; name: string; description: string | null }[] }
+export type ChatOption = {
+  id: string
+  name: string
+  category: 'mode' | 'model' | 'other'
+  currentValue: string
+  values: { value: string; name: string; description: string | null }[]
+}
 
 export type PermissionOption = { id: string; name: string; kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always' }
 

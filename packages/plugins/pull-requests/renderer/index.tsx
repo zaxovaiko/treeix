@@ -93,9 +93,7 @@ const detailTab = (pr: PullRequest): DocumentTab => ({
   icon: (
     <>
       <ProviderMark provider={pr.provider} className="size-3.5" />
-      <span className="font-mono text-muted-foreground">
-        {prLabel(pr)}
-      </span>
+      <span className="font-mono text-muted-foreground">{prLabel(pr)}</span>
     </>
   ),
   parent: TAB_ID,
@@ -142,14 +140,21 @@ function PullRequestsCount(): React.JSX.Element | null {
   useEffect(() => onPullRequestsUpdated(bump), [])
   const count = cachedPullRequests(scopeKeyOf(scopeRepoPaths ?? []))?.pullRequests.filter((pr) => pr.state === 'open').length ?? 0
   if (!count) return null
-  return <span title={`${count} open pull request${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">{count}</span>
+  return (
+    <span title={`${count} open pull request${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">
+      {count}
+    </span>
+  )
 }
 
 function PullRequestSettings(): React.JSX.Element {
   const { prFilesView, prPollMinutes } = prSettings.use()
   return (
     <Card title="Review">
-      <Row label="Files" description="Show one changed file at a time, or scroll through every file like GitHub. Files you mark viewed collapse in the scroll; a review opens with every file expanded.">
+      <Row
+        label="Files"
+        description="Show one changed file at a time, or scroll through every file like GitHub. Files you mark viewed collapse in the scroll; a review opens with every file expanded."
+      >
         <Segmented
           value={prFilesView}
           options={[

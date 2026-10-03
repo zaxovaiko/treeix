@@ -1,6 +1,26 @@
 import { expect, test } from 'bun:test'
 import { splitPatch } from '@treeix/host/git'
-import { githubFilesToPatches, githubPipelines, gitlabPipelines, githubReviewers, githubReviewEvents, gitlabReviewEvents, githubReviewStatuses, githubThreadStates, githubThreads, gitlabReviewers, gitlabThreads, normalizeGitlabDiff, parseMergeTreeConflicts, parseRemote, pullRequestNumberIn, toGithubPullRequest, toGitlabPullRequest, githubMyReview, logTail } from './prs'
+import {
+  githubFilesToPatches,
+  githubPipelines,
+  gitlabPipelines,
+  githubReviewers,
+  githubReviewEvents,
+  gitlabReviewEvents,
+  githubReviewStatuses,
+  githubThreadStates,
+  githubThreads,
+  gitlabReviewers,
+  gitlabThreads,
+  normalizeGitlabDiff,
+  parseMergeTreeConflicts,
+  parseRemote,
+  pullRequestNumberIn,
+  toGithubPullRequest,
+  toGitlabPullRequest,
+  githubMyReview,
+  logTail
+} from './prs'
 
 test('parseRemote', () => {
   expect(parseRemote('git@github.com:blurifycom/openora.git')).toEqual({ provider: 'github', host: 'github.com', slug: 'blurifycom/openora' })
@@ -133,10 +153,28 @@ test('githubReviewStatuses tells reviewed, requested and own PRs apart', () => {
         nodes: [
           pr(1, 'me', [], [], ['a']),
           pr(2, 'ann', ['me'], [], ['a']),
-          pr(3, 'ann', [], [['me', 'APPROVED', 'b'], ['bob', 'CHANGES_REQUESTED', 'b']], ['a', 'b']),
+          pr(
+            3,
+            'ann',
+            [],
+            [
+              ['me', 'APPROVED', 'b'],
+              ['bob', 'CHANGES_REQUESTED', 'b']
+            ],
+            ['a', 'b']
+          ),
           pr(4, 'ann', [], [['me', 'CHANGES_REQUESTED', 'a']], ['a', 'b', 'c']),
           pr(5, 'ann', [], [], ['a']),
-          pr(6, 'me', [], [['ann', 'APPROVED', 'a'], ['bob', 'CHANGES_REQUESTED', 'a']], ['a', 'b']),
+          pr(
+            6,
+            'me',
+            [],
+            [
+              ['ann', 'APPROVED', 'a'],
+              ['bob', 'CHANGES_REQUESTED', 'a']
+            ],
+            ['a', 'b']
+          ),
           {}
         ]
       }
@@ -219,8 +257,23 @@ test('parseMergeTreeConflicts lists each conflicted path once and stops at the m
 
 test('githubPipelines reads the head commit check rollup', () => {
   const head = (state: string | null) => ({ nodes: [{ commit: { statusCheckRollup: state ? { state } : null } }] })
-  const raw = { data: { search: { nodes: [{ number: 1, head: head('SUCCESS') }, { number: 2, head: head('ERROR') }, { number: 3, head: head('PENDING') }, { number: 4, head: head(null) }] } } }
-  expect([...githubPipelines(raw)]).toEqual([[1, 'passed'], [2, 'failed'], [3, 'running']])
+  const raw = {
+    data: {
+      search: {
+        nodes: [
+          { number: 1, head: head('SUCCESS') },
+          { number: 2, head: head('ERROR') },
+          { number: 3, head: head('PENDING') },
+          { number: 4, head: head(null) }
+        ]
+      }
+    }
+  }
+  expect([...githubPipelines(raw)]).toEqual([
+    [1, 'passed'],
+    [2, 'failed'],
+    [3, 'running']
+  ])
 })
 
 test('gitlabPipelines links each merge request to its head pipeline and skips ones that say nothing', () => {

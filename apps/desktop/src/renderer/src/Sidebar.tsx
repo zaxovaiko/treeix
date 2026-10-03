@@ -24,7 +24,14 @@ export const reposInScope = (repos: Repo[], { folder, focus }: Pick<RepoScope, '
   repos.filter((repo) => (focus ? repo.path === focus : !folder || parentDir(repo.path) === folder))
 export const branchAge = (branch: Branch): string => {
   const seconds = Math.max(0, Date.now() / 1000 - branch.committedAt)
-  const units: [number, string][] = [[31_536_000, 'y'], [2_592_000, 'mo'], [604_800, 'w'], [86_400, 'd'], [3600, 'h'], [60, 'm']]
+  const units: [number, string][] = [
+    [31_536_000, 'y'],
+    [2_592_000, 'mo'],
+    [604_800, 'w'],
+    [86_400, 'd'],
+    [3600, 'h'],
+    [60, 'm']
+  ]
   const [size, unit] = units.find(([unitSeconds]) => seconds >= unitSeconds) ?? [1, 's']
   return `${Math.floor(seconds / size)}${unit}`
 }
@@ -129,10 +136,13 @@ export function Sidebar({
   useEffect(() => {
     if (scanning) return
     for (const path of openRepoPaths) {
-      window.api.listBranches(path).then((next) => {
-        branchCache.set(path, next)
-        setBranches((current) => ({ ...current, [path]: next }))
-      }, () => undefined)
+      window.api.listBranches(path).then(
+        (next) => {
+          branchCache.set(path, next)
+          setBranches((current) => ({ ...current, [path]: next }))
+        },
+        () => undefined
+      )
     }
   }, [openRepoPaths.join('\n'), scanning])
 
@@ -212,21 +222,28 @@ export function Sidebar({
     const path = cursorRow?.kind === 'worktree' ? cursorRow.worktree.path : repo.path
     const open = repoOpen(repo)
     const action =
-      event.key === 'n' ? () => onNewWorktree(repo)
-      : event.key === 't' ? () => onTerminal(path)
-      : event.key === 'f' ? () => setFocus(focus ? '' : repo.path)
-      : event.key === 'z' && canFoldAll ? foldAll
-      : event.key === 'y' ? () => {
-          const text = cursorRow?.kind === 'branch' ? cursorRow.branch.name : path
-          copyText(text)
-          onFlash(`Copied ${text}`)
-        }
-      : (event.key === 'h' || event.key === 'ArrowLeft') && open && !focus && !needle ? () => {
-          setCursorKey(`repo:${repo.path}`)
-          if (cursorRow?.kind === 'repo') toggleRepo(repo)
-        }
-      : (event.key === 'l' || event.key === 'ArrowRight') && cursorRow?.kind === 'repo' && !open ? () => toggleRepo(repo)
-      : null
+      event.key === 'n'
+        ? () => onNewWorktree(repo)
+        : event.key === 't'
+          ? () => onTerminal(path)
+          : event.key === 'f'
+            ? () => setFocus(focus ? '' : repo.path)
+            : event.key === 'z' && canFoldAll
+              ? foldAll
+              : event.key === 'y'
+                ? () => {
+                    const text = cursorRow?.kind === 'branch' ? cursorRow.branch.name : path
+                    copyText(text)
+                    onFlash(`Copied ${text}`)
+                  }
+                : (event.key === 'h' || event.key === 'ArrowLeft') && open && !focus && !needle
+                  ? () => {
+                      setCursorKey(`repo:${repo.path}`)
+                      if (cursorRow?.kind === 'repo') toggleRepo(repo)
+                    }
+                  : (event.key === 'l' || event.key === 'ArrowRight') && cursorRow?.kind === 'repo' && !open
+                    ? () => toggleRepo(repo)
+                    : null
     if (!action) return
     event.preventDefault()
     action()
@@ -283,7 +300,9 @@ export function Sidebar({
           <span className="flex w-full min-w-0 items-center gap-2">
             <Icon name={worktree.path === row.repo.path ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
             <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/85'}`}>{branchLabel(worktree)}</span>
-            {worktree.changedFiles > 0 && <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>}
+            {worktree.changedFiles > 0 && (
+              <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>
+            )}
             {state && NEWS.includes(state) && <ActivityMark activity={state} className="size-2" />}
           </span>
           <span className="w-full truncate pl-5 text-[10.5px] text-muted-foreground">{worktree.path === row.repo.path ? 'main worktree' : baseName(worktree.path)}</span>
@@ -312,7 +331,12 @@ export function Sidebar({
     }
     if (row.kind === 'older') {
       return (
-        <button key={row.key} {...cursor} onClick={() => activate(row)} className="mx-1.5 flex h-6 w-[calc(100%-12px)] items-center rounded-md pl-10 text-left text-[11px] text-muted-foreground hover:text-foreground">
+        <button
+          key={row.key}
+          {...cursor}
+          onClick={() => activate(row)}
+          className="mx-1.5 flex h-6 w-[calc(100%-12px)] items-center rounded-md pl-10 text-left text-[11px] text-muted-foreground hover:text-foreground"
+        >
           Show {row.count} older branches
         </button>
       )
@@ -331,7 +355,10 @@ export function Sidebar({
         <Icon name={branch.remote ? 'external' : 'branch'} className="size-3.5 opacity-50" />
         <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{branch.name}</span>
         {isCursor ? (
-          <button onClick={() => onOpenBranch(branch, row.repo)} className="flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[10.5px] text-foreground ring-1 ring-input hover:bg-background">
+          <button
+            onClick={() => onOpenBranch(branch, row.repo)}
+            className="flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[10.5px] text-foreground ring-1 ring-input hover:bg-background"
+          >
             ⏎ create worktree
           </button>
         ) : (
@@ -350,10 +377,13 @@ export function Sidebar({
     <div className="flex h-full min-h-0 flex-col">
       <ZoneHeader zone="list" title="Worktrees">
         {canFoldAll && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
-        <IconButton label="New worktree (n)" onClick={() => {
+        <IconButton
+          label="New worktree (n)"
+          onClick={() => {
             const repo = cursorRow?.repo ?? visibleRepos[0]
             if (repo) onNewWorktree(repo)
-          }}>
+          }}
+        >
           <Icon name="plus" className="size-3.5" />
         </IconButton>
         <IconButton label="Rescan (r)" onClick={onRescan}>

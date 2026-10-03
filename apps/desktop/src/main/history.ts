@@ -8,8 +8,7 @@ import { insideWorktree } from './paths'
 const MIN_SNAPSHOT_GAP_MS = 60_000
 const MAX_SNAPSHOTS = 100
 
-const fileDir = (root: string, worktreePath: string, filePath: string): string =>
-  join(root, createHash('sha1').update(`${worktreePath}\0${filePath}`).digest('hex'))
+const fileDir = (root: string, worktreePath: string, filePath: string): string => join(root, createHash('sha1').update(`${worktreePath}\0${filePath}`).digest('hex'))
 
 const snapshotIds = async (dir: string): Promise<number[]> =>
   (await readdir(dir).catch(() => []))
@@ -37,9 +36,7 @@ export function createHistory(root: string) {
 
     async list(worktreePath: string, filePath: string): Promise<HistoryEntry[]> {
       const dir = fileDir(root, worktreePath, filePath)
-      return Promise.all(
-        (await snapshotIds(dir)).map(async (id) => ({ id: String(id), savedAt: id, bytes: (await stat(join(dir, `${id}.txt`))).size }))
-      )
+      return Promise.all((await snapshotIds(dir)).map(async (id) => ({ id: String(id), savedAt: id, bytes: (await stat(join(dir, `${id}.txt`))).size })))
     },
 
     read: (worktreePath: string, filePath: string, id: string): Promise<string> => {

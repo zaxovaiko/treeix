@@ -104,8 +104,20 @@ const plugin: RendererPlugin = {
   tabs: [{ id: TAB_ID, label: 'AI Hub', icon: 'sparkles', order: 30, render: Tab, panels: ['terminal'], Badge: HubBadge }],
   Root,
   commands: () => [
-    ...hubAgents.get().map((agent) => ({ id: `hub.ask.${agent.id}`, group: 'Actions', label: `Ask ${agent.name}…`, icon: 'comment' as const, run: () => asking.set({ target: `agent:${agent.id}`, openRun: true }) })),
-    ...hubWorkflows.get().map((workflow) => ({ id: `hub.run.${workflow.id}`, group: 'Actions', label: `Run ${workflow.name}…`, icon: 'wand' as const, run: () => asking.set({ target: `workflow:${workflow.id}`, openRun: true }) }))
+    ...hubAgents.get().map((agent) => ({
+      id: `hub.ask.${agent.id}`,
+      group: 'Actions',
+      label: `Ask ${agent.name}…`,
+      icon: 'comment' as const,
+      run: () => asking.set({ target: `agent:${agent.id}`, openRun: true })
+    })),
+    ...hubWorkflows.get().map((workflow) => ({
+      id: `hub.run.${workflow.id}`,
+      group: 'Actions',
+      label: `Run ${workflow.name}…`,
+      icon: 'wand' as const,
+      run: () => asking.set({ target: `workflow:${workflow.id}`, openRun: true })
+    }))
   ],
   // Personas join the new-tab menus and chats; a runtime from Settings can change under them, so settings count too
   agents: {

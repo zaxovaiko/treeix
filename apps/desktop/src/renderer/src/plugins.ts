@@ -48,25 +48,27 @@ let syncing = Promise.resolve()
 
 /** Activates enabled plugins' main modules first, so their handlers exist before renderer code calls them */
 function sync(): void {
-  syncing = syncing.then(async () => {
-    const enabled = PLUGINS.filter((entry) => isPluginEnabled(entry.manifest.id))
-    await window.api.plugins.setEnabled(enabled.map((entry) => entry.manifest.id))
-    const loaded = await Promise.all(
-      enabled.map(async (entry): Promise<LoadedPlugin | null> => {
-        const existing = state.loaded.find((candidate) => candidate.manifest.id === entry.manifest.id)
-        if (existing) return existing
-        const plugin = await entry.load?.().catch((reason: unknown) => {
-          console.error(`Plugin ${entry.manifest.id} failed to load`, reason)
-          return null
+  syncing = syncing
+    .then(async () => {
+      const enabled = PLUGINS.filter((entry) => isPluginEnabled(entry.manifest.id))
+      await window.api.plugins.setEnabled(enabled.map((entry) => entry.manifest.id))
+      const loaded = await Promise.all(
+        enabled.map(async (entry): Promise<LoadedPlugin | null> => {
+          const existing = state.loaded.find((candidate) => candidate.manifest.id === entry.manifest.id)
+          if (existing) return existing
+          const plugin = await entry.load?.().catch((reason: unknown) => {
+            console.error(`Plugin ${entry.manifest.id} failed to load`, reason)
+            return null
+          })
+          return plugin ? { manifest: entry.manifest, plugin } : null
         })
-        return plugin ? { manifest: entry.manifest, plugin } : null
-      })
-    )
-    state = { loaded: loaded.filter((entry) => entry !== null), ready: true }
-    setPluginThemes(Object.assign({}, ...state.loaded.map(({ plugin }) => plugin.themes ?? {})))
-    followPluginAgents()
-    listeners.forEach((listener) => listener())
-  }).catch((reason: unknown) => console.error('Plugins could not be synced', reason))
+      )
+      state = { loaded: loaded.filter((entry) => entry !== null), ready: true }
+      setPluginThemes(Object.assign({}, ...state.loaded.map(({ plugin }) => plugin.themes ?? {})))
+      followPluginAgents()
+      listeners.forEach((listener) => listener())
+    })
+    .catch((reason: unknown) => console.error('Plugins could not be synced', reason))
 }
 
 let unfollowAgents: (() => void)[] = []

@@ -5,8 +5,7 @@ import type { AgentHookStatus } from '../shared/types'
 export type AgentState = 'input' | 'running' | 'idle'
 
 // ponytail: screen-scraped prompt detection for agents without hooks
-const WAITING_FOR_INPUT =
-  /Do you want to|❯\s*1\.\s*Yes|Yes, and don't ask|\[y\/n\]|\(y\/n\)|Allow command|Would you like to run|Press Enter to continue/i
+const WAITING_FOR_INPUT = /Do you want to|❯\s*1\.\s*Yes|Yes, and don't ask|\[y\/n\]|\(y\/n\)|Allow command|Would you like to run|Press Enter to continue/i
 /** Claude Code and Codex show this for as long as they work */
 const WORKING = /esc to interrupt/i
 // ponytail: screen-scraped, Claude's footer counts what it left running after its turn, e.g. "· 1 shell"; no hook reports it

@@ -8,10 +8,18 @@ test('imageProblem', () => {
 })
 
 test('slash completion only at the start, file completion after @ anywhere', () => {
-  const commands = [{ name: 'compact', description: 'Summarize' }, { name: 'clear', description: 'Start over' }]
+  const commands = [
+    { name: 'compact', description: 'Summarize' },
+    { name: 'clear', description: 'Start over' }
+  ]
   expect(completion('/co', 3, commands, [])).toMatchObject({ kind: 'command', query: 'co', start: 0, items: [{ label: '/compact', insert: '/compact ' }] })
   expect(completion('fix /co', 7, commands, [])).toBeNull()
-  expect(completion('see @src/pri', 12, [], ['src/pricing/Pricing.tsx', 'src/app.ts'])).toMatchObject({ kind: 'file', query: 'src/pri', start: 4, items: [{ label: 'src/pricing/Pricing.tsx', insert: '@src/pricing/Pricing.tsx ' }] })
+  expect(completion('see @src/pri', 12, [], ['src/pricing/Pricing.tsx', 'src/app.ts'])).toMatchObject({
+    kind: 'file',
+    query: 'src/pri',
+    start: 4,
+    items: [{ label: 'src/pricing/Pricing.tsx', insert: '@src/pricing/Pricing.tsx ' }]
+  })
   expect(completion('mail me@home', 12, [], ['home.ts'])).toBeNull()
 })
 

@@ -17,10 +17,15 @@ let siteUrl = ''
 let mcp: { url: string; token: string }
 
 const rpc = async (method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}): Promise<Response> =>
-  fetch(mcp.url, { method: 'POST', headers: { Authorization: `Bearer ${mcp.token}`, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
+  fetch(mcp.url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${mcp.token}`, 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+  })
 
 type ToolResult = { content: { type: string; text?: string; data?: string }[]; isError?: boolean }
-const call = async (name: string, args: Record<string, unknown> = {}): Promise<ToolResult> => ((await (await rpc('tools/call', { name, arguments: args })).json()) as { result: ToolResult }).result
+const call = async (name: string, args: Record<string, unknown> = {}): Promise<ToolResult> =>
+  ((await (await rpc('tools/call', { name, arguments: args })).json()) as { result: ToolResult }).result
 const text = (result: ToolResult): string => result.content.map((part) => part.text ?? '').join('\n')
 
 test.beforeAll(async () => {
@@ -54,14 +59,18 @@ test('agent sessions get an MCP server that drives the built-in browser', async 
 
   expect((await rpc('ping', {}, { Authorization: 'Bearer nope' })).status).toBe(401)
   expect((await rpc('ping', {}, { Origin: 'https://evil.example' })).status).toBe(401)
-  const init = (await (await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } })).json()) as { result: { instructions: string } }
+  const init = (await (await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } })).json()) as {
+    result: { instructions: string }
+  }
   expect(init.result.instructions).toContain('browser_')
   const listed = (await (await rpc('tools/list')).json()) as { result: { tools: { name: string }[] } }
   expect(listed.result.tools.map((tool) => tool.name)).toContain('browser_snapshot')
 
-
   // Sessions: the shell above is listed, takes a command and shows its output
-  const shell = text(await call('sessions_list')).split('\n').find((line) => line.includes(' shell ')) ?? ''
+  const shell =
+    text(await call('sessions_list'))
+      .split('\n')
+      .find((line) => line.includes(' shell ')) ?? ''
   expect(shell).toContain('running')
   const session = shell.split(' ')[0]
   await call('session_send', { session, text: 'echo treeix-$((6*7))' })

@@ -16,7 +16,12 @@ test('chunks of one role merge into one block, a new role starts another', () =>
 })
 
 test('thoughts time themselves and close when something else arrives', () => {
-  const feed = run([{ type: 'turn_start' }, { type: 'thought_chunk', text: 'Hmm ' }, { type: 'thought_chunk', text: 'yes' }, { type: 'message_chunk', role: 'agent', content: { type: 'text', text: 'Done' } }])
+  const feed = run([
+    { type: 'turn_start' },
+    { type: 'thought_chunk', text: 'Hmm ' },
+    { type: 'thought_chunk', text: 'yes' },
+    { type: 'message_chunk', role: 'agent', content: { type: 'text', text: 'Done' } }
+  ])
   expect(feed.blocks[0]).toEqual({ type: 'thought', text: 'Hmm yes', startedAt: 1000, endedAt: 3000 })
 })
 
@@ -29,7 +34,10 @@ test('tool calls upsert by id and permissions attach to their call', () => {
   ])
   expect(feed.waiting).toBe(true)
   expect(feed.blocks).toHaveLength(1)
-  const settled = [{ type: 'permission_settled', requestId: 'r1' }, { type: 'tool_call_update', id: 't1', patch: { status: 'completed', output: [{ type: 'text', text: '4 pass' }] } }] satisfies ChatEvent[]
+  const settled = [
+    { type: 'permission_settled', requestId: 'r1' },
+    { type: 'tool_call_update', id: 't1', patch: { status: 'completed', output: [{ type: 'text', text: '4 pass' }] } }
+  ] satisfies ChatEvent[]
   const after = settled.reduce((current, event) => reduce(current, event, 9000), feed)
   expect(after.waiting).toBe(false)
   expect(after.blocks[0]).toMatchObject({ type: 'tool', permission: null, call: { status: 'completed', output: [{ type: 'text', text: '4 pass' }] } })

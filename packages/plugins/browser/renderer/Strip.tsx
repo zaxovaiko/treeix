@@ -69,9 +69,18 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
           }))
         : vitals.map((entry) => ({
             entry,
-            cells: [entry.name, [entry.element, entry.detail].filter(Boolean).join(' · '), entry.name === 'CLS' ? String(Math.round(entry.value * 100) / 100) : `${Math.round(entry.value)} ms`, entry.start ? `at ${seconds(entry.start)}` : ''],
+            cells: [
+              entry.name,
+              [entry.element, entry.detail].filter(Boolean).join(' · '),
+              entry.name === 'CLS' ? String(Math.round(entry.value * 100) / 100) : `${Math.round(entry.value)} ms`,
+              entry.start ? `at ${seconds(entry.start)}` : ''
+            ],
             bad: (entry.name === 'LCP' && entry.value > 4000) || (entry.name === 'INP' && entry.value > 500) || (entry.name === 'CLS' && entry.value > 0.25),
-            warn: entry.name === 'Long task' || (entry.name === 'LCP' && entry.value > 2500) || (entry.name === 'INP' && entry.value > 200) || (entry.name === 'CLS' && entry.value > 0.1)
+            warn:
+              entry.name === 'Long task' ||
+              (entry.name === 'LCP' && entry.value > 2500) ||
+              (entry.name === 'INP' && entry.value > 200) ||
+              (entry.name === 'CLS' && entry.value > 0.1)
           }))
   const paneButton = (id: Pane, label: string, badge?: number): React.JSX.Element => {
     const shown = pane === id && open
@@ -103,7 +112,12 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
         <button
           title={`Docked ${side}; click to move`}
           aria-label="Move panel"
-          onClick={(event) => openMenu(event, SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onSide(target) })))}
+          onClick={(event) =>
+            openMenu(
+              event,
+              SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onSide(target) }))
+            )
+          }
           className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Icon name="panel" className={`size-3.5 ${side === 'bottom' ? 'rotate-90 -scale-x-100' : side === 'right' ? '-scale-x-100' : ''}`} />
@@ -127,29 +141,29 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
             {!detail && rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
             {!detail &&
               rows
-              .slice()
-              .reverse()
-              .map(({ entry, cells, bad, warn }) => (
-                <label
-                  key={entry.id}
-                  title={entry.kind === 'network' ? 'Click for headers, payload, response and curl' : undefined}
-                  onClick={(event) => {
-                    // A network row opens its details; only its checkbox hands it to the agent
-                    if (entry.kind !== 'network' || event.target instanceof HTMLInputElement) return
-                    event.preventDefault()
-                    setDetailId(entry.id)
-                  }}
-                  className="grid cursor-pointer grid-cols-[16px_72px_minmax(0,1fr)_72px_64px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50"
-                >
-                  <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
-                  <span className={`truncate ${tone(bad, warn)}`}>{cells[0]}</span>
-                  <span className="truncate" title={cells[1]}>
-                    {cells[1]}
-                  </span>
-                  <span className={`text-right ${tone(bad, warn)}`}>{cells[2]}</span>
-                  <span className="text-right text-muted-foreground">{cells[3]}</span>
-                </label>
-              ))}
+                .slice()
+                .reverse()
+                .map(({ entry, cells, bad, warn }) => (
+                  <label
+                    key={entry.id}
+                    title={entry.kind === 'network' ? 'Click for headers, payload, response and curl' : undefined}
+                    onClick={(event) => {
+                      // A network row opens its details; only its checkbox hands it to the agent
+                      if (entry.kind !== 'network' || event.target instanceof HTMLInputElement) return
+                      event.preventDefault()
+                      setDetailId(entry.id)
+                    }}
+                    className="grid cursor-pointer grid-cols-[16px_72px_minmax(0,1fr)_72px_64px] items-center gap-2 border-t border-border px-5 py-1.5 font-mono text-[11px] hover:bg-accent/50"
+                  >
+                    <input type="checkbox" checked={ticked(entry)} onChange={() => void toggle(entry)} />
+                    <span className={`truncate ${tone(bad, warn)}`}>{cells[0]}</span>
+                    <span className="truncate" title={cells[1]}>
+                      {cells[1]}
+                    </span>
+                    <span className={`text-right ${tone(bad, warn)}`}>{cells[2]}</span>
+                    <span className="text-right text-muted-foreground">{cells[3]}</span>
+                  </label>
+                ))}
           </div>
         </div>
       )}
@@ -228,7 +242,13 @@ function RequestDetail({ entry, guestId, onClose }: { entry: NetworkEntry; guest
         <HeaderList values={entry.responseHeaders} />
       </Section>
       <Section title="Response body">
-        {body === undefined ? <div className="text-muted-foreground">Loading…</div> : body ? <pre className={code}>{pretty(body)}</pre> : <div className="text-muted-foreground">Not available</div>}
+        {body === undefined ? (
+          <div className="text-muted-foreground">Loading…</div>
+        ) : body ? (
+          <pre className={code}>{pretty(body)}</pre>
+        ) : (
+          <div className="text-muted-foreground">Not available</div>
+        )}
       </Section>
     </div>
   )

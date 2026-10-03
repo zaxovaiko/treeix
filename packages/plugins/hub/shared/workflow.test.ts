@@ -15,6 +15,12 @@ const run = (agent: string, status: RunStatus, node: NodeStatus): Run => ({
 })
 
 test('active agents are those a running step asks, each once', () => {
-  const runs = [run('news', 'running', 'running'), run('news', 'running', 'running'), run('scout', 'running', 'running'), run('idle', 'running', 'pending'), run('old', 'done', 'done')]
+  const runs = [
+    run('news', 'running', 'running'),
+    run('news', 'running', 'running'),
+    run('scout', 'running', 'running'),
+    run('idle', 'running', 'pending'),
+    run('old', 'done', 'done')
+  ]
   expect([...activeAgents(runs)].sort()).toEqual(['news', 'scout'])
 })

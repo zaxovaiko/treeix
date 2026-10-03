@@ -71,7 +71,12 @@ export function paletteResults(commands: Command[], query: string, browseFiles =
   if (words.length === 0) {
     const order = ['Actions', ...groups.filter((group) => !(group in BROWSE_LIMITS)), 'Worktrees', 'Files', 'Settings']
     const limit = (group: string): number => (single || (group === 'Files' && browseFiles) ? GROUP_LIMIT : (BROWSE_LIMITS[group] ?? BROWSE_LIMIT))
-    return order.flatMap((group) => pool.filter((command) => command.group === group).slice(0, limit(group)).map((command) => ({ command, score: 0, marks: new Set<number>() })))
+    return order.flatMap((group) =>
+      pool
+        .filter((command) => command.group === group)
+        .slice(0, limit(group))
+        .map((command) => ({ command, score: 0, marks: new Set<number>() }))
+    )
   }
   const scored = pool.flatMap((command) => score(command, words) ?? []).sort((a, b) => b.score - a.score)
   // Groups in the order of their best match

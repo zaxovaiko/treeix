@@ -20,22 +20,16 @@ let loadedShiki: Shiki | null = null
 let toMonacoTheme: ToMonacoTheme | null = null
 
 async function load(): Promise<{ monaco: Monaco; shiki: Shiki }> {
-  const [
-    monaco,
-    { default: EditorWorker },
-    { createHighlighter },
-    { shikiToMonaco, textmateThemeToMonacoTheme },
-    { default: pierreDark },
-    { default: pierreLight }
-  ] = await Promise.all([
-    // editor.main: the whole editor, find, suggest, hover, folding and the rest
-    import('monaco-editor'),
-    import('monaco-editor/editor/editor.worker.js?worker'),
-    import('shiki'),
-    import('@shikijs/monaco'),
-    import('@pierre/theme/pierre-dark'),
-    import('@pierre/theme/pierre-light')
-  ])
+  const [monaco, { default: EditorWorker }, { createHighlighter }, { shikiToMonaco, textmateThemeToMonacoTheme }, { default: pierreDark }, { default: pierreLight }] =
+    await Promise.all([
+      // editor.main: the whole editor, find, suggest, hover, folding and the rest
+      import('monaco-editor'),
+      import('monaco-editor/editor/editor.worker.js?worker'),
+      import('shiki'),
+      import('@shikijs/monaco'),
+      import('@pierre/theme/pierre-dark'),
+      import('@pierre/theme/pierre-light')
+    ])
   // Only the base worker: TypeScript smarts come from the app's own language service, not Monaco's
   self.MonacoEnvironment = { getWorker: () => new EditorWorker() }
   // Monaco's own TypeScript mode would start its 7 MB worker and duplicate our providers; turn every feature of it off

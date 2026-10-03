@@ -215,23 +215,13 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
         ))}
       {call.kind === 'execute' && output !== '' && <Output text={output} collapseAfter={COLLAPSED_LINES} />}
       {isLookup && open && <Output text={output} collapseAfter={null} />}
-      {!isLookup && !isEdit && call.kind !== 'execute' && open && (
-        <Output text={output || JSON.stringify(call.rawInput, null, 2) || ''} collapseAfter={null} />
-      )}
+      {!isLookup && !isEdit && call.kind !== 'execute' && open && <Output text={output || JSON.stringify(call.rawInput, null, 2) || ''} collapseAfter={null} />}
       {children}
     </div>
   )
 }
 
-export function PermissionCard({
-  permission,
-  newest,
-  onAnswer
-}: {
-  permission: PendingPermission
-  newest: boolean
-  onAnswer: (optionId: string) => void
-}): React.JSX.Element {
+export function PermissionCard({ permission, newest, onAnswer }: { permission: PendingPermission; newest: boolean; onAnswer: (optionId: string) => void }): React.JSX.Element {
   const allow = firstAllow(permission.options)
   const reject = firstReject(permission.options)
   return (

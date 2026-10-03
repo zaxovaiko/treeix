@@ -25,7 +25,9 @@ export function kindOf(env: WorktreeEnv, file: EnvFile, name: string, value: str
 
 /** Every name the worktree sets, then the names its folders' templates expect and no file in that folder sets */
 export function rowsOf(env: WorktreeEnv, main: WorktreeEnv | null): Row[] {
-  const rows: Row[] = env.files.flatMap((file) => file.vars.map((entry) => ({ file: file.path, name: entry.name, value: entry.value, line: entry.line, ...kindOf(env, file, entry.name, entry.value) })))
+  const rows: Row[] = env.files.flatMap((file) =>
+    file.vars.map((entry) => ({ file: file.path, name: entry.name, value: entry.value, line: entry.line, ...kindOf(env, file, entry.name, entry.value) }))
+  )
   const seen = new Set(rows.map((row) => `${folderOf(row.file)}|${row.name}`))
   for (const template of env.templates) {
     const folder = folderOf(template.path)

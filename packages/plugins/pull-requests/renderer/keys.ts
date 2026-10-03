@@ -59,7 +59,13 @@ const idOf = (verb: Verb): string => `prs.${verb}`
 defineActions([
   ...VERBS.map(({ verb, code, shift, label }) => ({ id: idOf(verb), label, section: 'Pull requests', page: PAGE, keys: key(code, { shift }) })),
   { id: 'prs.findFile', label: 'Go to a changed file', section: 'Pull requests', page: PAGE, keys: key('KeyP', { meta: true }) },
-  { id: 'prs.draftComment', label: 'Add a draft comment to agent comments instead of posting it', section: 'Pull requests', page: PAGE, keys: key('Enter', { meta: true, shift: true }) }
+  {
+    id: 'prs.draftComment',
+    label: 'Add a draft comment to agent comments instead of posting it',
+    section: 'Pull requests',
+    page: PAGE,
+    keys: key('Enter', { meta: true, shift: true })
+  }
 ])
 
 type Handlers = Partial<Record<Verb, () => void>>
@@ -89,7 +95,10 @@ export function usePullRequestKeys(handlers: Handlers): void {
     sources.add(get)
     const onKey = (event: KeyboardEvent): void => {
       if (!mine.current || !isPageKey(event)) return
-      const id = actionForEvent(event, VERBS.map(({ verb }) => idOf(verb)))
+      const id = actionForEvent(
+        event,
+        VERBS.map(({ verb }) => idOf(verb))
+      )
       const verb = VERBS.find((entry) => idOf(entry.verb) === id)?.verb
       const run = verb && latest.current[verb]
       if (!run) return

@@ -9,7 +9,24 @@ import { importLabel } from './SettingsPage'
 import { browserSettings } from './settings'
 import { Strip, type StripSide } from './Strip'
 import { type Suggestion, SuggestionRow, Suggestions, sectionLabel, useRunning, useSuggestions } from './Suggestions'
-import { activeTab, type BrowserTab, closeTab, getBrowser, groupNames, groupTab, moveTab, openTab, patchTab, renameGroup, reopenTab, selectTab, tabLabel, toggleGroup, updateBrowser, useBrowser } from './tabs'
+import {
+  activeTab,
+  type BrowserTab,
+  closeTab,
+  getBrowser,
+  groupNames,
+  groupTab,
+  moveTab,
+  openTab,
+  patchTab,
+  renameGroup,
+  reopenTab,
+  selectTab,
+  tabLabel,
+  toggleGroup,
+  updateBrowser,
+  useBrowser
+} from './tabs'
 import type { BrowserAction } from '../shared/keys'
 import type { ImportInfo } from '../shared/types'
 import { httpProblem, loadError } from './loadErrors'
@@ -183,7 +200,11 @@ function TabStrip(): React.JSX.Element {
                 {...dropProps((id) => updateBrowser((current) => groupTab(current, id, group)))}
                 className={`ml-1 flex h-5 max-w-32 shrink-0 items-center rounded px-1.5 text-[11px] font-medium text-background ${groupColor(group)}`}
               >
-                {renamingGroup === group ? <NameInput value={group} label="Group name" onDone={(name) => finishGroupRename(group, name)} /> : <span className="truncate">{group}</span>}
+                {renamingGroup === group ? (
+                  <NameInput value={group} label="Group name" onDone={(name) => finishGroupRename(group, name)} />
+                ) : (
+                  <span className="truncate">{group}</span>
+                )}
                 {collapsed && <span className="ml-1 tabular-nums opacity-70">{tabs.filter((candidate) => candidate.group === group).length}</span>}
               </button>
             )}
@@ -364,12 +385,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         >
           <Icon name="pointer" className="size-3.5" />
         </button>
-        <button
-          aria-label="Developer tools"
-          title="Developer tools (⌥⌘I)"
-          className={toolButton}
-          onClick={() => runBrowserAction('devtools')}
-        >
+        <button aria-label="Developer tools" title="Developer tools (⌥⌘I)" className={toolButton} onClick={() => runBrowserAction('devtools')}>
           <Icon name="code" className="size-3.5" />
         </button>
         {place === 'tab' && host.service('sessions') && (

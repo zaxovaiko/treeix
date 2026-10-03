@@ -13,10 +13,13 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 const poll = (): void => {
   if (document.hidden) return
-  void listPlans().then((plans) => {
-    latest = plans
-    listeners.forEach((listener) => listener(plans))
-  }, () => undefined)
+  void listPlans().then(
+    (plans) => {
+      latest = plans
+      listeners.forEach((listener) => listener(plans))
+    },
+    () => undefined
+  )
 }
 
 /** One poll of the plans folder for every plan button and view; runs while any is mounted and the window shows */

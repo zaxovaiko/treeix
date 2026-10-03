@@ -115,7 +115,12 @@ function blocks(nodes: RootContent[], mediaOf: MediaOf): Json[] {
     const parent = frames[frames.length - 1]
     // Expands nest one level deep in ADF; anything deeper joins the one around it
     if (frames.length > 2) parent.content.push(...frame.content)
-    else parent.content.push({ type: frames.length === 1 ? 'expand' : 'nestedExpand', attrs: { title: frame.title }, content: frame.content.length ? frame.content : [{ type: 'paragraph', content: [] }] })
+    else
+      parent.content.push({
+        type: frames.length === 1 ? 'expand' : 'nestedExpand',
+        attrs: { title: frame.title },
+        content: frame.content.length ? frame.content : [{ type: 'paragraph', content: [] }]
+      })
   }
   for (const node of nodes) {
     const open = node.type === 'html' ? node.value.trim().match(DETAILS_OPEN) : null

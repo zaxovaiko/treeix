@@ -66,7 +66,12 @@ export function FullFileView({ path, subtitle, load, onClose }: { path: string; 
           <EmptyState fill title="Loading file..." />
         ) : (
           <Virtualizer className="min-h-0 flex-1 overflow-auto select-text">
-            <File file={{ name: path, contents, cacheKey: `full:${path}:${contents.length}` }} className="block" style={diffBackground()} options={{ ...codeThemeOptions(), disableFileHeader: true }} />
+            <File
+              file={{ name: path, contents, cacheKey: `full:${path}:${contents.length}` }}
+              className="block"
+              style={diffBackground()}
+              options={{ ...codeThemeOptions(), disableFileHeader: true }}
+            />
           </Virtualizer>
         )}
       </div>

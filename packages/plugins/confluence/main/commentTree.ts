@@ -36,7 +36,9 @@ export function toCommentTree(raw: unknown, pageId: string, host: string | null)
       replies: []
     }
     byId.set(comment.id, comment)
-    const parent = list(result.ancestors).filter((ancestor) => ancestor.type === 'comment').at(-1)
+    const parent = list(result.ancestors)
+      .filter((ancestor) => ancestor.type === 'comment')
+      .at(-1)
     if (parent) parents.set(comment.id, text(parent.id))
   }
   for (const comment of byId.values()) {

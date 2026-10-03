@@ -74,8 +74,7 @@ export const changeBlockStarts = (rows: PatchRow[]): number[] => rows.flatMap((r
 export function extractLines(patch: string, range: LineRange): string {
   const rows = patchRows(patch)
   const startSide = range.side ?? 'additions'
-  const find = (side: Side, line: number): number =>
-    rows.findIndex((row) => (side === 'deletions' ? row.old : row.new) === line)
+  const find = (side: Side, line: number): number => rows.findIndex((row) => (side === 'deletions' ? row.old : row.new) === line)
   const from = find(startSide, range.start)
   const to = find(range.endSide ?? startSide, range.end)
   if (from === -1 || to === -1) return ''
@@ -99,8 +98,7 @@ export function rangeLabel({ start, end, side, endSide }: LineRange): string {
 }
 
 /** Line 0 means the comment is about the whole file or PR, not specific lines */
-export const commentLocation = (comment: ReviewComment): string =>
-  comment.range.start > 0 ? `${comment.filePath}:${rangeLabel(comment.range)}` : comment.filePath
+export const commentLocation = (comment: ReviewComment): string => (comment.range.start > 0 ? `${comment.filePath}:${rangeLabel(comment.range)}` : comment.filePath)
 
 /** What a page wrote goes to the agent as quoted data, fenced longer than any fence inside it, so it can't pass for instructions */
 function pageContent(body: string): string[] {
@@ -154,11 +152,7 @@ export function commentsPrompt(comments: ReviewComment[], where: string | null):
 function isAttachment(value: unknown): value is Attachment {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Record<string, unknown>
-  return (
-    typeof candidate.path === 'string' &&
-    typeof candidate.name === 'string' &&
-    (candidate.thumbnail === undefined || typeof candidate.thumbnail === 'string')
-  )
+  return typeof candidate.path === 'string' && typeof candidate.name === 'string' && (candidate.thumbnail === undefined || typeof candidate.thumbnail === 'string')
 }
 
 export function isReviewComment(value: unknown): value is ReviewComment {
