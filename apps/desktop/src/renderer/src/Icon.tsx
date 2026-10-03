@@ -257,6 +257,8 @@ const paths = {
 } as const
 
 export type IconName = keyof typeof paths
+export const isIconName = (value: unknown): value is IconName => typeof value === 'string' && Object.hasOwn(paths, value)
+export const ICON_NAMES = Object.keys(paths).filter(isIconName)
 
 export function Icon({ name, className = 'size-3.5' }: { name: IconName; className?: string }): React.JSX.Element {
   return (
@@ -268,6 +270,7 @@ export function Icon({ name, className = 'size-3.5' }: { name: IconName; classNa
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
+      data-icon={name}
       className={`shrink-0 ${className}`}
     >
       {paths[name]}

@@ -1,14 +1,15 @@
 import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav } from '@treeix/sdk'
 import type { ToolStatus } from '../../shared/types'
-import { Icon } from './Icon'
+import { Icon, ICON_NAMES, type IconName } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
 import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
 import { BORDER_STRENGTHS, clampOpacity, DIGIT_MODIFIERS, type DigitModifier, type DigitTarget, FONT_SIZE_RANGE, fontStack, getSettings, MIN_OPACITY, type Settings, hotkeyOptions, SYSTEM_FONTS, TERMINAL_CONTRASTS, TERMINAL_FONT_WEIGHTS, type TerminalFontWeight as TerminalFontWeightChoice, updateSettings, useSettings } from './settings'
 import { type Agent, useAgents } from './agents'
 import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile, removeCustomTheme, type Theme } from './themes'
-import { EmptyState, Popup } from './ui'
+import { EmptyState, Popup, useMenuKeys } from './ui'
+import { arrangeTabs, WORKTREES_TAB } from './titleBarTabs'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
@@ -763,6 +764,94 @@ function Themes(): React.JSX.Element {
   )
 }
 
+function TabIconRow({ tab }: { tab: { id: string; label: string; icon: IconName } }): React.JSX.Element {
+  const picked = useSettings().tabIcons[tab.id]
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const close = (): void => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+  const menu = useMenuKeys(open, close)
+  const pick = (icon: IconName | null): void => {
+    const others = Object.entries(getSettings().tabIcons).filter(([id]) => id !== tab.id)
+    updateSettings({ tabIcons: Object.fromEntries(icon && icon !== tab.icon ? [...others, [tab.id, icon]] : others) })
+    close()
+  }
+  const current = picked ?? tab.icon
+  return (
+    <Row label={tab.label} description={`The ${tab.label} tab's icon in the title bar and the command palette.`}>
+      <div className="flex items-center gap-2">
+        {picked && (
+          <button onClick={() => pick(null)} className="h-8 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+            Reset
+          </button>
+        )}
+        <button
+          ref={triggerRef}
+          aria-label={`${tab.label} icon`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-input bg-muted px-2.5 text-muted-foreground hover:text-foreground"
+        >
+          <Icon name={current} className="size-4 text-foreground" />
+          <Icon name="chevron" className="size-3 rotate-90" />
+        </button>
+      </div>
+      {open && (
+        <Popup
+          ref={menu.ref}
+          anchor={triggerRef}
+          align="end"
+          onDismiss={close}
+          onKeyDown={menu.onKeyDown}
+          role="menu"
+          aria-label={`${tab.label} icon`}
+          className="grid max-h-72 grid-cols-8 gap-0.5 overflow-y-auto rounded-lg border border-input bg-popover p-1.5 shadow-xl"
+        >
+          {ICON_NAMES.map((name) => (
+            <button
+              key={name}
+              role="menuitemradio"
+              aria-checked={name === current}
+              aria-label={name}
+              title={name}
+              onClick={() => pick(name)}
+              className={`grid size-8 place-items-center rounded-md hover:bg-accent focus:bg-accent focus:outline-none ${name === current ? 'text-foreground ring-1 ring-border' : 'text-muted-foreground'}`}
+            >
+              <Icon name={name} className="size-4" />
+            </button>
+          ))}
+        </Popup>
+      )}
+    </Row>
+  )
+}
+
+function TabIcons(): React.JSX.Element {
+  const { titleBarTabs } = useSettings()
+  const { loaded } = usePlugins()
+  const pages = [WORKTREES_TAB, ...loaded.flatMap(({ plugin }) => plugin.tabs ?? [])].sort((a, b) => a.order - b.order)
+  const { left, right } = arrangeTabs(pages, titleBarTabs)
+  return (
+    <Card title="Tab icons">
+      {[...left, ...right].map((tab) => (
+        <TabIconRow key={tab.id} tab={tab} />
+      ))}
+    </Card>
+  )
+}
+
+function Appearance(): React.JSX.Element {
+  return (
+    <>
+      <Themes />
+      <TabIcons />
+    </>
+  )
+}
+
 function ShortcutRow({ keys, action }: { keys: string; action: string }): React.JSX.Element | null {
   if (!useSettingMatch(action, keys, 'shortcut')) return null
   return (
@@ -1093,7 +1182,7 @@ function Agents(): React.JSX.Element {
 }
 
 /** Blocks after a section's own rows */
-const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance: Themes, Terminal: Agents, Keyboard: Shortcuts, Plugins, Integrations: Tools }
+const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance, Terminal: Agents, Keyboard: Shortcuts, Plugins, Integrations: Tools }
 
 function Section({ id }: { id: SectionId }): React.JSX.Element {
   const specs = SETTINGS.filter((spec) => spec.section === id)
@@ -1137,6 +1226,7 @@ export function useSettingEntries(): SettingEntry[] {
   return [
     ...SETTINGS.map(({ section, card, label }) => ({ section, card, label })),
     { section: 'Appearance', card: 'Theme', label: 'Theme' },
+    { section: 'Appearance', card: 'Tab icons', label: 'Tab icons' },
     { section: 'Terminal', card: 'Agents', label: 'Agents' },
     ...PLUGINS.map(({ manifest }): SettingEntry => ({ section: 'Plugins', card: 'Plugins', label: manifest.name })),
     { section: 'Integrations', card: 'Command line tools', label: 'Command line tools' },

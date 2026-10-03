@@ -48,7 +48,7 @@ import { menuActions, registerActionRunner, runAction, subscribeRunners } from '
 import { inlineByDefault, refreshToolStatus } from './toolStatus'
 import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
 import { WORKTREE_ACTIONS } from './actions'
-import { arrangeTabs, moveTab, type TabSide } from './titleBarTabs'
+import { arrangeTabs, moveTab, type TabSide, WORKTREES_TAB } from './titleBarTabs'
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
 
@@ -60,7 +60,6 @@ const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.inc
 /** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
 const DEFAULT_TAB = 'terminal'
 /** Where Worktrees sits among the plugin tabs */
-const WORKTREES_ORDER = 30
 /** Page tabs dragged in the title bar carry their id */
 const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
 
@@ -256,8 +255,11 @@ function App(): React.JSX.Element {
   const [docTabs, setDocTabs] = useState<DocumentTab[]>([])
   const { loaded: plugins, ready: pluginsReady } = usePlugins()
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
-  /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, left side first */
-  const tabSides = arrangeTabs([{ id: 'worktrees', label: 'Worktrees', icon: 'branch' as const, order: WORKTREES_ORDER }, ...pluginTabs].sort((a, b) => a.order - b.order), settings.titleBarTabs)
+  /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, left side first, each with the icon picked in Settings */
+  const tabSides = arrangeTabs(
+    [WORKTREES_TAB, ...pluginTabs].sort((a, b) => a.order - b.order).map((tab) => ({ ...tab, icon: settings.tabIcons[tab.id] ?? tab.icon })),
+    settings.titleBarTabs
+  )
   const tabs = [...tabSides.left, ...tabSides.right]
   const [draggingTab, setDraggingTab] = useState(false)
   const [tabDrop, setTabDrop] = useState<{ side: TabSide; beforeId: string | null } | null>(null)

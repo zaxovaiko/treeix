@@ -4,6 +4,9 @@ import { isString, list, object } from '../../shared/json'
 export type TabLayout = { left: string[]; right: string[] }
 export type TabSide = keyof TabLayout
 
+/** The one page tab the app brings itself; plugins bring the rest */
+export const WORKTREES_TAB = { id: 'worktrees', label: 'Worktrees', icon: 'branch', order: 30 } as const
+
 /** Splits tabs, given in their default order, between the sides; tabs the layout doesn't name yet go last on the left */
 export function arrangeTabs<T extends { id: string }>(tabs: T[], layout: TabLayout): Record<TabSide, T[]> {
   const pick = (ids: string[]): T[] => ids.flatMap((id) => tabs.filter((tab) => tab.id === id))

@@ -49,6 +49,13 @@ test('parseChatThinking falls back to collapsed for unknown values and keeps exp
   expect(parseChatThinking('hidden')).toBe('hidden')
 })
 
+test('parseTabIcons keeps only known icon names', async () => {
+  const { parseTabIcons } = await import('./settings')
+  expect(parseTabIcons({ worktrees: 'folder', terminal: 'not-an-icon', jira: 42, editor: 'toString' })).toEqual({ worktrees: 'folder' })
+  expect(parseTabIcons('folder')).toEqual({})
+  expect(parseTabIcons(undefined)).toEqual({})
+})
+
 test('parseAppearance moves the old single theme into its mode', async () => {
   const { parseAppearance } = await import('./settings')
   expect(parseAppearance({ theme: 'nord' })).toEqual({ themeMode: 'dark', lightTheme: 'light', darkTheme: 'nord' })
