@@ -6,6 +6,7 @@ import { Dialog, errorMessage } from '@treeix/app/ui'
 import { shrinkImage } from '@treeix/app/WorkspaceRail'
 import { WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { API_PRESETS, type HubAgent, type Runtime } from '../shared/types'
+import { useEscape } from './AskDialog'
 import { hubApi, runtimeSpec } from './store'
 
 const FIELD = 'h-8 rounded-md border border-input bg-muted px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60'
@@ -106,16 +107,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
     setKeySaved(true)
   }
 
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
-      event.preventDefault()
-      event.stopPropagation()
-      onClose()
-    }
-    window.addEventListener('keydown', closeOnEscape, true)
-    return () => window.removeEventListener('keydown', closeOnEscape, true)
-  }, [onClose])
+  useEscape(onClose)
 
   const detect = (): void => {
     if (!spec) return

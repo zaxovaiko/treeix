@@ -46,6 +46,9 @@ export type ChatEvent =
   /** The agent's process or connection ended; the session can be resumed with a new start */
   | { type: 'disconnected'; message: string }
 
+/** An event as a log keeps it, with when it arrived */
+export type LoggedChatEvent = { at: number; event: ChatEvent }
+
 export type ChatCapabilities = { images: boolean; load: boolean; list: boolean }
 
 export type ChatSessionInfo = { sessionId: string; title: string; updatedAt: number }

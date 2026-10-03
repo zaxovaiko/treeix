@@ -22,7 +22,7 @@ export * from './layout'
 export type * from './chat'
 /** Makes a plugin's action runnable from the native menu; the action needs a `Go to` or `Panels` section to show there */
 export { registerActionRunner } from '@treeix/app/actionRunners'
-import type { ChatSpec } from './chat'
+import type { ChatSpec, LoggedChatEvent } from './chat'
 import type { ShortcutInfo } from './layout'
 
 /** A tab in the title bar that always exists while the plugin is enabled */
@@ -131,6 +131,8 @@ export interface Services {
 
 export type ChatService = {
   View: ComponentType<{ chatId: string }>
+  /** A read-only conversation from logged events, e.g. an agent's part of a workflow run; permission prompts still take answers */
+  Transcript: ComponentType<{ events: LoggedChatEvent[]; cwd: string; onAnswer?: (requestId: string, optionId: string) => void }>
   /** Connects and remembers the agent session id; resolves with it */
   start: (chatId: string, options: ChatSpec & { agent: string; cwd: string; resume: string | null }) => Promise<string>
   /** Sends a message, queued behind a running turn */

@@ -4,9 +4,9 @@ import { agentOr } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { useSettings } from '@treeix/app/settings'
 import { baseName } from '@treeix/app/Sidebar'
-import { ErrorBlock, firstAllow, firstReject, formatElapsed, PermissionCard, TextBlock, ThoughtBlock, ToolCard, useElapsed } from './Blocks'
+import { firstAllow, firstReject, formatElapsed, useElapsed } from './Blocks'
 import { Composer } from './ChatComposer'
-import type { Block, PendingPermission } from './feed'
+import { FeedBlocks, pendingOf } from './Transcript'
 import { activityOf, answer, cancel, type ChatState, isBusy, isConnecting, retry, useChat } from './store'
 
 const STICK_PX = 40
@@ -76,8 +76,6 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
   )
 }
 
-const pendingOf = (block: Block): PendingPermission | null => (block.type === 'permission' ? block.permission : block.type === 'tool' ? block.permission : null)
-
 export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
   const host = useHost()
   const chat = useChat(chatId)
@@ -114,7 +112,6 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
 
   const newest = feed.blocks.map(pendingOf).findLast((permission) => permission !== null) ?? null
 
-
   const onKeyDownCapture = (event: React.KeyboardEvent): void => {
     // Keys from portaled menus (option pickers) reach here through React but are not the chat's
     if (!newest || !(event.target instanceof Node && root.current?.contains(event.target))) return
@@ -133,31 +130,6 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
     cancel(chatId)
   }
 
-  const renderBlock = (block: Block, index: number): React.ReactNode => {
-    switch (block.type) {
-      case 'text':
-        return <TextBlock key={index} block={block} />
-      case 'thought':
-        return <ThoughtBlock key={index} block={block} />
-      case 'tool': {
-        const permission = block.permission
-        return (
-          <ToolCard key={block.call.id} call={block.call} cwd={cwd}>
-            {permission && (
-              <div className="border-t border-border p-2">
-                <PermissionCard permission={permission} newest={permission === newest} onAnswer={(optionId) => reply(permission.requestId, optionId)} />
-              </div>
-            )}
-          </ToolCard>
-        )
-      }
-      case 'permission':
-        return <PermissionCard key={block.permission.requestId} permission={block.permission} newest={block.permission === newest} onAnswer={(optionId) => reply(block.permission.requestId, optionId)} />
-      case 'error':
-        return <ErrorBlock key={index} message={block.message} />
-    }
-  }
-
   return (
     <div ref={root} tabIndex={-1} className="flex h-full min-h-0 flex-col bg-background outline-none" onKeyDownCapture={onKeyDownCapture} onKeyDown={onKeyDown}>
       <div
@@ -169,7 +141,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
         className="flex min-h-0 flex-1 flex-col overflow-y-auto"
       >
         <div ref={content} className={`mx-auto flex w-full flex-1 ${width} flex-col gap-3 px-4 py-4`}>
-          {empty ? <EmptyState chatId={chatId} chat={chat} cwd={cwd} /> : feed.blocks.map(renderBlock)}
+          {empty ? <EmptyState chatId={chatId} chat={chat} cwd={cwd} /> : <FeedBlocks blocks={feed.blocks} cwd={cwd} newest={newest} onAnswer={reply} />}
         </div>
       </div>
       <div className={`mx-auto w-full ${width}`}>

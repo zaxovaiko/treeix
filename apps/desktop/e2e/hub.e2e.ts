@@ -105,3 +105,23 @@ test('an agent on an OpenAI-compatible API lists its models and chats with its i
   await expect(page.getByText('tiny heard 2 messages, first system')).toBeVisible()
   await expect(page.getByText(/^Thought for \d+s$/)).toBeVisible()
 })
+
+test('asking an agent from the palette records a run with its thinking and answer', async () => {
+  const { page } = launched
+  await page.locator('[data-page-tab="hub"]').click()
+  await page.getByRole('button', { name: 'New agent' }).click()
+  await page.getByPlaceholder('Reviewer').fill('Courier')
+  await page.getByRole('combobox', { name: /^Runtime/ }).selectOption('agent:fake')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Run command' }).click()
+  await page.getByPlaceholder(/^Search commands/).fill('Ask Courier')
+  await page.keyboard.press('Enter')
+  await page.getByPlaceholder(/^A one-off question/).fill('Where to?')
+  await page.keyboard.press('Enter')
+
+  await expect(page.getByText('Here is a picture')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(/^Thought for \d+s$/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Where to\?/ })).toBeVisible()
+  await expect(page.locator('header').getByTitle('Done')).toBeVisible()
+})

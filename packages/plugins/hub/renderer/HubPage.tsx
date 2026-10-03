@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { focusZone, PageLayout, useHost, useListNav } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { EmptyState, errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
+import { timeAgo } from '@treeix/app/time'
+import { EmptyState, errorMessage, IconButton } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
-import { hubAgents, hubApi, hubSettings, registryId, runtimeLabel } from './store'
+import { RunView, StatusIcon } from './RunView'
+import { asking, hubAgents, hubApi, hubRuns, hubSelection, hubSettings, registryId, runtimeLabel } from './store'
 
 const ROW = 'flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent'
+const HEADING = 'text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
 
 const chatIdOf = (agent: HubAgent): string => `hub:${agent.id}`
 
@@ -51,6 +54,9 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
           <div className="truncate text-sm font-medium">{agent.name}</div>
           <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model, agent.mode].filter(Boolean).join(' · ')}</div>
         </div>
+        <IconButton label={`Ask ${agent.name}`} onClick={() => asking.set(agent.id)}>
+          <Icon name="comment" className="size-3.5" />
+        </IconButton>
         <IconButton label="New conversation" onClick={restart}>
           <Icon name="plus" className="size-3.5" />
         </IconButton>
@@ -77,13 +83,17 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
 export function HubPage(): React.JSX.Element {
   const host = useHost()
   const agents = hubAgents.use()
-  const [selectedId, setSelectedId] = usePersisted<string | null>('hub.selected', null)
+  const runs = hubRuns.use()
+  const selection = hubSelection.use()
   const [editing, setEditing] = useState<HubAgent | 'new' | null>(null)
-  const selected = agents.find((agent) => agent.id === selectedId) ?? agents[0] ?? null
+  const rows = [...agents.map((agent) => `agent:${agent.id}`), ...runs.map((run) => `run:${run.id}`)]
+  const selectedRow = selection !== null && rows.includes(selection) ? selection : (rows[0] ?? null)
+  const selectedAgent = agents.find((agent) => `agent:${agent.id}` === selectedRow) ?? null
+  const selectedRun = runs.find((run) => `run:${run.id}` === selectedRow) ?? null
   const nav = useListNav({
-    count: agents.length,
-    index: selected ? agents.indexOf(selected) : -1,
-    onSelect: (index) => setSelectedId(agents[index].id),
+    count: rows.length,
+    index: selectedRow === null ? -1 : rows.indexOf(selectedRow),
+    onSelect: (index) => hubSelection.set(rows[index]),
     onOpen: () => focusZone('main')
   })
 
@@ -99,7 +109,7 @@ export function HubPage(): React.JSX.Element {
   const list = (
     <>
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Agents</span>
+        <span className={HEADING}>Agents</span>
         <span className="flex-1" />
         <IconButton label="New agent" onClick={() => setEditing('new')}>
           <Icon name="plus" className="size-3.5" />
@@ -110,11 +120,24 @@ export function HubPage(): React.JSX.Element {
           <button
             key={agent.id}
             {...nav.rowProps(index)}
-            onClick={() => setSelectedId(agent.id)}
-            className={`${ROW} h-9 px-2 text-xs ${agent === selected ? 'bg-accent' : ''}`}
+            onClick={() => hubSelection.set(`agent:${agent.id}`)}
+            className={`${ROW} h-9 px-2 text-xs ${agent === selectedAgent ? 'bg-accent' : ''}`}
           >
             <AgentAvatar agent={agent} className="size-6 text-[11px]" />
             <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+          </button>
+        ))}
+        {runs.length > 0 && <div className={`${HEADING} px-2 pt-4 pb-1.5`}>Runs</div>}
+        {runs.map((run, index) => (
+          <button
+            key={run.id}
+            {...nav.rowProps(agents.length + index)}
+            onClick={() => hubSelection.set(`run:${run.id}`)}
+            className={`${ROW} h-8 px-2 text-xs ${run === selectedRun ? 'bg-accent' : ''}`}
+          >
+            <StatusIcon status={run.status} />
+            <span className="min-w-0 flex-1 truncate">{run.title}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{timeAgo(new Date(run.startedAt).toISOString())}</span>
           </button>
         ))}
       </div>
@@ -127,8 +150,10 @@ export function HubPage(): React.JSX.Element {
         id="hub"
         list={list}
         main={
-          selected ? (
-            <AgentChat key={selected.id} agent={selected} onEdit={() => setEditing(selected)} onDelete={() => remove(selected)} />
+          selectedRun ? (
+            <RunView key={selectedRun.id} run={selectedRun} />
+          ) : selectedAgent ? (
+            <AgentChat key={selectedAgent.id} agent={selectedAgent} onEdit={() => setEditing(selectedAgent)} onDelete={() => remove(selectedAgent)} />
           ) : (
             <EmptyState fill icon="star" title="Your own agents: a name, a look and instructions on top of Claude, Codex or any chat agent">
               <button onClick={() => setEditing('new')} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
@@ -138,7 +163,7 @@ export function HubPage(): React.JSX.Element {
           )
         }
       />
-      {editing && <AgentEditor agent={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={(id) => (setSelectedId(id), setEditing(null))} />}
+      {editing && <AgentEditor agent={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={(id) => (hubSelection.set(`agent:${id}`), setEditing(null))} />}
     </>
   )
 }
