@@ -22,7 +22,7 @@ import { errorMessage, IconButton } from '@treeix/app/ui'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
-import { KIND_LABEL, StatusIcon } from './RunView'
+import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
 import { asking, hubAgents, hubApi, hubRuns, hubSelection } from './store'
 
 type StepNode = FlowNode<{ step: WorkflowNode }, 'step'>
@@ -32,7 +32,7 @@ const COLUMN = 260
 const ROW = 120
 const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60'
 const LABEL = 'flex flex-col gap-1.5 text-xs text-muted-foreground'
-const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', output: 'check' }
+const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', approval: 'lock', output: 'check' }
 const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the pattern', empty: 'is empty' } as const satisfies Record<Extract<WorkflowNode, { kind: 'condition' }>['test'], string>
 // Follows the app theme instead of React Flow's own light colors
 const THEME = {
@@ -72,6 +72,8 @@ function blankStep(kind: Exclude<WorkflowNode['kind'], 'input'>, id: string, age
       return { id, kind, agent, prompt: '{{prev}}', folder: null, retries: 0, onError: 'stop', timeoutMin: ASK_TIMEOUT_MIN }
     case 'condition':
       return { id, kind, source: '{{prev}}', test: 'contains', value: '' }
+    case 'approval':
+      return { id, kind, message: 'Go on with {{prev}}?' }
     case 'merge':
     case 'output':
       return { id, kind, template: '{{prev}}' }
@@ -85,7 +87,7 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
   const issues = problems.get(id)
   const title = step.kind === 'agent' ? (agent?.name ?? 'Pick an agent') : KIND_LABEL[step.kind]
   const detail =
-    step.kind === 'input' ? 'What the run starts with' : step.kind === 'agent' ? step.prompt : step.kind === 'condition' ? `${step.source} ${TESTS[step.test]} ${step.test === 'empty' ? '' : step.value}` : step.template
+    step.kind === 'input' ? 'What the run starts with' : step.kind === 'agent' ? step.prompt : step.kind === 'condition' ? `${step.source} ${TESTS[step.test]} ${step.test === 'empty' ? '' : step.value}` : step.kind === 'approval' ? step.message : step.template
 
   return (
     <div
@@ -96,7 +98,7 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
       <div className="flex items-center gap-2">
         {agent ? <AgentAvatar agent={agent} className="size-5 text-[10px]" /> : <Icon name={KIND_ICON[step.kind]} className="size-3.5 text-muted-foreground" />}
         <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
-        {state && state.status !== 'pending' && <StatusIcon status={state.status} />}
+        {state && state.status !== 'pending' && <StatusIcon status={shownNode(state)} />}
       </div>
       {detail.trim() && <div className="mt-1 line-clamp-2 break-words text-muted-foreground">{detail}</div>}
       {step.kind === 'condition' ? (
@@ -190,6 +192,12 @@ function Inspector({ step, sources, onChange, onDelete }: { step: WorkflowNode; 
               <option value="continue">Go on without its output</option>
             </select>
           </label>
+        </>
+      )}
+      {step.kind === 'approval' && (
+        <>
+          <TemplateField label="Message" value={step.message} sources={sources} onChange={(message) => onChange({ ...step, message })} />
+          <p className="text-xs text-muted-foreground">The run waits here until you approve it from the run's page; what came in goes on. Reject fails the run.</p>
         </>
       )}
       {(step.kind === 'merge' || step.kind === 'output') && <TemplateField label="Template" value={step.template} sources={sources} onChange={(template) => onChange({ ...step, template })} />}
@@ -388,13 +396,13 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
               isValidConnection={connectable}
               deleteKeyCode={['Backspace', 'Delete']}
               fitView
-              fitViewOptions={{ maxZoom: 1, minZoom: 0.8 }}
+              fitViewOptions={{ maxZoom: 1, minZoom: 0.5 }}
               style={THEME}
             >
               <Background gap={20} />
               <Controls showInteractive={false} />
               <Panel position="top-left" className="flex gap-1">
-                {(['agent', 'merge', 'condition', 'output'] as const).map((kind) => (
+                {(['agent', 'merge', 'condition', 'approval', 'output'] as const).map((kind) => (
                   <button key={kind} onClick={() => add(kind)} className="flex h-7 items-center gap-1 rounded-md bg-popover px-2 text-xs ring-1 ring-border hover:bg-accent">
                     <Icon name="plus" className="size-3" />
                     {KIND_LABEL[kind]}

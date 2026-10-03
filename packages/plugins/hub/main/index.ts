@@ -75,6 +75,7 @@ const plugin: MainPlugin = {
     const engine = createEngine({
       adapter: context.chatAdapter,
       runtime: async (agent) => (await runtimes.get()).find((entry) => entry.agent === agent) ?? null,
+      autoApprove: async (agent) => (await agents.get()).find((entry) => entry.id === agent)?.autoApprove === true,
       sessionEnv: context.sessionEnv,
       runs: createRuns(join(context.dataPath, 'runs')),
       onRun: (run) => context.broadcast('run', run),
@@ -106,6 +107,8 @@ const plugin: MainPlugin = {
     })
 
     context.on('cancelRun', (_, id: string) => engine.cancel(id))
+    context.on('decide', (_, runId: string, node: string, approved: boolean) => engine.decide(runId, node, approved))
+    context.handle('retryRun', (_, runId: string, node: string) => engine.retry(runId, node))
     context.on('answer', (_, runId: string, node: string, requestId: string, optionId: string | null) => engine.answer(runId, node, requestId, optionId))
 
     context.mcpTool({

@@ -25,6 +25,8 @@ export type HubAgent = {
   instructions: string
   /** Where it works; null is the selected worktree */
   folder: string | null
+  /** Allows every permission it asks for in runs, so they never wait; missing on agents saved before it existed */
+  autoApprove?: boolean
   updatedAt: number
 }
 
@@ -41,4 +43,5 @@ export const isHubAgent = (value: unknown): value is HubAgent =>
   ['id', 'name', 'icon', 'color', 'instructions'].every((key) => isString(value[key])) &&
   ['avatar', 'model', 'mode', 'folder'].every((key) => isNullableString(value[key])) &&
   isRuntime(value.runtime) &&
+  (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
   typeof value.updatedAt === 'number'

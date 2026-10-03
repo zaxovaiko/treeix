@@ -42,6 +42,8 @@ test.beforeAll(async () => {
   const { page } = launched
   await page.evaluate((agent) => localStorage.setItem('settings', JSON.stringify({ customAgents: [agent], plugins: { hub: true } })), fake)
   await page.reload()
+  // CI's screen is small; the canvas has to fit there
+  await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 740))
 })
 test.afterAll(async () => {
   api?.close()
@@ -168,4 +170,31 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await page.getByRole('button', { name: 'Run command' }).click()
   await page.getByPlaceholder(/^Search commands/).fill('Run Relay')
   await expect(page.getByText('Run Relay…')).toBeVisible()
+})
+
+test('an approval step holds the run, counted on the tab, until approved', async () => {
+  const { page } = launched
+  const steps = page.locator('.react-flow__node')
+  const hubTab = page.locator('[data-page-tab="hub"]')
+  // The first Esc clears the last test's query, the next closes the palette
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await hubTab.click()
+  await page.getByRole('button', { name: 'New workflow' }).click()
+  await page.getByRole('textbox', { name: 'Workflow name' }).fill('Gate')
+  await steps.filter({ hasText: 'Input' }).click()
+  await page.getByRole('button', { name: 'Approval', exact: true }).click()
+  await expect(page.locator('.react-flow__edge')).toHaveCount(2)
+
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await page.getByPlaceholder(/^The input/).fill('v1')
+  await page.keyboard.press('Enter')
+  await expect(steps.filter({ hasText: 'Approval' }).getByTitle('Needs you')).toBeVisible({ timeout: 20_000 })
+  await expect(hubTab.getByTitle('1 run waiting for you')).toBeVisible()
+
+  await page.getByRole('button', { name: /^Last run/ }).click()
+  await expect(page.getByText('Go on with v1?')).toBeVisible()
+  await page.getByRole('button', { name: 'Approve' }).click()
+  await expect(page.getByText(/^Done · /)).toBeVisible()
+  await expect(hubTab.getByTitle('1 run waiting for you')).toBeHidden()
 })

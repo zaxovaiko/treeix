@@ -7,7 +7,7 @@ import { EmptyState, errorMessage, IconButton } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
-import { RunView, StatusIcon } from './RunView'
+import { RunView, shownRun, StatusIcon } from './RunView'
 import { asking, hubAgents, hubApi, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel } from './store'
 
 // The canvas library is big and only workflows need it
@@ -178,7 +178,7 @@ export function HubPage(): React.JSX.Element {
             onClick={() => hubSelection.set(`run:${run.id}`)}
             className={`${ROW} h-8 px-2 text-xs ${run === selectedRun ? 'bg-accent' : ''}`}
           >
-            <StatusIcon status={run.status} />
+            <StatusIcon status={shownRun(run)} />
             <span className="min-w-0 flex-1 truncate">{run.title}</span>
             <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{timeAgo(new Date(run.startedAt).toISOString())}</span>
           </button>

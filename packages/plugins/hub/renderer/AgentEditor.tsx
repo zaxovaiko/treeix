@@ -287,6 +287,14 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
           />
         </label>
 
+        <label className="flex items-start gap-2 text-xs">
+          <input type="checkbox" checked={draft.autoApprove === true} onChange={(event) => patch({ autoApprove: event.target.checked })} className="mt-0.5 shrink-0" />
+          <span>
+            Allow everything it asks in workflow runs
+            {draft.autoApprove && <span className="mt-0.5 block text-[11px] text-amber-400">It edits files and runs commands without asking you first.</span>}
+          </span>
+        </label>
+
         {problem && <span className="text-[11px] whitespace-pre-wrap text-destructive">{problem}</span>}
       </div>
 

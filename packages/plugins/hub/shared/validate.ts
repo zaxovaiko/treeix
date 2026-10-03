@@ -12,24 +12,31 @@ export const templatesOf = (node: WorkflowNode): string[] => {
       return [node.prompt]
     case 'condition':
       return [node.source]
+    case 'approval':
+      return [node.message]
     case 'merge':
     case 'output':
       return [node.template]
   }
 }
 
-/** Every step that runs before `id`, found by walking its edges back */
-export function ancestors(workflow: Workflow, id: string): Set<string> {
+function reach(workflow: Workflow, id: string, back: boolean): Set<string> {
   const seen = new Set<string>()
-  const parents = (child: string): string[] => workflow.edges.filter((edge) => edge.to === child).map((edge) => edge.from)
-  const stack = parents(id)
+  const near = (node: string): string[] => workflow.edges.filter((edge) => (back ? edge.to : edge.from) === node).map((edge) => (back ? edge.from : edge.to))
+  const stack = near(id)
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
     if (seen.has(next)) continue
     seen.add(next)
-    stack.push(...parents(next))
+    stack.push(...near(next))
   }
   return seen
 }
+
+/** Every step that runs before `id`, found by walking its edges back */
+export const ancestors = (workflow: Workflow, id: string): Set<string> => reach(workflow, id, true)
+
+/** Every step that runs after `id` */
+export const descendants = (workflow: Workflow, id: string): Set<string> => reach(workflow, id, false)
 
 /** What has to change before the workflow can run, given the ids of the agents that exist */
 export function validate(workflow: Workflow, agents: string[]): Problem[] {

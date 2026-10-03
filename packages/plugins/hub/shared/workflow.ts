@@ -9,6 +9,8 @@ export type WorkflowNode =
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
   | { id: string; kind: 'condition'; source: string; test: 'contains' | 'equals' | 'regex' | 'empty'; value: string }
+  /** Pauses the run until the user approves `message`; passes what came in on */
+  | { id: string; kind: 'approval'; message: string }
 
 /** `branch` is set on edges leaving a condition: only the side that matched runs */
 export type Edge = { id: string; from: string; to: string; branch: 'true' | 'false' | null }
@@ -18,7 +20,7 @@ export type Point = { x: number; y: number }
 /** `layout` is where each step sits on the canvas; runs ignore it */
 export type Workflow = { id: string; name: string; nodes: WorkflowNode[]; edges: Edge[]; layout: Record<string, Point>; updatedAt: number }
 
-const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'output'] satisfies WorkflowNode['kind'][]
+const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'approval', 'output'] satisfies WorkflowNode['kind'][]
 
 /** Saved workflows come from the renderer; this keeps a malformed one out of the file */
 export const isWorkflow = (value: unknown): value is Workflow =>
@@ -44,6 +46,8 @@ export type NodeRun = {
   branch: 'true' | 'false' | null
   error: string | null
   usage: { used: number; cost: number | null } | null
+  /** A running node held up by the user: an approval step, or an agent asking for permission */
+  waiting?: 'approval' | 'permission' | null
 }
 
 export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
@@ -91,6 +95,8 @@ export function askWorkflow(agent: string, folder: string | null): Workflow {
 }
 
 export const freshNode = (): NodeRun => ({ status: 'pending', attempt: 0, startedAt: null, endedAt: null, prompt: null, output: null, branch: null, error: null, usage: null })
+
+export const isWaiting = (run: Run): boolean => run.status === 'running' && Object.values(run.nodes).some((node) => node.waiting)
 
 /** Runs are written by the app; this only keeps a damaged file from reaching the UI */
 export const isRun = (value: unknown): value is Run =>

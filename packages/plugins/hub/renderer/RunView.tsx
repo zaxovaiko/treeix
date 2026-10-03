@@ -1,24 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useHost } from '@treeix/sdk'
+import { errorMessage } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
-import type { NodeStatus, Run, RunEvent, RunStatus, WorkflowNode } from '../shared/workflow'
+import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { followRunEvents, hubAgents, hubApi } from './store'
 
-const STATUS: Record<NodeStatus | RunStatus, { icon: IconName; className: string; label: string }> = {
+type Shown = NodeStatus | RunStatus | 'waiting'
+
+const STATUS: Record<Shown, { icon: IconName; className: string; label: string }> = {
   pending: { icon: 'history', className: 'text-muted-foreground', label: 'Waiting' },
   running: { icon: 'loader', className: 'animate-spin text-sky-400', label: 'Running' },
   done: { icon: 'check', className: 'text-emerald-400', label: 'Done' },
   failed: { icon: 'alert', className: 'text-red-400', label: 'Failed' },
   skipped: { icon: 'close', className: 'text-muted-foreground', label: 'Skipped' },
   cancelled: { icon: 'close', className: 'text-muted-foreground', label: 'Cancelled' },
-  interrupted: { icon: 'alert', className: 'text-amber-400', label: 'Interrupted' }
+  interrupted: { icon: 'alert', className: 'text-amber-400', label: 'Interrupted' },
+  waiting: { icon: 'comment', className: 'text-amber-400', label: 'Needs you' }
 }
 
-export const KIND_LABEL: Record<WorkflowNode['kind'], string> = { input: 'Input', agent: 'Agent', merge: 'Merge', condition: 'Condition', output: 'Output' }
+/** A step or run held up by the user shows as waiting on them */
+export const shownNode = (node: NodeRun): Shown => (node.waiting ? 'waiting' : node.status)
+export const shownRun = (run: Run): Shown => (isWaiting(run) ? 'waiting' : run.status)
 
-export function StatusIcon({ status, className = 'size-3.5' }: { status: NodeStatus | RunStatus; className?: string }): React.JSX.Element {
+export const KIND_LABEL: Record<WorkflowNode['kind'], string> = { input: 'Input', agent: 'Agent', merge: 'Merge', condition: 'Condition', approval: 'Approval', output: 'Output' }
+
+export function StatusIcon({ status, className = 'size-3.5' }: { status: Shown; className?: string }): React.JSX.Element {
   return (
     <span title={STATUS[status].label} className="inline-flex shrink-0">
       <Icon name={STATUS[status].icon} className={`${className} ${STATUS[status].className}`} />
@@ -40,7 +48,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   useEffect(() => followRunEvents(run.id, setEvents), [run.id])
 
   const steps = run.workflow.nodes.filter((node) => node.kind !== 'input')
-  const [selectedId, setSelectedId] = useState(() => (steps.find((node) => node.kind === 'agent') ?? steps[0])?.id ?? null)
+  const [selectedId, setSelectedId] = useState(() => (steps.find((node) => run.nodes[node.id].waiting) ?? steps.find((node) => node.kind === 'agent') ?? steps[0])?.id ?? null)
   const node = steps.find((step) => step.id === selectedId) ?? null
   const state = node ? run.nodes[node.id] : null
   const nodeEvents = useMemo(() => events.filter((entry) => entry.node === node?.id), [events, node?.id])
@@ -48,6 +56,8 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agentOf(step)?.name ?? 'Deleted agent') : KIND_LABEL[step.kind])
   const lead = agentOf(steps.find((step) => step.kind === 'agent'))
   const logged = nodeEvents.some((entry) => entry.event.type === 'error')
+  const retryable = node && state && (run.status === 'failed' || run.status === 'cancelled' || run.status === 'interrupted') && (state.status === 'failed' || state.status === 'cancelled')
+  const retry = (id: string): void => void hubApi.retry(run.id, id).catch((error: unknown) => host.flash(errorMessage(error)))
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -56,8 +66,8 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{run.title}</div>
           <div className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-            <StatusIcon status={run.status} className="size-3" />
-            {[STATUS[run.status].label, new Date(run.startedAt).toLocaleString(), run.endedAt && duration(run.endedAt - run.startedAt)].filter(Boolean).join(' · ')}
+            <StatusIcon status={shownRun(run)} className="size-3" />
+            {[STATUS[shownRun(run)].label, new Date(run.startedAt).toLocaleString(), run.endedAt && duration(run.endedAt - run.startedAt)].filter(Boolean).join(' · ')}
           </div>
         </div>
         {run.status === 'running' && (
@@ -78,7 +88,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
                 onClick={() => setSelectedId(step.id)}
                 className={`flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border hover:bg-accent ${step === node ? 'bg-accent' : ''}`}
               >
-                <StatusIcon status={stepRun.status} className="size-3" />
+                <StatusIcon status={shownNode(stepRun)} className="size-3" />
                 {labelOf(step)}
                 {stepRun.startedAt !== null && stepRun.endedAt !== null && <span className="text-muted-foreground tabular-nums">{duration(stepRun.endedAt - stepRun.startedAt)}</span>}
               </button>
@@ -97,13 +107,33 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
               </div>
             )
           )}
-          {state?.status === 'running' && (
+          {node?.kind === 'approval' && state?.prompt && (
+            <div className="text-sm select-text">
+              <LazyMarkdown>{state.prompt}</LazyMarkdown>
+            </div>
+          )}
+          {node && state?.waiting === 'approval' && (
+            <div className="flex gap-2">
+              <button onClick={() => hubApi.decide(run.id, node.id, true)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+                Approve
+              </button>
+              <button onClick={() => hubApi.decide(run.id, node.id, false)} className="h-7 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">
+                Reject
+              </button>
+            </div>
+          )}
+          {state?.status === 'running' && !state.waiting && (
             <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
               <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
               Working…
             </div>
           )}
           {state?.error && !logged && <div className="rounded-lg bg-red-400/5 px-3 py-2 text-xs text-red-300 ring-1 ring-red-400/30 select-text">{state.error}</div>}
+          {retryable && (
+            <button onClick={() => retry(node.id)} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
+              Retry from this step
+            </button>
+          )}
           {state?.usage && (
             <div className="text-[11px] text-muted-foreground">
               {state.usage.used.toLocaleString()} tokens{state.usage.cost !== null && ` · $${state.usage.cost.toFixed(4)}`}
