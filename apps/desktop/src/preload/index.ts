@@ -13,6 +13,7 @@ const api: Api = {
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),
   readImage: (worktreePath, filePath) => ipcRenderer.invoke('readImage', worktreePath, filePath),
+  readPdf: (worktreePath, filePath) => ipcRenderer.invoke('readPdf', worktreePath, filePath),
   navigate: (worktreePath, kind, target) => ipcRenderer.invoke('navigate', worktreePath, kind, target),
   hover: (worktreePath, target) => ipcRenderer.invoke('hover', worktreePath, target),
   completions: (worktreePath, path, text, position) => ipcRenderer.invoke('completions', worktreePath, path, text, position),

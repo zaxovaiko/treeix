@@ -47,9 +47,35 @@ const AUTOSAVE_DELAY_MS = 800
 
 const IMAGE_PATH = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i
 
-/** Pictures show as themselves, on a checkerboard so transparency reads; everything else opens as code */
+const PDF_PATH = /\.pdf$/i
+
+/** Pictures show as themselves, on a checkerboard so transparency reads; PDFs in Chromium's viewer; everything else opens as code */
 export function FileView(props: Parameters<typeof TextFileView>[0]): React.JSX.Element {
-  return IMAGE_PATH.test(props.path) && props.contents === undefined ? <ImageView worktreePath={props.worktreePath} path={props.path} /> : <TextFileView {...props} />
+  if (props.contents !== undefined) return <TextFileView {...props} />
+  if (IMAGE_PATH.test(props.path)) return <ImageView worktreePath={props.worktreePath} path={props.path} />
+  if (PDF_PATH.test(props.path)) return <PdfView worktreePath={props.worktreePath} path={props.path} />
+  return <TextFileView {...props} />
+}
+
+/** A blob URL rather than a data URL: Chromium refuses to navigate a frame to a URL over 2 MB */
+function PdfView({ worktreePath, path }: { worktreePath: string; path: string }): React.JSX.Element {
+  const [source, setSource] = useState<{ path: string; url: string | null } | null>(null)
+  useEffect(() => {
+    let stale = false
+    let url: string | null = null
+    void window.api.readPdf(worktreePath, path).then((bytes) => {
+      if (stale) return
+      url = bytes && URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+      setSource({ path, url })
+    })
+    return () => {
+      stale = true
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [worktreePath, path])
+  if (source?.path !== path) return <EmptyState fill title="Loading..." />
+  if (!source.url) return <EmptyState fill icon="file" title="PDF too large to preview" />
+  return <iframe title={path} src={source.url} className="min-h-0 w-full flex-1 border-0" />
 }
 
 function ImageView({ worktreePath, path }: { worktreePath: string; path: string }): React.JSX.Element {

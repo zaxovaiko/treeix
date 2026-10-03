@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { addWorktree, createBranch, deleteBranch, discardChanges, isDefinitionLine, listBranches, parseTrack, parseWorktreeList, removeWorktree, searchText, splitPatch, worktreeDir } from './git'
+import { addWorktree, createBranch, deleteBranch, discardChanges, isDefinitionLine, listBranches, parseTrack, parseWorktreeList, readPdf, removeWorktree, searchText, splitPatch, worktreeDir } from './git'
 
 test('parseWorktreeList', () => {
   const porcelain = `worktree /repo
@@ -109,6 +109,14 @@ test('searchText finds text across worktrees with case and whole word options', 
   const exact = await searchText([root], 'Grant', { caseSensitive: true, wholeWord: true, regex: false })
   expect(exact.matches).toHaveLength(0)
   await expect(searchText([root], '(', { caseSensitive: true, wholeWord: false, regex: true })).rejects.toThrow()
+})
+
+test('readPdf reads a file inside the worktree and refuses one outside it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-pdf-'))
+  writeFileSync(join(root, 'doc.pdf'), '%PDF-1.4')
+  expect(Buffer.from((await readPdf(root, 'doc.pdf')) ?? []).toString()).toBe('%PDF-1.4')
+  await expect(readPdf(root, '../outside.pdf')).rejects.toThrow('outside the worktree')
+  rmSync(root, { recursive: true })
 })
 
 test('listBranches reports tracking, merged state and remote-only branches', async () => {

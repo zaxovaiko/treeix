@@ -134,6 +134,8 @@ export type Api = {
   readFile: (worktreePath: string, filePath: string) => Promise<string | null>
   /** A data URL of a picture in the worktree; null when it is not one or too big */
   readImage: (worktreePath: string, filePath: string) => Promise<string | null>
+  /** Bytes of a PDF in the worktree; null when outside it or too big */
+  readPdf: (worktreePath: string, filePath: string) => Promise<Uint8Array<ArrayBuffer> | null>
   /** Language service answers for TS/JS, text search for everything else */
   navigate: (worktreePath: string, kind: NavigationKind, target: SymbolTarget) => Promise<CodeLocation[]>
   hover: (worktreePath: string, target: SymbolTarget) => Promise<HoverInfo | null>

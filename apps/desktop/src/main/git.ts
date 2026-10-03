@@ -189,6 +189,14 @@ export async function readImage(worktreePath: string, filePath: string): Promise
   return `data:${type};base64,${(await readFileBytes(absolute)).toString('base64')}`
 }
 
+const MAX_PDF_BYTES = 100 * 1024 * 1024
+
+/** A PDF in the worktree as bytes, for the built-in viewer; null when too big, throws outside the worktree */
+export async function readPdf(worktreePath: string, filePath: string): Promise<Uint8Array | null> {
+  const absolute = insideWorktree(worktreePath, filePath)
+  return (await stat(absolute)).size > MAX_PDF_BYTES ? null : readFileBytes(absolute)
+}
+
 const escapeRegExp = (text: string): string => text.replace(/[$]/g, '\\$')
 
 // ponytail: regex guesses, swap for a language server if jumps get unreliable
