@@ -321,7 +321,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         <button aria-label="Reload" title="Reload (⌘R)" className={toolButton} onClick={() => runBrowserAction('reload')}>
           <Icon name={tab?.loading ? 'loader' : 'refresh'} className={`size-3.5 ${tab?.loading ? 'animate-spin' : ''}`} />
         </button>
-        <div className="relative min-w-0 flex-1">
+        <div className="relative flex h-6 min-w-0 flex-1 items-center rounded-md border border-border bg-muted/40 focus-within:border-primary">
           <input
             ref={input}
             value={address}
@@ -351,12 +351,12 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
                 event.currentTarget.blur()
               }
             }}
-            className="h-6 w-full rounded-md border border-border bg-muted/40 px-2 font-mono text-xs outline-none focus:border-primary"
+            className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-xs outline-none"
           />
           {problem && !suggesting && (
             <span
               title={`${problem.title} ${problem.hint}`}
-              className={`pointer-events-none absolute top-1/2 right-1.5 flex h-4 -translate-y-1/2 items-center gap-1 rounded px-1 text-[10.5px] ${tab?.status && tab.status >= 500 ? 'bg-red-400/15 text-red-400' : 'bg-amber-400/15 text-amber-400'}`}
+              className={`mr-1 flex h-4 max-w-[50%] min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded px-1 text-[10.5px] whitespace-nowrap ${tab?.status && tab.status >= 500 ? 'bg-red-400/15 text-red-400' : 'bg-amber-400/15 text-amber-400'}`}
             >
               <Icon name={problem.icon} className="size-3" />
               {problem.title} {problem.hint}
