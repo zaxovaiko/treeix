@@ -3,7 +3,9 @@ import { loadCredentials } from '@treeix/atlassian/main/credentials'
 import { object, orNull, text } from '@treeix/atlassian/shared'
 import { list } from '@treeix/shared/json'
 import type { Page, PageList, Space } from '../shared/types'
-import { bodyMarkdown } from './commentTree'
+import { editedAdf } from '@treeix/atlassian/main/adfEdit'
+import { checkedId } from './comments'
+import { bodyDoc, bodyMarkdown, pageImageSource } from './commentTree'
 import { searchCql, toPageSummaries } from './search'
 
 const RESULT_LIMIT = 40
@@ -44,6 +46,18 @@ export async function pageView(id: string): Promise<Page> {
     updatedAt: orNull(text(object(raw.version).createdAt)),
     links: [...links]
   }
+}
+
+/** `original` is the body's markdown the edit started from; a page changed since is refused */
+export async function editPage(id: string, original: string, edited: string): Promise<void> {
+  const credentials = await loadCredentials()
+  const path = `/wiki/api/v2/pages/${checkedId(id)}`
+  const raw = object(await (await restFetch(`${path}?body-format=atlas_doc_format`, credentials)).json())
+  const doc = editedAdf(bodyDoc(raw.body), original, edited, pageImageSource(id))
+  await restFetch(path, credentials, {
+    method: 'PUT',
+    json: { id, status: 'current', title: text(raw.title), body: { representation: 'atlas_doc_format', value: JSON.stringify(doc) }, version: { number: Number(object(raw.version).number) + 1 } }
+  })
 }
 
 async function cqlSearch(cql: string): Promise<PageList> {

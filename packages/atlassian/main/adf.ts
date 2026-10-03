@@ -169,7 +169,19 @@ export function convert(raw: unknown, context: AdfContext): string {
   }
 }
 
-export const adfToMarkdown = (raw: unknown, context: AdfContext): string => convert(raw, context).replace(/\n{3,}/g, '\n\n').trim()
+const tidy = (markdown: string): string => markdown.replace(/\n{3,}/g, '\n\n').trim()
+
+/** Each top-level block with its markdown; an edit keeps the blocks whose markdown it left alone */
+export const adfBlocks = (raw: unknown, context: AdfContext): { node: unknown; markdown: string }[] =>
+  children(object(raw)).map((node) => ({ node, markdown: tidy(convert(node, context)) }))
+
+export const blocksMarkdown = (blocks: { markdown: string }[]): string =>
+  blocks
+    .map((block) => block.markdown)
+    .filter(Boolean)
+    .join('\n\n')
+
+export const adfToMarkdown = (raw: unknown, context: AdfContext): string => (typeof raw === 'string' ? tidy(raw) : blocksMarkdown(adfBlocks(raw, context)))
 
 /** Plain text as an ADF document: blank lines split paragraphs, single newlines break lines; a mention leads when given */
 export function textToAdf(body: string, mention: { id: string; name: string } | null = null): Json {

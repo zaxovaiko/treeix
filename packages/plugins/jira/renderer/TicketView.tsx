@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Kbd, ListToggle, useHost } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
-import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
+import { MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { baseName } from '@treeix/app/Sidebar'
 import { timeAgo } from '@treeix/app/time'
 import { CopyButton, EmptyState, errorMessage, UserAvatar } from '@treeix/app/ui'
 import type { Repo, Worktree } from '@treeix/shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
+import { EditableBody } from '@treeix/atlassian/renderer/EditableBody'
 import { Comments, commentCount } from '@treeix/atlassian/renderer/Comments'
 import { addReference } from '@treeix/atlassian/renderer/reference'
 import type { AtlassianComment } from '@treeix/atlassian/shared'
@@ -517,7 +518,16 @@ export function TicketMain({
             <SectionTitle>Description</SectionTitle>
             {error && <p className="text-xs break-words text-red-400 select-text">{error}</p>}
             {!detail && !error && <p className="text-xs text-muted-foreground">Loading...</p>}
-            {detail && (detail.description ? <Markdown resolveImage={resolveImage}>{detail.description}</Markdown> : <p className="text-xs text-muted-foreground">No description</p>)}
+            {detail && (
+              <EditableBody
+                key={item.key}
+                markdown={detail.description}
+                label="description"
+                empty="No description"
+                resolveImage={resolveImage}
+                onSave={(original, edited) => jiraApi.editDescription(item.key, original, edited).then(ticket.reload)}
+              />
+            )}
           </section>
           {detail && <LabelEditor labels={ticket.labels} onAdd={ticket.addLabel} onRemove={ticket.removeLabel} />}
           {detail && <LinkPreviews urls={detail.links} exclude={[item.key]} />}

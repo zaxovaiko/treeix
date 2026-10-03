@@ -1,4 +1,5 @@
-import { adfToMarkdown, textToAdf } from '@treeix/atlassian/main/adf'
+import { type AdfContext, adfToMarkdown, textToAdf } from '@treeix/atlassian/main/adf'
+import { editedAdf } from '@treeix/atlassian/main/adfEdit'
 import { acli, atlassianSite, failure, run } from '@treeix/atlassian/main/cli'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -61,22 +62,23 @@ export async function searchWorkItems(jql: string): Promise<WorkItemList> {
   return { items: issues.map((issue) => toWorkItem(issue, host)), sprintKeys }
 }
 
+/** Inline images name their attachment by file name; the attachment list has the id to download it */
+function attachmentSource(fields: Json): AdfContext['mediaSource'] {
+  const attachments = (Array.isArray(fields.attachment) ? fields.attachment : []).map(object)
+  return (attrs) => {
+    const attachment = attachments.find((candidate) => text(candidate.filename) === text(attrs.alt))
+    return attachment ? `${IMAGE_HOST}/jira/${text(attachment.id)}` : `${IMAGE_HOST}/missing/${encodeURIComponent(text(attrs.alt) || 'image')}`
+  }
+}
+
 export async function workItemDetail(key: string): Promise<WorkItemDetail> {
   const [raw, host] = await Promise.all([
     acli(['jira', 'workitem', 'view', key, '--fields', DETAIL_FIELDS, '--json']),
     atlassianSite()
   ])
   const fields = object(object(raw).fields)
-  // Inline images name their attachment by file name; the attachment list has the id to download it
-  const attachments = (Array.isArray(fields.attachment) ? fields.attachment : []).map(object)
   const links = new Set<string>()
-  const context = {
-    onLink: (url: string) => void links.add(url),
-    mediaSource: (attrs: Json): string | null => {
-      const attachment = attachments.find((candidate) => text(candidate.filename) === text(attrs.alt))
-      return attachment ? `${IMAGE_HOST}/jira/${text(attachment.id)}` : `${IMAGE_HOST}/missing/${encodeURIComponent(text(attrs.alt) || 'image')}`
-    }
-  }
+  const context = { onLink: (url: string) => void links.add(url), mediaSource: attachmentSource(fields) }
   const comments = (Array.isArray(object(fields.comment).comments) ? (object(fields.comment).comments as unknown[]) : []).map(object)
   return {
     ...toWorkItem(raw, host),
@@ -177,11 +179,11 @@ export async function workItemSummary(key: string): Promise<WorkItem> {
 }
 
 /** acli reads ADF bodies from a file */
-async function withAdfFile(body: string, mention: Mention | null, use: (file: string) => Promise<unknown>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'treeix-comment-'))
+async function withAdfFile(doc: Json, use: (file: string) => Promise<unknown>): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), 'treeix-adf-'))
   const file = join(dir, 'body.json')
   try {
-    await writeFile(file, JSON.stringify(textToAdf(body, mention)))
+    await writeFile(file, JSON.stringify(doc))
     await use(file)
   } catch (reason) {
     throw new Error(failure(reason))
@@ -198,10 +200,10 @@ const checkedCommentId = (id: string): string => {
 
 /** A reply is a new comment that mentions who it answers, since Jira comments have no threads */
 export const commentOnWorkItem = (key: string, body: string, mention: Mention | null): Promise<void> =>
-  withAdfFile(body, mention, (file) => run(['jira', 'workitem', 'comment', 'create', '--key', checkedKey(key), '--body-file', file]))
+  withAdfFile(textToAdf(body, mention), (file) => run(['jira', 'workitem', 'comment', 'create', '--key', checkedKey(key), '--body-file', file]))
 
 export const updateComment = (key: string, id: string, body: string): Promise<void> =>
-  withAdfFile(body, null, (file) => run(['jira', 'workitem', 'comment', 'update', '--key', checkedKey(key), '--id', checkedCommentId(id), '--body-adf', file]))
+  withAdfFile(textToAdf(body), (file) => run(['jira', 'workitem', 'comment', 'update', '--key', checkedKey(key), '--id', checkedCommentId(id), '--body-adf', file]))
 
 export async function deleteComment(key: string, id: string): Promise<void> {
   await run(['jira', 'workitem', 'comment', 'delete', '--key', checkedKey(key), '--id', checkedCommentId(id)])
@@ -224,6 +226,13 @@ export async function editWorkItem(key: string, changes: WorkItemEdit): Promise<
   ]
   if (args.length === 0) return
   await run(['jira', 'workitem', 'edit', '--key', checkedKey(key), ...args, '--yes'])
+}
+
+/** `original` is the description's markdown the edit started from; a description changed since is refused */
+export async function editDescription(key: string, original: string, edited: string): Promise<void> {
+  const fields = object(object(await acli(['jira', 'workitem', 'view', checkedKey(key), '--fields', 'description,attachment', '--json'])).fields)
+  const doc = editedAdf(fields.description, original, edited, attachmentSource(fields))
+  await withAdfFile(doc, (file) => run(['jira', 'workitem', 'edit', '--key', checkedKey(key), '--description-file', file, '--yes']))
 }
 
 /** `accountId` null removes the assignee; '@me' is you */

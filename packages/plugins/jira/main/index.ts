@@ -2,7 +2,7 @@ import { handleAtlassianShared } from '@treeix/atlassian/main/handlers'
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { Mention } from '@treeix/atlassian/shared'
 import type { WorkItemEdit } from '../shared/types'
-import { assignWorkItem, commentOnWorkItem, currentUserName, deleteComment, updateComment, editWorkItem, openEpics, projectKeys, searchWorkItems, transitionWorkItem, workItemDetail, workItemSummary } from './acli'
+import { assignWorkItem, commentOnWorkItem, currentUserName, deleteComment, updateComment, editDescription, editWorkItem, openEpics, projectKeys, searchWorkItems, transitionWorkItem, workItemDetail, workItemSummary } from './acli'
 import { assignableUsers } from './people'
 
 const plugin: MainPlugin = {
@@ -19,6 +19,7 @@ const plugin: MainPlugin = {
     context.handle('updateComment', (_, key: string, id: string, body: string) => updateComment(key, id, body))
     context.handle('deleteComment', (_, key: string, id: string) => deleteComment(key, id))
     context.handle('edit', (_, key: string, changes: WorkItemEdit) => editWorkItem(key, typeof changes === 'object' && changes !== null ? changes : {}))
+    context.handle('editDescription', (_, key: string, original: string, edited: string) => editDescription(key, String(original), String(edited)))
     context.handle('assign', (_, key: string, accountId: unknown) => assignWorkItem(key, typeof accountId === 'string' ? accountId : null))
     context.handle('assignable', (_, key: string, query: unknown) => assignableUsers(key, typeof query === 'string' ? query : ''))
     handleAtlassianShared(context)

@@ -6,7 +6,7 @@ import type { CommentList } from '../shared/types'
 import { toCommentTree } from './commentTree'
 
 const ID = /^\d+$/
-const checkedId = (id: string): string => {
+export const checkedId = (id: string): string => {
   if (!ID.test(id)) throw new Error(`Not a Confluence id: ${id}`)
   return id
 }

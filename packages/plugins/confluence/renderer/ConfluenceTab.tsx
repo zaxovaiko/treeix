@@ -4,7 +4,7 @@ import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav,
 import { copyText } from '@treeix/app/contextMenu'
 import { type FilterGroup, FilterSearch, type FilterToken, matchesTokens, parseTokens } from '@treeix/app/FilterSearch'
 import { Icon } from '@treeix/app/Icon'
-import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
+import { MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { timeAgo } from '@treeix/app/time'
 import { EmptyState, errorMessage, FoldAllButton, IconButton, usePersisted } from '@treeix/app/ui'
@@ -12,6 +12,7 @@ import { workspaceKey } from '@treeix/app/workspaces'
 import type { CommentList, Page, PageList, PageSummary } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
 import { withList } from '@treeix/atlassian/renderer/panels'
+import { EditableBody } from '@treeix/atlassian/renderer/EditableBody'
 import { Comments, commentCount } from '@treeix/atlassian/renderer/Comments'
 import { addReference } from '@treeix/atlassian/renderer/reference'
 import { commentCache, confluenceApi, openRequest, pageCache, pageOfUrl, recentCache, resolveImage, TTL } from './api'
@@ -125,7 +126,16 @@ function PageMain({ page, parent, error, onReload, onAgent, onCopy }: { page: Pa
             {page.space && page.updatedAt && <span>·</span>}
             {page.updatedAt && <span className="shrink-0">Updated {timeAgo(page.updatedAt)} ago</span>}
           </div>
-          <div id={BODY_ID}>{page.body ? <Markdown resolveImage={resolveImage}>{page.body}</Markdown> : <p className="text-xs text-muted-foreground">This page is empty</p>}</div>
+          <div id={BODY_ID}>
+            <EditableBody
+              key={page.id}
+              markdown={page.body}
+              label="page"
+              empty="This page is empty"
+              resolveImage={resolveImage}
+              onSave={(original, edited) => confluenceApi.editPage(page.id, original, edited).then(onReload)}
+            />
+          </div>
           {page.children.length > 0 && (
             <section className="mt-6">
               <h3 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Child pages</h3>

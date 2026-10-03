@@ -1,15 +1,20 @@
-import { adfToMarkdown } from '@treeix/atlassian/main/adf'
+import { type AdfContext, adfToMarkdown } from '@treeix/atlassian/main/adf'
 import { type AtlassianComment, IMAGE_HOST, object, orNull, text } from '@treeix/atlassian/shared'
 import { list, parseJson } from '@treeix/shared/json'
 
 /** A page or comment body, whose ADF comes as a JSON string, as markdown; images are the page's attachments */
-export function bodyMarkdown(body: unknown, pageId: string, onLink?: (url: string) => void): string {
+export const bodyMarkdown = (body: unknown, pageId: string, onLink?: (url: string) => void): string =>
+  adfToMarkdown(bodyDoc(body), { mediaSource: pageImageSource(pageId), onLink })
+
+export function bodyDoc(body: unknown): unknown {
   const value = object(object(body).atlas_doc_format).value
-  return adfToMarkdown(typeof value === 'string' ? parseJson(value) : value, {
-    mediaSource: (attrs) => `${IMAGE_HOST}/confluence/${pageId}/${encodeURIComponent(text(attrs.id))}`,
-    onLink
-  })
+  return typeof value === 'string' ? parseJson(value) : value
 }
+
+export const pageImageSource =
+  (pageId: string): AdfContext['mediaSource'] =>
+  (attrs) =>
+    `${IMAGE_HOST}/confluence/${pageId}/${encodeURIComponent(text(attrs.id))}`
 
 /** v1 content results with history, ancestors and inline properties, nested under the comment each one answers */
 export function toCommentTree(raw: unknown, pageId: string, host: string | null): AtlassianComment[] {

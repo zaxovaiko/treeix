@@ -15,6 +15,7 @@ export const TTL = { page: 30 * 60_000, recent: 10 * 60_000, comments: 5 * 60_00
 
 export const confluenceApi = {
   page: (id: string) => confluenceBridge.invoke<Page>('page', id),
+  editPage: (id: string, original: string, edited: string) => confluenceBridge.invoke<void>('editPage', id, original, edited),
   recent: () => confluenceBridge.invoke<PageList>('recent'),
   search: (texts: string[], spaces: string[]) => confluenceBridge.invoke<PageList>('search', texts, spaces),
   comments: (pageId: string) => confluenceBridge.invoke<CommentList>('comments', pageId),

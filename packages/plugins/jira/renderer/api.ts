@@ -17,6 +17,7 @@ export const jiraApi = {
   updateComment: (key: string, id: string, body: string) => jiraBridge.invoke<void>('updateComment', key, id, body),
   deleteComment: (key: string, id: string) => jiraBridge.invoke<void>('deleteComment', key, id),
   edit: (key: string, changes: WorkItemEdit) => jiraBridge.invoke<void>('edit', key, changes),
+  editDescription: (key: string, original: string, edited: string) => jiraBridge.invoke<void>('editDescription', key, original, edited),
   assign: (key: string, accountId: string | null) => jiraBridge.invoke<void>('assign', key, accountId),
   assignable: (key: string, query: string) => jiraBridge.invoke<JiraPerson[]>('assignable', key, query),
   me: () => jiraBridge.invoke<string | null>('me'),
