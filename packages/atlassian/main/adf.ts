@@ -7,6 +7,8 @@ export type AdfContext = {
   mediaSource: (attrs: Json) => string | null
   /** Called for every link, so linked Confluence pages can be listed */
   onLink?: (url: string) => void
+  /** Inside a collapsed expand, whose closing tag a foldable heading section would swallow */
+  inExpand?: boolean
 }
 
 const CONFLUENCE_PAGE = /\/wiki\/spaces\/[^/]+\/pages\/(\d+)(?:\/([^?#]*))?/
@@ -84,6 +86,8 @@ function macroSource(node: Json): string {
   return [body, ...strings].find((candidate) => /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|mindmap|timeline)\b/.test(candidate)) ?? ''
 }
 
+const escapeHtml = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
 const textOf = (node: unknown): string => (isJson(node) ? (node.type === 'text' ? text(node.text) : children(node).map(textOf).join(node.type === 'paragraph' ? '\n' : '')) : '')
 
 /** Markdown from Atlassian Document Format */
@@ -114,8 +118,10 @@ export function convert(raw: unknown, context: AdfContext): string {
     }
     case 'paragraph':
       return `${inline(node, context)}\n\n`
-    case 'heading':
-      return `${'#'.repeat(Math.min(6, Number(attrs.level) || 3))} ${inline(node, context).trim()}\n\n`
+    case 'heading': {
+      const title = inline(node, context).trim()
+      return context.inExpand ? `**${title}**\n\n` : `${'#'.repeat(Math.min(6, Number(attrs.level) || 3))} ${title}\n\n`
+    }
     case 'rule':
       return '---\n\n'
     case 'bulletList':
@@ -131,7 +137,8 @@ export function convert(raw: unknown, context: AdfContext): string {
       return `${indent(inline(node, context), '> ')}\n\n`
     case 'expand':
     case 'nestedExpand':
-      return `${text(attrs.title) ? `**${text(attrs.title)}**\n\n` : ''}${inline(node, context)}`
+      // Collapsed like in Confluence; the blank lines let the body stay markdown
+      return `<details><summary>${escapeHtml(text(attrs.title) || 'Click here to expand...')}</summary>\n\n${inline(node, { ...context, inExpand: true }).trim()}\n\n</details>\n\n`
     case 'table': {
       const rows = children(node).filter(isJson).map((row) => children(row).filter(isJson).map((cell) => cellText(cell, context)))
       if (rows.length === 0) return ''

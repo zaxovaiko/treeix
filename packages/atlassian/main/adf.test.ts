@@ -65,3 +65,36 @@ test('textToAdf splits paragraphs and lines and leads with the mention', () => {
     ]
   })
 })
+
+test('adfToMarkdown collapses expands into details, headings inside them stay plain bold lines', () => {
+  const doc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'expand',
+        attrs: { title: 'A <b> & c' },
+        content: [{ type: 'heading', attrs: { level: 2 }, content: [t('Inner')] }, p(t('body')), { type: 'nestedExpand', attrs: { title: '' }, content: [p(t('deep'))] }]
+      },
+      p(t('after'))
+    ]
+  }
+  expect(adfToMarkdown(doc, { mediaSource: () => null })).toBe(
+    [
+      '<details><summary>A &lt;b&gt; &amp; c</summary>',
+      '',
+      '**Inner**',
+      '',
+      'body',
+      '',
+      '<details><summary>Click here to expand...</summary>',
+      '',
+      'deep',
+      '',
+      '</details>',
+      '',
+      '</details>',
+      '',
+      'after'
+    ].join('\n')
+  )
+})
