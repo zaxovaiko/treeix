@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { findFileLinks, findInFiles, findIssueLinks, findWebLinks, resolvePath } from './fileLinks'
+import { droppedPaths, findFileLinks, findInFiles, findIssueLinks, findWebLinks, resolvePath } from './fileLinks'
 
 const paths = (text: string) => findFileLinks(text).map(({ path, line }) => (line ? `${path}:${line}` : path))
 
@@ -42,4 +42,10 @@ test('findInFiles picks the shortest worktree file ending with the path', () => 
 
 test('findIssueLinks finds Jira keys, not parts of longer words', () => {
   expect(findIssueLinks('Fixes ABC-12 and X2-7 (see UTF-8, a-ABC-1, ABC-1x)').map((link) => `${link.project}:${link.key}`)).toEqual(['ABC:ABC-12', 'X2:X2-7', 'UTF:UTF-8'])
+})
+
+test('droppedPaths escapes what a shell would split or expand, like Terminal', () => {
+  expect(droppedPaths(['/Users/me/Desktop/Screenshot 2026-10-03 at 9.41.12.png', "/tmp/it's (1).jpg", '/tmp/a.png'])).toBe(
+    "/Users/me/Desktop/Screenshot\\ 2026-10-03\\ at\\ 9.41.12.png /tmp/it\\'s\\ \\(1\\).jpg /tmp/a.png "
+  )
 })

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import type { Api, UpdateStatus } from '../shared/types'
@@ -11,6 +11,7 @@ const api: Api = {
   listDirectory: (root, folder) => ipcRenderer.invoke('listDirectory', root, folder),
   zoom: (step: number) => ipcRenderer.send('zoom', step),
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),
   readImage: (worktreePath, filePath) => ipcRenderer.invoke('readImage', worktreePath, filePath),
   readPdf: (worktreePath, filePath) => ipcRenderer.invoke('readPdf', worktreePath, filePath),

@@ -15,6 +15,7 @@ import { ListToggle, useHost, usePanels } from '@treeix/sdk'
 import { errorMessage, ResizeGrip } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
+import { droppedPaths } from './fileLinks'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, type Task, type TerminalTab, tabPanes } from './tasks'
@@ -36,6 +37,7 @@ import {
   pasteClipboard,
   placePane,
   renameSession,
+  sendText,
   restoreClosedSession,
   selectAllTerminal,
   sessionDiagrams,
@@ -60,6 +62,7 @@ const SESSION_MIME = 'application/x-treeix-session'
 /** Dragged panes or tabs carry their session ids, space separated */
 const draggingSession = (event: React.DragEvent): boolean => event.dataTransfer.types.includes(SESSION_MIME)
 const draggedSessions = (event: React.DragEvent): string[] => event.dataTransfer.getData(SESSION_MIME).split(' ').filter(Boolean)
+const draggingFiles = (event: React.DragEvent): boolean => event.dataTransfer.types.includes('Files')
 
 const LONG_PRESS_MS = 400
 
@@ -293,12 +296,21 @@ function TerminalPane({
       // A chat takes clicks itself: its feed has text to select and buttons
       onMouseDown={() => session.view === 'terminal' && focusSession(session.id)}
       onDragOver={(event) => {
+        // A chat's composer takes files itself
+        if (session.view === 'terminal' && draggingFiles(event)) return event.preventDefault()
         if (!draggingSession(event)) return
         event.preventDefault()
         setDropEdge(edgeOf(event))
       }}
       onDragLeave={() => setDropEdge(null)}
       onDrop={(event) => {
+        // Files dropped from Finder are typed as their paths, which agents like Claude Code read as attachments
+        if (session.view === 'terminal' && draggingFiles(event)) {
+          event.preventDefault()
+          const paths = [...event.dataTransfer.files].map((file) => window.api.pathForFile(file)).filter(Boolean)
+          if (paths.length) sendText(session.id, droppedPaths(paths), false)
+          return
+        }
         if (!draggingSession(event)) return
         event.preventDefault()
         setDropEdge(null)

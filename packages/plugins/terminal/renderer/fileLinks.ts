@@ -64,3 +64,6 @@ export function findWebLinks(text: string): WebLink[] {
     return { start, end: start + url.length, url }
   })
 }
+
+/** Dropped paths as Terminal types them: backslash before anything a shell reads as special, then a space */
+export const droppedPaths = (paths: string[]): string => paths.map((path) => `${path.replace(/[^\w./~@%+=:,-]/g, '\\$&')} `).join('')

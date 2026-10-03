@@ -131,6 +131,8 @@ export type Api = {
   listDirectory: (root: string, folder: string) => Promise<string[]>
   /** Native folder picker; null when cancelled */
   pickFolder: () => Promise<string | null>
+  /** Where a dropped or picked file lives on disk; empty for one that is not a file there */
+  pathForFile: (file: File) => string
   readFile: (worktreePath: string, filePath: string) => Promise<string | null>
   /** A data URL of a picture in the worktree; null when it is not one or too big */
   readImage: (worktreePath: string, filePath: string) => Promise<string | null>
