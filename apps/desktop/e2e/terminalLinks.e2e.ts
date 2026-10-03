@@ -57,10 +57,9 @@ test('⌘-click on a path cut short opens the worktree file it ends', async () =
 
 test('⌘-click on a Jira key of a known project opens it in Tasks, other KEY-1 words stay text', async () => {
   const { page } = launched
-  await page
-    .getByRole('button', { name: /^Terminal/ })
-    .first()
-    .click()
+  // The open page's tab clicked again would hide it
+  const terminalTab = page.locator('[data-page-tab="terminal"]')
+  if ((await terminalTab.getAttribute('aria-current')) !== 'page') await terminalTab.click()
   await page.locator('.xterm').first().click()
   await page.keyboard.type("clear && printf 'UTF-8\\n'\n")
   await page.waitForTimeout(1000)
