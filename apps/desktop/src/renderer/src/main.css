@@ -293,11 +293,16 @@ html[data-translucent] .code-editor .monaco-editor .margin {
 .code-editor-target-line {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
+/* Monaco makes the glyph a flex row with codicon's line height, which squeezes and lowers a plain + */
 .code-editor-comment-glyph::before {
   content: '+';
   display: grid;
   place-items: center;
-  height: 100%;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  line-height: 1;
+  font-size: 14px;
   border-radius: 4px;
   background: var(--color-primary);
   color: white;

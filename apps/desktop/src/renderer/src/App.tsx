@@ -1431,6 +1431,7 @@ function App(): React.JSX.Element {
       shortcut: actionKeys('app.diffStyle') || undefined,
       run: () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split')
     },
+    { id: 'minimap', group: 'Actions', label: settings.editorMinimap ? 'Hide editor minimap' : 'Show editor minimap', icon: 'code', run: () => updateSettings({ editorMinimap: !settings.editorMinimap }) },
     ...(worktreeComments.length > 0
       ? ([
           {

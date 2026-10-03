@@ -1,7 +1,7 @@
 import type { IconName } from './Icon'
 import type { LoadedPlugin, PluginEntry } from './plugins'
 
-export type SectionId = 'General' | 'Appearance' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations' | 'Claude' | 'Codex'
+export type SectionId = 'General' | 'Appearance' | 'Editor' | 'Terminal' | 'Keyboard' | 'Plugins' | 'Integrations' | 'Claude' | 'Codex'
 
 /** A page in Settings: one of the fixed sections, or a plugin's own page nested under Plugins */
 export type PageId = SectionId | `plugin:${string}`
@@ -9,6 +9,7 @@ export type PageId = SectionId | `plugin:${string}`
 export const SECTIONS: [SectionId, IconName][] = [
   ['General', 'settings'],
   ['Appearance', 'palette'],
+  ['Editor', 'code'],
   ['Terminal', 'terminal'],
   ['Keyboard', 'keyboard'],
   ['Plugins', 'plug'],

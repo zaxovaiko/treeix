@@ -442,15 +442,15 @@ const SETTINGS: SettingSpec[] = [
   },
   { section: 'Appearance', card: 'Fonts', label: 'Interface', description: "Menus, lists, markdown and everything that isn't code.", Control: fontRow('uiFont') },
   {
-    section: 'Appearance',
-    card: 'Fonts',
-    label: 'Editor',
+    section: 'Editor',
+    card: 'Editor',
+    label: 'Font',
     description: 'Code in the editor, diffs and pull requests. Size is independent of window zoom (⌘+ / ⌘-).',
     Control: fontRow('editorFont', { key: 'editorFontSize', fallback: 13, label: 'editor font' })
   },
-  { section: 'Appearance', card: 'Editor', label: 'Minimap', description: 'The code overview along the right edge of the editor.', Control: toggle('editorMinimap', 'Minimap') },
+  { section: 'Editor', card: 'Editor', label: 'Minimap', description: 'The code overview along the right edge of the editor.', Control: toggle('editorMinimap', 'Minimap') },
   {
-    section: 'Appearance',
+    section: 'Editor',
     card: 'Editor',
     label: 'Line numbers',
     description: 'Relative counts lines from the cursor, handy for jumping a few lines at a time.',
@@ -460,7 +460,7 @@ const SETTINGS: SettingSpec[] = [
       ['off', 'Off']
     ])
   },
-  { section: 'Appearance', card: 'Editor', label: 'Word wrap', description: 'Long lines wrap at the editor width instead of scrolling sideways.', Control: toggle('editorWordWrap', 'Word wrap') },
+  { section: 'Editor', card: 'Editor', label: 'Word wrap', description: 'Long lines wrap at the editor width instead of scrolling sideways.', Control: toggle('editorWordWrap', 'Word wrap') },
   {
     section: 'Terminal',
     card: 'Font',

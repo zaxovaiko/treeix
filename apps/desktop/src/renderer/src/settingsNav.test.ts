@@ -13,6 +13,7 @@ test('only a loaded plugin with settings of its own gets a row, in the plugin li
   expect(rows.map((row) => row.page)).toEqual([
     'General',
     'Appearance',
+    'Editor',
     'Terminal',
     'Keyboard',
     'Plugins',
@@ -27,7 +28,7 @@ test('only a loaded plugin with settings of its own gets a row, in the plugin li
 
 test('only the agent pages nest when no loaded plugin brings settings', () => {
   const rows = navRows(PLUGINS, [loaded('terminal', 'Terminal', false)])
-  expect(rows).toHaveLength(8)
+  expect(rows).toHaveLength(9)
   expect(rows.filter((row) => row.child).map((row) => row.page)).toEqual(['Claude', 'Codex'])
 })
 
