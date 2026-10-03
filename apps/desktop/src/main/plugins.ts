@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, typ
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ChatAdapter, MainContext, MainPlugin, ToolDefinition } from '@treeix/sdk/main'
+import { setMenuBarStatus } from './menuBar'
 import { mcpEnv, registerMcpTool } from './mcp'
 import { adaptersOf } from './pluginAdapters'
 
@@ -46,6 +47,7 @@ function activate(pluginId: string, plugin: MainPlugin, userData: string): { dis
     sessionEnv,
     onDispose: (dispose) => disposers.push(dispose),
     mcpTool: (tool) => disposers.push(registerMcpTool(tool)),
+    menuBar: setMenuBarStatus,
     chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null
   }
   plugin.activate?.(context)

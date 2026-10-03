@@ -12,6 +12,7 @@ directories:
 # A denylist let dist/ and src/ in as soon as node_modules stopped dominating the archive.
 files:
   - out/**
+  - resources/menuBarGlyph.png
   - native/mac-window/build/Release/*.node
   - node_modules/**
   - package.json

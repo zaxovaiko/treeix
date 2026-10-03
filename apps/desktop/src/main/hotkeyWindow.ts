@@ -2,6 +2,7 @@ import { app, type BrowserWindow, globalShortcut, type Rectangle, screen } from 
 import { carbonModifiers, isShortcut, macKeyCode, toAccelerator } from '../shared/shortcut'
 import type { HotkeyOptions } from '../shared/types'
 import { nativeHotkeys, setDockHidden, setSquareCorners } from './macWindow'
+import { showMenuBar } from './menuBar'
 
 // See TREEIX_HEADLESS in index.ts: the window stays hidden
 const HEADLESS = process.env.TREEIX_HEADLESS === '1'
@@ -132,10 +133,12 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
     if (!globalShortcut.register(accelerator, () => toggleHotkeyWindow(window))) return 'This shortcut is already taken by another app or macOS'
   }
   registered = key
+  showMenuBar(() => summon(window))
   return null
 }
 
 function unregister(): void {
+  showMenuBar(null)
   nativeHotkeys?.unregister()
   globalShortcut.unregisterAll()
   registered = null

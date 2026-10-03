@@ -18,6 +18,9 @@ export type ToolDefinition = {
 /** What a tool shows the agent; images are base64 */
 export type McpContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 
+/** Treeix's item in the macOS menu bar: text and a pair of rings per meter, the 5-hour and weekly share used from 0 to 1, next to its icon, and lines atop its menu */
+export type MenuBarStatus = { title: string; meters: [fiveHour: number | null, weekly: number | null][]; lines: string[] }
+
 /** A tool agents started by Treeix can call over its MCP server; arguments come from the agent, so `run` checks them */
 export type McpTool = {
   name: string
@@ -45,6 +48,8 @@ export type MainContext = {
   onDispose: (dispose: () => void) => void
   /** Offers a tool to agent sessions through Treeix's MCP server while the plugin is enabled */
   mcpTool: (tool: McpTool) => void
+  /** Sets what Treeix's menu bar item shows, which is there while the hotkey window is on; null clears it */
+  menuBar: (status: MenuBarStatus | null) => void
   /** An adapter contributed by any enabled plugin */
   chatAdapter: (id: string) => ChatAdapter | null
 }

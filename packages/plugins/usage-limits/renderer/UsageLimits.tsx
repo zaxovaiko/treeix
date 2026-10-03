@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AgentLimits, LimitWindow, UsageLimits as Limits } from '../shared/types'
+import { isMenuBarLabel, type AgentLimits, type LimitWindow, type MenuBarLabel, type UsageLimits as Limits } from '../shared/types'
 import { untilLabel } from '@treeix/app/time'
 import { KindBadge } from '@treeix/app/sessionUi'
 import { createBridge, definePluginSettings, useHost } from '@treeix/sdk'
@@ -9,10 +9,25 @@ export type UsageLabel = (typeof USAGE_LABEL_IDS)[number]
 
 export const usageSettings = definePluginSettings('usage-limits', (stored) => ({
   /** Title bar label for Claude and Codex usage limits */
-  usageLabel: USAGE_LABEL_IDS.find((id) => id === stored.usageLabel) ?? ('percent' as UsageLabel)
+  usageLabel: USAGE_LABEL_IDS.find((id) => id === stored.usageLabel) ?? ('percent' as UsageLabel),
+  /** Next to Treeix's icon in the macOS menu bar, which main draws from its own copy */
+  menuBarLabel: isMenuBarLabel(stored.menuBarLabel) ? stored.menuBarLabel : ('weekly' as MenuBarLabel)
 }))
 
 const bridge = createBridge('usage-limits')
+
+export function setMenuBarLabel(menuBarLabel: MenuBarLabel): void {
+  usageSettings.update({ menuBarLabel })
+  bridge.send('menuBarLabel', menuBarLabel)
+}
+
+/** Claude first, then Codex */
+export const MENU_BAR_OPTIONS: [MenuBarLabel, string, string][] = [
+  ['weekly', 'Weekly', '40% 50%'],
+  ['fiveHour', '5-hour', '35% 62%'],
+  ['rings', 'Rings, 5-hour outside and weekly inside', '◔ ◑'],
+  ['icon', 'Icon only', '']
+]
 
 export const USAGE_LABELS: [UsageLabel, string, string][] = [
   ['reset', 'Percent and reset', '5h 35% · 2h   wk 28% · 5d'],
