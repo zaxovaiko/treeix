@@ -385,6 +385,37 @@ export function EmptyState({
   )
 }
 
+/** Both panes hidden: a window with its two panes empty, and nothing to click */
+export function NothingOpen(): React.JSX.Element {
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 text-muted-foreground select-none">
+      <svg viewBox="0 0 160 112" className="w-44 text-foreground" fill="none" aria-hidden>
+        <defs>
+          <radialGradient id="nothing-open-glow" cx="50%" cy="55%" r="55%">
+            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="nothing-open-frame" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.07" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="80" cy="62" rx="78" ry="50" fill="url(#nothing-open-glow)" />
+        <rect x="16" y="14" width="128" height="84" rx="10" fill="url(#nothing-open-frame)" stroke="currentColor" strokeOpacity="0.18" />
+        <path d="M16 30h128" stroke="currentColor" strokeOpacity="0.14" />
+        <circle cx="27" cy="22" r="2.2" fill="currentColor" fillOpacity="0.22" />
+        <circle cx="35" cy="22" r="2.2" fill="currentColor" fillOpacity="0.22" />
+        <circle cx="43" cy="22" r="2.2" fill="currentColor" fillOpacity="0.22" />
+        <rect x="24" y="38" width="52" height="52" rx="6" stroke="currentColor" strokeOpacity="0.28" strokeDasharray="4 4" />
+        <rect x="84" y="38" width="52" height="52" rx="6" stroke="currentColor" strokeOpacity="0.28" strokeDasharray="4 4" />
+        <path d="M44 64h12M50 58v12" stroke="var(--color-primary)" strokeOpacity="0.7" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M104 64h12M110 58v12" stroke="var(--color-primary)" strokeOpacity="0.7" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+      <p className="text-[13px]">Nothing open</p>
+    </div>
+  )
+}
+
 /** Single text field dialog; Electron has no window.prompt */
 export function TextPrompt({
   title,

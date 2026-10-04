@@ -8,10 +8,13 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => launched.close())
 
-test('a page tab clicked while open hides it behind an empty state, and a second click or its button shows it again', async () => {
+test('a left tab shows in the left pane and hides on a second click, leaving an empty state without buttons', async () => {
   const { page } = launched
   const terminalTab = page.locator('[data-page-tab="terminal"]')
-  const emptyState = page.getByText('No tab open')
+  const emptyState = page.getByText('Nothing open')
+  // The AI Hub, where the app opens, hidden leaves both panes empty
+  await page.locator('[data-page-tab="hub"]').click()
+  await expect(emptyState).toBeVisible()
   await terminalTab.click()
   await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   await expect(emptyState).toHaveCount(0)
@@ -19,19 +22,39 @@ test('a page tab clicked while open hides it behind an empty state, and a second
   await terminalTab.click()
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
   await expect(emptyState).toBeVisible()
+  await expect(page.locator('[data-zone="main"] button:visible')).toHaveCount(0)
 
   await terminalTab.click()
   await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   await expect(emptyState).toHaveCount(0)
+})
 
-  await terminalTab.click()
-  await page.getByRole('button', { name: 'Show Terminal', exact: true }).click()
-  await expect(terminalTab).toHaveAttribute('aria-current', 'page')
-
-  // Another tab while one is hidden just shows that one
+test('a second tab opens beside the first, and each hides on a second click', async () => {
+  const { page } = launched
+  const terminalTab = page.locator('[data-page-tab="terminal"]')
   const worktreesTab = page.locator('[data-page-tab="worktrees"]')
-  await terminalTab.click()
+  const rightPane = page.locator('[data-split-pane]')
+  const emptyState = page.getByText('Nothing open')
+
+  await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   await worktreesTab.click()
   await expect(worktreesTab).toHaveAttribute('aria-current', 'page')
-  await expect(emptyState).toHaveCount(0)
+  await expect(terminalTab).toHaveAttribute('aria-current', 'page')
+  await expect(rightPane).toBeVisible()
+
+  // The right pane takes the whole window while the left one is hidden
+  await terminalTab.click()
+  await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
+  await expect(rightPane).toBeVisible()
+  await expect(emptyState).toBeHidden()
+
+  await worktreesTab.click()
+  await expect(worktreesTab).not.toHaveAttribute('aria-current', 'page')
+  await expect(rightPane).toHaveCount(0)
+  await expect(emptyState).toBeVisible()
+
+  // With both hidden the next tab fills the left pane
+  await worktreesTab.click()
+  await expect(worktreesTab).toHaveAttribute('aria-current', 'page')
+  await expect(rightPane).toHaveCount(0)
 })

@@ -90,7 +90,7 @@ import { arrangeBar, isSpace, moveItem, SEARCH_ITEM, SPACE_ITEMS, WORKTREES_TAB 
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
 
-import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
+import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, NothingOpen, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
 import { isJson, list, object } from '../../shared/json'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
@@ -1349,7 +1349,7 @@ function App(): React.JSX.Element {
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
   // Shown even with no workspace yet: its + is where the first one is made
-  const showRail = shell.rail && !shell.zen && !onHub
+  const showRail = shell.rail && !shell.zen && !(onHub && !pageHidden)
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1702,19 +1702,28 @@ function App(): React.JSX.Element {
   const pageTab = (tab: (typeof tabs)[number]): React.ReactNode => {
     const index = tabs.indexOf(tab)
     const letter = leaderOf(tab.id)?.toUpperCase()
-    const compact = settings.compactTabs && appTab !== tab.id
+    const inSplit = splitPage?.id === tab.id
+    const open = inSplit || (appTab === tab.id && !pageHidden)
+    // A second click hides an open tab; another one fills the left pane when it is empty, else opens beside it, replacing what was there
+    const click = (): void => {
+      if (inSplit) setSplitTab(null)
+      else if (open) setHiddenTab(tab.id)
+      else if (pageHidden || !tabs.some((candidate) => candidate.id === appTab)) goPage(tab.id)
+      else setSplitTab(tab.id)
+    }
+    const compact = settings.compactTabs && !open
     const digitKey = digitLabel('tabs', index + 1)
     const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
     return (
       <button
         key={tab.id}
         data-page-tab={tab.id}
-        aria-current={appTab === tab.id && !pageHidden ? 'page' : undefined}
+        aria-current={open ? 'page' : undefined}
         title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag anywhere in the title bar`}
         {...barItemDrag(tab.id)}
-        onClick={() => (appTab === tab.id && !pageHidden ? setHiddenTab(tab.id) : goPage(tab.id))}
+        onClick={click}
         onContextMenu={(event) => pageTabMenu(event, tab)}
-        className={`${tabClass(appTab === tab.id && !pageHidden)} ${tab.id === splitPage?.id ? 'text-foreground ring-1 ring-border' : ''}`}
+        className={tabClass(open)}
       >
         {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
         {!compact && tab.label}
@@ -1726,14 +1735,13 @@ function App(): React.JSX.Element {
 
   const tabClass = (active: boolean): string =>
     `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag] ${
-      active ? 'bg-foreground/8 text-foreground ring-1 ring-border' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+      active ? 'bg-primary/15 text-foreground ring-1 ring-primary/50' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
     }`
   // Each project is searched once: in the selected worktree when it belongs to it, otherwise in its main checkout
   const searchPaths = (workspaceRepos ? reposInScope(workspaceRepos, scope) : []).map((repo) =>
     repo.worktrees.some((candidate) => candidate.path === selected) && selected ? selected : repo.path
   )
   const activePluginTab = pluginTabs.find((tab) => tab.id === appTab)
-  const hiddenPage = pageHidden ? tabs.find((tab) => tab.id === appTab) : undefined
   const appTabLabel = openDocTab?.title ?? activePluginTab?.label ?? (appTab === 'settings' ? 'Settings' : appTab === 'worktrees' ? 'Worktrees' : 'This tab')
 
   const changedPaths = new Set(files.map((patch) => patch.path))
@@ -2083,24 +2091,27 @@ function App(): React.JSX.Element {
               <div className="flex shrink-0 items-center gap-0.5">
                 {titleBarItems(false)}
                 {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
-                {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id))).map((panel) => {
-                  const info = panelInfo(panel)
-                  const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
-                  return info ? (
-                    <PanelToggle
-                      key={panel}
-                      id={panel}
-                      info={info}
-                      active={dock.isVisible(panel)}
-                      side={dock.sideOf(panel)}
-                      badge={Badge && <Badge />}
-                      onToggle={() => dock.toggle(panel)}
-                      onMove={(side) => dock.move(panel, side)}
-                      onDragStart={() => startPanelDrag(panel)}
-                      onDragEnd={() => setDraggingPanel(null)}
-                    />
-                  ) : null
-                })}
+                {/* Worktrees and PRs leave Terminal and Browser to their own tabs, which open beside them; an open panel keeps its toggle to close it */}
+                {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id)))
+                  .filter((panel) => !(['worktrees', 'prs'].includes(appTab) && ['terminal', 'browser'].includes(panel) && !dock.isVisible(panel)))
+                  .map((panel) => {
+                    const info = panelInfo(panel)
+                    const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
+                    return info ? (
+                      <PanelToggle
+                        key={panel}
+                        id={panel}
+                        info={info}
+                        active={dock.isVisible(panel)}
+                        side={dock.sideOf(panel)}
+                        badge={Badge && <Badge />}
+                        onToggle={() => dock.toggle(panel)}
+                        onMove={(side) => dock.move(panel, side)}
+                        onDragStart={() => startPanelDrag(panel)}
+                        onDragEnd={() => setDraggingPanel(null)}
+                      />
+                    ) : null
+                  })}
                 <button
                   title={`Agent comments (${actionKeys('app.comments')})`}
                   onClick={() => setDrawerOpen(!drawerOpen)}
@@ -2128,19 +2139,14 @@ function App(): React.JSX.Element {
           {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
           <div className="flex min-h-0 flex-1" onFocusCapture={(event) => setSplitFocused(event.target instanceof Element && event.target.closest('[data-split-pane]') !== null)}>
             {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
-            <Zone id="main" className="flex-1">
+            {/* A hidden left pane stays mounted, so its pages keep their state, and gives its room to the right one */}
+            <Zone id="main" className="flex-1" style={pageHidden && splitPage ? { display: 'none' } : undefined}>
               {/* With a split, a line over the side that has the keyboard */}
               {splitPage && !splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70" />}
               {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
               <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
-                  {hiddenPage && (
-                    <EmptyState fill icon={hiddenPage.icon} title="No tab open">
-                      <button onClick={() => goPage(hiddenPage.id)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
-                        Show {hiddenPage.label}
-                      </button>
-                    </EmptyState>
-                  )}
+                  {pageHidden && <NothingOpen />}
                   {appTab === 'worktrees' && !pageHidden && worktreeView}
                   <Suspense fallback={<div className="flex-1" />}>
                     {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
@@ -2156,8 +2162,12 @@ function App(): React.JSX.Element {
             </Zone>
             {splitPage && (
               <HostContext.Provider value={splitHost}>
-                <div data-split-pane style={{ width: splitWidth }} className="relative flex min-h-0 min-w-0 shrink-0 flex-col border-l border-border">
-                  <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />
+                <div
+                  data-split-pane
+                  style={pageHidden ? undefined : { width: splitWidth }}
+                  className={`relative flex min-h-0 min-w-0 flex-col ${pageHidden ? 'flex-1' : 'shrink-0 border-l border-border'}`}
+                >
+                  {!pageHidden && <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />}
                   <div
                     className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${splitFocused ? 'text-foreground' : 'text-muted-foreground'}`}
                   >

@@ -11,6 +11,8 @@ test('ctrl+tab cycles the tabs and inactive tabs can show only their icon', asyn
   const { page } = launched
   // Hovering moves a title into data-tip for the app's own tooltip
   const tab = (name: string) => page.locator(`button[title^="${name}"], button[data-tip^="${name}"]`).first()
+  // The AI Hub, where the app opens, is hidden first so Worktrees fills the left pane rather than opening beside it
+  await page.locator('[data-page-tab="hub"]').click()
   await tab('Worktrees').click()
   await expect(tab('Worktrees')).toHaveClass(/ring-1/)
   await page.keyboard.press('Control+Tab')
