@@ -92,6 +92,7 @@ app.whenReady().then(() => {
     const level = step === 0 ? 0 : Math.max(-3, Math.min(6, event.sender.getZoomLevel() + Math.sign(step) * 0.5))
     event.sender.setZoomLevel(level)
   })
+  ipcMain.on('setBadge', (_, count: number) => app.setBadgeCount(Number.isInteger(count) && count > 0 ? count : 0))
   ipcMain.handle('pickFolder', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     const options = { properties: ['openDirectory' as const] }

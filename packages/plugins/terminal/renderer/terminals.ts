@@ -16,6 +16,7 @@ import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from 
 import { isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 import { isJson, isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
+import { notify as notifyCenter } from '@treeix/app/notifications'
 
 export { type SessionKind, type SessionStatus, type SessionView }
 
@@ -127,12 +128,12 @@ function userInput(id: string, data: string): void {
   else if (hooked === 'input') hookStatus.set(id, 'working')
 }
 
-/** A system notification while the window is in the background; clicking it shows the session */
+/** Into the notification center, unless it is the pane the user is looking at; opening it shows the session */
 function notifyAgent(id: string, what: string): void {
   const session = findSession(id)
-  if (!session || !getSettings().agentNotifications || document.hasFocus()) return
-  const notification = new Notification(`${agentOr(session.kind).label} ${what}`, { body: session.title })
-  notification.onclick = () => revealSession(id)
+  // Not for the pane the user is looking at; on another page it is out of sight even while active
+  if (!session || (document.hasFocus() && activePane()?.id === id && document.querySelector(`[data-session-id="${id}"]`)?.checkVisibility())) return
+  notifyCenter({ title: `${agentOr(session.kind).label} ${what}`, body: session.title, workspaceId: session.workspaceId, open: () => sessionRevealer?.(id) })
 }
 
 const ACTIVE_WINDOW_MS = 2000
@@ -161,6 +162,12 @@ export const setFileLinkHandler = (handler: typeof fileLinkHandler): void => {
 let issueLinks: { isProject: (project: string) => boolean; open: (key: string) => void } | null = null
 export const setIssueLinks = (links: typeof issueLinks): void => {
   issueLinks = links
+}
+
+/** Shows a session on screen, its page included; set by the plugin, which knows the host */
+let sessionRevealer: ((id: string) => void) | null = null
+export const setSessionRevealer = (reveal: typeof sessionRevealer): void => {
+  sessionRevealer = reveal
 }
 
 /** Opens a web address ⌘-clicked in a session, in the app when a plugin knows it, else in the browser */

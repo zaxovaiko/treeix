@@ -10,6 +10,7 @@ const api: Api = {
   listFiles: (worktreePath) => ipcRenderer.invoke('listFiles', worktreePath),
   listDirectory: (root, folder) => ipcRenderer.invoke('listDirectory', root, folder),
   zoom: (step: number) => ipcRenderer.send('zoom', step),
+  setBadge: (count: number) => ipcRenderer.send('setBadge', count),
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),

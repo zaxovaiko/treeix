@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { type RendererPlugin, useHost } from '@treeix/sdk'
 import { type Agent, useAgents } from '@treeix/app/agents'
-import { getSettings, subscribeSettings } from '@treeix/app/settings'
+import { subscribeSettings } from '@treeix/app/settings'
+import { notify } from '@treeix/app/notifications'
 import { activeAgents, type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
 import { asAgent, asking, followAgents, followRuns, followWorkflows, hubAgents, hubApi, hubRuns, hubSelection, hubWorkflows, onOpenRun, TAB_ID } from './store'
@@ -33,7 +34,7 @@ function useRuntimes(): void {
 
 const NOTICE: Partial<Record<string, string>> = { waiting: 'needs you', done: 'finished', failed: 'failed' }
 
-/** A system notification when a run starts waiting on the user or ends, while the window is in the background; clicking it shows the run */
+/** Into the notification center when a run starts waiting on the user or ends; opening it shows the run */
 function useRunNotifications(): void {
   const host = useHost()
   useEffect(
@@ -53,14 +54,17 @@ function useRunNotifications(): void {
       for (const run of hubRuns.get()) {
         const state = stateOf(run)
         const previous = seen.get(run.id)
-        // Main tells how a scheduled run ended itself, as the schedule asks
-        const mainTells = run.kind === 'schedule' && state !== 'waiting'
-        if (!previous || previous === state || !NOTICE[state] || mainTells || document.hasFocus() || !getSettings().agentNotifications) continue
-        const notification = new Notification(`${run.title} ${NOTICE[state]}`, { body: 'AI Hub' })
-        notification.onclick = () => {
-          hubSelection.set(`run:${run.id}`)
-          host.setActiveTab(TAB_ID)
-        }
+        if (!previous || previous === state || !NOTICE[state]) continue
+        notify({
+          title: `${run.title} ${NOTICE[state]}`,
+          body: 'AI Hub',
+          // Main shows how a scheduled run ended itself, as the schedule asks
+          system: !(run.kind === 'schedule' && state !== 'waiting'),
+          open: () => {
+            hubSelection.set(`run:${run.id}`)
+            host.setActiveTab(TAB_ID)
+          }
+        })
       }
       seen = next
     })

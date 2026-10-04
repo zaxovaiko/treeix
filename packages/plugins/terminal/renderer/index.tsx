@@ -56,6 +56,7 @@ import {
   sendText,
   setActiveTab,
   setFileLinkHandler,
+  setSessionRevealer,
   setIssueLinks,
   setWebLinkHandler,
   splitPane,
@@ -302,6 +303,14 @@ function useFileLinks(): void {
   // Looked up on use: the Jira plugin may load after this one, or be switched off later
   useEffect(() => setIssueLinks({ isProject: (project) => host.service('jira')?.isProject(project) ?? false, open: (key) => host.service('jira')?.open(key, host) }))
   useEffect(() => setWebLinkHandler(host.openLink))
+  // The Terminal page itself, not the docked panel: a notification may have just switched the workspace and its page
+  useEffect(() =>
+    setSessionRevealer((id) => {
+      revealSession(id)
+      host.setActiveTab(TAB_ID)
+      setTimeout(() => focusSession(id), 50)
+    })
+  )
 }
 
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {

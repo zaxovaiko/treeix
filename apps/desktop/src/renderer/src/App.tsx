@@ -62,6 +62,7 @@ import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindFo
 import { codeThemeOptions, diffBackground, FileView, findLineElement } from './FileView'
 import { FileIcon, Icon, type IconName } from './Icon'
 import { McpInstallButton } from './mcpInstall'
+import { NotificationCenter, setWorkspaceSwitcher } from './notifications'
 import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
@@ -590,6 +591,8 @@ function App(): React.JSX.Element {
   useEffect(() => {
     if (pluginsReady && !tabExists(appTab)) setAppTab(tabExists(DEFAULT_TAB) ? DEFAULT_TAB : 'worktrees')
   })
+
+  useEffect(() => setWorkspaceSwitcher(switchWorkspace))
 
   /** Each workspace remembers its selected worktree and open tabs */
   const switchWorkspace = (id: string): void => {
@@ -2107,6 +2110,7 @@ function App(): React.JSX.Element {
                   {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
                   <Kbd hint>{actionKeys('app.comments')}</Kbd>
                 </button>
+                <NotificationCenter />
                 <McpInstallButton flash={flash} />
                 <IconButton
                   label={`Settings (${actionKeys('app.settings')} or G S)`}
