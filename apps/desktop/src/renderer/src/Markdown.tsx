@@ -129,6 +129,8 @@ function ResolvedImage({ src, alt, resolve }: { src: string; alt: string; resolv
       </span>
     )
   }
+  // Screen recordings attached to tickets resolve to video data URLs, which an img can't play
+  if (state.src.startsWith('data:video/')) return <video src={state.src} title={alt} controls loop muted autoPlay className="my-2 max-w-full rounded-lg" />
   return (
     <Expandable title={alt} preview={<img src={state.src} alt={alt} className="my-2 max-w-full rounded-lg" />}>
       <img src={state.src} alt={alt} />
