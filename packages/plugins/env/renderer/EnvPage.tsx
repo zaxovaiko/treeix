@@ -2,7 +2,7 @@ import { actionForEvent, matchesAction } from '@treeix/shared/keymap'
 import { useEffect, useMemo, useState } from 'react'
 import { isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
-import { baseName, branchLabel, ZoneHeader } from '@treeix/app/Sidebar'
+import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { EmptyState, IconButton, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import { issuesOf, issueSummary, issueTone, type Place, placesByName, worstKind } from './model'
@@ -150,7 +150,7 @@ export function EnvPage(): React.JSX.Element {
   let position = -1
   const list = (
     <>
-      <ZoneHeader zone="list" title="Env">
+      <div className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border pr-1 pl-3">
         <ToggleButton label="By worktree" on={mode === 'worktree'} onClick={() => setMode('worktree')}>
           <Icon name="list" className="size-3.5" />
         </ToggleButton>
@@ -161,7 +161,7 @@ export function EnvPage(): React.JSX.Element {
         <IconButton label={busy ? 'Scanning...' : 'Rescan (r), runs on file change too'} onClick={() => void rescan(scoped.map(({ worktree }) => worktree.path))}>
           <Icon name="refresh" className={`size-3.5 ${busy ? 'opacity-40' : ''}`} />
         </IconButton>
-      </ZoneHeader>
+      </div>
       <div className="shrink-0 border-b border-border p-2">
         <label className="flex h-7 min-w-0 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
           <Icon name="search" className="size-3.5" />

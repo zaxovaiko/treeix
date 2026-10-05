@@ -401,7 +401,6 @@ export function Inspector({
   onComment: () => void
 }): React.JSX.Element {
   const host = useHost()
-  const panels = usePanels()
   const [usages, setUsages] = useState<Usage[] | null>(null)
   const worktreePath = target.env.path
   useEffect(() => {
@@ -446,9 +445,6 @@ export function Inspector({
         </span>
         <IconButton label="Comment to agent (c)" onClick={onComment}>
           <Icon name="comment" className="size-3.5" />
-        </IconButton>
-        <IconButton label="Close (i)" onClick={() => panels.toggle('inspector')}>
-          <Icon name="close" className="size-3" />
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 text-xs">

@@ -380,10 +380,7 @@ export function JiraTasks(): React.JSX.Element {
 
   const listPane = (
     <>
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Tasks</span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{visible.length}</span>
-        <span className="flex-1" />
+      <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
         {groupIds.length > 1 && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
         <IconButton label={loading ? 'Refreshing...' : 'Refresh'} onClick={refresh}>
           <Icon name="refresh" className={`size-3.5 ${loading ? 'opacity-40' : ''}`} />

@@ -117,7 +117,6 @@ function PageMain({
             <span className="text-muted-foreground/40">/</span>
           </>
         )}
-        <span className="min-w-0 truncate text-foreground">{page.title}</span>
         <span className="flex-1" />
         <MarkdownFoldButton />
         <IconButton label="Reload page (r)" onClick={onReload}>
@@ -400,9 +399,7 @@ export function ConfluenceTab(): React.JSX.Element {
   let index = -1
   const listPane = (
     <>
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Confluence</span>
-        <span className="flex-1" />
+      <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
         {spaceKeys.length > 1 && <FoldAllButton anyOpen={anySpaceOpen} groups="spaces" onClick={foldAll} />}
         <IconButton label={recentLoading ? 'Reloading...' : 'Reload recently viewed'} onClick={reloadRecent}>
           <Icon name="refresh" className={`size-3.5 ${recentLoading ? 'opacity-40' : ''}`} />
