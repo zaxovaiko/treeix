@@ -11,7 +11,8 @@ test('hardenWebview forces the browser partition, isolation and our preload', ()
     sandbox: true,
     webSecurity: true,
     partition: BROWSER_PARTITION,
-    preload: '/app/out/preload/browserInject.js'
+    preload: '/app/out/preload/browserInject.js',
+    transparent: false
   })
 })
 

@@ -14,7 +14,9 @@ export function hardenWebview(prefs: WebPreferences | Record<string, unknown>, i
     sandbox: true,
     webSecurity: true,
     partition: BROWSER_PARTITION,
-    preload: injectPath
+    preload: injectPath,
+    // Guests are see-through by default, so a page that leaves its background to the browser showed the app's dark theme under dark text
+    transparent: false
   })
 }
 
