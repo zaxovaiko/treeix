@@ -39,7 +39,7 @@ function Section({ children }: { children?: React.ReactNode }): React.JSX.Elemen
         <Icon name="chevron" className={`size-3 shrink-0 translate-y-[3px] text-muted-foreground/50 group-hover/section:text-foreground ${open ? 'rotate-90' : ''}`} />
         <div className="min-w-0 flex-1">{heading}</div>
       </button>
-      {open && <div className="pl-4">{body}</div>}
+      {open && body}
     </section>
   )
 }
