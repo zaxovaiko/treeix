@@ -17,6 +17,11 @@ export type Workspace = {
 
 /** Only used before any workspace exists, when every project shows */
 export const ALL_PROJECTS = 'all'
+/** Terminals in the home folder, outside every workspace: no projects, and its sessions show nowhere else */
+export const HOME: Workspace = { id: 'home', name: 'Home', color: '#64748b', repoPaths: [] }
+
+/** The workspace with that id, Home included */
+export const workspaceOf = (workspaces: Workspace[], id: string): Workspace | undefined => (id === HOME.id ? HOME : workspaces.find((workspace) => workspace.id === id))
 export const WORKSPACE_COLORS = ['#4f5ff0', '#e0703d', '#10a37f', '#d946ef', '#eab308', '#64748b']
 
 const KEY = 'workspaces'
@@ -45,7 +50,7 @@ function load(): State {
   const currentId = localStorage.getItem(CURRENT_KEY)
   return {
     workspaces,
-    currentId: workspaces.some((workspace) => workspace.id === currentId) ? (currentId ?? ALL_PROJECTS) : (workspaces[0]?.id ?? ALL_PROJECTS),
+    currentId: currentId && workspaceOf(workspaces, currentId) ? currentId : (workspaces[0]?.id ?? ALL_PROJECTS),
     recentIds: list(parseJson(localStorage.getItem(RECENT_KEY)), isString)
   }
 }
@@ -166,6 +171,7 @@ const containsWorktree = (workspace: Workspace, repos: Repo[] | null, worktreePa
  * is gone (or that predate workspaces) move to the first workspace holding their worktree, else the first one.
  */
 export function inWorkspace(session: { worktreePath: string; workspaceId: string }, workspace: Workspace | undefined, repos: Repo[] | null, workspaces: Workspace[]): boolean {
+  if (session.workspaceId === HOME.id || workspace?.id === HOME.id) return session.workspaceId === workspace?.id
   if (!workspace) return true
   if (workspaces.some((candidate) => candidate.id === session.workspaceId)) return session.workspaceId === workspace.id
   // With no record of where it started, it belongs to the narrowest workspace holding the checkout, e.g. "Betfeel" over "Betfeel + Openora"

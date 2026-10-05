@@ -36,6 +36,19 @@ test('workspace helpers', async () => {
   expect(inWorkspace({ worktreePath: '/r/ariex', workspaceId: 'all' }, undefined, repos, [])).toBe(true)
 })
 
+test('Home sessions show in Home alone, and Home shows nothing else', async () => {
+  const { HOME, inWorkspace, workspaceOf } = await import('./workspaces')
+  const workspace = { id: 'w1', name: 'Client', color: '#fff', repoPaths: [] }
+  expect(workspaceOf([workspace], 'home')).toBe(HOME)
+  expect(workspaceOf([workspace], 'w1')).toBe(workspace)
+  const atHome = { worktreePath: '/Users/me', workspaceId: 'home' }
+  expect(inWorkspace(atHome, HOME, null, [workspace])).toBe(true)
+  expect(inWorkspace(atHome, workspace, null, [workspace])).toBe(false)
+  expect(inWorkspace(atHome, undefined, null, [])).toBe(false)
+  expect(inWorkspace({ worktreePath: '/Users/me', workspaceId: 'w1' }, HOME, null, [workspace])).toBe(false)
+  expect(inWorkspace({ worktreePath: '/Users/me', workspaceId: 'gone' }, HOME, null, [workspace])).toBe(false)
+})
+
 test('reorderWorkspaces moves before a target or to the end', async () => {
   const { reorderWorkspaces } = await import('./workspaces')
   const list = ['a', 'b', 'c'].map((id) => ({ id, name: id, color: '#000', repoPaths: [] }))

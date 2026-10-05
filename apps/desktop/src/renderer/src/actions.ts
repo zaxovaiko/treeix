@@ -68,6 +68,13 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'app.diffStyle', label: 'Switch between split and unified diffs', menuLabel: 'Split or unified diff', section: 'Go to', keys: null },
   { id: 'app.copyComments', label: 'Copy the agent comments of the worktree', section: 'Comments', keys: null },
   { id: 'app.clearComments', label: 'Delete the agent comments of the worktree', section: 'Comments', keys: null },
+  {
+    id: 'workspace.home',
+    label: 'Home terminal in ~, outside every workspace, and back',
+    menuLabel: 'Home terminal',
+    section: 'Go to',
+    keys: key('KeyH', { meta: true, shift: true })
+  },
   { id: 'workspace.new', label: 'New workspace', menuLabel: 'New workspace', section: 'Go to', keys: null },
   { id: 'workspace.edit', label: 'Edit the current workspace', menuLabel: 'Edit workspace', section: 'Go to', keys: null },
 

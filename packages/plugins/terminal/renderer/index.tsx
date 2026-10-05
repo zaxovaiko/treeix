@@ -25,7 +25,7 @@ import { HtmlPreview, isHtmlPath, isPreviewPath, MarkdownPreview, PreviewToggle,
 import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
 import { digitPressed } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
-import { getCurrentWorkspaceId, inWorkspace, useWorkspaces } from '@treeix/app/workspaces'
+import { getCurrentWorkspaceId, inWorkspace, useWorkspaces, workspaceOf } from '@treeix/app/workspaces'
 import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } from './folder'
 import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
@@ -136,7 +136,7 @@ type TaskScope = { tasks: Task[]; task: Task | null; sessions: Session[]; histor
 function useTaskScope(): TaskScope {
   const { repos } = useHost()
   const { workspaces, currentId } = useWorkspaces()
-  const workspace = workspaces.find((candidate) => candidate.id === currentId)
+  const workspace = workspaceOf(workspaces, currentId)
   const state = useTerminals()
   const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
   const tasks = state.tasks.filter(include)

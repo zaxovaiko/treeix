@@ -9,7 +9,20 @@ import { type Activity, ActivityMark, NEWS } from './activity'
 import { activityOf } from './sessionUi'
 import { useSessions } from './plugins'
 import { Dialog } from './ui'
-import { deleteWorkspace, initials, inWorkspace, moveWorkspace, saveWorkspace, suggestWorkspaceName, useWorkspaces, type Workspace, shades, WORKSPACE_COLORS } from './workspaces'
+import { actionKeys } from '../../shared/keymap'
+import {
+  deleteWorkspace,
+  HOME,
+  initials,
+  inWorkspace,
+  moveWorkspace,
+  saveWorkspace,
+  suggestWorkspaceName,
+  useWorkspaces,
+  type Workspace,
+  shades,
+  WORKSPACE_COLORS
+} from './workspaces'
 
 const workspaceActivity = (sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): Activity =>
   activityOf(sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces)))
@@ -155,6 +168,16 @@ export function WorkspaceRail({
       >
         <Icon name="plus" className="size-4" />
       </button>
+      <div data-home-workspace className="mt-auto w-full">
+        <Tile
+          active={currentId === HOME.id}
+          title={`Home: terminals in ~, outside every workspace (${actionKeys('workspace.home')})`}
+          activity={workspaceActivity(sessions, HOME, repos, workspaces)}
+          onClick={() => onSwitch(HOME.id)}
+        >
+          <span className="font-mono text-[15px]">~</span>
+        </Tile>
+      </div>
     </Zone>
   )
 }

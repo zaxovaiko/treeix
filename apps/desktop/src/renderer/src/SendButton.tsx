@@ -6,7 +6,7 @@ import { KindBadge, StatusDot, worktreeLabel } from './sessionUi'
 import { agentOr, isAgent, useAgents } from './agents'
 import type { SessionKind, SessionSummary as Session } from '@treeix/sdk'
 import { useService, useSessions } from './plugins'
-import { inWorkspace, useWorkspaces } from './workspaces'
+import { inWorkspace, useWorkspaces, workspaceOf } from './workspaces'
 import { Popup, useMenuKeys, usePersisted } from './ui'
 
 const lastTargets = new Map<string, string>()
@@ -40,7 +40,7 @@ export function SendButton({
 }): React.JSX.Element {
   // Only sessions of this workspace, even when another workspace has one on the same checkout
   const { workspaces, currentId } = useWorkspaces()
-  const workspace = workspaces.find((candidate) => candidate.id === currentId)
+  const workspace = workspaceOf(workspaces, currentId)
   const sessions = useSessions().filter((session) => inWorkspace(session, workspace, repos, workspaces))
   const service = useService('sessions')
   const [menuOpen, setMenuOpen] = useState(false)

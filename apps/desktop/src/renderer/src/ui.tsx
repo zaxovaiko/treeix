@@ -138,13 +138,26 @@ export function CopyButton({ text, label = 'Copy', className = 'size-3' }: { tex
   )
 }
 
-export function IconButton({ label, active = false, onClick, children }: { label: string; active?: boolean; onClick: () => void; children: React.ReactNode }): React.JSX.Element {
+export function IconButton({
+  label,
+  active = false,
+  disabled = false,
+  onClick,
+  children
+}: {
+  label: string
+  active?: boolean
+  disabled?: boolean
+  onClick: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
   return (
     <button
       title={label}
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
-      className={`inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${
+      className={`inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 [-webkit-app-region:no-drag] ${
         active ? 'text-foreground' : 'text-muted-foreground'
       }`}
     >

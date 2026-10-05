@@ -5,7 +5,7 @@ import { Icon } from '@treeix/app/Icon'
 import { goToWorkspace, markAllRead, useNotifications } from '@treeix/app/notifications'
 import { useSessions } from '@treeix/app/plugins'
 import { timeAgo } from '@treeix/app/time'
-import { useWorkspaces } from '@treeix/app/workspaces'
+import { useWorkspaces, workspaceOf } from '@treeix/app/workspaces'
 import { type AgentNode, isWaiting, type Run } from '../shared/workflow'
 import { Alien, type Character, characterOf, type Mood } from './Alien'
 import { asking, hubAgents, hubRuns, hubSelection, TAB_ID } from './store'
@@ -171,7 +171,7 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
   }
   return (
     <div className="grid w-[560px] grid-cols-[196px_1fr] gap-2.5 p-2.5">
-      <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[radial-gradient(120%_90%_at_50%_60%,rgb(79_95_240/18%),transparent_70%)] px-2 pt-3.5 pb-3 ring-1 ring-border ring-inset">
+      <div className="flex flex-col items-center justify-center gap-1.5 px-2 pt-3.5 pb-3">
         <Alien character={overallCharacter(entries)} mood={overallMood(entries)} size={148} />
         <div className="text-center text-[12.5px] font-medium">{headline}</div>
         <div className="text-center text-[11px] text-muted-foreground">{sub}</div>
@@ -179,7 +179,7 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
       <div className="flex min-w-0 flex-col gap-0.5">
         {entries.length === 0 && <div className="m-auto text-muted-foreground">No agent is at work</div>}
         {entries.slice(0, MAX_ROWS).map((entry) => {
-          const workspace = entry.workspaceId ? workspaces.find((candidate) => candidate.id === entry.workspaceId) : undefined
+          const workspace = entry.workspaceId ? workspaceOf(workspaces, entry.workspaceId) : undefined
           return (
             <button
               key={entry.id}

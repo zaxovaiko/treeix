@@ -71,8 +71,10 @@ import { isPageId, showSettingsPage } from './settingsNav'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
 import {
   addRepoToWorkspace,
+  ALL_PROJECTS,
   commonFolder,
   getCurrentWorkspaceId,
+  HOME,
   workspaceKey,
   inWorkspace,
   recentWorkspaces,
@@ -80,7 +82,8 @@ import {
   saveWorkspace,
   setCurrentWorkspace,
   useWorkspaces,
-  type Workspace
+  type Workspace,
+  workspaceOf
 } from './workspaces'
 import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
@@ -147,9 +150,22 @@ function readBrowsedFolders(): Record<string, string> {
   return Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
 }
 
-type Place = { appTab: string; selected: string | null; viewer: { path: string; line: number | null } | null; filePath: string | null }
+type Place = {
+  workspaceId: string
+  appTab: string
+  overlay: boolean
+  selected: string | null
+  viewer: { path: string; line: number | null } | null
+  filePath: string | null
+}
 const samePlace = (a: Place, b: Place): boolean =>
-  a.appTab === b.appTab && a.selected === b.selected && a.filePath === b.filePath && a.viewer?.path === b.viewer?.path && a.viewer?.line === b.viewer?.line
+  a.workspaceId === b.workspaceId &&
+  a.appTab === b.appTab &&
+  a.overlay === b.overlay &&
+  a.selected === b.selected &&
+  a.filePath === b.filePath &&
+  a.viewer?.path === b.viewer?.path &&
+  a.viewer?.line === b.viewer?.line
 const PLACE_SETTLE_MS = 400
 
 /** The numpad twins of the font size keys, which the recorded shortcuts don't cover */
@@ -369,7 +385,7 @@ function App(): React.JSX.Element {
   const dock = useLayout(panelIds)
   const allSessions = useSessions()
   const workspacesState = useWorkspaces()
-  const { workspaces, currentId: workspaceId } = workspacesState
+  const { workspaces, currentId: workspaceId, recentIds } = workspacesState
   // Read in the same render the workspace changed in, so no page of the old workspace is mounted again
   const visitedTabs = visitedIn(visited, workspaceId)
   useEffect(
@@ -385,7 +401,7 @@ function App(): React.JSX.Element {
     localStorage.setItem(BROWSED_FOLDERS_KEY, JSON.stringify(next))
     setBrowsedFolders(next)
   }
-  const workspace = workspaces.find((candidate) => candidate.id === workspaceId)
+  const workspace = workspaceOf(workspaces, workspaceId)
   const workspaceRepos = repos ? reposOf(workspace, repos) : null
   // A workspace replaces the folder filter; focus only applies to a project inside it
   const scope: RepoScope = {
@@ -489,21 +505,25 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener('mousedown', cancelLeader, true)
   }, [])
 
-  const places = useRef(emptyHistory<Place>())
+  const [places, setPlaces] = useState(emptyHistory<Place>)
   /** Restoring a place settles over a few renders (worktree reset, cached diff); none of them are new places */
   const restoringUntil = useRef(0)
   useEffect(() => {
     if (Date.now() < restoringUntil.current) return
-    places.current = recordPlace(places.current, { appTab, selected, viewer, filePath }, samePlace)
-  }, [appTab, selected, viewer, filePath])
+    setPlaces((history) => recordPlace(history, { workspaceId, appTab, overlay: overlayOpen, selected, viewer, filePath }, samePlace))
+  }, [workspaceId, appTab, overlayOpen, selected, viewer, filePath])
 
   const goToPlace = (delta: -1 | 1): void => {
-    const step = stepPlace(places.current, delta)
+    const step = stepPlace(places, delta)
     if (!step) return
-    places.current = step.history
+    setPlaces(step.history)
     restoringUntil.current = Date.now() + PLACE_SETTLE_MS
     const { place } = step
+    // The workspace first, so the tab, worktree and file below win over the ones it remembers
+    switchWorkspace(place.workspaceId)
     setAppTab(place.appTab)
+    setOverlayOver(place.appTab)
+    setOverlayOpen(place.overlay)
     if (place.selected !== selected) {
       pendingViewer.current = place.viewer
       pendingFilePath.current = place.filePath
@@ -646,6 +666,7 @@ function App(): React.JSX.Element {
   const overlayRef = useRef<HTMLDivElement>(null)
   // Opening moves the keyboard into the overlay; Esc, outside a field, closes it and the keyboard goes back to the page
   useEffect(() => {
+    slide(overlayRef.current, overlayOpen)
     if (!overlayOpen) {
       requestAnimationFrame(() => document.activeElement === document.body && focusZone('main'))
       return
@@ -676,9 +697,18 @@ function App(): React.JSX.Element {
     }
     setSelected(nextSelected)
     setDocTabs(view?.docTabs ?? [])
-    setAppTab(view?.appTab ?? DEFAULT_TAB)
+    setAppTab(id === HOME.id ? 'terminal' : (view?.appTab ?? DEFAULT_TAB))
+    // Home is a terminal in zen; leaving it gives back the zen it found
+    if (id === HOME.id) zenBeforeHome.current = getShell().zen
+    if (id === HOME.id || workspaceId === HOME.id) updateShell({ zen: id === HOME.id || zenBeforeHome.current })
     setCurrentWorkspace(id)
+    if (id === HOME.id && !allSessions.some((session) => session.workspaceId === HOME.id)) void findService('sessions')?.start(window.api.home, 'shell')
   }
+  const zenBeforeHome = useRef(false)
+
+  /** Into Home, or back to the workspace it was entered from */
+  const toggleHome = (): void =>
+    switchWorkspace(workspaceId === HOME.id ? (recentIds.find((id) => id !== HOME.id && workspaceOf(workspaces, id)) ?? workspaces[0]?.id ?? ALL_PROJECTS) : HOME.id)
 
   const openWorktree = (worktreePath: string): void => {
     setAppTab('worktrees')
@@ -1068,6 +1098,7 @@ function App(): React.JSX.Element {
     'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
     'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
     'app.clearComments': () => clearComments(),
+    'workspace.home': toggleHome,
     'workspace.new': () => setEditingWorkspace(null),
     'workspace.edit': () => workspace && setEditingWorkspace(workspace),
     ...Object.fromEntries(tabs.map((tab) => [`page.${tab.id}`, () => goPage(tab.id)]))
@@ -2245,9 +2276,15 @@ function App(): React.JSX.Element {
             >
               {/* Equal sides keep the centre segment in the middle of the window */}
               <div className="flex min-w-0 flex-1 basis-0 items-center gap-0.5">
-                <span className={`mr-1 shrink-0 ${chromeless ? '' : 'pl-[80px]'}`}>
+                <span className={`mr-1 flex shrink-0 items-center ${chromeless ? '' : 'pl-[80px]'}`}>
                   <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={showRail} onClick={() => toggleShellPanel('rail')}>
                     <Icon name="panel" className="size-3.5" />
+                  </IconButton>
+                  <IconButton label={`Back (${actionKeys('app.back')})`} disabled={!stepPlace(places, -1)} onClick={() => goToPlace(-1)}>
+                    <Icon name="arrowLeft" className="size-3.5" />
+                  </IconButton>
+                  <IconButton label={`Forward (${actionKeys('app.forward')})`} disabled={!stepPlace(places, 1)} onClick={() => goToPlace(1)}>
+                    <Icon name="arrowRight" className="size-3.5" />
                   </IconButton>
                 </span>
                 <div className="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">{barItems(barOrder.slice(0, searchAt))}</div>
@@ -2261,9 +2298,11 @@ function App(): React.JSX.Element {
                 </div>
                 {titleBarItems(false)}
                 {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
-                {/* Worktrees and PRs leave Terminal and Browser to their own tabs, which open beside them; an open panel keeps its toggle to close it */}
+                {/* Worktrees and PRs leave Terminal and Browser to their own tabs, which open beside them; an open Browser panel keeps its toggle to close it */}
+                {/* The Terminal toggle stays out of Worktrees, PRs and Browser altogether: the Terminal tab and t reach it */}
                 {(appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id)))
-                  .filter((panel) => !(['worktrees', 'prs'].includes(appTab) && ['terminal', 'browser'].includes(panel) && !dock.isVisible(panel)))
+                  .filter((panel) => !(['worktrees', 'prs', 'browser'].includes(appTab) && panel === 'terminal'))
+                  .filter((panel) => !(['worktrees', 'prs'].includes(appTab) && panel === 'browser' && !dock.isVisible(panel)))
                   .map((panel) => {
                     const info = panelInfo(panel)
                     const Badge = pluginPanels.find((candidate) => candidate.id === panel)?.Badge
@@ -2380,7 +2419,7 @@ function App(): React.JSX.Element {
                   data-overlay={overlayTab.id}
                   data-split-pane={overlayTab.id}
                   inert={!overlayOpen}
-                  className={`absolute inset-0 z-40 flex flex-col bg-background transition-[opacity,translate] duration-150 ${overlayOpen ? '' : 'invisible -translate-y-1 opacity-0'}`}
+                  className={`absolute inset-0 z-40 flex flex-col bg-background ${overlayOpen ? '' : 'invisible opacity-0'}`}
                 >
                   <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
                     <ErrorBoundary label={overlayTab.label} resetKey={`${workspaceId}:${overlayTab.id}`}>
@@ -2536,6 +2575,14 @@ function App(): React.JSX.Element {
 
 export default App
 
+/** CSS motion is off app-wide, so the title bar's overlay and its card drop in and out with the Web Animations API */
+function slide(element: HTMLElement | null, show = true): void {
+  if (!element || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const shown = { opacity: 1, transform: 'none', visibility: 'visible' }
+  const hidden = { opacity: 0, transform: 'translateY(-6px)', visibility: 'visible' }
+  element.animate(show ? [hidden, shown] : [shown, hidden], { duration: show ? 180 : 120, easing: 'cubic-bezier(0.2, 0, 0, 1)' })
+}
+
 /** A small outlined action that shows its shortcut */
 /** The overlay page's title bar button; resting the pointer on it shows its card, with a grace period to travel into it */
 function OverlayButton({
@@ -2579,7 +2626,8 @@ function OverlayButton({
       {shown && (
         <div
           data-overlay-peek
-          className="absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-2xl bg-popover text-xs text-popover-foreground shadow-2xl ring-1 ring-foreground/8 transition-[opacity,translate] duration-150 starting:-translate-y-1 starting:opacity-0"
+          ref={slide}
+          className="absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-2xl bg-popover text-xs text-popover-foreground shadow-2xl ring-1 ring-foreground/8"
         >
           <overlay.Peek close={close} />
         </div>
