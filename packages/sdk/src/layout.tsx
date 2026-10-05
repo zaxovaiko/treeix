@@ -3,6 +3,7 @@ import { Icon } from '@treeix/app/Icon'
 import { ResizeHandle } from '@treeix/app/ui'
 import { HostContext } from './index'
 import { isJson, object } from '@treeix/shared/json'
+import { actionKeys } from '@treeix/shared/keymap'
 import { readStored } from '@treeix/app/storage'
 
 /**
@@ -437,7 +438,8 @@ export function Keys({ combo, on = false, hint = false }: { combo: string; on?: 
 /** Hides or shows the page's list; sits at the left of the main header in both states so a hidden list comes back with one click */
 export function ListToggle({ page }: { page?: string }): React.JSX.Element {
   const panels = usePanels(page)
-  const label = `${panels.list ? 'Hide' : 'Show'} list (⌘⇧E)`
+  const keys = actionKeys('panel.list')
+  const label = `${panels.list ? 'Hide' : 'Show'} list${keys ? ` (${keys})` : ''}`
   return (
     <button
       title={label}
@@ -446,7 +448,7 @@ export function ListToggle({ page }: { page?: string }): React.JSX.Element {
       className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
     >
       <Icon name="panel" className="size-3.5" />
-      <Kbd hint>⌘⇧E</Kbd>
+      {keys && <Kbd hint>{keys}</Kbd>}
     </button>
   )
 }
