@@ -3,7 +3,7 @@ import type { ChatContent, ChatImage, ChatOption } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
 import { agentOr, useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { updateSettings, useSettings } from '@treeix/app/settings'
+import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import { completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning } from './composer'
@@ -84,7 +84,7 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
   )
 }
 
-/** The chat's agent; picking another starts the chat over with it, so only a chat without a conversation offers it */
+/** The chat's agent; picking another starts the chat over with it, so only a chat without a conversation offers it, and a locked one shows nothing */
 function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
   const host = useHost()
   const chat = useChat(chatId)
@@ -92,13 +92,7 @@ function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
   const current = chat.options?.agent
   if (!current) return null
   // A plugin's agent, like an AI Hub persona, is the point of its chat
-  if (hasConversation(chat) || agents.length < 2 || agentOr(current).plugin) {
-    return (
-      <span title="A chat keeps the agent it started with" className="flex h-6 items-center px-1.5 text-xs text-muted-foreground">
-        {agentOr(current).label}
-      </span>
-    )
-  }
+  if (hasConversation(chat) || agents.length < 2 || agentOr(current).plugin) return null
   const option: ChatOption = {
     id: 'agent',
     name: 'Agent',
@@ -122,7 +116,6 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
   const chat = useChat(chatId)
   const { feed, draft } = chat
   const busy = isBusy(chat)
-  const { chatFullWidth } = useSettings()
   const [images, setImages] = useState<ChatImage[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [files, setFiles] = useState<string[]>([])
@@ -372,14 +365,6 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
               {formatTokens(feed.usage.used)} / {formatTokens(feed.usage.size)}
             </span>
           )}
-          <button
-            aria-label={chatFullWidth ? 'Fixed width' : 'Full width'}
-            title={chatFullWidth ? 'Fixed width' : 'Full width'}
-            onClick={() => updateSettings({ chatFullWidth: !chatFullWidth })}
-            className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Icon name={chatFullWidth ? 'narrow' : 'widen'} className="size-3.5" />
-          </button>
           {busy ? (
             <button onClick={() => cancel(chatId)} className="h-6 rounded-md px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent">
               Stop

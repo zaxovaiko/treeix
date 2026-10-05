@@ -27,7 +27,6 @@ function Activity({ chat }: { chat: ChatState }): React.JSX.Element {
       <Icon name="loader" className="size-3.5 shrink-0 animate-spin text-sky-400" />
       <span className="min-w-0 truncate text-foreground/85">{activityOf(chat)}…</span>
       {chat.turnStartedAt !== null && <span className="shrink-0 tabular-nums">{formatElapsed(seconds)}</span>}
-      <span className="shrink-0">· Esc to stop</span>
     </div>
   )
 }
@@ -67,11 +66,6 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
       <div className="font-mono text-xs" title={cwd}>
         {baseName(cwd)}
       </div>
-      <ul className="mt-2 flex flex-col gap-1 text-xs">
-        <li>@ adds a file · / runs a command</li>
-        {chat.capabilities?.images && <li>Paste or drop images</li>}
-        <li>Esc stops the agent</li>
-      </ul>
     </div>
   )
 }
