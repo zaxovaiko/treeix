@@ -5,7 +5,7 @@ import { copyText } from './contextMenu'
 import { type Activity, ActivityMark, NEWS } from './activity'
 import { Icon } from './Icon'
 import { groupOpen, toggleIn, useSettings } from './settings'
-import { EmptyState, FoldAllButton, IconButton, Popup, readStored, useMenuKeys, usePersisted } from './ui'
+import { EmptyState, FoldAllButton, Popup, readStored, useMenuKeys, usePersisted } from './ui'
 import { workspaceKey } from './workspaces'
 
 export const baseName = (path: string): string => path.split('/').pop() ?? path
@@ -70,7 +70,6 @@ export function Sidebar({
   activity,
   scope: { folder, focus, setFolder, setFocus },
   onSelect,
-  onRescan,
   onRepoMenu,
   onWorktreeMenu,
   onBranchMenu,
@@ -87,7 +86,6 @@ export function Sidebar({
   /** Agent session state per worktree path, shown as a dot */
   activity: Record<string, Activity>
   onSelect: (worktreePath: string) => void
-  onRescan: () => void
   onRepoMenu: (event: React.MouseEvent, repo: Repo) => void
   onWorktreeMenu: (event: React.MouseEvent, worktree: Worktree, repo: Repo) => void
   onBranchMenu: (event: React.MouseEvent, branch: Branch, repo: Repo) => void
@@ -263,8 +261,7 @@ export function Sidebar({
         <div key={row.key} {...cursor} onContextMenu={(event) => onRepoMenu(event, row.repo)} className="group/row mx-1.5 mt-1 flex h-7 items-center rounded-md hover:bg-accent">
           <button onClick={() => activate(row)} title={tildify(row.repo.path)} className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left">
             <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground/65 ${open ? 'rotate-90' : ''}`} />
-            <span className="shrink-0 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{baseName(row.repo.path)}</span>
-            <span className="min-w-0 truncate text-[10.5px] text-muted-foreground/60">{tildify(parentDir(row.repo.path))}</span>
+            <span className="min-w-0 truncate text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{baseName(row.repo.path)}</span>
           </button>
           <button
             title="New worktree or branch (n)"
@@ -280,7 +277,6 @@ export function Sidebar({
           >
             <Icon name="focus" className="size-3.5" />
           </button>
-          <span className="w-6 shrink-0 pr-2 text-right text-[11px] text-muted-foreground/55 tabular-nums">{row.repo.worktrees.length}</span>
         </div>
       )
     }
@@ -295,17 +291,12 @@ export function Sidebar({
           title={tildify(worktree.path)}
           onClick={() => (setCursorKey(row.key), onSelect(worktree.path))}
           onContextMenu={(event) => onWorktreeMenu(event, worktree, row.repo)}
-          className={`mx-1.5 flex w-[calc(100%-12px)] flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-accent ${active ? 'bg-accent' : ''}`}
+          className={`mx-1.5 flex h-7 w-[calc(100%-12px)] min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent ${active ? 'bg-accent' : ''}`}
         >
-          <span className="flex w-full min-w-0 items-center gap-2">
-            <Icon name={worktree.path === row.repo.path ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
-            <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/85'}`}>{branchLabel(worktree)}</span>
-            {worktree.changedFiles > 0 && (
-              <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>
-            )}
-            {state && NEWS.includes(state) && <ActivityMark activity={state} className="size-2" />}
-          </span>
-          <span className="w-full truncate pl-5 text-[10.5px] text-muted-foreground">{worktree.path === row.repo.path ? 'main worktree' : baseName(worktree.path)}</span>
+          <Icon name={worktree.path === row.repo.path ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
+          <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/85'}`}>{branchLabel(worktree)}</span>
+          {worktree.changedFiles > 0 && <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>}
+          {state && NEWS.includes(state) && <ActivityMark activity={state} className="size-2" />}
         </button>
       )
     }
@@ -375,45 +366,33 @@ export function Sidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ZoneHeader zone="list" title="Worktrees">
-        {canFoldAll && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
-        <IconButton
-          label="New worktree (n)"
-          onClick={() => {
-            const repo = cursorRow?.repo ?? visibleRepos[0]
-            if (repo) onNewWorktree(repo)
-          }}
-        >
-          <Icon name="plus" className="size-3.5" />
-        </IconButton>
-        <IconButton label="Rescan (r)" onClick={onRescan}>
-          <Icon name="refresh" className={`size-3.5 ${scanning ? 'text-foreground' : ''}`} />
-        </IconButton>
-      </ZoneHeader>
       <div className="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
-        <label className="flex h-7 min-w-0 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
-          <Icon name="search" className="size-3.5" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter worktrees and branches"
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
-          />
-          {query && (
-            <button title="Clear filter" onClick={() => setQuery('')} className="inline-flex size-5 items-center justify-center rounded hover:text-foreground">
-              <Icon name="close" className="size-3" />
+        <div className="flex min-w-0 items-center gap-1">
+          <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
+            <Icon name="search" className="size-3.5" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter worktrees and branches"
+              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+            />
+            {query && (
+              <button title="Clear filter" onClick={() => setQuery('')} className="inline-flex size-5 items-center justify-center rounded hover:text-foreground">
+                <Icon name="close" className="size-3" />
+              </button>
+            )}
+            <button
+              role="switch"
+              aria-checked={changesOnly}
+              title={changesOnly ? 'Showing worktrees with uncommitted changes, click to show all' : 'Only show worktrees with uncommitted changes'}
+              onClick={() => setChangesOnly(!changesOnly)}
+              className={`-mr-1 h-5 shrink-0 rounded px-1.5 text-[11px] ${changesOnly ? 'bg-foreground/[.08] text-foreground' : 'hover:bg-accent hover:text-foreground'}`}
+            >
+              Changed
             </button>
-          )}
-          <button
-            role="switch"
-            aria-checked={changesOnly}
-            title={changesOnly ? 'Showing worktrees with uncommitted changes, click to show all' : 'Only show worktrees with uncommitted changes'}
-            onClick={() => setChangesOnly(!changesOnly)}
-            className={`-mr-1 h-5 shrink-0 rounded px-1.5 text-[11px] ${changesOnly ? 'bg-foreground/[.08] text-foreground' : 'hover:bg-accent hover:text-foreground'}`}
-          >
-            Changed
-          </button>
-        </label>
+          </label>
+          {canFoldAll && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
+        </div>
         {folderFilter && (
           <div ref={folderAnchor} className="relative flex min-w-0">
             <button

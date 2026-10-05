@@ -85,7 +85,7 @@ import {
   type Workspace,
   workspaceOf
 } from './workspaces'
-import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar, ZoneHeader } from './Sidebar'
+import { baseName, branchLabel, reposInScope, type RepoScope, Sidebar } from './Sidebar'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { inlineByDefault, refreshToolStatus } from './toolStatus'
 import { actionForEvent, actionKeys, matchesAction, onKeymapChange } from '../../shared/keymap'
@@ -1920,31 +1920,19 @@ function App(): React.JSX.Element {
   const appTabLabel = openDocTab?.title ?? activePluginTab?.label ?? (appTab === 'settings' ? 'Settings' : appTab === 'worktrees' ? 'Worktrees' : 'This tab')
 
   const changedPaths = new Set(files.map((patch) => patch.path))
-  const worktreeInspector = (
-    <div className="flex h-full min-h-0 flex-col">
-      <ZoneHeader zone="inspector" title="Explorer">
-        <IconButton label={`Hide inspector (${actionKeys('panel.inspector')})`} onClick={() => worktreePanels.toggle('inspector')}>
-          <Icon name="close" className="size-3" />
-        </IconButton>
-      </ZoneHeader>
-      <div className="min-h-0 flex-1">
-        {worktree ? (
-          <Explorer
-            files={worktreeFiles}
-            rootPath={worktree.path}
-            changed={changedPaths}
-            activePath={viewer?.path ?? null}
-            onOpen={(path) => setViewer({ path, line: null })}
-            onFileMenu={(event, path) => explorerMenu(event, path, () => setViewer({ path, line: null }))}
-            onFolderMenu={(event, path) => folderMenu(event, path, (next) => setViewer({ path: next, line: null }))}
-            onCreate={(kind, folder) => askCreate(worktree.path, kind, folder, (next) => setViewer({ path: next, line: null }))}
-          />
-        ) : (
-          <EmptyState title="Select a worktree to browse its files" />
-        )}
-      </div>
-    </div>
-  )
+  // Empty without a worktree: the main area already says to pick one
+  const worktreeInspector = worktree ? (
+    <Explorer
+      files={worktreeFiles}
+      rootPath={worktree.path}
+      changed={changedPaths}
+      activePath={viewer?.path ?? null}
+      onOpen={(path) => setViewer({ path, line: null })}
+      onFileMenu={(event, path) => explorerMenu(event, path, () => setViewer({ path, line: null }))}
+      onFolderMenu={(event, path) => folderMenu(event, path, (next) => setViewer({ path: next, line: null }))}
+      onCreate={(kind, folder) => askCreate(worktree.path, kind, folder, (next) => setViewer({ path: next, line: null }))}
+    />
+  ) : null
 
   const worktreeMain = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1952,33 +1940,19 @@ function App(): React.JSX.Element {
         <IconButton label={`Toggle list (${actionKeys('panel.list')})`} active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
           <Icon name="panel" />
         </IconButton>
-        {worktree && selectedRepo ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2" title={worktree.path}>
-            <Icon name="branch" className="size-3.5 text-muted-foreground" />
-            <span className="min-w-0 truncate font-mono text-xs">{branchLabel(worktree)}</span>
-            <span className="min-w-0 truncate text-[11px] text-muted-foreground">{baseName(selectedRepo.path)}</span>
-            <span className="shrink-0 rounded-sm bg-foreground/6 px-1.5 font-mono text-[11px] text-muted-foreground">{worktree.head}</span>
-            {patches && (
-              <span className="shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
-                <span className="text-emerald-400">+{additions}</span> <span className="text-red-400">−{deletions}</span>
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">No worktree selected</span>
-        )}
-        <div title="Split or unified (w)" className="flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5 ring-1 ring-border">
-          {(['split', 'unified'] as const).map((style) => (
-            <button
-              key={style}
-              onClick={() => setDiffStyle(style)}
-              className={`h-5 rounded px-2 text-[11px] ${diffStyle === style ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              {style === 'split' ? 'Split' : 'Unified'}
-            </button>
-          ))}
+        <div className="flex min-w-0 flex-1 items-center gap-2" title={worktree?.path}>
+          {worktree && (
+            <>
+              <Icon name="branch" className="size-3.5 text-muted-foreground" />
+              <span className="min-w-0 truncate font-mono text-xs">{branchLabel(worktree)}</span>
+              {patches && (
+                <span className="shrink-0 font-mono text-[11px] whitespace-nowrap tabular-nums">
+                  <span className="text-emerald-400">+{additions}</span> <span className="text-red-400">−{deletions}</span>
+                </span>
+              )}
+            </>
+          )}
         </div>
-        {worktree && <HintButton title="Terminal in this worktree (t)" icon="terminal" label="Terminal" hint="t" onClick={() => openTerminal(worktree.path)} />}
         <IconButton label={`Toggle changed files (${actionKeys('wt.changedFiles')})`} active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           <Icon name="list" />
         </IconButton>
@@ -2171,7 +2145,6 @@ function App(): React.JSX.Element {
           activity={activity}
           scope={scope}
           onSelect={setSelected}
-          onRescan={rescan}
           onRepoMenu={repoMenu}
           onWorktreeMenu={worktreeMenu}
           onBranchMenu={branchMenu}
@@ -2320,15 +2293,17 @@ function App(): React.JSX.Element {
                       />
                     ) : null
                   })}
-                <button
-                  title={`Agent comments (${actionKeys('app.comments')})`}
-                  onClick={() => setDrawerOpen(!drawerOpen)}
-                  className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 text-foreground ring-1 ring-border' : comments.length > 0 ? 'text-foreground' : 'text-muted-foreground'}`}
-                >
-                  <Icon name="comment" />
-                  {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
-                  <Kbd hint>{actionKeys('app.comments')}</Kbd>
-                </button>
+                {(comments.length > 0 || drawerOpen) && (
+                  <button
+                    title={`Agent comments (${actionKeys('app.comments')})`}
+                    onClick={() => setDrawerOpen(!drawerOpen)}
+                    className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-foreground hover:bg-accent [-webkit-app-region:no-drag] ${drawerOpen ? 'bg-foreground/8 ring-1 ring-border' : ''}`}
+                  >
+                    <Icon name="comment" />
+                    {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
+                    <Kbd hint>{actionKeys('app.comments')}</Kbd>
+                  </button>
+                )}
                 <McpInstallButton flash={flash} />
                 <IconButton
                   label={`Settings (${actionKeys('app.settings')} or G S)`}
