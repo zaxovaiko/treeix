@@ -188,13 +188,11 @@ const parseFolded = (json: string): string[] => jsonList(parseJson(json), isStri
 
 export function PullRequestsView({
   repoPaths,
-  scopeLabel,
   onOpenTab,
   ...detailProps
 }: DetailProps & {
   /** Repositories to query, following the sidebar folder or focus filter */
   repoPaths: string[] | null
-  scopeLabel: string
   onOpenTab: (pr: PullRequest) => void
 }): React.JSX.Element {
   const { repos, onOpenWorktree, onCreateWorktree } = detailProps
@@ -236,7 +234,10 @@ export function PullRequestsView({
     return onPullRequestsUpdated((updated) => updated === scopeKey && setData(cachedPullRequests(scopeKey)))
   }, [scopeKey])
 
-  const byProvider = (data?.pullRequests ?? []).filter((pr) => provider === 'all' || pr.provider === provider)
+  const fetched = data?.pullRequests ?? []
+  // The switch only shows when both providers are listed, so it can't filter invisibly
+  const mixedProviders = fetched.some((pr) => pr.provider !== fetched[0].provider)
+  const byProvider = fetched.filter((pr) => !mixedProviders || provider === 'all' || pr.provider === provider)
   const inScope = byProvider.filter((pr) => matchesFilters(pr, filters) && (!involved || involvesYou(pr)))
   const visible = sortPullRequests(
     inScope.filter((pr) => pr.state === status),
@@ -340,15 +341,7 @@ export function PullRequestsView({
   let rowIndex = 0
   const list = (
     <>
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-        <span
-          title={`${repoPaths?.length ?? 0} ${repoPaths?.length === 1 ? 'repository' : 'repositories'} in ${scopeLabel}`}
-          className="truncate text-[11px] font-semibold tracking-wide uppercase"
-        >
-          Pull requests
-        </span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{visible.length}</span>
-        <span className="flex-1" />
+      <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
         {foldable.length > 1 && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
         <IconButton label={loading ? 'Refreshing' : 'Refresh'} onClick={refresh}>
           <Icon name={loading ? 'loader' : 'refresh'} className="size-3.5" />
@@ -382,17 +375,19 @@ export function PullRequestsView({
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Segment
-            value={provider}
-            onChange={setProvider}
-            options={(['all', 'github', 'gitlab'] as const).map((value) => [
-              value,
-              <>
-                {value !== 'all' && <ProviderMark provider={value} className="size-3" />}
-                {{ all: 'All', github: 'GitHub', gitlab: 'GitLab' }[value]}
-              </>
-            ])}
-          />
+          {mixedProviders && (
+            <Segment
+              value={provider}
+              onChange={setProvider}
+              options={(['all', 'github', 'gitlab'] as const).map((value) => [
+                value,
+                <>
+                  {value !== 'all' && <ProviderMark provider={value} className="size-3" />}
+                  {{ all: 'All', github: 'GitHub', gitlab: 'GitLab' }[value]}
+                </>
+              ])}
+            />
+          )}
           <button
             title="Yours, asked of you, or reviewed by you (GitHub only)"
             onClick={() => setInvolved(!involved)}
@@ -1904,9 +1899,6 @@ export function PullRequestDetailView({
     <div className="flex min-h-0 flex-1">
       <nav style={{ width: filesWidth }} className="relative flex shrink-0 flex-col border-r border-border bg-card">
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3 text-[11px] text-muted-foreground">
-          <span className="truncate font-medium" title={`Click a line number in a diff to comment on ${providerName(pr)}`}>
-            {patches.length} files
-          </span>
           {since && (
             <button
               title={sinceOnly ? 'Show every file' : 'Only the files that changed since your last visit'}
@@ -1973,7 +1965,7 @@ export function PullRequestDetailView({
         </div>
       ) : (
         <div className="min-h-0 min-w-0 flex-1 overflow-auto select-text" onContextMenu={symbols.onContextMenu}>
-          {file && renderFile(file)}
+          {file ? renderFile(file) : <EmptyState icon="file" title={`Click a line number in a diff to comment on ${providerName(pr)}`} />}
           {symbols.hoverCard}
         </div>
       )}
@@ -2006,12 +1998,6 @@ export function PullRequestDetailView({
 
   const inspector = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-        <span className="flex-1 truncate text-[11px] font-semibold tracking-wide uppercase">Details</span>
-        <IconButton label="Hide inspector (⌘⌥B)" onClick={() => panels.toggle('inspector')}>
-          <Icon name="close" className="size-3" />
-        </IconButton>
-      </div>
       <div className="max-h-[60%] shrink-0 overflow-y-auto pb-2">
         <SectionLabel>Reviewers</SectionLabel>
         {(detail?.reviewers ?? []).map((reviewer) => (
@@ -2026,13 +2012,10 @@ export function PullRequestDetailView({
         <SectionLabel>Actions</SectionLabel>
         <div className="px-1.5">
           <ActionRow icon="branch" label={local ? 'Open worktree' : `Create worktree for ${pr.sourceBranch}`} keys="w" onClick={worktree} />
-          <ActionRow icon="comment" label={`Comment on ${providerName(pr)}`} keys="c" onClick={comment} />
           <ActionRow icon="external" label={`Open on ${providerName(pr)}`} keys="o" onClick={openInBrowser} />
           <ActionRow icon="copy" label="Copy link" keys="y" onClick={copyLink} />
           {pr.state === 'open' && <ActionRow icon="user" label="Assign people" keys="⇧A" onClick={openAssign} />}
-          {pr.state === 'open' && own && (
-            <ActionRow icon={isDraft ? 'check' : 'pencil'} label={isDraft ? 'Mark ready for review' : 'Convert to draft'} keys="⇧R" onClick={() => setDraftState(!isDraft)} />
-          )}
+          {pr.state === 'open' && own && !isDraft && <ActionRow icon="pencil" label="Convert to draft" keys="⇧R" onClick={() => setDraftState(true)} />}
           {pr.state === 'open' && (
             <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />
           )}

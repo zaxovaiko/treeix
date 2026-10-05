@@ -106,7 +106,7 @@ function PullRequestsTab(): React.JSX.Element {
   const props = useViewProps()
   return (
     <Suspense fallback={<div className="flex-1" />}>
-      <PullRequestsView {...props} repoPaths={host.scopeRepoPaths} scopeLabel={host.scopeLabel} onOpenTab={(pr) => host.openTab(detailTab(pr))} />
+      <PullRequestsView {...props} repoPaths={host.scopeRepoPaths} onOpenTab={(pr) => host.openTab(detailTab(pr))} />
     </Suspense>
   )
 }
