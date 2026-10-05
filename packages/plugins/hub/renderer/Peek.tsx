@@ -7,7 +7,7 @@ import { useSessions } from '@treeix/app/plugins'
 import { timeAgo } from '@treeix/app/time'
 import { useWorkspaces } from '@treeix/app/workspaces'
 import { type AgentNode, isWaiting, type Run } from '../shared/workflow'
-import { Mochi, type Mood } from './Mochi'
+import { Alien, type Character, characterOf, type Mood } from './Alien'
 import { asking, hubAgents, hubRuns, hubSelection, TAB_ID } from './store'
 
 /** One agent at work anywhere: a hub run, or an agent session in any workspace */
@@ -17,7 +17,7 @@ type Entry = {
   title: string
   who: string
   via: string
-  tint: string
+  character: Character
   at: number
   workspaceId: string | null
   open: () => void
@@ -70,7 +70,7 @@ function useEntries(): Entry[] {
         title: session.title,
         who: agent.label,
         via: session.view === 'chat' ? 'Chat' : 'Terminal',
-        tint: agent.color,
+        character: characterOf(session.kind),
         at: session.startedAt,
         workspaceId: session.workspaceId,
         open
@@ -93,7 +93,7 @@ function useEntries(): Entry[] {
         title: run.title,
         who: agent?.name ?? run.workflow.name,
         via: 'AI Hub',
-        tint: agent?.color ?? 'var(--color-primary)',
+        character: characterOf(agent?.runtime.kind === 'agent' ? agent.runtime.agent : undefined),
         at: run.endedAt ?? run.startedAt,
         workspaceId: null,
         open
@@ -104,6 +104,7 @@ function useEntries(): Entry[] {
 }
 
 const overallMood = (entries: Entry[]): Mood => entries[0]?.mood ?? 'idle'
+const overallCharacter = (entries: Entry[]): Character => entries[0]?.character ?? 'claude'
 
 /** The title bar button: the agent in the overall mood, and a dot while something wants a look */
 export function HubFace(): React.JSX.Element {
@@ -118,7 +119,7 @@ export function HubFace(): React.JSX.Element {
         : null
   return (
     <>
-      <Mochi mood={overallMood(entries)} size={18} />
+      <Alien character={overallCharacter(entries)} mood={overallMood(entries)} size={18} />
       AI Hub
       {dot && (
         <span data-hub-attention className="relative flex size-2" aria-label={dot.label}>
@@ -171,7 +172,7 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
   return (
     <div className="grid w-[560px] grid-cols-[196px_1fr] gap-2.5 p-2.5">
       <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl bg-[radial-gradient(120%_90%_at_50%_60%,rgb(79_95_240/18%),transparent_70%)] px-2 pt-3.5 pb-3 ring-1 ring-border ring-inset">
-        <Mochi mood={overallMood(entries)} size={148} follow />
+        <Alien character={overallCharacter(entries)} mood={overallMood(entries)} size={148} />
         <div className="text-center text-[12.5px] font-medium">{headline}</div>
         <div className="text-center text-[11px] text-muted-foreground">{sub}</div>
       </div>
@@ -186,7 +187,7 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
               onClick={() => go(entry.open)}
               className="flex h-9 shrink-0 items-center gap-2 rounded-lg px-2 text-left hover:bg-accent"
             >
-              <Mochi mood={entry.mood} size={22} tint={entry.tint} />
+              <Alien character={entry.character} mood={entry.mood} size={22} />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{entry.title}</span>
                 <span className="truncate text-[11px] text-muted-foreground">
