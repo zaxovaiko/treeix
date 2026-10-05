@@ -69,6 +69,16 @@ test('parseAppearance moves the old single theme into its mode', async () => {
   expect(parseAppearance({})).toEqual({ themeMode: 'dark', lightTheme: 'light', darkTheme: 'neutral' })
 })
 
+test('parseHotkey drops a shortcut the old Hotkey window only switch kept inactive', async () => {
+  const { parseHotkey } = await import('./settings')
+  const shortcut = { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false }
+  expect(parseHotkey({ hotkey: shortcut, hotkeyOnly: false })).toBeNull()
+  expect(parseHotkey({ hotkey: shortcut, hotkeyOnly: true })).toEqual(shortcut)
+  expect(parseHotkey({ hotkey: shortcut })).toEqual(shortcut)
+  expect(parseHotkey({ hotkey: 'Alt+Space' })).toEqual({ code: 'Space', meta: false, alt: true, ctrl: false, shift: false })
+  expect(parseHotkey({})).toBeNull()
+})
+
 test('resolveTheme falls back to the built-in theme of the mode', async () => {
   const { resolveTheme, setPluginThemes, THEMES } = await import('./themes')
   const pack = { 'github-light': { ...THEMES.light, label: 'GitHub', primary: '#0969da' } }

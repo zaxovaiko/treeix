@@ -43,7 +43,7 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
   useEffect(() => {
     if (!recording) return
     // The current global hotkey would fire instead of being recorded
-    window.api.configureHotkey({ shortcut: null, hideOnBlur: false, only: getSettings().hotkeyOnly })
+    window.api.configureHotkey({ shortcut: null, hideOnBlur: false, only: hotkeyOptions().only })
     updateShell({ recording: true })
     const capture = (event: KeyboardEvent): void => {
       event.preventDefault()
@@ -94,12 +94,12 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
 }
 
 function GlobalShortcut(): React.JSX.Element {
-  const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = useSettings()
+  const { hotkey, hotkeyHideOnBlur } = useSettings()
   const [error, setError] = useState<string | null>(null)
   // main.tsx registers every change too; this call is only for the error to show here
   useEffect(() => {
     window.api.configureHotkey(hotkeyOptions()).then(setError)
-  }, [hotkey, hotkeyHideOnBlur, hotkeyOnly])
+  }, [hotkey, hotkeyHideOnBlur])
   return (
     <div className="flex shrink-0 flex-col items-end gap-1.5">
       <ShortcutRecorder value={hotkey} onChange={(next) => updateSettings({ hotkey: next })} />
@@ -291,7 +291,7 @@ function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorL
 }
 
 function toggle(
-  key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'claudeSkipPermissions' | 'codexSkipPermissions' | 'agentNotifications',
+  key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'claudeSkipPermissions' | 'codexSkipPermissions' | 'agentNotifications',
   label: string
 ): ComponentType {
   return function SettingSwitch() {
@@ -454,7 +454,7 @@ const SETTINGS: SettingSpec[] = [
     card: 'Hotkey window',
     label: 'Global shortcut',
     description:
-      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. Any key works, including § on ISO keyboards; while it is on, that key opens Treeix instead of typing. Only active with Hotkey window only switched on.',
+      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. With a shortcut recorded there is no normal window: Treeix stays the drop-down and only shows or hides. Clear it to get the normal window back. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing.',
     Control: GlobalShortcut
   },
   {
@@ -463,13 +463,6 @@ const SETTINGS: SettingSpec[] = [
     label: 'Hide when focus is lost',
     description: 'Clicking another app puts the hotkey window away, like iTerm2.',
     Control: toggle('hotkeyHideOnBlur', 'Hide when focus is lost')
-  },
-  {
-    section: 'General',
-    card: 'Hotkey window',
-    label: 'Hotkey window only',
-    description: 'No normal window: Treeix always stays the drop-down and only shows or hides, so nothing resizes or re-renders when it appears. Needs a global shortcut.',
-    Control: toggle('hotkeyOnly', 'Hotkey window only')
   },
   {
     section: 'General',
@@ -594,7 +587,7 @@ const SETTINGS: SettingSpec[] = [
     section: 'Terminal',
     card: 'Agent sessions',
     label: 'Chat width',
-    description: 'Fixed keeps chats at a readable line length; full uses the whole pane. The button at the top of a chat switches it too.',
+    description: 'Fixed keeps chats at a readable line length; full uses the whole pane.',
     Control: function ChatWidth() {
       const { chatFullWidth } = useSettings()
       return (

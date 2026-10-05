@@ -57,7 +57,6 @@ export type Settings = {
   /** Recorded global shortcut for the drop-down hotkey window, null turns it off */
   hotkey: Shortcut | null
   hotkeyHideOnBlur: boolean
-  hotkeyOnly: boolean
   /** In-app code navigation keys; macOS sends F-keys only with fn unless standard function keys are on, so they can be re-recorded */
   navigationKeys: Record<NavigationKind, Shortcut | null>
   /** Modifier held with 1-9 to jump to a terminal pane, a title bar tab or a workspace; tabs are off by default since the G leader goes to pages */
@@ -116,9 +115,12 @@ const PRESET_HOTKEYS: Record<string, Shortcut | null> = {
   off: null
 }
 
-function parseHotkey(value: unknown): Shortcut | null {
+/** A separate "Hotkey window only" switch used to gate the shortcut, so one stored as off means no shortcut */
+export function parseHotkey(stored: Record<string, unknown>): Shortcut | null {
+  const value = stored.hotkey
+  if (stored.hotkeyOnly === false) return null
   if (value === null || isShortcut(value)) return value
-  return typeof value === 'string' && value in PRESET_HOTKEYS ? PRESET_HOTKEYS[value] : DEFAULTS.hotkey
+  return typeof value === 'string' && value in PRESET_HOTKEYS ? PRESET_HOTKEYS[value] : null
 }
 function parseNavigationKeys(value: unknown): Settings['navigationKeys'] {
   const stored = object(value)
@@ -228,9 +230,8 @@ const DEFAULTS: Settings = {
   sidebarBranches: false,
   opacity: 100,
   borderStrength: 100,
-  hotkey: { code: 'Backquote', meta: false, alt: true, ctrl: false, shift: false },
+  hotkey: null,
   hotkeyHideOnBlur: true,
-  hotkeyOnly: false,
   editorFontSize: 13,
   terminalFontSize: 12,
   terminalFontWeight: 'auto',
@@ -287,8 +288,7 @@ function load(): Settings {
     const stored = readStored(KEY)
     if (!isJson(stored)) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyOnly' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean =>
-      typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key]
+    const flag = (key: 'hotkeyHideOnBlur' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
@@ -313,9 +313,8 @@ function load(): Settings {
       sidebarBranches: candidate.sidebarBranches === true,
       opacity: clampOpacity(candidate.opacity),
       borderStrength: BORDER_STRENGTHS.find((strength) => strength === candidate.borderStrength) ?? DEFAULTS.borderStrength,
-      hotkey: 'hotkey' in candidate ? parseHotkey(candidate.hotkey) : DEFAULTS.hotkey,
+      hotkey: parseHotkey(candidate),
       hotkeyHideOnBlur: flag('hotkeyHideOnBlur'),
-      hotkeyOnly: flag('hotkeyOnly'),
       navigationKeys: parseNavigationKeys(candidate.navigationKeys),
       digitShortcuts: parseDigitShortcuts(candidate.digitShortcuts),
       keymap: parseKeymap(candidate.keymap),
@@ -340,11 +339,10 @@ const listeners = new Set<() => void>()
 
 export const getSettings = (): Settings => settings
 
-/** The global shortcut only summons the hotkey window while that window is switched on */
+/** A recorded shortcut makes Treeix the hotkey window only; clearing it brings the normal window back */
 export function hotkeyOptions(): { shortcut: Shortcut | null; hideOnBlur: boolean; only: boolean } {
-  const { hotkey, hotkeyHideOnBlur, hotkeyOnly } = settings
-  const shortcut = hotkeyOnly ? hotkey : null
-  return { shortcut, hideOnBlur: hotkeyHideOnBlur, only: shortcut !== null }
+  const { hotkey, hotkeyHideOnBlur } = settings
+  return { shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkey !== null }
 }
 
 export function updateSettings(patch: Partial<Settings>): void {
