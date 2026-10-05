@@ -4,11 +4,11 @@ import { untilLabel } from '@treeix/app/time'
 import { KindBadge } from '@treeix/app/sessionUi'
 import { createBridge, definePluginSettings, useHost } from '@treeix/sdk'
 
-const USAGE_LABEL_IDS = ['reset', 'percent', 'remaining', 'weekly', 'bars', 'hidden'] as const
+const USAGE_LABEL_IDS = ['reset', 'percent', 'weekly', 'bars'] as const
 export type UsageLabel = (typeof USAGE_LABEL_IDS)[number]
 
 export const usageSettings = definePluginSettings('usage-limits', (stored) => ({
-  /** Title bar label for Claude and Codex usage limits */
+  /** Title bar label for Claude and Codex usage limits; retired styles fall back to percent */
   usageLabel: USAGE_LABEL_IDS.find((id) => id === stored.usageLabel) ?? ('percent' as UsageLabel),
   /** Next to Treeix's icon in the macOS menu bar, which main draws from its own copy */
   menuBarLabel: isMenuBarLabel(stored.menuBarLabel) ? stored.menuBarLabel : ('weekly' as MenuBarLabel)
@@ -32,10 +32,8 @@ export const MENU_BAR_OPTIONS: [MenuBarLabel, string, string][] = [
 export const USAGE_LABELS: [UsageLabel, string, string][] = [
   ['reset', 'Percent and reset', '5h 35% · 2h   wk 28% · 5d'],
   ['percent', 'Percent', '35% · 28%'],
-  ['remaining', 'Remaining', '65% · 72% left'],
   ['weekly', 'Weekly and reset', '28% in 5d'],
-  ['bars', 'Bars', '▰▰▱ ▰▱▱'],
-  ['hidden', 'Hidden', '']
+  ['bars', 'Bars', '▰▰▱ ▰▱▱']
 ]
 
 // Changes are pushed as sources are written; the poll only ages out windows that reset
@@ -53,9 +51,9 @@ function Bar({ window }: { window: LimitWindow | null }): React.JSX.Element {
   )
 }
 
-function Percent({ window, remaining = false }: { window: LimitWindow | null; remaining?: boolean }): React.JSX.Element {
+function Percent({ window }: { window: LimitWindow | null }): React.JSX.Element {
   if (!window) return <span className="text-muted-foreground">-</span>
-  return <span className={`tabular-nums ${levelColor(window.usedPercent)}`}>{remaining ? 100 - window.usedPercent : window.usedPercent}%</span>
+  return <span className={`tabular-nums ${levelColor(window.usedPercent)}`}>{window.usedPercent}%</span>
 }
 
 function AgentLabel({ limits, label }: { limits: AgentLimits; label: UsageLabel }): React.JSX.Element {
@@ -84,11 +82,9 @@ function AgentLabel({ limits, label }: { limits: AgentLimits; label: UsageLabel 
       </>
     )
   }
-  const remaining = label === 'remaining'
   return (
     <>
-      <Percent window={fiveHour} remaining={remaining} /> <span className={muted}>·</span> <Percent window={weekly} remaining={remaining} />
-      {remaining && <span className={muted}>left</span>}
+      <Percent window={fiveHour} /> <span className={muted}>·</span> <Percent window={weekly} />
     </>
   )
 }
@@ -109,7 +105,6 @@ export function UsageLimits(): React.JSX.Element | null {
   const [limits, setLimits] = useState<Limits | null>(null)
 
   useEffect(() => {
-    if (usageLabel === 'hidden') return
     // Same readings keep the old object, so the title bar doesn't re-render
     const load = (): void => void bridge.invoke<Limits>('limits').then((next) => setLimits((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next)))
     load()
@@ -121,9 +116,9 @@ export function UsageLimits(): React.JSX.Element | null {
       window.removeEventListener('focus', load)
       unsubscribe()
     }
-  }, [usageLabel])
+  }, [])
 
-  if (usageLabel === 'hidden' || !limits) return null
+  if (!limits) return null
   const agents = (
     [
       ['claude', 'Claude', limits.claude],
