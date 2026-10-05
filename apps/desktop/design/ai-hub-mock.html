@@ -20,7 +20,7 @@
 
   /* title bar: h-9, tabs h-6 rounded-md text-xs */
   .titlebar { position: relative; z-index: 40; height: 36px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--bg); }
-  .lights { display: flex; gap: 8px; width: 80px; padding-left: 6px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .lights { flex: none; display: flex; gap: 8px; width: 80px; padding-left: 6px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
   .iconbtn { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); }
   .iconbtn:hover { background: var(--accent); color: var(--fg); }
   .iconbtn.on { color: var(--fg); background: rgb(255 255 255 / 8%); }
@@ -28,19 +28,36 @@
   .strip { display: flex; align-items: center; gap: 2px; height: 28px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .tab { position: relative; height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 6px; color: var(--muted); flex: none; white-space: nowrap; }
   .tab:hover { background: var(--accent); color: var(--fg); }
-  .tab.main { background: rgb(79 95 240 / 15%); color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
-  .tab.beside { color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 40%); }
-  .tab .side { width: 9px; height: 7px; border: 1px solid currentColor; border-radius: 1.5px; opacity: .7; position: relative; }
-  .tab .side::after { content: ''; position: absolute; inset: 0 0 0 50%; background: currentColor; }
-  .search { margin: 0 auto; height: 24px; width: 162px; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
-  .right { display: flex; align-items: center; gap: 2px; flex: none; }
+  .tab.open { background: rgb(79 95 240 / 15%); color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
+  .tab.open:has(.x:first-child) { padding-left: 3px; }
+  .tab.open:has(.x:last-child) { padding-right: 3px; }
+  .tab .x { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 4px; opacity: .5; }
+  .tab .x .i { width: 11px; height: 11px; }
+  .tab .x:hover { opacity: 1; background: rgb(255 255 255 / 12%); }
+  .tab .side { display: flex; gap: 1px; opacity: .6; }
+  .tab .side i { width: 4px; height: 8px; border: 1px solid currentColor; border-radius: 1px; }
+  .tab .side i.on { background: currentColor; }
+  .drops { position: absolute; inset: 0; display: none; gap: 8px; padding: 8px 8px 8px 60px; z-index: 6; }
+  .drops.on { display: flex; }
+  .drops div { flex: 1; display: grid; place-items: center; border-radius: 10px; border: 1px dashed var(--border); background: rgb(0 0 0 / 85%); color: var(--muted); font-size: 13px; }
+  .drops div.over { border-color: rgb(79 95 240 / 80%); background: rgb(79 95 240 / 14%); color: var(--fg); }
+  /* both sides grow alike, so the command bar sits at the header's centre */
+  .lhs, .right { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
+  .right { justify-content: flex-end; }
+  .center { flex: none; margin: 0 8px; height: 24px; display: flex; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .search { width: 162px; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px 0 0 6px; color: var(--muted); }
+  .search:hover { color: var(--fg); }
+  .center .hubbtn { border-radius: 0 6px 6px 0; box-shadow: inset 1px 0 0 var(--border); }
 
   /* AI Hub button: a mini agent face, not a page tab */
-  .hubbtn { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 5px; border-radius: 6px; color: var(--muted); margin-right: 4px; }
+  .hubbtn { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 5px; border-radius: 6px; color: var(--muted); }
   .hubbtn:hover, .hubbtn.hover { background: var(--accent); color: var(--fg); }
   .hubbtn.on { background: rgb(79 95 240 / 15%); color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
-  .counts { display: flex; gap: 8px; font-variant-numeric: tabular-nums; }
-  .counts span { display: flex; align-items: center; gap: 4px; }
+  /* one dot on the hub button stands in for the notification bell: amber pulses when an agent needs you, red when one failed, green for news you have not seen */
+  .attn { display: block; position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+  .attn.ping::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--c); animation: ping 1.6s cubic-bezier(0,0,.2,1) infinite; }
+  @keyframes ping { 75%, 100% { transform: scale(2.6); opacity: 0; } }
+  .ws { font-size: 10.5px; padding: 0 5px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); flex: none; }
   .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
 
   /* window body */
@@ -48,8 +65,11 @@
   .rail { width: 52px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
   .railbtn { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
   .pane { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .pane.besidepane { flex: none; width: 560px; border-left: 1px solid var(--border); }
-  .pane.focusline::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 2px; background: rgb(79 95 240 / 70%); z-index: 2; }
+  .panes { flex: 1; min-width: 0; display: flex; }
+  .panes > .pane + .pane { border-left: 1px solid var(--border); }
+  /* three side by side: each page keeps its main column, like the app's narrow PageLayout */
+  .panes.n3 .cols > :not(:first-child) { display: none; }
+  .panes.n3 .cols > .pane { flex: 1 !important; width: auto !important; border: 0 !important; }
   .splithead { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; border-bottom: 1px solid var(--border); color: var(--muted); }
   .splithead .grow { flex: 1; }
   .label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
@@ -163,19 +183,22 @@
 
 <div class="window" id="win">
   <div class="titlebar">
-    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
-    <button class="iconbtn" title="Hide workspaces"><svg class="i"><use href="#panel" /></svg></button>
-    <div class="strip" id="strip"></div>
-    <button class="search"><svg class="i"><use href="#search" /></svg>Run command</button>
-    <div class="right">
+    <div class="lhs">
+      <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <button class="iconbtn" title="Hide workspaces"><svg class="i"><use href="#panel" /></svg></button>
+      <div class="strip" id="strip"></div>
+    </div>
+    <div class="center">
+      <button class="search"><svg class="i"><use href="#search" /></svg>Run command</button>
       <button class="hubbtn" id="hubbtn" title="AI Hub - click to open, hover to peek">
         <span data-mochi="hub" data-size="22"></span>
         AI Hub
-        <span class="counts" id="counts"></span>
+        <span id="attn"></span>
       </button>
+    </div>
+    <div class="right">
       <button class="iconbtn on" title="Keep awake"><svg class="i"><use href="#coffee" /></svg></button>
       <button class="iconbtn" title="Agent comments"><svg class="i"><use href="#comment" /></svg></button>
-      <button class="iconbtn" title="Notifications"><svg class="i"><use href="#bell" /></svg></button>
       <button class="iconbtn" title="MCP"><svg class="i"><use href="#plug" /></svg></button>
       <button class="iconbtn" title="Settings"><svg class="i"><use href="#settings" /></svg></button>
     </div>
@@ -197,8 +220,8 @@
 
   <div class="body">
     <div class="rail"><div class="railbtn"><svg class="i"><use href="#plus" /></svg></div></div>
-    <div class="pane" id="left"></div>
-    <div class="pane besidepane" id="rightpane" hidden></div>
+    <div class="panes" id="panes"></div>
+    <div class="drops" id="drops"></div>
 
     <div class="overlay" id="overlay">
       <div class="hubside">
@@ -209,7 +232,7 @@
           <div class="row"><svg class="i muted"><use href="#layers" /></svg>Review then ship</div>
           <div class="row"><svg class="i muted"><use href="#layers" /></svg>Nightly dependency bump</div>
         </div>
-        <div class="label" style="padding:16px 14px 6px">Runs</div>
+        <div class="label" style="padding:16px 14px 6px">Running now · all workspaces</div>
         <div style="padding:0 6px" id="runlist"></div>
       </div>
       <div class="hubmain">
@@ -237,10 +260,13 @@
   <div>
     <div style="margin-bottom:6px"><b>Hub state</b> (drives the agent's mood)</div>
     <div class="seg" id="moods"></div>
+    <div style="margin:10px 0 6px"><b>Settings › Tab close button</b></div>
+    <div class="seg" id="closeat"></div>
   </div>
   <div style="max-width:760px">
-    <b>Tabs.</b> Click shows a tab. <b>⌘-click</b> opens it beside, ⌘-click again closes it. Clicking the tab that is beside swaps sides. Highlights are inset, so the first tab and a scrolled strip never clip them.<br />
-    <b>AI Hub.</b> Not a tab any more: hover the face to peek at runs, click to open it over everything. The panes underneath keep their state, the rail and split stay put. Click the face again or press Esc to go back.
+    <b>Tabs.</b> A click shows the tab alone, across the whole window. <b>⇧-click</b> opens it beside, up to three side by side; at three it replaces the rightmost, and ⇧-click on a tab in the split takes it out. Or drag a tab onto a pane to replace it or swap with it, or onto the free slot on the right. The × on an open tab closes it; the setting puts it left or right. In a split, open tabs show which slot they are in.<br />
+    <b>AI Hub.</b> Not a tab any more: hover the face to peek at runs, click to open it over everything. The panes underneath keep their state, the rail and split stay put. Click the face again or press Esc to go back.<br />
+    <b>No bell.</b> Every notification came from an agent, so the hub is the inbox: it lists every agent at work in any workspace, hub runs, terminal sessions and chats, most urgent first, and a click goes to it. The button carries one dot: amber and pulsing when one needs you, red when one failed, green for finished runs until you peek.
   </div>
 </div>
 
@@ -258,38 +284,46 @@ const AGENTS = [
   { name: 'Docs writer', tint: '#a78bfa' },
   { name: 'Triage', tint: '#60a5fa' }
 ]
+/* every agent at work in any workspace: hub runs, terminal sessions (Claude, Codex) and chats; a click goes to it */
+const WHO = { claude: { name: 'Claude', tint: '#d97757' }, codex: { name: 'Codex', tint: '#e5e5e5' } }
+const run = (who, ws, via, title, status, detail) => ({ who: typeof who === 'number' ? AGENTS[who] : WHO[who], ws, via, title, status, detail })
 const RUNS = {
   idle: [],
   working: [
-    { agent: 0, title: 'Review feat/notifications', status: 'working', detail: 'Writing comments on notifications.tsx' },
-    { agent: 2, title: 'Changelog for v0.9', status: 'working', detail: 'Reading 14 commits' },
-    { agent: 1, title: 'Nightly dependency bump', status: 'done', detail: '12 min ago' }
+    run(0, 'alpha', 'Hub', 'Review feat/notifications', 'working', 'Writing comments on notifications.tsx'),
+    run('claude', 'beta', 'Terminal', 'Fix flaky upload test', 'working', 'Running bun test'),
+    run('codex', 'alpha', 'Terminal', 'Port settings to zod', 'working', 'Editing settings.ts'),
+    run(1, 'alpha', 'Hub', 'Nightly dependency bump', 'done', '12 min ago')
   ],
   waiting: [
-    { agent: 1, title: 'Release v0.9.0', status: 'waiting', detail: 'Push the v0.9.0 tag?' },
-    { agent: 0, title: 'Review feat/notifications', status: 'working', detail: 'Writing comments on notifications.tsx' },
-    { agent: 3, title: 'Triage BF-412', status: 'done', detail: '3 min ago' }
+    run(1, 'alpha', 'Hub', 'Release v0.9.0', 'waiting', 'Push the v0.9.0 tag?'),
+    run('claude', 'beta', 'Terminal', 'Fix flaky upload test', 'waiting', 'Allow rm -rf tmp/uploads?'),
+    run(0, 'alpha', 'Hub', 'Review feat/notifications', 'working', 'Writing comments on notifications.tsx'),
+    run(3, 'gamma', 'Hub', 'Triage BF-412', 'done', '3 min ago')
   ],
   done: [
-    { agent: 0, title: 'Review feat/notifications', status: 'done', detail: '6 comments, just now' },
-    { agent: 2, title: 'Changelog for v0.9', status: 'done', detail: '2 min ago' }
+    run(0, 'alpha', 'Hub', 'Review feat/notifications', 'done', '6 comments, just now'),
+    run('claude', 'beta', 'Terminal', 'Fix flaky upload test', 'done', '2 min ago')
   ],
   failed: [
-    { agent: 1, title: 'Release v0.9.0', status: 'failed', detail: 'bun test exited 1' },
-    { agent: 0, title: 'Review feat/notifications', status: 'working', detail: 'Writing comments on notifications.tsx' }
+    run(1, 'alpha', 'Hub', 'Release v0.9.0', 'failed', 'bun test exited 1'),
+    run('codex', 'alpha', 'Terminal', 'Port settings to zod', 'working', 'Editing settings.ts')
   ]
 }
+const URGENCY = { waiting: 0, failed: 1, working: 2, done: 3 }
 const SAY = {
   idle: ['All quiet', 'No agent is running. Ask one, or start a workflow.'],
-  working: ['On it', '2 agents working'],
-  waiting: ['Release bot needs you', '1 question waiting, 1 agent working'],
+  working: ['On it', '3 agents working in 2 workspaces'],
+  waiting: ['2 agents need you', 'Release bot and Claude in beta are waiting'],
   done: ['All done!', '2 runs finished'],
   failed: ['Something broke', 'Release v0.9.0 failed']
 }
 
 let mood = 'waiting'
-let main = 'terminal'
-let beside = 'worktrees'
+let seen = false
+const MAX_PANES = 3
+let panes = ['terminal', 'worktrees']
+let closeAt = 'right'
 let hubOpen = false
 
 const $ = (id) => document.getElementById(id)
@@ -313,24 +347,61 @@ const mini = (tint, m = 'idle', size = 22, id = '') => `<svg class="mochi" ${id 
     <g class="b-fail"><circle cx="8" cy="5" r="13" fill="#f87171" stroke="#121212" stroke-width="3" /><text x="8" y="11" text-anchor="middle" font-size="17" font-weight="800" fill="#2b0b0b">!</text></g></g>` : ''}
 </svg>`
 
-/* tabs: click shows, ⌘-click toggles beside, clicking the beside tab swaps */
+/* tabs: a click shows one tab alone, ⇧-click opens it beside (up to MAX_PANES), × closes, a drag picks the slot */
+const tab = (id) => TABS.find((t) => t.id === id)
+function put(slot, id) {
+  const from = panes.indexOf(id)
+  if (from === -1) panes[slot] = id
+  else if (slot < panes.length) [panes[from], panes[slot]] = [panes[slot], panes[from]]
+  else panes.push(...panes.splice(from, 1))
+}
+const close = (id) => panes.splice(panes.indexOf(id), 1)
 function clickTab(id, event) {
-  if (event.metaKey || event.altKey) beside = beside === id ? null : id === main ? beside : id
-  else if (id === beside) [main, beside] = [beside, main]
-  else main = id
+  const open = panes.includes(id)
+  if (!event.shiftKey) panes = [id]
+  else if (open && panes.length > 1) close(id)
+  else if (!open) put(Math.min(panes.length, MAX_PANES - 1), id)
   if (hubOpen) toggleHub(false)
   render()
 }
+function showDrops() {
+  const slots = panes.map((id) => `Replace ${tab(id).label}`)
+  if (panes.length < MAX_PANES) slots.push(panes.length ? 'Open beside' : 'Open')
+  $('drops').innerHTML = slots.map((label, i) => `<div data-slot="${i}">${label}</div>`).join('')
+  $('drops').querySelectorAll('div').forEach((zone) => {
+    zone.addEventListener('dragover', (event) => (event.preventDefault(), zone.classList.add('over')))
+    zone.addEventListener('dragleave', () => zone.classList.remove('over'))
+    zone.addEventListener('drop', (event) => {
+      $('drops').classList.remove('on')
+      put(+zone.dataset.slot, event.dataTransfer.getData('text/tab'))
+      render()
+    })
+  })
+  $('drops').classList.add('on')
+}
 function renderTabs() {
-  $('strip').innerHTML = TABS.map((tab) => {
-    const state = tab.id === main ? 'main' : tab.id === beside ? 'beside' : ''
-    const named = state !== ''
-    return `<button class="tab ${state}" data-tab="${tab.id}" title="${tab.label} · ⌘-click to open beside">${icon(tab.icon ?? tab.id)}${named ? tab.label : ''}${state === 'beside' ? '<span class="side"></span>' : ''}</button>`
+  $('strip').innerHTML = TABS.map((t) => {
+    const slot = panes.indexOf(t.id)
+    const open = slot !== -1
+    const split = open && panes.length > 1
+    const glyph = split ? `<span class="side">${panes.map((_, i) => `<i class="${i === slot ? 'on' : ''}"></i>`).join('')}</span>` : ''
+    const x = open ? `<span class="x" data-close="${t.id}" title="Close">${icon('close')}</span>` : ''
+    const tip = split ? `${t.label} · click to show it alone, ⇧-click to take it out of the split` : `${t.label} · ⇧-click to open beside`
+    return `<button class="tab ${open ? 'open' : ''}" draggable="true" data-tab="${t.id}" title="${tip}">${closeAt === 'left' ? x : ''}${icon(t.icon ?? t.id)}${open ? t.label : ''}${glyph}${closeAt === 'right' ? x : ''}</button>`
   }).join('')
-  $('strip').querySelectorAll('.tab').forEach((el) => el.addEventListener('click', (event) => clickTab(el.dataset.tab, event)))
+  $('strip').querySelectorAll('.tab').forEach((el) => {
+    el.addEventListener('click', (event) => clickTab(el.dataset.tab, event))
+    el.addEventListener('dragstart', (event) => (event.dataTransfer.setData('text/tab', el.dataset.tab), showDrops()))
+    el.addEventListener('dragend', () => $('drops').classList.remove('on'))
+  })
+  $('strip').querySelectorAll('.x').forEach((el) => el.addEventListener('click', (event) => (event.stopPropagation(), close(el.dataset.close), render())))
+  $('closeat').innerHTML = ['right', 'left'].map((at) => `<button class="${at === closeAt ? 'on' : ''}" data-at="${at}">${at}</button>`).join('')
+  $('closeat').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => ((closeAt = b.dataset.at), renderTabs())))
 }
 
 function page(id) {
+  if (!id)
+    return `<div class="empty"><div>Nothing open</div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:420px">${TABS.map((t) => `<button class="chip" data-open="${t.id}">${icon(t.icon ?? t.id)}${t.label}</button>`).join('')}</div></div>`
   if (id === 'terminal')
     return `<div class="cols"><div class="pane"><div class="zonehead" style="gap:12px">${icon('panel', 'i muted')}<span class="muted" style="display:flex;gap:6px;align-items:center">${icon('folder')}~ alpha</span><span style="flex:1"></span></div>
       <div class="empty"><div class="railbtn" style="width:40px;height:40px;border-radius:10px">${icon('terminal')}</div><div>No terminals in <span style="color:var(--fg)">~ alpha</span></div>
@@ -351,15 +422,10 @@ function page(id) {
   return `<div class="empty">${icon('env')}<div>.env for alpha</div></div>`
 }
 function renderPanes() {
-  const tab = (id) => TABS.find((t) => t.id === id)
-  $('left').innerHTML = page(main)
-  $('rightpane').hidden = !beside
-  $('left').classList.toggle('focusline', !!beside)
-  if (beside)
-    $('rightpane').innerHTML = `<div class="splithead">${icon(tab(beside).icon ?? beside)}<span class="grow">${tab(beside).label}</span>
-      <button class="iconbtn" title="Swap sides" id="swap">${icon('compare')}</button><button class="iconbtn" title="Close" id="closeside">${icon('close')}</button></div>${page(beside)}`
-  $('swap')?.addEventListener('click', () => (([main, beside] = [beside, main]), render()))
-  $('closeside')?.addEventListener('click', () => ((beside = null), render()))
+  const head = (id) => (panes.length > 1 ? `<div class="splithead">${icon(tab(id).icon ?? id)}<span class="grow">${tab(id).label}</span></div>` : '')
+  $('panes').className = `panes n${panes.length}`
+  $('panes').innerHTML = panes.length ? panes.map((id) => `<div class="pane">${head(id)}${page(id)}</div>`).join('') : `<div class="pane">${page(null)}</div>`
+  $('panes').querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => (put(0, el.dataset.open), render())))
 }
 
 /* hub */
@@ -369,29 +435,34 @@ function statusOf(run) {
   if (run.status === 'failed') return `<span class="dot" style="background:var(--red)"></span>`
   return `<svg class="i" style="color:var(--emerald)"><use href="#check" /></svg>`
 }
-function renderHub() {
+function renderAttn() {
   const runs = RUNS[mood]
-  const working = runs.filter((r) => r.status === 'working').length
-  const waiting = runs.filter((r) => r.status === 'waiting').length
-  $('counts').innerHTML = `${working ? `<span>${working}<span class="dot" style="background:var(--emerald)"></span></span>` : ''}${waiting ? `<span>${waiting}<span class="dot" style="background:var(--amber)"></span></span>` : ''}`
+  const has = (status) => runs.some((r) => r.status === status)
+  const [color, ping] = has('waiting') ? ['var(--amber)', true] : has('failed') ? ['var(--red)', true] : has('done') && !seen ? ['var(--emerald)', false] : []
+  $('attn').innerHTML = color ? `<span class="attn ${ping ? 'ping' : ''}" style="--c:${color}"></span>` : ''
+}
+function renderHub() {
+  const runs = [...RUNS[mood]].sort((a, b) => URGENCY[a.status] - URGENCY[b.status])
+  renderAttn()
   document.querySelectorAll('[data-mochi]').forEach((el) => (el.innerHTML = mini(el.dataset.tint, el.dataset.mochi === 'head' ? 'working' : mood, +el.dataset.size, el.dataset.mochi === 'big' ? 'big' : '')))
   $('big').addEventListener('click', poke)
   $('say').textContent = SAY[mood][0]
   $('saysub').textContent = SAY[mood][1]
   $('runs').innerHTML = runs.length
-    ? runs.map((r) => `<div class="run">${mini(AGENTS[r.agent].tint, r.status === 'waiting' ? 'waiting' : r.status === 'done' ? 'done' : r.status === 'failed' ? 'failed' : 'working', 26)}
-        <div style="flex:1;min-width:0"><div class="t">${r.title}</div><div class="s">${AGENTS[r.agent].name} · ${r.detail}</div></div>${statusOf(r)}</div>`).join('')
-    : `<div class="empty" style="font-size:12px">Your agents are idle.<br />Hover here when one is at work.</div>`
+    ? runs.map((r) => `<div class="run" title="Go to it in ${r.ws}">${mini(r.who.tint, r.status, 26)}
+        <div style="flex:1;min-width:0"><div class="t">${r.title}</div><div class="s">${r.who.name} · ${r.via} · ${r.detail}</div></div><span class="ws">${r.ws}</span>${statusOf(r)}</div>`).join('')
+    : `<div class="empty" style="font-size:12px">No agent is running in any workspace.<br />Hover here when one is at work.</div>`
   $('agentlist').innerHTML = AGENTS.map((a, i) => `<div class="row ${i === 0 ? 'on' : ''}" style="height:36px">${mini(a.tint, 'idle', 26)}<span style="flex:1">${a.name}</span></div>`).join('')
-  $('runlist').innerHTML = runs.map((r) => `<div class="row">${statusOf(r).replace('<button class="answer">Answer</button>', '<span class="dot" style="background:var(--amber)"></span>')}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.title}</span></div>`).join('')
+  $('runlist').innerHTML = runs.map((r) => `<div class="row" title="${r.who.name} · ${r.via}">${statusOf(r).replace('<button class="answer">Answer</button>', '<span class="dot" style="background:var(--amber)"></span>')}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.title}</span><span class="ws">${r.ws}</span></div>`).join('')
   $('moods').innerHTML = Object.keys(RUNS).map((m) => `<button class="${m === mood ? 'on' : ''}" data-m="${m}">${m}</button>`).join('')
-  $('moods').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => ((mood = b.dataset.m), renderHub())))
+  $('moods').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => ((mood = b.dataset.m), (seen = false), renderHub())))
 }
 function toggleHub(open = !hubOpen) {
   hubOpen = open
+  if (open) (seen = true), renderAttn()
   $('overlay').classList.toggle('open', open)
   $('hubbtn').classList.toggle('on', open)
-  document.querySelector('.esc').innerHTML = `<span class="kbd">Esc</span> back to ${TABS.find((t) => t.id === main).label}`
+  document.querySelector('.esc').innerHTML = `<span class="kbd">Esc</span> back to ${panes.length ? tab(panes[0]).label : 'your tabs'}`
   hidePop()
 }
 
@@ -404,6 +475,8 @@ function showPop() {
     const btn = $('hubbtn').getBoundingClientRect(), bar = document.querySelector('.titlebar').getBoundingClientRect()
     $('pop').style.left = `${Math.min(btn.left - bar.left + btn.width / 2 - 280, bar.width - 568)}px`
     $('pop').classList.add('open')
+    seen = true
+    renderAttn()
     $('hubbtn').classList.add('hover')
   }, 140)
 }
