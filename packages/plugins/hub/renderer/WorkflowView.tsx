@@ -340,6 +340,8 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     history.current = { past: [...history.current.past, saved.current], future: [] }
     return write(draft)
   }
+  // Adding, removing or connecting a step is an undo step of its own, not folded into edits still waiting to save
+  const checkpoint = (): void => void commit()
   // Selecting or measuring a step makes a new draft with the same content; only content restarts the wait
   const content = JSON.stringify(draft)
   const latestCommit = useRef(commit)
@@ -410,6 +412,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     let count = 1
     while (nodes.some((node) => node.id === `${kind}-${count}`)) count++
     const id = `${kind}-${count}`
+    checkpoint()
     const after = selected && selected.data.step.kind !== 'output' ? selected : null
     const position = after ? { x: after.position.x + COLUMN, y: after.position.y } : { x: Math.max(0, ...nodes.map((node) => node.position.x)) + COLUMN, y: 0 }
     while (nodes.some((node) => Math.abs(node.position.x - position.x) < COLUMN * 0.9 && Math.abs(node.position.y - position.y) < ROW * 0.9)) position.y += ROW
@@ -423,6 +426,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
 
   const update = (step: WorkflowNode): void => setNodes(nodes.map((node) => (node.id === step.id ? { ...node, data: { step } } : node)))
   const removeStep = (id: string): void => {
+    checkpoint()
     setNodes(nodes.filter((node) => node.id !== id))
     setEdges(edges.filter((edge) => edge.source !== id && edge.target !== id))
   }
@@ -475,9 +479,18 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
               nodes={nodes}
               edges={edges}
               nodeTypes={NODE_TYPES}
-              onNodesChange={(changes) => setNodes((current) => applyNodeChanges(changes, current))}
-              onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
-              onConnect={(connection) => setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID() }, current))}
+              onNodesChange={(changes) => {
+                if (changes.some((change) => change.type === 'remove')) checkpoint()
+                setNodes((current) => applyNodeChanges(changes, current))
+              }}
+              onEdgesChange={(changes) => {
+                if (changes.some((change) => change.type === 'remove')) checkpoint()
+                setEdges((current) => applyEdgeChanges(changes, current))
+              }}
+              onConnect={(connection) => {
+                checkpoint()
+                setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID() }, current))
+              }}
               isValidConnection={connectable}
               deleteKeyCode={['Backspace', 'Delete']}
               fitView

@@ -161,7 +161,6 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await page.getByRole('button', { name: 'Agent', exact: true }).click()
   await choose(page, 'The agent this step asks', 'Courier')
   await expect(page.locator('.react-flow__edge')).toHaveCount(2)
-  await expect(page.getByRole('button', { name: 'Relay' })).toBeVisible()
 
   // Nothing goes after an output, so this one starts unconnected
   await steps.filter({ hasText: 'Output' }).click()
@@ -172,6 +171,7 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await page.keyboard.press('ControlOrMeta+Shift+z')
   await expect(steps).toHaveCount(4)
   await expect(page.getByText('Connect a step to it')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Relay' })).toBeVisible()
   await steps.filter({ hasText: 'Merge' }).click()
   await page.keyboard.press('Backspace')
   await expect(steps).toHaveCount(3)
