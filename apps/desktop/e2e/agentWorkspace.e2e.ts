@@ -35,8 +35,6 @@ test("an agent's browser tab opens in its session's workspace, not the one on sc
   const sessionWorkspace = server.headers['x-treeix-workspace']
   expect(sessionWorkspace).toBeTruthy()
 
-  // The AI Hub, where the app opens, hides the workspace rail until it is hidden itself
-  await page.locator('[data-page-tab="hub"]').click()
   await page.getByRole('button', { name: 'New workspace' }).click()
   await page.getByPlaceholder('Select projects or type a name').fill('Other')
   await page.getByRole('button', { name: 'Create workspace' }).click()

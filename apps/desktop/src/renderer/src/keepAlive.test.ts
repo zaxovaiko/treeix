@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { keptPages, keyboardPage, visitedIn } from './keepAlive'
+import { keptPages, visitedIn } from './keepAlive'
 
 const tabs = [{ id: 'terminal' }, { id: 'browser' }, { id: 'prs' }]
 
@@ -19,20 +19,8 @@ test('a tab that is not a plugin page keeps nothing extra', () => {
   expect(keptPages(tabs, ['browser'], 'worktrees').map((tab) => tab.id)).toEqual(['browser'])
 })
 
-test('bare keys belong to the tab on screen', () => {
-  expect(keyboardPage('prs', null, false)).toBe('prs')
-})
-
-test('bare keys belong to the split pane while it has the keyboard', () => {
-  expect(keyboardPage('prs', 'terminal', true)).toBe('terminal')
-})
-
-test('a split pane without the keyboard leaves the keys to the tab on screen', () => {
-  expect(keyboardPage('prs', 'terminal', false)).toBe('prs')
-})
-
-test('a page shown in the split is not kept hidden as well', () => {
-  expect(keptPages(tabs, ['browser', 'prs'], 'terminal', 'browser').map((tab) => tab.id)).toEqual(['terminal', 'prs'])
+test('a page shown in a split or the overlay is not kept hidden as well', () => {
+  expect(keptPages(tabs, ['browser', 'prs'], 'terminal', ['browser', 'prs']).map((tab) => tab.id)).toEqual(['terminal'])
 })
 
 test('visitedIn forgets the pages of another workspace right away', () => {

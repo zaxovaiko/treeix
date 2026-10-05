@@ -33,6 +33,8 @@ export type Settings = {
   bottomPanel: 'content' | 'full'
   /** Title bar tabs other than the active one show only their icon */
   compactTabs: boolean
+  /** Which end of an open title bar tab holds its close button */
+  tabCloseSide: 'left' | 'right'
   /** Page tabs moved to the right of the title bar or reordered by dragging */
   titleBarTabs: BarLayout
   /** Page tab icons picked in Settings, by tab id; absent ones keep their own */
@@ -214,6 +216,7 @@ const DEFAULTS: Settings = {
   sections: 'hidden',
   bottomPanel: 'content',
   compactTabs: true,
+  tabCloseSide: 'right',
   titleBarTabs: [],
   tabIcons: {},
   editorMinimap: true,
@@ -298,6 +301,7 @@ function load(): Settings {
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
       bottomPanel: candidate.bottomPanel === 'full' ? 'full' : 'content',
       compactTabs: flag('compactTabs'),
+      tabCloseSide: candidate.tabCloseSide === 'left' ? 'left' : 'right',
       titleBarTabs: parseBarLayout(candidate.titleBarTabs),
       tabIcons: parseTabIcons(candidate.tabIcons),
       editorMinimap: flag('editorMinimap'),

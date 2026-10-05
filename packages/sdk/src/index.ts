@@ -37,6 +37,11 @@ export type TabContribution = {
   Badge?: ComponentType
   /** Dock panels whose toggles show in the title bar while this tab is active */
   panels?: string[]
+  /**
+   * Opens over the panes and the workspace rail instead of in a pane, from a button at the centre of the title bar, like
+   * the AI Hub. `Face` is the button's content and `Peek` the card shown while the pointer rests on it; `close` hides the card
+   */
+  overlay?: { Face: ComponentType; Peek: ComponentType<{ close: () => void }> }
 }
 
 /** A tab opened on demand, like one pull request or one plan; closing it returns to `parent` */

@@ -8,7 +8,7 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => launched.close())
 
-test('a session that needs the user lands in the notification center, and opening it shows the session', async () => {
+test('a session that needs the user lights the AI Hub button, and a peek at it puts the light out', async () => {
   const { page } = launched
   const terminalTab = page.locator('[data-page-tab="terminal"]')
   await terminalTab.click()
@@ -20,16 +20,10 @@ test('a session that needs the user lands in the notification center, and openin
   await page.locator('[data-page-tab="worktrees"]').click()
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 
-  const bell = page.getByRole('button', { name: 'Notifications', exact: true })
-  await expect(bell).toContainText('1', { timeout: 15_000 })
-  await bell.click()
-  await page.getByRole('button', { name: /needs you/ }).click()
-  await expect(terminalTab).toHaveAttribute('aria-current', 'page')
-  await expect(page.locator('.xterm').first()).toBeVisible()
-  // Read once the list was open
-  await expect(bell).not.toContainText('1')
-
-  await bell.click()
-  await page.getByRole('button', { name: 'Clear' }).click()
-  await expect(page.getByText('No notifications')).toBeVisible()
+  const hubButton = page.locator('[data-overlay-button]')
+  const dot = hubButton.locator('[data-hub-attention]')
+  await expect(dot).toBeVisible({ timeout: 15_000 })
+  await hubButton.hover()
+  await expect(page.locator('[data-overlay-peek]')).toBeVisible()
+  await expect(dot).toHaveCount(0)
 })

@@ -28,6 +28,7 @@ import {
   type PanelName,
   runShellCommand,
   type SessionKind,
+  type TabContribution,
   togglePanel,
   toggleZen,
   updateShell,
@@ -39,7 +40,7 @@ import {
 } from '@treeix/sdk'
 import { getAgents } from './agents'
 import { activityOf } from './sessionUi'
-import { keptPages, keyboardPage, visitedIn } from './keepAlive'
+import { keptPages, visitedIn } from './keepAlive'
 import { CleanupDialog } from './CleanupDialog'
 import { BranchDialog, type NewBranchRequest } from './BranchDialog'
 import { raceBranches } from './worktreePlans'
@@ -62,7 +63,7 @@ import { CodeNavigationContext, getActiveTarget, type Navigate, navigationKindFo
 import { codeThemeOptions, diffBackground, FileView, findLineElement } from './FileView'
 import { FileIcon, Icon, type IconName } from './Icon'
 import { McpInstallButton } from './mcpInstall'
-import { NotificationCenter, setWorkspaceSwitcher } from './notifications'
+import { setWorkspaceSwitcher } from './notifications'
 import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
 import { SendButton } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
@@ -97,14 +98,14 @@ import { isJson, list, object } from '../../shared/json'
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
 /** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
 const DEFAULT_TAB = 'terminal'
-/** The AI Hub hides the workspace rail, and its tab clicked while open goes back to the page before it */
-const HUB_TAB = 'hub'
 /** A first launch, before any workspace saved where it was left, opens the AI Hub */
-const FIRST_RUN_TAB = HUB_TAB
 const isFirstRun = typeof localStorage !== 'undefined' && !Object.keys(localStorage).some((key) => key.startsWith('app.place@'))
-/** Where Worktrees sits among the plugin tabs */
+// Stored at once, so the hub stays open past a reload that comes before anything else is saved
+if (isFirstRun) localStorage.setItem('app.overlay', 'true')
 /** Page tabs dragged in the title bar carry their id */
 const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
+/** Pages shown beside the main one, so three at most on screen */
+const MAX_SPLITS = 2
 
 /** A browser comment's page, in the built-in browser when it's enabled */
 function openPage(url: string): void {
@@ -132,7 +133,7 @@ function readPlace(workspaceId: string): SavedPlace {
   const record = object(stored)
   const viewer = isJson(record.viewer) ? record.viewer : null
   return {
-    appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : isFirstRun ? FIRST_RUN_TAB : DEFAULT_TAB,
+    appTab: typeof record.appTab === 'string' && isRestorableTab(record.appTab) ? record.appTab : DEFAULT_TAB,
     selected: typeof record.selected === 'string' ? record.selected : null,
     viewer: viewer && typeof viewer.path === 'string' ? { path: viewer.path, line: typeof viewer.line === 'number' ? viewer.line : null } : null
   }
@@ -271,22 +272,35 @@ function App(): React.JSX.Element {
   const { diffStyle } = settings
   const setDiffStyle = (style: 'split' | 'unified'): void => updateSettings({ diffStyle: style })
   const [appTab, setAppTab] = useState(SAVED_PLACE.appTab)
-  /** The page tab clicked again to hide it; another page showing unhides it */
+  /** The page tab closed while alone on screen; another page showing unhides it */
   const [hiddenTab, setHiddenTab] = useState<string | null>(null)
   const pageHidden = hiddenTab === appTab
   /** Plugin pages seen in this workspace; they stay mounted so coming back to one is instant */
   const [visited, setVisited] = useState<{ workspace: string; tabs: string[] }>({ workspace: '', tabs: [] })
-  /** A second page shown beside the active one; never the active page itself */
-  const [splitTab, setSplitTab] = usePersisted<string | null>('app.split', null)
+  /** Pages shown beside the active one, left to right; never the active page itself */
+  // Stored joined, as stored values are scalars; plugin tab ids hold no commas
+  const [splitList, setSplitList] = usePersisted<string>('app.splits', '')
+  const splitTabs = splitList ? splitList.split(',') : []
+  const setSplitTabs = (ids: string[]): void => setSplitList(ids.join())
   const [splitWidth, setSplitWidth] = usePersisted<number>('app.splitWidth', 560)
-  /** Which side of the split has the keyboard, so only that side's header reads as active */
-  const [splitFocused, setSplitFocused] = useState(false)
+  /** The split pane that has the keyboard, so only that pane's header reads as active; null while the main one has it */
+  const [splitFocus, setSplitFocus] = useState<string | null>(null)
+  /** The plugin page that opens over everything rather than in a pane, the AI Hub; first launch opens it, later ones open as left */
+  const [overlayOpen, setOverlayOpen] = usePersisted<boolean>('app.overlay', false)
+  // Mounted on first open and kept, so it opens instantly and keeps its state
+  const [overlaySeen, setOverlaySeen] = useState(false)
+  if (overlayOpen && !overlaySeen) setOverlaySeen(true)
+  // Any way to another page (Settings, a file, a plugin, the palette) brings the panes back from under the overlay
+  const [overlayOver, setOverlayOver] = useState(appTab)
+  if (overlayOver !== appTab) {
+    setOverlayOver(appTab)
+    if (overlayOpen) setOverlayOpen(false)
+  }
   // Reopen where the app was left: tab, worktree and file
   useEffect(() => {
     const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
     localStorage.setItem(workspaceKey('app.place'), JSON.stringify(place))
   }, [appTab, selected, viewer])
-  const onHub = appTab === HUB_TAB
   const tabBeforeSettings = useRef('worktrees')
   const openSettings = (page?: unknown): void => {
     // Menu and button handlers may pass their event, so only a page id counts
@@ -305,17 +319,42 @@ function App(): React.JSX.Element {
     settings.titleBarTabs
   )
   const tabs = defaultTabs.toSorted((a, b) => barOrder.indexOf(a.id) - barOrder.indexOf(b.id))
+  const overlayTab = pluginTabs.find((tab) => tab.overlay)
+  /** The tabs that open in a pane, in the title bar strip */
+  const paneTabs = tabs.filter((tab) => tab.id !== overlayTab?.id)
   const [draggingTab, setDraggingTab] = useState(false)
   /** Where a dragged title bar item would land: before this item, or at the end when null */
   const [tabDrop, setTabDrop] = useState<{ beforeId: string | null } | null>(null)
   // Settings and document tabs stay single; a split page whose plugin was turned off just closes
-  const splitPage = splitTab !== appTab && !shell.zen ? tabs.find((tab) => tab.id === splitTab) : undefined
-  const splitPluginTab = pluginTabs.find((tab) => tab.id === splitPage?.id)
-  const splitPageId = splitPage?.id ?? null
-  const pageTabMenu = (event: React.MouseEvent, tab: { id: string }): void =>
+  const splitPages = shell.zen ? [] : splitTabs.flatMap((id) => (id === appTab ? [] : paneTabs.filter((tab) => tab.id === id)))
+  const splitIds = splitPages.map((tab) => tab.id)
+  const focusedSplit = splitIds.find((id) => id === splitFocus) ?? null
+  const mainOnScreen = paneTabs.some((tab) => tab.id === appTab) && !pageHidden
+  /** Beside the pages on screen; with three up the rightmost makes room */
+  const openBeside = (id: string): void => {
+    if (!mainOnScreen) return goPage(id)
+    setSplitTabs([...(splitIds.length < MAX_SPLITS ? splitIds : splitIds.slice(0, -1)), id])
+  }
+  /** Off the screen; the main page hands its place to the first split, or leaves nothing open when alone */
+  const closePage = (id: string): void => {
+    if (splitIds.includes(id)) return setSplitTabs(splitIds.filter((candidate) => candidate !== id))
+    if (!splitIds.length) return setHiddenTab(id)
+    setAppTab(splitIds[0])
+    setSplitTabs(splitIds.slice(1))
+  }
+  const pageTabMenu = (event: React.MouseEvent, tab: { id: string }): void => {
+    const onScreen = splitIds.includes(tab.id) || (tab.id === appTab && mainOnScreen)
     openMenu(event, [
-      tab.id === splitPage?.id ? { label: 'Close split', run: () => setSplitTab(null) } : { label: 'Open in split', enabled: tab.id !== appTab, run: () => setSplitTab(tab.id) }
+      onScreen && splitIds.length
+        ? { label: 'Take out of split', run: () => closePage(tab.id) }
+        : {
+            label: 'Open beside',
+            enabled: !onScreen,
+            run: () => openBeside(tab.id)
+          },
+      { label: 'Close', enabled: onScreen, run: () => closePage(tab.id) }
     ])
+  }
   const pluginPanels = plugins.flatMap(({ plugin }) => plugin.panels ?? [])
   const panelInfo = (id: PanelId): PanelInfo | undefined => pluginPanels.find((panel) => panel.id === id)
   const panelIds = pluginPanels.map((panel) => panel.id)
@@ -556,17 +595,27 @@ function App(): React.JSX.Element {
 
   /** Shows a page with the keyboard in it: its list, or the terminal on the Terminal page */
   const goPage = (tab: string): void => {
-    // The page in the split trades places with the active one
+    if (tab === overlayTab?.id) return setOverlayOpen(true)
+    setOverlayOpen(false)
+    // A page in a split trades places with the active one
     setHiddenTab(null)
-    if (tab === splitTab) setSplitTab(tabs.some((candidate) => candidate.id === appTab) ? appTab : null)
+    if (splitIds.includes(tab)) setSplitTabs(mainOnScreen ? splitIds.map((id) => (id === tab ? appTab : id)) : splitIds.filter((id) => id !== tab))
     if (tab === 'settings') openSettings()
     else setAppTab(tab)
     focusZone(tab === 'terminal' || !(shell.pages[tab]?.list ?? true) ? 'main' : 'list')
   }
 
+  /** A plugin's way to a page: like goPage, but the keyboard stays where the plugin puts it */
+  const showTab = (tab: string): void => {
+    if (tab === overlayTab?.id) return setOverlayOpen(true)
+    setOverlayOpen(false)
+    setHiddenTab(null)
+    setAppTab(tab)
+  }
+
   /** ⌃Tab order: the page tabs, then the open documents, wrapping around */
   const stepTab = (step: number): void => {
-    const order = [...tabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
+    const order = [...paneTabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
     const index = order.indexOf(appTab)
     goPage(order[(Math.max(index, 0) + (index === -1 && step < 0 ? 0 : step) + order.length) % order.length])
   }
@@ -593,6 +642,22 @@ function App(): React.JSX.Element {
   })
 
   useEffect(() => setWorkspaceSwitcher(switchWorkspace))
+
+  const overlayRef = useRef<HTMLDivElement>(null)
+  // Opening moves the keyboard into the overlay; Esc, outside a field, closes it and the keyboard goes back to the page
+  useEffect(() => {
+    if (!overlayOpen) {
+      requestAnimationFrame(() => document.activeElement === document.body && focusZone('main'))
+      return
+    }
+    overlayRef.current?.focus()
+    focusZone('list')
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !isTyping(event)) setOverlayOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [overlayOpen])
 
   /** Each workspace remembers its selected worktree and open tabs */
   const switchWorkspace = (id: string): void => {
@@ -1044,7 +1109,7 @@ function App(): React.JSX.Element {
       const tabModifier = settings.digitShortcuts.tabs
       const heldByFocus = isTerminalFocused() ? tabModifier === 'alt' || tabModifier === 'meta' : typing && tabModifier === 'alt'
       if (tabDigit && !heldByFocus) {
-        const digitTabs = [...tabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
+        const digitTabs = [...paneTabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
         // 9 goes to the last tab, like browsers
         const tab = tabDigit === 9 ? digitTabs.at(-1) : digitTabs[tabDigit - 1]
         if (!tab) return
@@ -1349,7 +1414,7 @@ function App(): React.JSX.Element {
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
   // Shown even with no workspace yet: its + is where the first one is made
-  const showRail = shell.rail && !shell.zen && !(onHub && !pageHidden)
+  const showRail = shell.rail && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1381,7 +1446,8 @@ function App(): React.JSX.Element {
     withDock,
     dock,
     plugins,
-    onSent
+    onSent,
+    showTab
   }
   const latest = useRef(hostCalls)
   latest.current = hostCalls
@@ -1400,10 +1466,11 @@ function App(): React.JSX.Element {
       setBrowsedFolder: (path) => latest.current.setBrowsedFolder(path),
       defaultCwd,
       diffStyle,
-      activeTab: appTab,
+      // Under the overlay the page is off screen, so a plugin's "show my page" still has to lift it
+      activeTab: overlayOpen && overlayTab ? overlayTab.id : appTab,
       activePage,
-      keyboardPage: keyboardPage(appTab, splitPageId, splitFocused),
-      setActiveTab: setAppTab,
+      keyboardPage: overlayOpen && overlayTab ? overlayTab.id : (focusedSplit ?? appTab),
+      setActiveTab: (tab) => latest.current.showTab(tab),
       openTab: (tab) => latest.current.openTab(tab),
       closeTab: (key) => latest.current.closeTab(key),
       openLink: (url) => void (hostRef.current && openLink(url, hostRef.current)),
@@ -1446,8 +1513,8 @@ function App(): React.JSX.Element {
       diffStyle,
       appTab,
       activePage,
-      splitPageId,
-      splitFocused,
+      focusedSplit,
+      overlayOpen,
       comments,
       patches,
       worktreeFiles,
@@ -1470,9 +1537,11 @@ function App(): React.JSX.Element {
     window.addEventListener('click', onClick, true)
     return () => window.removeEventListener('click', onClick, true)
   }, [])
-  // The split page sees itself as the active page, so its layout keeps its own panels and widths
-  const splitHost = useMemo((): HostApi => ({ ...host, activeTab: splitPage?.id ?? '', activePage: splitPage?.id ?? '' }), [host, splitPage?.id])
-  const keptTabs = keptPages(pluginTabs, visitedTabs, appTab, splitPageId)
+  // A split page, and the overlay, see themselves as the active page, so their layouts keep their own panels and widths
+  const ownPages = [...splitIds, overlayTab?.id ?? '']
+  const ownKey = ownPages.join()
+  const ownHosts = useMemo(() => new Map(ownPages.map((id): [string, HostApi] => [id, { ...host, activeTab: id, activePage: id }])), [host, ownKey])
+  const keptTabs = keptPages(pluginTabs, visitedTabs, appTab, ownPages)
   const keptIds = keptTabs.map((tab) => tab.id).join()
   // A kept page reads its own panels and widths; `activeTab` still names the page the user is looking at
   // Its dock is drawn without frames while off screen, so the panels live once, around the page on screen
@@ -1526,11 +1595,25 @@ function App(): React.JSX.Element {
         run: () => goPage(tab.id)
       }
     }),
-    ...tabs
-      .filter((tab) => tab.id !== appTab && tab.id !== splitPage?.id)
-      .map((tab): Command => ({ id: `split:${tab.id}`, group: 'Actions', label: `Open ${tab.label.toLowerCase()} in split`, icon: 'splitRight', run: () => setSplitTab(tab.id) })),
-    ...(splitPage
-      ? [{ id: 'split:close', group: 'Actions', label: `Close split (${splitPage.label.toLowerCase()})`, icon: 'close', run: () => setSplitTab(null) } satisfies Command]
+    ...paneTabs
+      .filter((tab) => tab.id !== appTab && !splitIds.includes(tab.id))
+      .map((tab): Command => ({
+        id: `split:${tab.id}`,
+        group: 'Actions',
+        label: `Open ${tab.label.toLowerCase()} beside`,
+        icon: 'splitRight',
+        run: () => openBeside(tab.id)
+      })),
+    ...(splitIds.length
+      ? [
+          {
+            id: 'split:close',
+            group: 'Actions',
+            label: 'Close splits',
+            icon: 'close',
+            run: () => setSplitTabs([])
+          } satisfies Command
+        ]
       : []),
     { id: 'search', group: 'Actions', label: 'Search in projects', icon: 'search', shortcut: actionKeys('app.search') || undefined, run: () => setSearchOpen(true) },
     ...(
@@ -1702,33 +1785,59 @@ function App(): React.JSX.Element {
   const pageTab = (tab: (typeof tabs)[number]): React.ReactNode => {
     const index = tabs.indexOf(tab)
     const letter = leaderOf(tab.id)?.toUpperCase()
-    const inSplit = splitPage?.id === tab.id
-    const open = inSplit || (appTab === tab.id && !pageHidden)
-    // A second click hides an open tab; another one fills the left pane when it is empty, else opens beside it, replacing what was there
-    const click = (): void => {
-      if (inSplit) setSplitTab(null)
-      else if (open) setHiddenTab(tab.id)
-      else if (pageHidden || !tabs.some((candidate) => candidate.id === appTab)) goPage(tab.id)
-      else setSplitTab(tab.id)
+    const isMain = appTab === tab.id && mainOnScreen
+    const slot = isMain ? 0 : splitIds.indexOf(tab.id) + 1
+    const open = slot > 0 || isMain
+    const split = open && splitIds.length > 0
+    // A click shows the page alone; ⇧-click opens it beside the ones on screen, or takes it out of the split
+    const click = (event: React.MouseEvent): void => {
+      if (!event.shiftKey) {
+        if (!isMain || overlayOpen) goPage(tab.id)
+        setSplitTabs([])
+      } else if (split) closePage(tab.id)
+      else if (!open) openBeside(tab.id)
     }
     const compact = settings.compactTabs && !open
     const digitKey = digitLabel('tabs', index + 1)
     const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
+    const close = open && (
+      <span
+        aria-hidden
+        data-tab-close={tab.id}
+        title="Close"
+        onClick={(event) => {
+          event.stopPropagation()
+          closePage(tab.id)
+        }}
+        className="-mx-1 grid size-4 shrink-0 place-items-center rounded opacity-50 hover:bg-foreground/12 hover:opacity-100"
+      >
+        <Icon name="close" className="size-3" />
+      </span>
+    )
     return (
       <button
         key={tab.id}
         data-page-tab={tab.id}
         aria-current={open ? 'page' : undefined}
-        title={`${keys ? `${tab.label} (${keys})` : tab.label} · drag anywhere in the title bar`}
+        title={`${keys ? `${tab.label} (${keys})` : tab.label} · ${split ? 'click to show it alone, ⇧-click to take it out of the split' : '⇧-click to open beside'}`}
         {...barItemDrag(tab.id)}
         onClick={click}
         onContextMenu={(event) => pageTabMenu(event, tab)}
         className={tabClass(open)}
       >
+        {settings.tabCloseSide === 'left' && close}
         {shell.leader && letter ? <Kbd on>{letter}</Kbd> : <Icon name={tab.icon} className="size-3.5" />}
         {!compact && tab.label}
         {'Badge' in tab && tab.Badge && <tab.Badge />}
         {digitKey && !compact && <Kbd hint>{digitKey}</Kbd>}
+        {split && (
+          <span data-tab-slot={slot} className="flex gap-px opacity-60" aria-hidden>
+            {[0, ...splitIds].map((id, at) => (
+              <span key={id} className={`h-2 w-1 rounded-[1px] border border-current ${at === slot ? 'bg-current' : ''}`} />
+            ))}
+          </span>
+        )}
+        {settings.tabCloseSide === 'right' && close}
       </button>
     )
   }
@@ -2054,45 +2163,66 @@ function App(): React.JSX.Element {
       </button>
     </>
   )
-  const searchField = (
-    <button
-      title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
-      onClick={() => setPaletteOpen(true)}
-      {...barItemDrag(SEARCH_ITEM)}
-      className="mx-1 flex h-6 w-40 min-w-24 shrink-0 items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground [-webkit-app-region:no-drag]"
-    >
-      <Icon name="search" className="size-3.5 shrink-0" />
-      <span className="min-w-0 truncate whitespace-nowrap">Run command</span>
-      <Kbd hint>{actionKeys('app.palette')}</Kbd>
-    </button>
+  // Run command and the overlay's button share one segment at the centre of the title bar; tabs drop around it
+  const centerSegment = (
+    <div data-bar-item={SEARCH_ITEM} className="flex h-7 shrink-0 items-center rounded-lg bg-muted p-0.5 ring-1 ring-border [-webkit-app-region:no-drag]">
+      <button
+        title={`Search commands, worktrees and files (${actionKeys('app.palette')})`}
+        onClick={() => setPaletteOpen(true)}
+        className="flex h-6 w-40 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <Icon name="search" className="size-3.5 shrink-0" />
+        <span className="min-w-0 truncate whitespace-nowrap">Run command</span>
+        <Kbd hint>{actionKeys('app.palette')}</Kbd>
+      </button>
+      {overlayTab?.overlay && (
+        <>
+          <span className="mx-0.5 h-4 w-px bg-border" />
+          <OverlayButton label={overlayTab.label} overlay={overlayTab.overlay} open={overlayOpen} onToggle={() => (overlayOpen ? setOverlayOpen(false) : goPage(overlayTab.id))} />
+        </>
+      )}
+    </div>
   )
+  /** Title bar items: tabs, spaces and the drop mark of a dragged one */
+  const barItems = (ids: string[]): React.ReactNode =>
+    ids.map((id) => {
+      const tab = paneTabs.find((candidate) => candidate.id === id)
+      return (
+        <Fragment key={id}>
+          {tabDrop?.beforeId === id && tabDropMark}
+          {/* Open documents follow the tabs before the first space */}
+          {id === SPACE_ITEMS[0] && openDocs}
+          {isSpace(id) ? <span data-bar-item={id} className="h-full min-w-2 flex-1" /> : tab && pageTab(tab)}
+        </Fragment>
+      )
+    })
+  const searchAt = barOrder.indexOf(SEARCH_ITEM)
 
   return (
     <HostContext.Provider value={host}>
       <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
         <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
           {showTitle && (
-            <div className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'}`}>
-              <span className={`mr-1 shrink-0 ${chromeless ? '' : 'pl-[80px]'}`}>
-                <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={showRail} onClick={() => toggleShellPanel('rail')}>
-                  <Icon name="panel" className="size-3.5" />
-                </IconButton>
-              </span>
-              <div {...tabDropProps} className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${tabDropZone}`}>
-                {barOrder.map((id) => {
-                  const tab = tabs.find((candidate) => candidate.id === id)
-                  return (
-                    <Fragment key={id}>
-                      {tabDrop?.beforeId === id && tabDropMark}
-                      {/* Open documents follow the tabs before the first space */}
-                      {id === SPACE_ITEMS[0] && openDocs}
-                      {isSpace(id) ? <span data-bar-item={id} className="h-full min-w-2 flex-1" /> : id === SEARCH_ITEM ? searchField : tab && pageTab(tab)}
-                    </Fragment>
-                  )
-                })}
-                {tabDrop?.beforeId === null && tabDropMark}
+            <div
+              {...tabDropProps}
+              className={`flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
+            >
+              {/* Equal sides keep the centre segment in the middle of the window */}
+              <div className="flex min-w-0 flex-1 basis-0 items-center gap-0.5">
+                <span className={`mr-1 shrink-0 ${chromeless ? '' : 'pl-[80px]'}`}>
+                  <IconButton label={`${shell.rail ? 'Hide' : 'Show'} workspaces (${actionKeys('panel.rail')})`} active={showRail} onClick={() => toggleShellPanel('rail')}>
+                    <Icon name="panel" className="size-3.5" />
+                  </IconButton>
+                </span>
+                <div className="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">{barItems(barOrder.slice(0, searchAt))}</div>
               </div>
-              <div className="flex shrink-0 items-center gap-0.5">
+              {tabDrop?.beforeId === SEARCH_ITEM && tabDropMark}
+              {centerSegment}
+              <div className="flex flex-1 basis-0 items-center justify-end gap-0.5">
+                <div className="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+                  {barItems(barOrder.slice(searchAt + 1))}
+                  {tabDrop?.beforeId === null && tabDropMark}
+                </div>
                 {titleBarItems(false)}
                 {/* Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere */}
                 {/* Worktrees and PRs leave Terminal and Browser to their own tabs, which open beside them; an open panel keeps its toggle to close it */}
@@ -2125,7 +2255,6 @@ function App(): React.JSX.Element {
                   {comments.length > 0 && <span className="tabular-nums">{comments.length}</span>}
                   <Kbd hint>{actionKeys('app.comments')}</Kbd>
                 </button>
-                <NotificationCenter />
                 <McpInstallButton flash={flash} />
                 <IconButton
                   label={`Settings (${actionKeys('app.settings')} or G S)`}
@@ -2141,53 +2270,87 @@ function App(): React.JSX.Element {
 
           {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights; in zen the terminal's tab strip is that */}
           {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
-          <div className="flex min-h-0 flex-1" onFocusCapture={(event) => setSplitFocused(event.target instanceof Element && event.target.closest('[data-split-pane]') !== null)}>
-            {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
-            {/* A hidden left pane stays mounted, so its pages keep their state, and gives its room to the right one */}
-            <Zone id="main" className="flex-1" style={pageHidden && splitPage ? { display: 'none' } : undefined}>
-              {/* With a split, a line over the side that has the keyboard */}
-              {splitPage && !splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70" />}
-              {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
-              <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
-                  {pageHidden && <NothingOpen />}
-                  {appTab === 'worktrees' && !pageHidden && worktreeView}
-                  <Suspense fallback={<div className="flex-1" />}>
-                    {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
-                    {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab && !pageHidden))}
-                    {openDocTab && (
-                      <TabDock placement={settings.bottomPanel} withDock={withDock}>
-                        {openDocTab.content}
-                      </TabDock>
-                    )}
-                  </Suspense>
-                </ErrorBoundary>
-              </div>
-            </Zone>
-            {splitPage && (
-              <HostContext.Provider value={splitHost}>
+          <div className="relative flex min-h-0 flex-1">
+            <div
+              inert={overlayOpen}
+              className="flex min-h-0 min-w-0 flex-1"
+              onFocusCapture={(event) =>
+                setSplitFocus(event.target instanceof Element ? (event.target.closest('[data-split-pane]')?.getAttribute('data-split-pane') ?? null) : null)
+              }
+            >
+              {showRail && <WorkspaceRail repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} />}
+              <Zone id="main" className="flex-1">
+                {/* With a split, a line over the pane that has the keyboard */}
+                {splitIds.length > 0 && !focusedSplit && <span className="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70" />}
+                {/* Keyed by workspace so each tab remounts with that workspace's own filters, searches and selection */}
+                <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <ErrorBoundary label={appTabLabel} resetKey={`${workspaceId}:${appTab}`}>
+                    {pageHidden && <NothingOpen />}
+                    {appTab === 'worktrees' && !pageHidden && worktreeView}
+                    <Suspense fallback={<div className="flex-1" />}>
+                      {appTab === 'settings' && <SettingsView onClose={closeSettings} />}
+                      {keptTabs.map((tab) => renderKeptPage(tab, tab.id === appTab && !pageHidden))}
+                      {openDocTab && (
+                        <TabDock placement={settings.bottomPanel} withDock={withDock}>
+                          {openDocTab.content}
+                        </TabDock>
+                      )}
+                    </Suspense>
+                  </ErrorBoundary>
+                </div>
+              </Zone>
+              {splitPages.map((page) => {
+                const pluginTab = pluginTabs.find((tab) => tab.id === page.id)
+                const focused = focusedSplit === page.id
+                // ponytail: one split resizes; with two all three panes share the width evenly, add per-pane handles if asked
+                const resizable = splitPages.length === 1
+                return (
+                  <HostContext.Provider key={page.id} value={ownHosts.get(page.id) ?? host}>
+                    <div
+                      data-split-pane={page.id}
+                      style={resizable ? { width: splitWidth } : undefined}
+                      className={`relative flex min-h-0 min-w-0 flex-col border-l border-border ${resizable ? 'shrink-0' : 'flex-1'}`}
+                    >
+                      {resizable && <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />}
+                      <div
+                        className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${focused ? 'text-foreground' : 'text-muted-foreground'}`}
+                      >
+                        {focused && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary/70" />}
+                        <Icon name={page.icon} className="size-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">{page.label}</span>
+                        <IconButton label="Make it the main page" onClick={() => goPage(page.id)}>
+                          <Icon name="compare" className="size-3.5" />
+                        </IconButton>
+                        <IconButton label="Close" onClick={() => closePage(page.id)}>
+                          <Icon name="close" className="size-3.5" />
+                        </IconButton>
+                      </div>
+                      <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <ErrorBoundary label={page.label} resetKey={`${workspaceId}:split:${page.id}`}>
+                          <Suspense fallback={<div className="flex-1" />}>{pluginTab ? <pluginTab.render /> : worktreeLayout}</Suspense>
+                        </ErrorBoundary>
+                      </div>
+                    </div>
+                  </HostContext.Provider>
+                )
+              })}
+            </div>
+            {/* Over the panes and the rail; the pages underneath keep their state */}
+            {overlayTab && overlaySeen && (
+              <HostContext.Provider value={ownHosts.get(overlayTab.id) ?? host}>
                 <div
-                  data-split-pane
-                  style={pageHidden ? undefined : { width: splitWidth }}
-                  className={`relative flex min-h-0 min-w-0 flex-col ${pageHidden ? 'flex-1' : 'shrink-0 border-l border-border'}`}
+                  ref={overlayRef}
+                  tabIndex={-1}
+                  data-overlay={overlayTab.id}
+                  data-split-pane={overlayTab.id}
+                  inert={!overlayOpen}
+                  className={`absolute inset-0 z-40 flex flex-col bg-background transition-[opacity,translate] duration-150 ${overlayOpen ? '' : 'invisible -translate-y-1 opacity-0'}`}
                 >
-                  {!pageHidden && <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />}
-                  <div
-                    className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${splitFocused ? 'text-foreground' : 'text-muted-foreground'}`}
-                  >
-                    {splitFocused && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary/70" />}
-                    <Icon name={splitPage.icon} className="size-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{splitPage.label}</span>
-                    <IconButton label="Swap sides" onClick={() => goPage(splitPage.id)}>
-                      <Icon name="compare" className="size-3.5" />
-                    </IconButton>
-                    <IconButton label="Close split" onClick={() => setSplitTab(null)}>
-                      <Icon name="close" className="size-3.5" />
-                    </IconButton>
-                  </div>
                   <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <ErrorBoundary label={splitPage.label} resetKey={`${workspaceId}:split:${splitPage.id}`}>
-                      <Suspense fallback={<div className="flex-1" />}>{splitPluginTab ? <splitPluginTab.render /> : worktreeLayout}</Suspense>
+                    <ErrorBoundary label={overlayTab.label} resetKey={`${workspaceId}:${overlayTab.id}`}>
+                      <Suspense fallback={<div className="flex-1" />}>
+                        <overlayTab.render />
+                      </Suspense>
                     </ErrorBoundary>
                   </div>
                 </div>
@@ -2338,6 +2501,57 @@ function App(): React.JSX.Element {
 export default App
 
 /** A small outlined action that shows its shortcut */
+/** The overlay page's title bar button; resting the pointer on it shows its card, with a grace period to travel into it */
+function OverlayButton({
+  label,
+  overlay,
+  open,
+  onToggle
+}: {
+  label: string
+  overlay: NonNullable<TabContribution['overlay']>
+  open: boolean
+  onToggle: () => void
+}): React.JSX.Element {
+  const [peek, setPeek] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const later = (show: boolean, ms: number): void => {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setPeek(show), ms)
+  }
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const close = (): void => {
+    clearTimeout(timer.current)
+    setPeek(false)
+  }
+  const shown = peek && !open
+  return (
+    <div className="relative" onPointerEnter={() => later(true, 140)} onPointerLeave={() => later(false, 220)}>
+      <button
+        data-overlay-button
+        aria-label={label}
+        aria-pressed={open}
+        title={`${label} · click to open, rest the pointer to peek`}
+        onClick={() => {
+          close()
+          onToggle()
+        }}
+        className={`flex h-6 items-center gap-1.5 rounded-md px-2 text-xs ${open || shown ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+      >
+        <overlay.Face />
+      </button>
+      {shown && (
+        <div
+          data-overlay-peek
+          className="absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-2xl bg-popover text-xs text-popover-foreground shadow-2xl ring-1 ring-foreground/8 transition-[opacity,translate] duration-150 starting:-translate-y-1 starting:opacity-0"
+        >
+          <overlay.Peek close={close} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HintButton({ title, icon, label, hint, onClick }: { title: string; icon?: IconName; label: string; hint: string; onClick: () => void }): React.JSX.Element {
   return (
     <button

@@ -3,8 +3,9 @@ import { type RendererPlugin, useHost } from '@treeix/sdk'
 import { type Agent, useAgents } from '@treeix/app/agents'
 import { subscribeSettings } from '@treeix/app/settings'
 import { notify } from '@treeix/app/notifications'
-import { activeAgents, type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
+import { type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
+import { HubFace, HubPeek } from './Peek'
 import { asAgent, asking, followAgents, followRuns, followWorkflows, hubAgents, hubApi, hubRuns, hubSelection, hubWorkflows, onOpenRun, TAB_ID } from './store'
 
 // The page pulls in the editor and the chat view, so it loads when first opened
@@ -34,7 +35,7 @@ function useRuntimes(): void {
 
 const NOTICE: Partial<Record<string, string>> = { waiting: 'needs you', done: 'finished', failed: 'failed' }
 
-/** Into the notification center when a run starts waiting on the user or ends; opening it shows the run */
+/** Lights the hub's button when a run starts waiting on the user or ends; opening it shows the run */
 function useRunNotifications(): void {
   const host = useHost()
   useEffect(
@@ -60,6 +61,7 @@ function useRunNotifications(): void {
           body: 'AI Hub',
           // Main shows how a scheduled run ended itself, as the schedule asks
           system: !(run.kind === 'schedule' && state !== 'waiting'),
+          failed: state === 'failed',
           open: () => {
             hubSelection.set(`run:${run.id}`)
             host.setActiveTab(TAB_ID)
@@ -69,30 +71,6 @@ function useRunNotifications(): void {
       seen = next
     })
   }, [host])
-}
-
-/** How many agents are at work, and how many runs wait on the user */
-function HubBadge(): React.JSX.Element | null {
-  const runs = hubRuns.use()
-  const active = activeAgents(runs).size
-  const waiting = runs.filter(isWaiting).length
-  if (!active && !waiting) return null
-  return (
-    <span className="flex items-center gap-2 text-muted-foreground tabular-nums">
-      {active > 0 && (
-        <span title={`${active} agent${active === 1 ? '' : 's'} working`} className="flex items-center gap-1">
-          {active}
-          <span className="size-1.5 rounded-full bg-emerald-400" />
-        </span>
-      )}
-      {waiting > 0 && (
-        <span title={`${waiting} run${waiting === 1 ? '' : 's'} waiting for you`} className="flex items-center gap-1">
-          {waiting}
-          <span className="size-1.5 rounded-full bg-amber-400" />
-        </span>
-      )}
-    </span>
-  )
 }
 
 function Root(): React.JSX.Element {
@@ -105,7 +83,16 @@ function Root(): React.JSX.Element {
 }
 
 const plugin: RendererPlugin = {
-  tabs: [{ id: TAB_ID, label: 'AI Hub', icon: 'sparkles', order: 30, render: Tab, panels: ['terminal'], Badge: HubBadge }],
+  tabs: [
+    {
+      id: TAB_ID,
+      label: 'AI Hub',
+      icon: 'sparkles',
+      order: 30,
+      render: Tab,
+      overlay: { Face: HubFace, Peek: HubPeek }
+    }
+  ],
   Root,
   commands: () => [
     ...hubAgents.get().map((agent) => ({

@@ -283,7 +283,7 @@ type SettingSpec = {
   note?: (settings: Settings) => string
 }
 
-function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorLineNumbers'>(key: K, options: [Settings[K], string][]): ComponentType {
+function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorLineNumbers' | 'tabCloseSide'>(key: K, options: [Settings[K], string][]): ComponentType {
   return function SettingSegmented() {
     const value = useSettings()[key]
     return <Segmented value={value} options={options} onChange={(next) => updateSettings({ [key]: next })} />
@@ -430,6 +430,16 @@ const SETTINGS: SettingSpec[] = [
     Control: segmented('bottomPanel', [
       ['content', 'Beside sidebar'],
       ['full', 'Full width']
+    ])
+  },
+  {
+    section: 'General',
+    card: 'Layout',
+    label: 'Tab close button',
+    description: 'Which end of an open title bar tab holds its ×.',
+    Control: segmented('tabCloseSide', [
+      ['left', 'Left'],
+      ['right', 'Right']
     ])
   },
   {

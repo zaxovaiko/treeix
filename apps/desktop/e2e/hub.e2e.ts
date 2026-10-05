@@ -17,10 +17,10 @@ const fake = {
   chat: { adapter: 'acp', command: `"${process.execPath}" "${join(__dirname, 'fakeAcpAgent.mjs')}"` }
 }
 
-/** Shows the AI Hub; its tab clicked while it is open would hide it */
+/** Shows the AI Hub over the panes; its button clicked while it is open would close it */
 async function showHub(page: Page): Promise<void> {
-  const tab = page.locator('[data-page-tab="hub"]')
-  if ((await tab.getAttribute('aria-current')) !== 'page') await tab.click()
+  const button = page.locator('[data-overlay-button]')
+  if ((await button.getAttribute('aria-pressed')) !== 'true') await button.click()
 }
 
 /** An OpenAI-compatible API that thinks, then answers with what it was sent */
@@ -193,10 +193,10 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await expect(page.getByText('Run Relay…')).toBeVisible()
 })
 
-test('an approval step holds the run, counted on the tab, until approved', async () => {
+test('an approval step holds the run, lighting the hub button, until approved', async () => {
   const { page } = launched
   const steps = page.locator('.react-flow__node')
-  const hubTab = page.locator('[data-page-tab="hub"]')
+  const needsYou = page.locator('[data-overlay-button] [data-hub-attention][aria-label="An agent needs you"]')
   // The first Esc clears the last test's query, the next closes the palette
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
@@ -211,13 +211,13 @@ test('an approval step holds the run, counted on the tab, until approved', async
   await page.getByPlaceholder(/^The input/).fill('v1')
   await page.keyboard.press('Enter')
   await expect(steps.filter({ hasText: 'Approval' }).getByTitle('Needs you')).toBeVisible({ timeout: 20_000 })
-  await expect(hubTab.getByTitle('1 run waiting for you')).toBeVisible()
+  await expect(needsYou).toBeVisible()
 
   await page.getByRole('button', { name: /^Last run/ }).click()
   await expect(page.getByText('Go on with v1?')).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByText(/^Done · /)).toBeVisible()
-  await expect(hubTab.getByTitle('1 run waiting for you')).toBeHidden()
+  await expect(needsYou).toBeHidden()
 })
 
 test('a first launch opens the AI Hub', async () => {
