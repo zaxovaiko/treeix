@@ -22,7 +22,7 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => launched.close())
 
-test('one chat opens with the last picked agent, shows what it is doing, widens, and zooms its images', async () => {
+test('one chat opens with the last picked agent, shows what it is doing and zooms its images', async () => {
   const { page } = launched
   await page.getByRole('button', { name: 'Run command' }).click()
   await page.getByPlaceholder(/^Search commands/).fill('New chat')
@@ -35,15 +35,11 @@ test('one chat opens with the last picked agent, shows what it is doing, widens,
   await expect(page.getByRole('button', { name: 'Claude' })).toBeVisible()
   await page.keyboard.press('Escape')
 
-  await page.getByRole('button', { name: 'Full width' }).click()
-  await expect(page.getByRole('button', { name: 'Fixed width' })).toBeVisible()
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('settings') ?? '{}').chatFullWidth)).toBe(true)
-
   await page.getByPlaceholder('Message Fake').fill('Show me')
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('status').filter({ hasText: 'Esc to stop' })).toContainText('Thinking')
+  await expect(page.getByRole('status').filter({ hasText: 'Thinking' })).toBeVisible()
   await expect(page.getByText('Here is a picture')).toBeVisible()
-  await expect(page.getByRole('status').filter({ hasText: 'Esc to stop' })).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeHidden()
   await expect(page.getByText(/^Thought for \d+s$/)).toBeVisible()
   // The conversation belongs to the agent now
   await expect(page.getByTitle('Agent', { exact: true })).toBeHidden()

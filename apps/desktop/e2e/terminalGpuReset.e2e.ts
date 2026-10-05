@@ -13,8 +13,9 @@ test('terminals sharing a glyph atlas still draw text after the GPU process rese
   const { page, app } = launched
   await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
   await page.getByRole('button', { name: 'Shell' }).click()
-  await page.locator('button[title^="Split right"]').first().click()
   const panes = page.locator('.xterm')
+  await expect(panes).toHaveCount(1)
+  await page.keyboard.press('Meta+D')
   await expect(panes).toHaveCount(2)
   // The shells start their prompts
   await page.waitForTimeout(2000)
