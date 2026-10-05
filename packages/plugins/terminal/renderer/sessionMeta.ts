@@ -16,8 +16,6 @@ export type SessionMeta = {
   view: SessionView
   /** Named by the user, so the program's own titles no longer replace it */
   renamed?: boolean
-  /** Hidden from History */
-  archived?: boolean
 }
 
 /** Keeps the value's other fields, e.g. a saved session's id; sessions saved before chats have no view and are terminals */
@@ -28,12 +26,19 @@ export function parseMeta(value: unknown): SessionMeta | null {
   return { ...(value as SessionMeta), view: candidate.view === 'chat' ? 'chat' : 'terminal' }
 }
 
+export type ClosedSession = SessionMeta & { id: string; endedAt: number; taskId?: string }
+
+/** History entries archived by older versions stayed hidden, so they are dropped */
+export function parseClosedSession(value: unknown): ClosedSession | null {
+  const meta = parseMeta(value)
+  const { id, endedAt, archived } = (meta ?? {}) as Partial<ClosedSession> & { archived?: boolean }
+  return meta && typeof id === 'string' && typeof endedAt === 'number' && archived !== true ? (meta as ClosedSession) : null
+}
+
 export const NEW_CHAT_TITLE = 'New chat'
 
 /** A chat still titled "New chat" or "New chat 2" takes its first message as its title */
 export const isDefaultChatTitle = (title: string): boolean => new RegExp(`^${NEW_CHAT_TITLE}( \\d+)?$`).test(title)
-
-export const unarchived = <T extends { archived?: boolean }>(entries: T[]): T[] => entries.filter((entry) => !entry.archived)
 
 /** Agents with a key of their own for a new tab */
 export const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab' }

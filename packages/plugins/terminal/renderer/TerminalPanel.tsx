@@ -22,7 +22,6 @@ import { activeTabOf, type Task, type TerminalTab, tabPanes } from './tasks'
 import { NameInput, renaming, startRename } from './taskUi'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
-  archiveClosedSession,
   attachSession,
   releaseGpu,
   clearTerminal,
@@ -43,7 +42,6 @@ import {
   sessionDiagrams,
   setActiveTab,
   setTabFocus,
-  splitPane,
   switchView,
   terminalSelection,
   transcriptRef,
@@ -84,9 +82,11 @@ function useNewTabEntries(): NewTabEntry[] {
   return newTabEntries(useAgents(), chat ? chatAgent() : undefined)
 }
 
-/** "Claude · chat" beside a chat's title */
-const ChatBadge = ({ kind }: { kind: SessionKind }): React.JSX.Element => (
-  <span className="shrink-0 rounded bg-foreground/5 px-1 text-[10.5px] leading-4 text-muted-foreground">{agentOr(kind).label} · chat</span>
+/** Beside the agent's badge, a session open as a chat */
+const ChatMark = (): React.JSX.Element => (
+  <span title="Chat" className="shrink-0 text-muted-foreground">
+    <Icon name="comment" className="size-3" />
+  </span>
 )
 
 /** Opens the mermaid diagrams the session's agent wrote as a tab, newest first; the diagrams plugin draws them */
@@ -115,12 +115,11 @@ function DiagramsButton({ session }: { session: Session }): React.JSX.Element | 
   return (
     <button
       title="Render the mermaid diagrams of this session"
+      aria-label="Diagrams"
       onClick={() => void open()}
-      className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <Icon name="layers" className="size-3" />
-      {/* In a narrow toolbar, like the terminal page opened beside another, the icon alone */}
-      <span className="@max-md:hidden">Diagrams</span>
     </button>
   )
 }
@@ -140,21 +139,12 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
             className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-left text-xs text-foreground/80 hover:text-foreground"
           >
             <KindBadge kind={entry.kind} />
+            {entry.view === 'chat' && <ChatMark />}
             <span className="min-w-0 truncate">{entry.title}</span>
-            {entry.view === 'chat' && <ChatBadge kind={entry.kind} />}
             <span className="min-w-0 truncate text-[10.5px] text-muted-foreground">{worktreeLabel(repos, entry.worktreePath)}</span>
             <span className="flex-1" />
             <span className="shrink-0 text-[10.5px] text-muted-foreground">{timeAgo(new Date(entry.endedAt).toISOString())}</span>
           </button>
-          {entry.view === 'chat' && (
-            <button
-              title="Hide from history"
-              onClick={() => archiveClosedSession(entry.id)}
-              className="h-6 shrink-0 rounded px-1.5 text-[10.5px] text-muted-foreground opacity-0 group-hover/closed:opacity-100 hover:text-foreground focus-visible:opacity-100"
-            >
-              Archive
-            </button>
-          )}
           <button
             title="Remove from history"
             aria-label="Remove from history"
@@ -345,6 +335,7 @@ function TerminalPane({
         >
           <Icon name="grip" className="-mx-1 size-3 shrink-0 text-muted-foreground/50" />
           <KindBadge kind={session.kind} />
+          {session.view === 'chat' && <ChatMark />}
           {renamingId === session.id ? (
             <SessionNameInput session={session} />
           ) : (
@@ -352,7 +343,6 @@ function TerminalPane({
               {session.title}
             </span>
           )}
-          {session.view === 'chat' && <ChatBadge kind={session.kind} />}
           {task?.worktreePath !== session.worktreePath && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>}
           <span className="flex-1" />
           <DiagramsButton session={session} />
@@ -459,8 +449,8 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
           className="flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2"
         >
           <KindBadge kind={shown.kind} />
+          {shown.view === 'chat' && <ChatMark />}
           <span className="min-w-0 truncate">{shown.title}</span>
-          {shown.view === 'chat' && <ChatBadge kind={shown.kind} />}
           {panes.length > 1 && (
             <span title={`${panes.length} panes`} className="flex shrink-0 items-center gap-0.5 text-[10.5px] text-muted-foreground tabular-nums">
               <Icon name="splitRight" className="size-3" />
@@ -566,7 +556,7 @@ function FolderRow({ name, path }: { name: string; path: string }): React.JSX.El
   )
 }
 
-/** Tabs of the task with new tab and split buttons; on the Terminal page also the list and inspector toggles. `sessions` are the task's */
+/** Tabs of the task with a new tab button; on the Terminal page also the list and inspector toggles. `sessions` are the task's */
 function TabStrip({
   task,
   label,
@@ -645,25 +635,9 @@ function TabStrip({
       >
         <Icon name="plus" className="size-3.5" />
       </button>
-      {/* Makes the menu behind a long press on + findable */}
-      <button
-        title={`Shell (${actionKeys('terminal.newTab')}), other agents and chats`}
-        aria-label="More new tabs"
-        onClick={showMenu}
-        className="-ml-1 grid h-6 w-3.5 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <Icon name="chevron" className="size-2.5 rotate-90" />
-      </button>
       <span className="min-w-2 flex-1" />
       {lone && <DiagramsButton session={lone} />}
       {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
-      {/* Too narrow to split further; the keys still do it */}
-      <button title="Split right (⌘D)" aria-label="Split right" onClick={() => void splitPane('right', cwd)} className={`${stripButton} @max-sm:hidden`}>
-        <Icon name="splitRight" className="size-3.5" />
-      </button>
-      <button title="Split down (⌘⇧D)" aria-label="Split down" onClick={() => void splitPane('bottom', cwd)} className={`${stripButton} @max-sm:hidden`}>
-        <Icon name="splitDown" className="size-3.5" />
-      </button>
       {page && (
         <button
           title={`${panels.inspector ? 'Hide' : 'Show'} inspector (⌘⌥B)`}

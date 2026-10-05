@@ -13,7 +13,7 @@ import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, remo
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
-import { isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
+import { type ClosedSession, isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseClosedSession, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
 import { isJson, isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
 import { notify as notifyCenter } from '@treeix/app/notifications'
@@ -144,7 +144,7 @@ function notifyAgent(id: string, what: string): void {
 const ACTIVE_WINDOW_MS = 2000
 
 /** A closed session, kept so it can be started again; agent sessions resume their conversation, in their task when it still exists */
-export type ClosedSession = SessionMeta & { id: string; endedAt: number; taskId?: string }
+export type { ClosedSession }
 
 type State = {
   sessions: Session[]
@@ -195,12 +195,6 @@ export const sessionUsage = (ref: TranscriptRef): Promise<SessionUsage | null> =
 
 const HISTORY_KEY = 'terminals.history'
 const HISTORY_LIMIT = 100
-
-function parseClosedSession(value: unknown): ClosedSession | null {
-  const meta = parseMeta(value)
-  const { id, endedAt } = (meta ?? {}) as Partial<ClosedSession>
-  return meta && typeof id === 'string' && typeof endedAt === 'number' ? (meta as ClosedSession) : null
-}
 
 function loadHistory(): ClosedSession[] {
   const parsed = readStored(HISTORY_KEY)
@@ -956,13 +950,11 @@ export function closeTab(taskId: string, tabId: string): void {
 }
 
 export const forgetClosedSession = (id: string): void => setHistory(state.history.filter((entry) => entry.id !== id))
-/** Hides a closed chat from History */
-export const archiveClosedSession = (id: string): void => setHistory(state.history.map((entry) => (entry.id === id ? { ...entry, archived: true } : entry)))
 export const clearClosedSessions = (ids: string[]): void => setHistory(state.history.filter((entry) => !ids.includes(entry.id)))
 
 /** Starts a closed session again in its folder, resuming the agent conversation, as a new tab of its task, and shows it */
 export async function restoreClosedSession(entry: ClosedSession): Promise<string> {
-  const { id: _closedId, endedAt: _endedAt, taskId, archived: _archived, ...closed } = entry
+  const { id: _closedId, endedAt: _endedAt, taskId, ...closed } = entry
   const meta = openable(closed)
   let id: string
   if (meta.view === 'chat') {

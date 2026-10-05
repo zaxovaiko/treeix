@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { BUILTIN_AGENTS } from '@treeix/app/agents'
-import { isDefaultChatTitle, isTerminalReply, newTabEntries, parseMeta, unarchived } from './sessionMeta'
+import { isDefaultChatTitle, isTerminalReply, newTabEntries, parseClosedSession, parseMeta } from './sessionMeta'
 
 const saved = { worktreePath: '/repo', kind: 'claude', title: 'Claude', startedAt: 1, workspaceId: 'w', agentSessionId: 'abc' }
 
@@ -13,8 +13,12 @@ test('parseMeta reads sessions saved before chats as terminals and keeps chats',
   expect(parseMeta(null)).toBeNull()
 })
 
-test('unarchived hides archived history entries', () => {
-  expect(unarchived([{ id: 'a' }, { id: 'b', archived: true }, { id: 'c', archived: false }]).map((entry) => entry.id)).toEqual(['a', 'c'])
+test('parseClosedSession drops entries archived by older versions', () => {
+  const closed = { ...saved, id: 'a', endedAt: 2 }
+  expect(parseClosedSession(closed)?.id).toBe('a')
+  expect(parseClosedSession({ ...closed, archived: false })?.id).toBe('a')
+  expect(parseClosedSession({ ...closed, archived: true })).toBeNull()
+  expect(parseClosedSession(saved)).toBeNull()
 })
 
 test('newTabEntries lists each agent as a terminal, then a single chat', () => {

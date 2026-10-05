@@ -33,7 +33,7 @@ import { TaskList } from './TaskList'
 import { startRename, switchTask, taskLabel } from './taskUi'
 import { openTab, TaskTerminals } from './TerminalPanel'
 import { findInFiles, resolvePath } from './fileLinks'
-import { NEW_TAB_ACTIONS, unarchived } from './sessionMeta'
+import { NEW_TAB_ACTIONS } from './sessionMeta'
 import { type Task, taskOf, uniqueName } from './tasks'
 import {
   type ClosedSession,
@@ -141,7 +141,7 @@ function useTaskScope(): TaskScope {
   const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
   const tasks = state.tasks.filter(include)
   const task = tasks.find((candidate) => candidate.id === state.selected[currentId]) ?? tasks[0] ?? null
-  return { tasks, task, sessions: state.sessions.filter(include), history: unarchived(state.history).filter(include) }
+  return { tasks, task, sessions: state.sessions.filter(include), history: state.history.filter(include) }
 }
 
 /** The latest scope, for keys handled outside React; kept by Root, which is always mounted */

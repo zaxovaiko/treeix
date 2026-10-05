@@ -40,12 +40,10 @@ export function TaskList({
   const [historyOpen, setHistoryOpen] = usePersisted<boolean>('terminal.historyOpen', false)
   const index = tasks.findIndex((task) => task.id === current?.id)
   const { rowProps } = useListNav({ count: tasks.length, index, onSelect: (row) => switchTask(host, tasks[row]) })
-  const waiting = tasks.filter((task) => taskStatus(task, sessions) === 'input').length
   return (
     <>
       <div className="flex h-9 shrink-0 items-center gap-2 pr-1.5 pl-3">
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Groups</span>
-        {waiting > 0 && <span className="shrink-0 rounded-full bg-amber-400/15 px-1.5 text-[10.5px] text-amber-400">{waiting} waiting</span>}
         <span className="flex-1" />
         <button
           title="New group (⌘⇧T)"
