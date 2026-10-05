@@ -19,7 +19,6 @@ export type Layout = {
 
 const SIDES: DockSide[] = ['left', 'right', 'bottom']
 const LAYOUT_KEY = 'layout'
-export const SIZE_LIMITS: Record<DockSide, [number, number]> = { left: [220, 640], right: [220, 640], bottom: [160, 800] }
 /** Where a panel docks before it was ever moved */
 const DEFAULT_SIDE: Record<string, DockSide> = { terminal: 'bottom' }
 

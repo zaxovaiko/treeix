@@ -21,28 +21,30 @@ export function usePersisted<T extends string | number | boolean | null>(key: st
   return [value, persist]
 }
 
+/** A dragged panel keeps this much, and its handle stays this far inside the window, so it can always be grabbed again */
+const GRAB_PX = 24
+
+/** Drags the panel it sits in, from the size it is drawn at, to any size that keeps the panel and its handle on screen */
 export function ResizeHandle({
-  width,
-  min,
-  max,
   onResize,
   edge = 'right'
 }: {
   /** Which edge of the panel the handle sits on; `top` resizes height */
   edge?: 'left' | 'right' | 'top'
-  width: number
-  min: number
-  max: number
   onResize: (size: number) => void
 }): React.JSX.Element {
   const startDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     const handle = event.currentTarget
+    const panel = handle.parentElement?.getBoundingClientRect()
+    if (!panel) return
+    const size = vertical ? panel.height : panel.width
+    const room = { right: window.innerWidth - panel.left, left: panel.right, top: panel.bottom }[edge] - GRAB_PX
     const start = vertical ? event.clientY : event.clientX
     const direction = edge === 'right' ? 1 : -1
     handle.setPointerCapture(event.pointerId)
     handle.onpointermove = (move) => {
       const delta = (vertical ? move.clientY : move.clientX) - start
-      onResize(Math.min(max, Math.max(min, width + direction * delta)))
+      onResize(Math.round(Math.max(GRAB_PX, Math.min(room, size + direction * delta))))
     }
     handle.onpointerup = () => {
       handle.onpointermove = null

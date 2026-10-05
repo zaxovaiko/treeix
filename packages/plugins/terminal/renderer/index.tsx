@@ -201,7 +201,7 @@ function TerminalPage(): React.JSX.Element {
               style={previewMaximized ? undefined : { width: previewWidth }}
               className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}
             >
-              {!previewMaximized && <ResizeHandle edge="left" width={previewWidth} min={320} max={1100} onResize={setPreviewWidth} />}
+              {!previewMaximized && <ResizeHandle edge="left" onResize={setPreviewWidth} />}
               <MarkdownFoldScope>
                 <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
                   <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">

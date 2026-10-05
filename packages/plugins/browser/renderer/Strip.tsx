@@ -130,13 +130,9 @@ export function Strip({ tab, slot, side, onSide }: { tab: BrowserTab; slot: HTML
     <>
       {slot && createPortal(bar, slot)}
       {open && (
-        <div className={`relative shrink-0 border-border ${{ bottom: 'border-t', left: 'border-r', right: 'border-l' }[side]}`}>
-          {across ? (
-            <ResizeHandle edge={side === 'left' ? 'right' : 'left'} width={width} min={200} max={Math.max(200, window.innerWidth - 320)} onResize={setWidth} />
-          ) : (
-            <ResizeHandle edge="top" width={height} min={80} max={Math.max(80, window.innerHeight - 240)} onResize={setHeight} />
-          )}
-          <div style={across ? { width, height: '100%' } : { height }} className="overflow-y-auto">
+        <div style={across ? { width } : { height }} className={`relative shrink-0 border-border ${{ bottom: 'border-t', left: 'border-r', right: 'border-l' }[side]}`}>
+          {across ? <ResizeHandle edge={side === 'left' ? 'right' : 'left'} onResize={setWidth} /> : <ResizeHandle edge="top" onResize={setHeight} />}
+          <div className="h-full overflow-y-auto">
             {detail && guestId !== null && <RequestDetail entry={detail} guestId={guestId} onClose={() => setDetailId(null)} />}
             {!detail && rows.length === 0 && <div className="px-5 py-4 text-xs text-muted-foreground">Nothing yet. Tick a row to hand it to the agent</div>}
             {!detail &&

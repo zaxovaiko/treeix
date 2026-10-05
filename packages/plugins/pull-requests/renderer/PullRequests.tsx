@@ -1964,7 +1964,7 @@ export function PullRequestDetailView({
             }}
           />
         </div>
-        <ResizeHandle width={filesWidth} min={180} max={560} onResize={setFilesWidth} />
+        <ResizeHandle onResize={setFilesWidth} />
       </nav>
       {allFiles ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col select-text" onContextMenu={symbols.onContextMenu}>

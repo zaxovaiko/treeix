@@ -241,7 +241,6 @@ export function Zone({ id, className = '', style, children }: { id: ZoneId; clas
   )
 }
 
-const LIST_LIMITS = { list: [180, 640], inspector: [220, 640] } as const
 /** In a narrow page, like one opened beside another, main keeps this much: side panels shrink to SIDE_MIN, then the inspector and then the list hide */
 const MAIN_MIN = 240
 const SIDE_MIN = 150
@@ -311,26 +310,18 @@ export function PageLayout({
   return (
     <div ref={ref} className="flex min-h-0 min-w-0 flex-1">
       {showList && (
-        <Zone id="list" style={{ width: listSize, minWidth: SIDE_MIN }} className="border-r border-border bg-sidebar">
+        <Zone id="list" style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }} className="border-r border-border bg-sidebar">
           {list}
-          {resizable && <ResizeHandle width={listSize} min={LIST_LIMITS.list[0]} max={LIST_LIMITS.list[1]} onResize={(next) => setPagePanels(page, { listWidth: next })} />}
+          {resizable && <ResizeHandle onResize={(next) => setPagePanels(page, { listWidth: next })} />}
         </Zone>
       )}
       <Zone id="main" style={{ minWidth: Math.min(MAIN_MIN, width) }} className="flex-1 bg-background">
         {claimDock && host ? host.withDock(main) : main}
       </Zone>
       {showInspector && (
-        <Zone id="inspector" style={{ width: inspectorSize, minWidth: SIDE_MIN }} className="border-l border-border bg-card">
+        <Zone id="inspector" style={{ width: inspectorSize, minWidth: Math.min(SIDE_MIN, inspectorSize) }} className="border-l border-border bg-card">
           {inspector}
-          {resizable && (
-            <ResizeHandle
-              edge="left"
-              width={inspectorSize}
-              min={LIST_LIMITS.inspector[0]}
-              max={LIST_LIMITS.inspector[1]}
-              onResize={(next) => setPagePanels(page, { inspectorWidth: next })}
-            />
-          )}
+          {resizable && <ResizeHandle edge="left" onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />}
         </Zone>
       )}
     </div>

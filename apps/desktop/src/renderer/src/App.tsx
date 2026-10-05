@@ -52,7 +52,7 @@ import { copyText, type MenuEntry, openMenu } from './contextMenu'
 import type { Command } from './CommandPalette'
 import { AgentCommentsDrawer, CommentCard, CommentDraft, CommentsPanel, orderRange, useCodeDrag } from './Comments'
 import { addSent, loadSent, restoreSent, saveSent, type SentBatch } from './sentComments'
-import { type DockSide, DropZones, type PanelId, type PanelInfo, PanelToggle, SIZE_LIMITS, useLayout } from './Dock'
+import { type DockSide, DropZones, type PanelId, type PanelInfo, PanelToggle, useLayout } from './Dock'
 import { ErrorBoundary } from './ErrorBoundary'
 import { MarkdownFoldScope } from './LazyMarkdown'
 import { HtmlPreview, isHtmlPath, isPreviewPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from './MarkdownPreview'
@@ -1387,7 +1387,6 @@ function App(): React.JSX.Element {
     const info = panel ? panelInfo(panel) : undefined
     if (!panel || !info || shell.zen) return null
     const size = dock.layout.sizes[side]
-    const [min, max] = SIZE_LIMITS[side]
     const frame = { left: 'border-r', right: 'border-l', bottom: 'border-t' }[side]
     const aside = (
       <aside
@@ -1395,7 +1394,7 @@ function App(): React.JSX.Element {
         style={side === 'bottom' ? { height: size } : { width: size }}
         className={`relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card ${frame} ${side === 'bottom' ? '' : 'flex-1'}`}
       >
-        <ResizeHandle edge={RESIZE_EDGE[side]} width={size} min={min} max={max} onResize={(next) => dock.resize(side, next)} />
+        <ResizeHandle edge={RESIZE_EDGE[side]} onResize={(next) => dock.resize(side, next)} />
         <div className="min-h-0 flex-1">
           <ErrorBoundary label={info.label} resetKey={panel}>
             <Suspense fallback={null}>{renderPanel(panel, side)}</Suspense>
@@ -2014,7 +2013,7 @@ function App(): React.JSX.Element {
                     badge={(path) => worktreeComments.some((comment) => comment.filePath === path) && <Icon name="comment" className="size-3 text-muted-foreground" />}
                   />
                 </div>
-                <ResizeHandle width={filesWidth} min={180} max={520} onResize={setFilesWidth} />
+                <ResizeHandle onResize={setFilesWidth} />
               </nav>
             )}
 
@@ -2386,7 +2385,7 @@ function App(): React.JSX.Element {
                       style={resizable ? { width: splitWidth } : undefined}
                       className={`relative flex min-h-0 min-w-0 flex-col border-l border-border ${resizable ? 'shrink-0' : 'flex-1'}`}
                     >
-                      {resizable && <ResizeHandle edge="left" width={splitWidth} min={320} max={Math.max(320, window.innerWidth - 360)} onResize={setSplitWidth} />}
+                      {resizable && <ResizeHandle edge="left" onResize={setSplitWidth} />}
                       <div
                         className={`flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card pr-1 pl-2.5 text-xs ${focused ? 'text-foreground' : 'text-muted-foreground'}`}
                       >
