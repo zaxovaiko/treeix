@@ -8,3 +8,4 @@ Short records of significant design decisions: the context, what was decided, an
 - [4. Keep visited plugin pages mounted](0004-keep-visited-plugin-pages-mounted.md) - Accepted
 - [5. Monaco for editable files](0005-monaco-for-editable-files.md) - Accepted
 - [6. AI Hub: personas and workflows](0006-ai-hub-personas-and-workflows.md) - Accepted
+- [7. Voice dictation](0007-voice-dictation-and-transcription.md) - Accepted

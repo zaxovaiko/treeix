@@ -14,6 +14,8 @@ files:
   - out/**
   - resources/menuBarGlyph.png
   - native/mac-window/build/Release/*.node
+  # The dictation plugin's helper: hotkey, microphone, speech recognition and pasting (native/voice)
+  - native/voice/bin/treeix-voice
   - node_modules/**
   - package.json
   # node-pty ships a 14MB prebuild per platform and only ever loads its own. Packaging for Windows needs this revisited.
@@ -30,6 +32,7 @@ files:
 asarUnpack:
   - node_modules/node-pty/**
   - native/mac-window/build/Release/*.node
+  - native/voice/bin/treeix-voice
 win:
   executableName: treeix
 nsis:
@@ -49,6 +52,7 @@ mac:
   extendInfo:
     NSDocumentsFolderUsageDescription: Treeix scans your Documents folder for git repositories.
     NSDownloadsFolderUsageDescription: Treeix scans your Downloads folder for git repositories.
+    NSMicrophoneUsageDescription: Treeix listens while you hold the dictation key and turns your speech into text on this Mac.
     # Open With > Treeix for any text file, as an alternative that never takes over the default app.
     # .ts and .mts are typed as MPEG-2 video by macOS, so source extensions are listed by name too.
     CFBundleDocumentTypes:
@@ -121,6 +125,9 @@ mas:
   entitlementsInherit: build/entitlements.mas.inherit.plist
   # Download from developer.apple.com (Mac App Store distribution profile for com.dyvertex.treeix)
   provisioningProfile: build/embedded.provisionprofile
+  # Watching keys in other apps and pasting into them can't work in the sandbox
+  files:
+    - '!native/voice/**'
 linux:
   target:
     - AppImage

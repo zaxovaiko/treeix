@@ -117,6 +117,7 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 | [`themes`](packages/plugins/themes) | on | Light and dark themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized |
 | [`diagrams`](packages/plugins/diagrams) | on | Mermaid code blocks, loaded on the first diagram |
 | [`keep-awake`](packages/plugins/keep-awake) | on | Keeps the Mac awake while an agent is working, optionally with the lid closed |
+| [`dictation`](packages/plugins/dictation) | off | Hold a key, speak, and the text is pasted into any app; speech recognised on the Mac, optional cleanup by a local model |
 | [`jira`](packages/plugins/jira) | off | Jira work items, status changes, worktree per item, sending items to agents |
 | [`confluence`](packages/plugins/confluence) | off | Confluence pages, search, page trees, link previews |
 

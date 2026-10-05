@@ -22,7 +22,8 @@
     "dist:mas": "bun run build && electron-builder --mac mas --publish never",
     "release:mac": "bun run build && electron-builder --mac dmg zip --publish never",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper && node-gyp rebuild -C native/mac-window && sh scripts/dev-app-name.sh",
-    "build:native": "node-gyp rebuild -C native/mac-window"
+    "build:native": "node-gyp rebuild -C native/mac-window",
+    "build:voice": "swift build -c release --package-path native/voice && mkdir -p native/voice/bin && cp \"$(swift build -c release --package-path native/voice --show-bin-path)/treeix-voice\" native/voice/bin/"
   },
   "dependencies": {
     "@electron-toolkit/utils": "4.0.0",

@@ -47,6 +47,9 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 
+      # The dictation helper, a Swift binary shipped unpacked beside the asar
+      - run: bun run --cwd apps/desktop build:voice
+
       # Signed builds are the ones the app can update itself into: macOS only replaces a build whose
       # Developer ID signature matches. Without the secrets this still ships a DMG, just one people install by hand.
       - name: Check for signing secrets

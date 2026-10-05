@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-dictation",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "dictation",
+    "name": "Dictation",
+    "description": "Hold a key, speak, and the text lands in whatever app has focus. Speech is recognised on the Mac; a local model can tidy it up.",
+    "enabledByDefault": false
+  }
+}
