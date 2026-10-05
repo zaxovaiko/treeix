@@ -210,7 +210,7 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
         })}
         {entries.length > MAX_ROWS && <div className="px-2 text-[11px] text-muted-foreground">{entries.length - MAX_ROWS} more in the AI Hub</div>}
       </div>
-      <div className="col-span-2 flex items-center gap-2 border-t border-border px-1 pt-1.5 text-muted-foreground">
+      <div className="col-span-2 flex items-center gap-2 border-t border-border px-1 pt-1.5">
         <button onClick={() => go(() => host.setActiveTab(TAB_ID))} className="flex h-[26px] items-center gap-1.5 rounded-md bg-primary px-2.5 font-medium text-primary-foreground">
           <Icon name="sparkles" />
           Open AI Hub
@@ -224,7 +224,6 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
             Ask an agent
           </button>
         )}
-        <span className="ml-auto text-[11px]">Click the button to open, Esc closes</span>
       </div>
     </div>
   )

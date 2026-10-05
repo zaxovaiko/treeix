@@ -8,7 +8,7 @@ import { browserSettings } from './settings'
 
 const bridge = createBridge('browser')
 
-export const importLabel = (info: ImportInfo): string => (info ? `${info.browser}, ${new Date(info.at).toLocaleDateString()}` : 'None')
+const importLabel = (info: ImportInfo): string => (info ? `${info.browser}, ${new Date(info.at).toLocaleDateString()}` : 'None')
 
 const field = 'h-6 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border outline-none focus:ring-primary'
 
