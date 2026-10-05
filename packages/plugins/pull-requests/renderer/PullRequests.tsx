@@ -1596,7 +1596,7 @@ export function PullRequestDetailView({
             <span className="ml-auto min-w-0 shrink-[2] truncate font-sans text-[11px] text-muted-foreground">
               {!collapsed && preview ? `Rendered from ${pr.sourceBranch}` : ''}
             </span>
-            {isMarkdownPath(patch.path) && !collapsed && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+            {isMarkdownPath(patch.path) && !collapsed && <PreviewToggle path={patch.path} on={markdownPreview} onChange={setMarkdownPreview} />}
             <button
               onClick={() => setFileCommentPath(fileCommentPath === patch.path ? null : patch.path)}
               title={`Comment on the whole file on ${providerName(pr)} (c)`}

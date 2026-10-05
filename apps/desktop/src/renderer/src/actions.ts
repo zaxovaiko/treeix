@@ -57,7 +57,7 @@ export const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'wt.open', label: 'Open the file at the line to edit', section: 'Worktrees', page: 'worktrees', keys: key('KeyO') },
   { id: 'wt.copyPath', label: 'Copy the file or worktree path', section: 'Worktrees', page: 'worktrees', keys: key('KeyY') },
   { id: 'wt.diffStyle', label: 'Split or unified diff', section: 'Worktrees', page: 'worktrees', keys: key('KeyW') },
-  { id: 'wt.markdown', label: 'Markdown preview', section: 'Worktrees', page: 'worktrees', keys: key('KeyM') },
+  { id: 'wt.markdown', label: 'Markdown or HTML preview', section: 'Worktrees', page: 'worktrees', keys: key('KeyM') },
   { id: 'wt.history', label: 'Edit history of the open file', section: 'Worktrees', page: 'worktrees', keys: key('KeyH') },
   { id: 'wt.terminal', label: 'Terminal in the worktree', section: 'Worktrees', page: 'worktrees', keys: key('KeyT') },
   { id: 'wt.focusProject', label: 'Focus on the project, in the list', section: 'Worktrees', page: 'worktrees', keys: key('KeyF') },

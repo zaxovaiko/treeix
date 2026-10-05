@@ -21,7 +21,7 @@ import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { useService } from '@treeix/app/plugins'
-import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
+import { HtmlPreview, isHtmlPath, isPreviewPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
 import { KindBadge, worktreeLabel } from '@treeix/app/sessionUi'
 import { digitPressed } from '@treeix/app/settings'
 import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
@@ -227,7 +227,7 @@ function TerminalPage(): React.JSX.Element {
                       )
                     })}
                   </div>
-                  {isMarkdownPath(preview.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+                  {isPreviewPath(preview.path) && <PreviewToggle path={preview.path} on={markdownPreview} onChange={setMarkdownPreview} />}
                   <IconButton
                     label={previewMaximized ? 'Show the terminals' : 'Fill the page'}
                     active={previewMaximized}
@@ -239,7 +239,9 @@ function TerminalPage(): React.JSX.Element {
                     <Icon name="close" className="size-3" />
                   </IconButton>
                 </div>
-                {markdownPreview && isMarkdownPath(preview.path) ? (
+                {markdownPreview && isHtmlPath(preview.path) ? (
+                  <HtmlPreview path={`${previewRoot}/${preview.path}`} reloadKey={preview.path} />
+                ) : markdownPreview && isPreviewPath(preview.path) ? (
                   <div className="min-h-0 flex-1 overflow-auto">
                     <MarkdownPreview loadKey={`${previewRoot}:${preview.path}`} load={() => window.api.readFile(previewRoot, preview.path)} />
                   </div>

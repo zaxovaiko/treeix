@@ -54,7 +54,7 @@ import { addSent, loadSent, restoreSent, saveSent, type SentBatch } from './sent
 import { type DockSide, DropZones, type PanelId, type PanelInfo, PanelToggle, SIZE_LIMITS, useLayout } from './Dock'
 import { ErrorBoundary } from './ErrorBoundary'
 import { MarkdownFoldScope } from './LazyMarkdown'
-import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from './MarkdownPreview'
+import { HtmlPreview, isHtmlPath, isPreviewPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from './MarkdownPreview'
 import { emptyHistory, recordPlace, stepPlace } from './navigationHistory'
 import { Explorer, FolderExplorer } from './Explorer'
 import { matcherFor } from './searchMatcher'
@@ -1089,7 +1089,7 @@ function App(): React.JSX.Element {
       return act(() => showDiff(files[Math.max(0, Math.min(files.length - 1, at + (id === 'wt.nextFile' ? 1 : -1)))].path))
     }
     if (id === 'wt.copyPath' && shownPath) return act(() => (copyText(shownPath), flash(`Copied ${shownPath}`)))
-    if (id === 'wt.markdown' && shownPath && isMarkdownPath(shownPath)) return act(() => setMarkdownPreview(!markdownPreview))
+    if (id === 'wt.markdown' && shownPath && isPreviewPath(shownPath)) return act(() => setMarkdownPreview(!markdownPreview))
     if (id === 'wt.history' && viewer) return act(() => setHistoryFor({ worktreePath: selected, path: viewer.path }))
     // An open file handles the comment keys itself
     if (viewer || !file) return
@@ -1885,12 +1885,14 @@ function App(): React.JSX.Element {
                         </div>
                         <CopyButton label="Copy path (y)" text={() => `${worktree.path}/${viewer.path}`} />
                         {changedPaths.has(viewer.path) && <HintButton title="Back to the diff (esc)" label="Diff" hint="esc" onClick={() => showDiff(viewer.path)} />}
-                        {isMarkdownPath(viewer.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+                        {isPreviewPath(viewer.path) && <PreviewToggle path={viewer.path} on={markdownPreview} onChange={setMarkdownPreview} />}
                         <IconButton label="Close all files" onClick={() => (setEditorTabs([]), setViewer(null))}>
                           <Icon name="close" className="size-3" />
                         </IconButton>
                       </div>
-                      {markdownPreview && isMarkdownPath(viewer.path) ? (
+                      {markdownPreview && isHtmlPath(viewer.path) ? (
+                        <HtmlPreview path={`${worktree.path}/${viewer.path}`} reloadKey={`${fileReload}`} />
+                      ) : markdownPreview && isPreviewPath(viewer.path) ? (
                         <div className="min-h-0 flex-1 overflow-auto">
                           {/* Keyed by reload so a save from the editor or an agent shows up after toggling back */}
                           <MarkdownPreview loadKey={`${worktree.path}:${viewer.path}:${fileReload}`} load={() => window.api.readFile(worktree.path, viewer.path)} />
@@ -1917,11 +1919,13 @@ function App(): React.JSX.Element {
                         </span>
                         <CopyButton label="Copy path (y)" text={() => `${worktree.path}/${file.path}`} />
                         <span className="min-w-2 flex-1" />
-                        {isMarkdownPath(file.path) && <PreviewToggle on={markdownPreview} onChange={setMarkdownPreview} />}
+                        {isPreviewPath(file.path) && <PreviewToggle path={file.path} on={markdownPreview} onChange={setMarkdownPreview} />}
                         {/* The diff is for reading and commenting; editing happens in the file itself */}
                         <HintButton title="Open the file to edit (o)" icon="pencil" label="Edit" hint="o" onClick={() => setViewer({ path: file.path, line: cursorFileLine() })} />
                       </div>
-                      {markdownPreview && isMarkdownPath(file.path) ? (
+                      {markdownPreview && isHtmlPath(file.path) ? (
+                        <HtmlPreview path={`${worktree.path}/${file.path}`} reloadKey={file.path} />
+                      ) : markdownPreview && isPreviewPath(file.path) ? (
                         <div className="min-h-0 flex-1 overflow-auto">
                           <MarkdownPreview loadKey={`${worktree.path}:${file.path}`} load={() => window.api.readFile(worktree.path, file.path)} />
                         </div>

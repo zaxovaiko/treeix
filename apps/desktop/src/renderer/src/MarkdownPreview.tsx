@@ -4,17 +4,21 @@ import { LazyMarkdown, MarkdownFoldButton } from './LazyMarkdown'
 import { EmptyState, errorMessage, usePersisted } from './ui'
 
 export const isMarkdownPath = (path: string): boolean => /\.(md|mdx|markdown)$/i.test(path)
+export const isHtmlPath = (path: string): boolean => /\.html?$/i.test(path)
+/** Files with a rendered view beside their source */
+export const isPreviewPath = (path: string): boolean => isMarkdownPath(path) || isHtmlPath(path)
 
 /** Remembered across files and restarts, so the preview stays on while moving between docs */
 export const useMarkdownPreview = (): [boolean, (on: boolean) => void] => usePersisted<boolean>('markdown.preview', false)
 
 /** Also holds the fold all button of the preview, which needs a MarkdownFoldScope around the header and the preview */
-export function PreviewToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }): React.JSX.Element {
+export function PreviewToggle({ path, on, onChange }: { path: string; on: boolean; onChange: (on: boolean) => void }): React.JSX.Element {
+  const html = isHtmlPath(path)
   return (
     <>
-      {on && <MarkdownFoldButton />}
+      {on && !html && <MarkdownFoldButton />}
       <button
-        title={on ? 'Show source' : 'Preview markdown'}
+        title={on ? 'Show source' : html ? 'Preview page' : 'Preview markdown'}
         aria-pressed={on}
         onClick={() => onChange(!on)}
         className={`grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground ${on ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
@@ -23,6 +27,15 @@ export function PreviewToggle({ on, onChange }: { on: boolean; onChange: (on: bo
       </button>
     </>
   )
+}
+
+/**
+ * A local HTML file as a page, in a webview hardened like the built-in browser's: its scripts run and its relative CSS and images load, while none of it reaches the app.
+ * `reloadKey` reloads it, so saves show up
+ */
+export function HtmlPreview({ path, reloadKey }: { path: string; reloadKey: string }): React.JSX.Element {
+  const url = `file://${encodeURI(path).replace(/[?#]/g, encodeURIComponent)}`
+  return <webview key={reloadKey} src={url} className="min-h-0 w-full flex-1 bg-white" />
 }
 
 /** Rendered markdown of a file; `load` runs again whenever `loadKey` changes */
