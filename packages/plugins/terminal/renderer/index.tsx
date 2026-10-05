@@ -166,7 +166,9 @@ function TerminalPage(): React.JSX.Element {
   const preview = previews[currentId] ?? null
   // Previews saved before tabs existed have no tab of their own
   const openTabs = fileTabs[currentId]?.length ? fileTabs[currentId] : preview ? [preview] : []
-  const [previewWidth, setPreviewWidth] = usePersisted<number>('terminalTab.previewWidth', 560)
+  // A share of the page rather than a width, so in a narrow page, like one opened beside another, the file never pushes the terminals out
+  const [previewShare, setPreviewShare] = usePersisted<number>('terminalTab.previewShare', 0.4)
+  const row = useRef<HTMLDivElement>(null)
   // The file opener is registered once, so it reads the explorer's folder through a ref
   const explorerRoot = useRef(host.explorerRoot)
   explorerRoot.current = host.explorerRoot
@@ -183,8 +185,8 @@ function TerminalPage(): React.JSX.Element {
       listWidth={240}
       list={<TaskList tasks={tasks} current={task} sessions={sessions} repos={host.repos} onNew={() => startTask(host)} history={task ? historyOf(history, task) : history} />}
       main={
-        <div className="flex min-h-0 min-w-0 flex-1">
-          <div className={`min-w-0 flex-1 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
+        <div ref={row} className="flex min-h-0 min-w-0 flex-1">
+          <div style={{ flex: preview ? 1 - previewShare : 1 }} className={`min-w-6 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
             <TaskTerminals
               task={task}
               label={label}
@@ -198,10 +200,10 @@ function TerminalPage(): React.JSX.Element {
           </div>
           {preview && (
             <aside
-              style={previewMaximized ? undefined : { width: previewWidth }}
-              className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? 'flex-1' : 'shrink-0 border-l'}`}
+              style={{ flex: previewMaximized ? 1 : previewShare }}
+              className={`relative flex min-w-0 flex-col border-border bg-background ${previewMaximized ? '' : 'border-l'}`}
             >
-              {!previewMaximized && <ResizeHandle edge="left" onResize={setPreviewWidth} />}
+              {!previewMaximized && <ResizeHandle edge="left" onResize={(width) => row.current && setPreviewShare(Math.min(1, width / row.current.clientWidth))} />}
               <MarkdownFoldScope>
                 <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
                   <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
