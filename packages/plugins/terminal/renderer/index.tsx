@@ -690,7 +690,8 @@ const plugin: RendererPlugin = {
       reveal: (id) => {
         revealSession(id)
         setTimeout(() => focusSession(id), 50)
-      }
+      },
+      showFile: (root, path) => setPreview({ root, path, line: null })
     }
   },
   toolMarks: {

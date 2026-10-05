@@ -107,7 +107,7 @@ export type HotkeyOptions = {
   only: boolean
 }
 
-export type ContextMenuItem = { type: 'separator' } | { type?: 'item'; id: string; label: string; enabled?: boolean; accelerator?: string }
+export type ContextMenuItem = { type: 'separator' } | { type?: 'item'; id: string; label: string; enabled?: boolean; accelerator?: string; checked?: boolean }
 
 /**
  * Where the app is in getting its next version. `unsupported` covers builds that update elsewhere:
@@ -200,6 +200,10 @@ export type Api = {
   onCloseShortcut: (listener: () => void) => () => void
   /** Settings… in the app menu */
   onOpenSettings: (listener: () => void) => () => void
+  /** Files opened with Treeix from Finder or the Dock, including the one that launched it */
+  onOpenFiles: (listener: (paths: string[]) => void) => () => void
+  /** Opens the files among `paths` as if opened with Treeix; folders are skipped */
+  openFiles: (paths: string[]) => void
   /** The actions the native menu should offer; sent again whenever a plugin loads or a key is rebound */
   setMenuActions: (actions: { id: string; label: string; section: string; accelerator?: string }[]) => void
   /** A native menu item was picked; the id names an action with a registered runner */

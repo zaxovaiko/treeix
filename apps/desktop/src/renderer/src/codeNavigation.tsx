@@ -54,7 +54,8 @@ export function openSymbolMenu(
   worktreePath: string,
   path: string,
   onNavigate: Navigate,
-  leading: MenuEntry[] = []
+  leading: MenuEntry[] = [],
+  trailing: MenuEntry[] = []
 ): void {
   openMenu(event, [
     ...leading,
@@ -65,7 +66,8 @@ export function openSymbolMenu(
       run: () => onNavigate(kind, target, worktreePath)
     })),
     null,
-    { label: `Copy "${target.symbol}"`, run: () => copyText(target.symbol) }
+    { label: `Copy "${target.symbol}"`, run: () => copyText(target.symbol) },
+    ...trailing
   ])
 }
 

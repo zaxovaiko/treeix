@@ -998,6 +998,35 @@ function App(): React.JSX.Element {
   openSettingsRef.current = openSettings
   // A preload from before this menu item (dev window not reloaded yet) has no listener
   useEffect(() => window.api.onOpenSettings?.(() => openSettingsRef.current()), [])
+  /** A file from Finder, opened with Treeix or dropped on the window: beside the terminals, rooted at its worktree when it is in one */
+  const openFromFinder = (absolute: string): void => {
+    const sessions = findService('sessions')
+    if (!sessions) return flash('Turn on the Terminal plugin to open files from Finder')
+    const worktrees = (repos ?? []).flatMap((repo) => repo.worktrees.map((candidate) => candidate.path))
+    const root = worktrees.filter((path) => absolute.startsWith(`${path}/`)).sort((a, b) => b.length - a.length)[0] ?? absolute.slice(0, absolute.lastIndexOf('/'))
+    sessions.showFile(root, absolute.slice(root.length + 1))
+    goPage('terminal')
+  }
+  const openFromFinderRef = useRef(openFromFinder)
+  openFromFinderRef.current = openFromFinder
+  useEffect(() => window.api.onOpenFiles?.((paths) => paths.forEach((path) => openFromFinderRef.current(path))), [])
+  useEffect(() => {
+    const dragOver = (event: DragEvent): void => {
+      if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
+    }
+    // Drops a page handles itself, like paths typed into a terminal, arrive here already prevented
+    const drop = (event: DragEvent): void => {
+      if (event.defaultPrevented || !event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault()
+      window.api.openFiles([...event.dataTransfer.files].map((file) => window.api.pathForFile(file)))
+    }
+    window.addEventListener('dragover', dragOver)
+    window.addEventListener('drop', drop)
+    return () => {
+      window.removeEventListener('dragover', dragOver)
+      window.removeEventListener('drop', drop)
+    }
+  }, [])
   useEffect(() => window.api.onRunAction?.((id) => runAction(id)), [])
   useEffect(() => void refreshToolStatus(), [])
   // The native menu is rebuilt from whatever is runnable now, so a plugin loading or a key rebound updates it
@@ -1671,6 +1700,13 @@ function App(): React.JSX.Element {
       label: settings.editorMinimap ? 'Hide editor minimap' : 'Show editor minimap',
       icon: 'code',
       run: () => updateSettings({ editorMinimap: !settings.editorMinimap })
+    },
+    {
+      id: 'wordWrap',
+      group: 'Actions',
+      label: settings.editorWordWrap ? 'Turn off word wrap' : 'Turn on word wrap',
+      icon: 'code',
+      run: () => updateSettings({ editorWordWrap: !settings.editorWordWrap })
     },
     ...(worktreeComments.length > 0
       ? ([

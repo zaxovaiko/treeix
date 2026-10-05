@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from 'electron'
+import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import type { CodePosition, ContextMenuItem, HotkeyOptions, NavigationKind, SearchOptions, SymbolTarget } from '../shared/types'
@@ -73,7 +74,22 @@ function createWindow(): void {
   else window.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
+// Files opened with Treeix (Open With, the Dock icon, a drop on the window) wait here until the page takes them; it can still be loading
+const openedFiles: string[] = []
+function openFiles(paths: string[]): void {
+  openedFiles.push(...paths.filter((path) => statSync(path, { throwIfNoEntry: false })?.isFile()))
+  const window = BrowserWindow.getAllWindows()[0]
+  if (window) window.webContents.send('files-opened')
+  else if (app.isReady()) createWindow()
+}
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  openFiles([path])
+})
+
 app.whenReady().then(() => {
+  ipcMain.handle('takeOpenedFiles', () => openedFiles.splice(0))
+  ipcMain.on('openFiles', (_, paths: unknown) => Array.isArray(paths) && openFiles(paths.filter((path): path is string => typeof path === 'string')))
   if (headless && process.platform === 'darwin') app.setActivationPolicy('accessory')
   // Packaged builds take the icon from the bundle; dev runs inside the stock Electron app
   if (is.dev) app.dock?.setIcon(join(__dirname, '../../resources/icon.png'))

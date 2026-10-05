@@ -45,9 +45,67 @@ mac:
   icon: build/icon.icon
   entitlementsInherit: build/entitlements.mac.plist
   category: public.app-category.developer-tools
+  # A map: a list here lands in Info.plist as keys "0", "1", ... that macOS never reads
   extendInfo:
-    - NSDocumentsFolderUsageDescription: Treeix scans your Documents folder for git repositories.
-    - NSDownloadsFolderUsageDescription: Treeix scans your Downloads folder for git repositories.
+    NSDocumentsFolderUsageDescription: Treeix scans your Documents folder for git repositories.
+    NSDownloadsFolderUsageDescription: Treeix scans your Downloads folder for git repositories.
+    # Open With > Treeix for any text file, as an alternative that never takes over the default app.
+    # .ts and .mts are typed as MPEG-2 video by macOS, so source extensions are listed by name too.
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Text
+        CFBundleTypeRole: Editor
+        LSHandlerRank: Alternate
+        LSItemContentTypes: [public.text, public.source-code, public.script, public.json, public.xml, public.yaml]
+      - CFBundleTypeName: Source code
+        CFBundleTypeRole: Editor
+        LSHandlerRank: Alternate
+        CFBundleTypeExtensions:
+          [
+            ts,
+            tsx,
+            mts,
+            cts,
+            js,
+            jsx,
+            mjs,
+            cjs,
+            json,
+            jsonc,
+            md,
+            mdx,
+            txt,
+            css,
+            scss,
+            html,
+            vue,
+            svelte,
+            yml,
+            yaml,
+            toml,
+            ini,
+            env,
+            sh,
+            zsh,
+            py,
+            rb,
+            go,
+            rs,
+            java,
+            kt,
+            swift,
+            c,
+            h,
+            cpp,
+            hpp,
+            cs,
+            php,
+            sql,
+            graphql,
+            xml,
+            csv,
+            log,
+            lock
+          ]
   target:
     - dmg
     - zip

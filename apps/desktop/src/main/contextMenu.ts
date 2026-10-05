@@ -9,6 +9,9 @@ export function showContextMenu(sender: WebContents, items: ContextMenuItem[]): 
         ? { type: 'separator' }
         : {
             label: item.label,
+            // A checkmark only on items that toggle something
+            type: item.checked === undefined ? 'normal' : 'checkbox',
+            checked: item.checked,
             enabled: item.enabled ?? true,
             accelerator: item.accelerator,
             registerAccelerator: false,

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { LineRange } from '../../../shared/comments'
 import type { SymbolTarget } from '../../../shared/types'
 import { routeAppChord } from '../actionRunners'
+import { getSettings, updateSettings } from '../settings'
 import { type Navigate, openSymbolMenu, setActiveTarget } from '../codeNavigation'
 import { copyText, type MenuEntry, openMenu } from '../contextMenu'
 import type { CodeEditorHandle } from './CodeEditor'
@@ -51,8 +52,10 @@ export function useEditorNavigation(handle: CodeEditorHandle | null, worktreePat
         const selection = selectedText(handle)
         // Monaco's selection isn't a DOM selection, so openMenu can't offer to copy it by itself
         const copySelection: MenuEntry[] = selection ? [{ label: 'Copy selection', accelerator: 'CmdOrCtrl+C', run: () => copyText(selection) }, null] : []
-        if (symbol) openSymbolMenu(event.browserEvent, symbol, worktreePath, path, (...args) => navigate.current(...args), copySelection)
-        else if (selection) openMenu(event.browserEvent, copySelection)
+        const wrap = getSettings().editorWordWrap
+        const view: MenuEntry[] = [null, { label: 'Word wrap', checked: wrap, run: () => updateSettings({ editorWordWrap: !wrap }) }]
+        if (symbol) openSymbolMenu(event.browserEvent, symbol, worktreePath, path, (...args) => navigate.current(...args), copySelection, view)
+        else openMenu(event.browserEvent, [...copySelection, ...view])
       })
     ]
     return () => subscriptions.forEach((subscription) => subscription.dispose())

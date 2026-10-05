@@ -120,6 +120,8 @@ export type SessionsService = {
   runCommand: (cwd: string, command: string) => Promise<string>
   /** Shows the session in the terminal area and focuses it */
   reveal: (id: string) => void
+  /** Shows a file beside the terminals; `path` is relative to `root` */
+  showFile: (root: string, path: string) => void
 }
 
 /**

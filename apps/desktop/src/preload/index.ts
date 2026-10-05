@@ -66,6 +66,14 @@ const api: Api = {
     ipcRenderer.on('open-settings', handler)
     return () => ipcRenderer.removeListener('open-settings', handler)
   },
+  onOpenFiles: (listener) => {
+    const take = (): void => void ipcRenderer.invoke('takeOpenedFiles').then((paths: string[]) => paths.length > 0 && listener(paths))
+    ipcRenderer.on('files-opened', take)
+    // Files opened before the page listened, like the one that launched the app, wait in the main process
+    take()
+    return () => ipcRenderer.removeListener('files-opened', take)
+  },
+  openFiles: (paths) => ipcRenderer.send('openFiles', paths),
   setMenuActions: (actions) => ipcRenderer.send('setMenuActions', actions),
   onRunAction: (listener) => {
     const handler = (_: IpcRendererEvent, id: string): void => listener(id)
