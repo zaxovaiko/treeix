@@ -1,0 +1,447 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Treeix - AI Hub overlay mock</title>
+<style>
+  :root {
+    --bg: #000; --popover: #121212; --fg: #f5f5f5; --muted: #848484;
+    --border: rgb(255 255 255 / 6%); --input: rgb(255 255 255 / 8%); --accent: rgb(255 255 255 / 4%);
+    --primary: #4f5ff0; --emerald: #34d399; --amber: #fbbf24; --red: #f87171;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #1c1c1c; font: 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--fg); padding: 24px; -webkit-font-smoothing: antialiased; user-select: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: default; padding: 0; }
+  svg.i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .window { position: relative; width: 1440px; height: 900px; margin: 0 auto; background: var(--bg); border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgb(0 0 0 / 60%); }
+  .muted { color: var(--muted); }
+  .kbd { font: 500 10.5px/1 -apple-system, system-ui, sans-serif; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; }
+
+  /* title bar: h-9, tabs h-6 rounded-md text-xs */
+  .titlebar { position: relative; z-index: 40; height: 36px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .lights { display: flex; gap: 8px; width: 80px; padding-left: 6px; } .lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .iconbtn { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); }
+  .iconbtn:hover { background: var(--accent); color: var(--fg); }
+  .iconbtn.on { color: var(--fg); background: rgb(255 255 255 / 8%); }
+  /* the strip scrolls sideways, so highlights are inset rings: nothing reaches outside a tab to be clipped */
+  .strip { display: flex; align-items: center; gap: 2px; height: 28px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tab { position: relative; height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 6px; color: var(--muted); flex: none; white-space: nowrap; }
+  .tab:hover { background: var(--accent); color: var(--fg); }
+  .tab.main { background: rgb(79 95 240 / 15%); color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
+  .tab.beside { color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 40%); }
+  .tab .side { width: 9px; height: 7px; border: 1px solid currentColor; border-radius: 1.5px; opacity: .7; position: relative; }
+  .tab .side::after { content: ''; position: absolute; inset: 0 0 0 50%; background: currentColor; }
+  .search { margin: 0 auto; height: 24px; width: 162px; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; background: var(--accent); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
+  .right { display: flex; align-items: center; gap: 2px; flex: none; }
+
+  /* AI Hub button: a mini agent face, not a page tab */
+  .hubbtn { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 5px; border-radius: 6px; color: var(--muted); margin-right: 4px; }
+  .hubbtn:hover, .hubbtn.hover { background: var(--accent); color: var(--fg); }
+  .hubbtn.on { background: rgb(79 95 240 / 15%); color: var(--fg); box-shadow: inset 0 0 0 1px rgb(79 95 240 / 50%); }
+  .counts { display: flex; gap: 8px; font-variant-numeric: tabular-nums; }
+  .counts span { display: flex; align-items: center; gap: 4px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+
+  /* window body */
+  .body { position: relative; flex: 1; display: flex; min-height: 0; }
+  .rail { width: 52px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
+  .railbtn { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); }
+  .pane { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pane.besidepane { flex: none; width: 560px; border-left: 1px solid var(--border); }
+  .pane.focusline::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 2px; background: rgb(79 95 240 / 70%); z-index: 2; }
+  .splithead { height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .splithead .grow { flex: 1; }
+  .label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .zonehead { height: 36px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); }
+  .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); text-align: center; line-height: 1.6; font-size: 13px; }
+  .chip { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 6px; background: rgb(255 255 255 / 4%); box-shadow: inset 0 0 0 1px var(--border); color: var(--fg); font-size: 13px; }
+  .field { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--input); color: var(--muted); }
+  .row { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 6px; }
+  .row:hover { background: var(--accent); } .row.on { background: var(--accent); }
+  .cols { flex: 1; display: flex; min-height: 0; }
+
+  /* AI Hub overlay: over every pane, its own layout, the panes underneath untouched */
+  .overlay { position: absolute; inset: 0; z-index: 30; display: flex; background: var(--bg); opacity: 0; transform: translateY(-6px) scale(.995); pointer-events: none; transition: opacity .16s ease, transform .2s cubic-bezier(.2,.8,.2,1); }
+  .overlay.open { opacity: 1; transform: none; pointer-events: auto; }
+  .hubside { width: 280px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .avatar { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 11px; flex: none; }
+  .hubmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .msg { max-width: 640px; line-height: 1.6; font-size: 13px; }
+  .bubble { align-self: flex-end; background: rgb(255 255 255 / 6%); border-radius: 12px; padding: 8px 12px; }
+  .tool { font-family: var(--mono); font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .composer { margin: 0 auto 16px; width: min(720px, calc(100% - 32px)); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--input); background: rgb(255 255 255 / 2%); padding: 12px; color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 12px; }
+  .esc { margin-left: 6px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+
+  /* hover card under the AI Hub button */
+  .pop { position: absolute; z-index: 50; top: 34px; width: 560px; border-radius: 16px; background: var(--popover); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 8%), 0 24px 60px rgb(0 0 0 / 70%); padding: 10px; display: grid; grid-template-columns: 196px 1fr; gap: 10px; opacity: 0; transform: translateY(-4px) scale(.98); transform-origin: top center; pointer-events: none; transition: opacity .14s ease, transform .18s cubic-bezier(.2,.8,.2,1); }
+  .pop.open { opacity: 1; transform: none; pointer-events: auto; }
+  .stage { border-radius: 12px; background: radial-gradient(120% 90% at 50% 60%, rgb(79 95 240 / 18%), transparent 70%), rgb(255 255 255 / 2%); box-shadow: inset 0 0 0 1px var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 14px 8px 12px; }
+  .say { font-size: 12.5px; color: var(--fg); font-weight: 500; text-align: center; }
+  .sub { font-size: 11px; color: var(--muted); text-align: center; }
+  .runs { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .run { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px; }
+  .run:hover { background: var(--accent); }
+  .run .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .run .s { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+  .answer { height: 22px; padding: 0 8px; border-radius: 6px; background: var(--primary); color: #fff; font-size: 11px; font-weight: 500; }
+  .popfoot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 6px 4px 0; border-top: 1px solid var(--border); color: var(--muted); }
+  .primarybtn { height: 26px; padding: 0 10px; border-radius: 6px; background: var(--primary); color: #fff; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .ghostbtn { height: 26px; padding: 0 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; color: var(--fg); box-shadow: inset 0 0 0 1px var(--input); }
+
+  /* the agent: a soft squircle, eyes that follow the cursor, a mood per hub state */
+  .mochi { display: block; overflow: visible; }
+  .mochi .bob { transform-box: fill-box; transform-origin: 50% 100%; animation: breathe 3.2s ease-in-out infinite; }
+  .mochi .eyes { transform: translate(var(--ex, 0px), var(--ey, 0px)); transition: transform .12s ease-out; }
+  .mochi[data-mood="working"] .eyes { animation: scan 2.6s ease-in-out infinite; }
+  @keyframes scan { 0%, 100% { transform: translate(-4px, 2px); } 50% { transform: translate(4px, 2px); } }
+  .mochi[data-mood="waiting"] .eyes { transform: translate(var(--ex, 0px), -3px); }
+  .mochi .lids { transform-box: fill-box; transform-origin: 50% 50%; animation: blink 4.6s infinite; }
+  .mochi .happy, .mochi .badge > g { display: none; }
+  .mochi .badge { transform-box: fill-box; transform-origin: 100% 100%; animation: pop .3s cubic-bezier(.3,1.6,.5,1) both; }
+  .mochi[data-mood="working"] .bob { animation: work .9s ease-in-out infinite; }
+  .mochi[data-mood="working"] .badge .b-work, .mochi[data-mood="waiting"] .badge .b-wait, .mochi[data-mood="done"] .badge .b-done, .mochi[data-mood="failed"] .badge .b-fail { display: inline; }
+  .mochi[data-mood="working"] .badge .b-work circle { animation: typing 1.2s infinite; }
+  .mochi[data-mood="working"] .badge .b-work circle:nth-child(3) { animation-delay: .15s; } .mochi[data-mood="working"] .badge .b-work circle:nth-child(4) { animation-delay: .3s; }
+  .mochi[data-mood="waiting"] .bob { animation: wiggle 2.4s ease-in-out infinite; }
+  .mochi[data-mood="done"] .bob { animation: hop 1.6s cubic-bezier(.3,.7,.4,1) infinite; }
+  .mochi[data-mood="done"] .lids { display: none; } .mochi[data-mood="done"] .happy { display: inline; }
+  .mochi[data-mood="failed"] .body-fill { filter: saturate(.3) brightness(.85); }
+  .mochi[data-mood="failed"] .bob { animation: droop 3s ease-in-out infinite; }
+  .mochi[data-mood="idle"] .lids { animation: doze 6s infinite; }
+  .mochi.poked .bob { animation: squish .45s cubic-bezier(.3,1.5,.5,1); }
+  @keyframes breathe { 50% { transform: scale(1.025, .975); } }
+  @keyframes work { 50% { transform: translateY(-2.5px) scale(1.01, .99); } }
+  @keyframes wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-5deg); } 80% { transform: rotate(5deg); } 90% { transform: rotate(-3deg); } }
+  @keyframes hop { 0%, 55%, 100% { transform: translateY(0) scale(1); } 10% { transform: scale(1.08, .9); } 28% { transform: translateY(-14px) scale(.95, 1.06); } 45% { transform: translateY(0) scale(1.06, .94); } }
+  @keyframes droop { 50% { transform: scale(1.03, .95); } }
+  @keyframes squish { 30% { transform: scale(1.14, .84); } 65% { transform: scale(.95, 1.06); } }
+  @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+  @keyframes doze { 0%, 40%, 100% { transform: scaleY(1); } 55%, 80% { transform: scaleY(.25); } 86% { transform: scaleY(.08); } }
+  @keyframes typing { 0%, 60%, 100% { opacity: .35; } 30% { opacity: 1; } }
+  @keyframes pop { from { transform: scale(0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgb(52 211 153 / 30%); border-top-color: var(--emerald); animation: spin .8s linear infinite; flex: none; }
+
+  /* demo controls under the window */
+  .demo { width: 1440px; margin: 16px auto 0; display: flex; gap: 24px; align-items: flex-start; color: #aaa; font-size: 12.5px; line-height: 1.6; }
+  .demo .seg { display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: rgb(255 255 255 / 5%); }
+  .demo .seg button { height: 24px; padding: 0 10px; border-radius: 6px; color: #aaa; cursor: pointer; }
+  .demo .seg button.on { background: rgb(255 255 255 / 10%); color: #fff; }
+  .demo b { color: #ddd; font-weight: 500; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="terminal" viewBox="0 0 24 24"><path d="m7 11 2-2-2-2" /><path d="M11 13h4" /><rect width="18" height="18" x="3" y="3" rx="2" /></symbol>
+    <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20" /></symbol>
+    <symbol id="prs" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12" /></symbol>
+    <symbol id="worktrees" viewBox="0 0 24 24"><path d="M6 3v12" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" /></symbol>
+    <symbol id="env" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></symbol>
+    <symbol id="sparkles" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0zM20 3v4M22 5h-4M4 17v2M5 18H3" /></symbol>
+    <symbol id="panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" /></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+    <symbol id="coffee" viewBox="0 0 24 24"><path d="M10 2v2M14 2v2M6 2v2" /><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" /></symbol>
+    <symbol id="comment" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol>
+    <symbol id="bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
+    <symbol id="plug" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" /></symbol>
+    <symbol id="settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.730.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+    <symbol id="close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+    <symbol id="compare" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7M11 18H8a2 2 0 0 1-2-2V9" /></symbol>
+    <symbol id="layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7zM2 17l10 5 10-5M2 12l10 5 10-5" /></symbol>
+    <symbol id="folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+    <linearGradient id="mochi-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbf7f1" /><stop offset=".5" stop-color="#e9ecfb" /><stop offset="1" stop-color="#8f9cff" />
+    </linearGradient>
+    <radialGradient id="mochi-shine" cx=".32" cy=".22" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".9" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></radialGradient>
+    <radialGradient id="mochi-glow" cx=".5" cy=".55" r=".5"><stop offset="0" stop-color="#4f5ff0" stop-opacity=".45" /><stop offset="1" stop-color="#4f5ff0" stop-opacity="0" /></radialGradient>
+  </defs>
+</svg>
+
+<div class="window" id="win">
+  <div class="titlebar">
+    <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <button class="iconbtn" title="Hide workspaces"><svg class="i"><use href="#panel" /></svg></button>
+    <div class="strip" id="strip"></div>
+    <button class="search"><svg class="i"><use href="#search" /></svg>Run command</button>
+    <div class="right">
+      <button class="hubbtn" id="hubbtn" title="AI Hub - click to open, hover to peek">
+        <span data-mochi="hub" data-size="22"></span>
+        AI Hub
+        <span class="counts" id="counts"></span>
+      </button>
+      <button class="iconbtn on" title="Keep awake"><svg class="i"><use href="#coffee" /></svg></button>
+      <button class="iconbtn" title="Agent comments"><svg class="i"><use href="#comment" /></svg></button>
+      <button class="iconbtn" title="Notifications"><svg class="i"><use href="#bell" /></svg></button>
+      <button class="iconbtn" title="MCP"><svg class="i"><use href="#plug" /></svg></button>
+      <button class="iconbtn" title="Settings"><svg class="i"><use href="#settings" /></svg></button>
+    </div>
+    <div class="pop" id="pop">
+      <div class="stage">
+        <span data-mochi="big" data-size="148"></span>
+        <div class="say" id="say"></div>
+        <div class="sub" id="saysub"></div>
+      </div>
+      <div class="runs" id="runs"></div>
+      <div class="popfoot">
+        <button class="primarybtn" id="openhub"><svg class="i"><use href="#sparkles" /></svg>Open AI Hub</button>
+        <button class="ghostbtn"><svg class="i"><use href="#comment" /></svg>Ask an agent</button>
+        <span style="flex:1"></span>
+        <span>click the button to open, <span class="kbd">Esc</span> closes</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="rail"><div class="railbtn"><svg class="i"><use href="#plus" /></svg></div></div>
+    <div class="pane" id="left"></div>
+    <div class="pane besidepane" id="rightpane" hidden></div>
+
+    <div class="overlay" id="overlay">
+      <div class="hubside">
+        <div class="zonehead" style="height:36px"><span class="label">Agents</span><span style="flex:1"></span><button class="iconbtn"><svg class="i"><use href="#plus" /></svg></button></div>
+        <div style="padding:6px;display:flex;flex-direction:column;gap:1px" id="agentlist"></div>
+        <div style="padding:12px 8px 2px 14px;display:flex;align-items:center"><span class="label" style="flex:1">Workflows</span><button class="iconbtn"><svg class="i"><use href="#plus" /></svg></button></div>
+        <div style="padding:2px 6px">
+          <div class="row"><svg class="i muted"><use href="#layers" /></svg>Review then ship</div>
+          <div class="row"><svg class="i muted"><use href="#layers" /></svg>Nightly dependency bump</div>
+        </div>
+        <div class="label" style="padding:16px 14px 6px">Runs</div>
+        <div style="padding:0 6px" id="runlist"></div>
+      </div>
+      <div class="hubmain">
+        <header style="height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 12px;border-bottom:1px solid var(--border)">
+          <span data-mochi="head" data-size="30" data-tint="#34d399"></span>
+          <div style="flex:1"><div style="font-size:14px;font-weight:500">Reviewer</div><div class="muted" style="font-size:11px">Claude · opus · plan</div></div>
+          <button class="iconbtn"><svg class="i"><use href="#comment" /></svg></button>
+          <button class="iconbtn"><svg class="i"><use href="#plus" /></svg></button>
+          <div class="esc"><span class="kbd">Esc</span> back to Terminal</div>
+        </header>
+        <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:14px;padding:24px max(24px,calc(50% - 360px))">
+          <div class="msg bubble">Review the notification center diff on feat/notifications and leave comments where it could double-notify.</div>
+          <div class="tool"><svg class="i"><use href="#check" /></svg>Read src/renderer/src/notifications.tsx</div>
+          <div class="tool"><svg class="i"><use href="#check" /></svg>git diff main...feat/notifications</div>
+          <div class="msg">Two spots can notify twice: every background window subscribes to <code>hubRuns</code>, and a run that goes <i>waiting → running → waiting</i> fires again because <code>seen</code> only keeps the last state.</div>
+          <div class="tool"><span class="spinner"></span>Writing comments on notifications.tsx:62</div>
+        </div>
+        <div class="composer">Reply to Reviewer...<div style="display:flex;gap:8px;align-items:center"><span class="chip" style="height:24px;font-size:11px">Opus</span><span class="chip" style="height:24px;font-size:11px">Plan</span><span style="flex:1"></span><span class="kbd">↵</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="demo">
+  <div>
+    <div style="margin-bottom:6px"><b>Hub state</b> (drives the agent's mood)</div>
+    <div class="seg" id="moods"></div>
+  </div>
+  <div style="max-width:760px">
+    <b>Tabs.</b> Click shows a tab. <b>⌘-click</b> opens it beside, ⌘-click again closes it. Clicking the tab that is beside swaps sides. Highlights are inset, so the first tab and a scrolled strip never clip them.<br />
+    <b>AI Hub.</b> Not a tab any more: hover the face to peek at runs, click to open it over everything. The panes underneath keep their state, the rail and split stay put. Click the face again or press Esc to go back.
+  </div>
+</div>
+
+<script>
+const TABS = [
+  { id: 'terminal', label: 'Terminal' },
+  { id: 'browser', label: 'Browser', icon: 'globe' },
+  { id: 'prs', label: 'PRs' },
+  { id: 'worktrees', label: 'Worktrees' },
+  { id: 'env', label: 'Env' }
+]
+const AGENTS = [
+  { name: 'Reviewer', tint: '#34d399' },
+  { name: 'Release bot', tint: '#fbbf24' },
+  { name: 'Docs writer', tint: '#a78bfa' },
+  { name: 'Triage', tint: '#60a5fa' }
+]
+const RUNS = {
+  idle: [],
+  working: [
+    { agent: 0, title: 'Review feat/notifications', status: 'working', detail: 'Writing comments on notifications.tsx' },
+    { agent: 2, title: 'Changelog for v0.9', status: 'working', detail: 'Reading 14 commits' },
+    { agent: 1, title: 'Nightly dependency bump', status: 'done', detail: '12 min ago' }
+  ],
+  waiting: [
+    { agent: 1, title: 'Release v0.9.0', status: 'waiting', detail: 'Push the v0.9.0 tag?' },
+    { agent: 0, title: 'Review feat/notifications', status: 'working', detail: 'Writing comments on notifications.tsx' },
+    { agent: 3, title: 'Triage BF-412', status: 'done', detail: '3 min ago' }
+  ],
+  done: [
+    { agent: 0, title: 'Review feat/notifications', status: 'done', detail: '6 comments, just now' },
+    { agent: 2, title: 'Changelog for v0.9', status: 'done', detail: '2 min ago' }
+  ],
+  failed: [
+    { agent: 1, title: 'Release v0.9.0', status: 'failed', detail: 'bun test exited 1' },
+    { agent: 0, title: 'Review feat/notifications', status: 'working', detail: 'Writing comments on notifications.tsx' }
+  ]
+}
+const SAY = {
+  idle: ['All quiet', 'No agent is running. Ask one, or start a workflow.'],
+  working: ['On it', '2 agents working'],
+  waiting: ['Release bot needs you', '1 question waiting, 1 agent working'],
+  done: ['All done!', '2 runs finished'],
+  failed: ['Something broke', 'Release v0.9.0 failed']
+}
+
+let mood = 'waiting'
+let main = 'terminal'
+let beside = 'worktrees'
+let hubOpen = false
+
+const $ = (id) => document.getElementById(id)
+const icon = (name, cls = 'i') => `<svg class="${cls}"><use href="#${name}" /></svg>`
+/* one agent: the same drawing at every size, coloured per agent */
+const BODY = 'M60 12c34 0 48 8 48 40s-14 40-48 40S12 84 12 52s14-40 48-40Z'
+const mini = (tint, m = 'idle', size = 22, id = '') => `<svg class="mochi" ${id ? `id="${id}"` : ''} data-mood="${m}" viewBox="-14 -18 148 132" width="${size}" height="${Math.round(size * .9)}">
+  ${size > 60 ? '<ellipse cx="60" cy="58" rx="74" ry="62" fill="url(#mochi-glow)" />' : ''}
+  <g class="bob">
+    <path class="body-fill" d="${BODY}" fill="${tint || 'url(#mochi-body)'}" />
+    <path d="${BODY}" fill="url(#mochi-shine)" />
+    <ellipse cx="33" cy="64" rx="8" ry="4.5" fill="#ff8aa0" opacity=".35" /><ellipse cx="87" cy="64" rx="8" ry="4.5" fill="#ff8aa0" opacity=".35" />
+    <g class="eyes">
+      <g class="lids"><ellipse cx="47" cy="58" rx="5" ry="6.5" fill="#141414" /><ellipse cx="73" cy="58" rx="5" ry="6.5" fill="#141414" /></g>
+      <path class="happy" d="M41 60q6-8 12 0M67 60q6-8 12 0" fill="none" stroke="#141414" stroke-width="3.5" stroke-linecap="round" />
+    </g>
+  </g>
+  ${size > 40 ? `<g class="badge"><g class="b-work"><rect x="-6" y="-6" width="40" height="22" rx="11" fill="#4f5ff0" stroke="#121212" stroke-width="3" /><circle cx="5" cy="5" r="3" fill="#fff" /><circle cx="14" cy="5" r="3" fill="#fff" /><circle cx="23" cy="5" r="3" fill="#fff" /></g>
+    <g class="b-wait"><circle cx="8" cy="5" r="13" fill="#fbbf24" stroke="#121212" stroke-width="3" /><text x="8" y="11" text-anchor="middle" font-size="17" font-weight="800" fill="#1a1a1a">?</text></g>
+    <g class="b-done"><circle cx="8" cy="5" r="13" fill="#34d399" stroke="#121212" stroke-width="3" /><path d="m2 5 4 4 8-8" fill="none" stroke="#0b2b1f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></g>
+    <g class="b-fail"><circle cx="8" cy="5" r="13" fill="#f87171" stroke="#121212" stroke-width="3" /><text x="8" y="11" text-anchor="middle" font-size="17" font-weight="800" fill="#2b0b0b">!</text></g></g>` : ''}
+</svg>`
+
+/* tabs: click shows, ⌘-click toggles beside, clicking the beside tab swaps */
+function clickTab(id, event) {
+  if (event.metaKey || event.altKey) beside = beside === id ? null : id === main ? beside : id
+  else if (id === beside) [main, beside] = [beside, main]
+  else main = id
+  if (hubOpen) toggleHub(false)
+  render()
+}
+function renderTabs() {
+  $('strip').innerHTML = TABS.map((tab) => {
+    const state = tab.id === main ? 'main' : tab.id === beside ? 'beside' : ''
+    const named = state !== ''
+    return `<button class="tab ${state}" data-tab="${tab.id}" title="${tab.label} · ⌘-click to open beside">${icon(tab.icon ?? tab.id)}${named ? tab.label : ''}${state === 'beside' ? '<span class="side"></span>' : ''}</button>`
+  }).join('')
+  $('strip').querySelectorAll('.tab').forEach((el) => el.addEventListener('click', (event) => clickTab(el.dataset.tab, event)))
+}
+
+function page(id) {
+  if (id === 'terminal')
+    return `<div class="cols"><div class="pane"><div class="zonehead" style="gap:12px">${icon('panel', 'i muted')}<span class="muted" style="display:flex;gap:6px;align-items:center">${icon('folder')}~ alpha</span><span style="flex:1"></span></div>
+      <div class="empty"><div class="railbtn" style="width:40px;height:40px;border-radius:10px">${icon('terminal')}</div><div>No terminals in <span style="color:var(--fg)">~ alpha</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><span class="chip"><span style="color:#d97757">✳</span>Claude</span><span class="chip">◎ Codex</span><span class="chip"><span style="color:var(--emerald)">$</span>Shell</span><span class="chip">${icon('comment')}Chat</span></div>
+      <div style="font-size:11px"><span class="kbd">⌘T</span> new shell tab</div></div></div>
+      <div class="pane" style="flex:none;width:300px;border-left:1px solid var(--border)"><div class="zonehead"><span class="label">Files</span></div>
+      <div style="padding:8px"><div class="field">${icon('search')}Filter files</div></div>
+      <div style="padding:0 8px">${['..', '.github', 'apps', 'docs', 'packages', 'README.md'].map((f) => `<div class="row" style="height:24px">${icon('folder', 'i muted')}${f}</div>`).join('')}</div></div></div>`
+  if (id === 'worktrees')
+    return `<div class="cols"><div class="pane" style="flex:none;width:280px;border-right:1px solid var(--border)"><div class="zonehead"><span class="label" style="color:var(--fg)">Worktrees</span><span style="flex:1"></span>${icon('plus', 'i muted')}</div>
+      <div style="padding:8px"><div class="field">${icon('search')}Filter worktrees and branches</div></div>
+      <div style="padding:0 6px">${[['alpha', 'main', 0], ['alpha', 'feat/notifications', 4], ['alpha', 'fix/tab-ring', 1]].map(([r, b, n], i) => `<div class="row ${i === 1 ? 'on' : ''}">${icon('worktrees', 'i muted')}<span style="flex:1">${b}</span><span class="muted">${n || ''}</span></div>`).join('')}</div></div>
+      <div class="empty">${icon('worktrees')}<div>feat/notifications<br />4 changed files</div></div></div>`
+  if (id === 'browser')
+    return `<div class="zonehead"><div class="field" style="flex:1">${icon('globe')}localhost:5173</div></div><div class="empty">${icon('globe')}<div>localhost:5173</div></div>`
+  if (id === 'prs')
+    return `<div class="zonehead"><span class="label" style="color:var(--fg)">Pull requests</span></div><div style="padding:6px">${['feat(notifications): notification center', 'fix(title-bar): inset tab rings', 'chore: bump electron'].map((t) => `<div class="row">${icon('prs', 'i muted')}${t}</div>`).join('')}</div>`
+  return `<div class="empty">${icon('env')}<div>.env for alpha</div></div>`
+}
+function renderPanes() {
+  const tab = (id) => TABS.find((t) => t.id === id)
+  $('left').innerHTML = page(main)
+  $('rightpane').hidden = !beside
+  $('left').classList.toggle('focusline', !!beside)
+  if (beside)
+    $('rightpane').innerHTML = `<div class="splithead">${icon(tab(beside).icon ?? beside)}<span class="grow">${tab(beside).label}</span>
+      <button class="iconbtn" title="Swap sides" id="swap">${icon('compare')}</button><button class="iconbtn" title="Close" id="closeside">${icon('close')}</button></div>${page(beside)}`
+  $('swap')?.addEventListener('click', () => (([main, beside] = [beside, main]), render()))
+  $('closeside')?.addEventListener('click', () => ((beside = null), render()))
+}
+
+/* hub */
+function statusOf(run) {
+  if (run.status === 'working') return `<span class="spinner"></span>`
+  if (run.status === 'waiting') return `<button class="answer">Answer</button>`
+  if (run.status === 'failed') return `<span class="dot" style="background:var(--red)"></span>`
+  return `<svg class="i" style="color:var(--emerald)"><use href="#check" /></svg>`
+}
+function renderHub() {
+  const runs = RUNS[mood]
+  const working = runs.filter((r) => r.status === 'working').length
+  const waiting = runs.filter((r) => r.status === 'waiting').length
+  $('counts').innerHTML = `${working ? `<span>${working}<span class="dot" style="background:var(--emerald)"></span></span>` : ''}${waiting ? `<span>${waiting}<span class="dot" style="background:var(--amber)"></span></span>` : ''}`
+  document.querySelectorAll('[data-mochi]').forEach((el) => (el.innerHTML = mini(el.dataset.tint, el.dataset.mochi === 'head' ? 'working' : mood, +el.dataset.size, el.dataset.mochi === 'big' ? 'big' : '')))
+  $('big').addEventListener('click', poke)
+  $('say').textContent = SAY[mood][0]
+  $('saysub').textContent = SAY[mood][1]
+  $('runs').innerHTML = runs.length
+    ? runs.map((r) => `<div class="run">${mini(AGENTS[r.agent].tint, r.status === 'waiting' ? 'waiting' : r.status === 'done' ? 'done' : r.status === 'failed' ? 'failed' : 'working', 26)}
+        <div style="flex:1;min-width:0"><div class="t">${r.title}</div><div class="s">${AGENTS[r.agent].name} · ${r.detail}</div></div>${statusOf(r)}</div>`).join('')
+    : `<div class="empty" style="font-size:12px">Your agents are idle.<br />Hover here when one is at work.</div>`
+  $('agentlist').innerHTML = AGENTS.map((a, i) => `<div class="row ${i === 0 ? 'on' : ''}" style="height:36px">${mini(a.tint, 'idle', 26)}<span style="flex:1">${a.name}</span></div>`).join('')
+  $('runlist').innerHTML = runs.map((r) => `<div class="row">${statusOf(r).replace('<button class="answer">Answer</button>', '<span class="dot" style="background:var(--amber)"></span>')}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.title}</span></div>`).join('')
+  $('moods').innerHTML = Object.keys(RUNS).map((m) => `<button class="${m === mood ? 'on' : ''}" data-m="${m}">${m}</button>`).join('')
+  $('moods').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => ((mood = b.dataset.m), renderHub())))
+}
+function toggleHub(open = !hubOpen) {
+  hubOpen = open
+  $('overlay').classList.toggle('open', open)
+  $('hubbtn').classList.toggle('on', open)
+  document.querySelector('.esc').innerHTML = `<span class="kbd">Esc</span> back to ${TABS.find((t) => t.id === main).label}`
+  hidePop()
+}
+
+/* hover card: a short delay in, a grace period out so the pointer can travel into it */
+let inTimer, outTimer
+function showPop() {
+  clearTimeout(outTimer)
+  if (hubOpen) return
+  inTimer = setTimeout(() => {
+    const btn = $('hubbtn').getBoundingClientRect(), bar = document.querySelector('.titlebar').getBoundingClientRect()
+    $('pop').style.left = `${Math.min(btn.left - bar.left + btn.width / 2 - 280, bar.width - 568)}px`
+    $('pop').classList.add('open')
+    $('hubbtn').classList.add('hover')
+  }, 140)
+}
+function hidePop() {
+  clearTimeout(inTimer)
+  $('pop').classList.remove('open')
+  $('hubbtn').classList.remove('hover')
+}
+function leavePop() {
+  clearTimeout(inTimer)
+  outTimer = setTimeout(hidePop, 220)
+}
+$('hubbtn').addEventListener('mouseenter', showPop)
+$('hubbtn').addEventListener('mouseleave', leavePop)
+$('pop').addEventListener('mouseenter', () => clearTimeout(outTimer))
+$('pop').addEventListener('mouseleave', leavePop)
+$('hubbtn').addEventListener('click', () => toggleHub())
+$('openhub').addEventListener('click', () => toggleHub(true))
+document.addEventListener('keydown', (e) => e.key === 'Escape' && (hubOpen ? toggleHub(false) : hidePop()))
+
+/* the big agent's eyes follow the cursor; a click squishes it */
+document.addEventListener('mousemove', (e) => {
+  document.querySelectorAll('.mochi').forEach((svg) => {
+    const box = svg.getBoundingClientRect()
+    if (!box.width) return
+    const dx = e.clientX - (box.left + box.width / 2), dy = e.clientY - (box.top + box.height / 2)
+    const reach = Math.hypot(dx, dy) || 1, k = Math.min(1, reach / 300)
+    svg.style.setProperty('--ex', `${(dx / reach) * 6 * k}px`)
+    svg.style.setProperty('--ey', `${(dy / reach) * 4 * k}px`)
+  })
+})
+function poke() {
+  $('big').classList.remove('poked'); void $('big').getBoundingClientRect(); $('big').classList.add('poked')
+}
+
+function render() { renderTabs(); renderPanes() }
+render()
+renderHub()
+</script>
+</body>
+</html>
