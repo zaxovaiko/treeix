@@ -6,7 +6,7 @@ export type SectionId = 'General' | 'Appearance' | 'Editor' | 'Terminal' | 'Keyb
 /** A page in Settings: one of the fixed sections, or a plugin's own page nested under Plugins */
 export type PageId = SectionId | `plugin:${string}`
 
-export const SECTIONS: [SectionId, IconName][] = [
+const SECTIONS: [SectionId, IconName][] = [
   ['General', 'settings'],
   ['Appearance', 'palette'],
   ['Editor', 'code'],
@@ -23,7 +23,7 @@ const INTEGRATION_PAGES: [SectionId, IconName][] = [
 ]
 
 const PLUGIN_PREFIX = 'plugin:'
-export const pluginPage = (id: string): PageId => `${PLUGIN_PREFIX}${id}`
+const pluginPage = (id: string): PageId => `${PLUGIN_PREFIX}${id}`
 export const isPageId = (value: string): value is PageId => value.startsWith(PLUGIN_PREFIX) || [...SECTIONS, ...INTEGRATION_PAGES].some(([id]) => id === value)
 export const pluginOf = (page: PageId): string | null => (page.startsWith(PLUGIN_PREFIX) ? page.slice(PLUGIN_PREFIX.length) : null)
 

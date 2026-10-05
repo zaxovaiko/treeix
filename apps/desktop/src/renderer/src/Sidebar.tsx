@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { focusZone, isPageKey, useListNav, useZone, type ZoneId } from '@treeix/sdk'
+import { focusZone, isPageKey, useListNav, useZone } from '@treeix/sdk'
 import type { Branch, Repo, Worktree } from '../../shared/types'
 import { copyText } from './contextMenu'
 import { type Activity, ActivityMark, NEWS } from './activity'
@@ -34,18 +34,6 @@ export const branchAge = (branch: Branch): string => {
   ]
   const [size, unit] = units.find(([unitSeconds]) => seconds >= unitSeconds) ?? [1, 's']
   return `${Math.floor(seconds / size)}${unit}`
-}
-
-/** A zone's title row; the label brightens while the zone has focus */
-export function ZoneHeader({ zone, title, children }: { zone: ZoneId; title: string; children?: React.ReactNode }): React.JSX.Element {
-  const focused = useZone().zone === zone
-  return (
-    <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-3">
-      <span className={`min-w-0 truncate text-[11px] font-semibold tracking-wide uppercase ${focused ? 'text-foreground' : 'text-muted-foreground'}`}>{title}</span>
-      <span className="flex-1" />
-      {children}
-    </div>
-  )
 }
 
 // ponytail: refetched when a group opens or a rescan ends; a file watcher on .git/refs would keep it live

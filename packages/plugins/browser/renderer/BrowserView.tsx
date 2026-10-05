@@ -33,7 +33,7 @@ const bridge = createBridge('browser')
 
 let focusAddress = (): void => undefined
 
-export function navigate(input: string): void {
+function navigate(input: string): void {
   const url = toUrl(input, browserSettings.get().searchEngine)
   const tab = activeTab()
   if (!tab) return updateBrowser((state) => openTab(state, url))

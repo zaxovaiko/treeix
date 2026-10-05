@@ -44,7 +44,7 @@ export function withStatusHooks(settings: string): string {
 }
 
 /** The usage-limits plugin's status line bridge keeps each session's last status line input here as `usage-<session id>` */
-export const USAGE_PREFIX = 'usage-'
+const USAGE_PREFIX = 'usage-'
 
 /** Claude's own running cost of the session, from its last status line input */
 export async function claudeCost(folder: string, sessionId: string): Promise<number | undefined> {

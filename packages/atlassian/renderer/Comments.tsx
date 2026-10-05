@@ -5,7 +5,7 @@ import { timeAgo } from '@treeix/app/time'
 import { errorMessage, UserAvatar } from '@treeix/app/ui'
 import { type AtlassianComment, IMAGE_HOST } from '../shared'
 
-export type CommentActions = {
+type CommentActions = {
   add: (body: string, replyTo: AtlassianComment | null) => Promise<void>
   edit: (comment: AtlassianComment, body: string) => Promise<void>
   remove: (comment: AtlassianComment) => Promise<void>

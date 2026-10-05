@@ -352,7 +352,7 @@ const byName: Record<string, FileKind> = {
 
 const fallback: FileKind = { label: '', color: '#737373' }
 
-export function fileKind(path: string): FileKind {
+function fileKind(path: string): FileKind {
   const name = (path.split('/').pop() ?? path).toLowerCase()
   const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : ''
   if (name.startsWith('.env')) return byExtension.env

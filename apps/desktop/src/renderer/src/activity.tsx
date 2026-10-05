@@ -10,7 +10,7 @@ export const agentActivity = (statuses: SessionStatus[]): Activity =>
 /** States worth a mark where space is short, like the workspace rail and the sidebar */
 export const NEWS: Activity[] = ['input', 'done', 'running']
 
-export const ACTIVITY_LABEL: Record<Activity, string> = {
+const ACTIVITY_LABEL: Record<Activity, string> = {
   input: 'An agent needs you',
   done: 'An agent finished, not seen yet',
   running: 'An agent is working',

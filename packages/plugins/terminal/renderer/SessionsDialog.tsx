@@ -16,7 +16,7 @@ const CONTENT_SEARCH_DELAY_MS = 300
 const tokens = (count: number): string => (count >= 1_000_000 ? `${(count / 1_000_000).toFixed(1)}M` : count >= 1000 ? `${Math.round(count / 1000)}k` : `${count}`)
 
 /** "1.2M in · 34k out · 3.1M cached · $3.40" */
-export const usageLabel = ({ input, output, cached, costUsd }: SessionUsage): string =>
+const usageLabel = ({ input, output, cached, costUsd }: SessionUsage): string =>
   [`${tokens(input)} in`, `${tokens(output)} out`, cached > 0 && `${tokens(cached)} cached`, costUsd !== undefined && `$${costUsd.toFixed(2)}`].filter(Boolean).join(' · ')
 
 const GROUPS = [

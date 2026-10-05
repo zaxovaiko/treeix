@@ -98,7 +98,7 @@ export function rangeLabel({ start, end, side, endSide }: LineRange): string {
 }
 
 /** Line 0 means the comment is about the whole file or PR, not specific lines */
-export const commentLocation = (comment: ReviewComment): string => (comment.range.start > 0 ? `${comment.filePath}:${rangeLabel(comment.range)}` : comment.filePath)
+const commentLocation = (comment: ReviewComment): string => (comment.range.start > 0 ? `${comment.filePath}:${rangeLabel(comment.range)}` : comment.filePath)
 
 /** What a page wrote goes to the agent as quoted data, fenced longer than any fence inside it, so it can't pass for instructions */
 function pageContent(body: string): string[] {

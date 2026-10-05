@@ -3,7 +3,7 @@ import type { IconName } from '@treeix/app/Icon'
 import { type Command, isPageKey, useHost } from '@treeix/sdk'
 import { actionForEvent, actionKeys, defineActions, key } from '@treeix/shared/keymap'
 
-export type Verb =
+type Verb =
   | 'conversation'
   | 'files'
   | 'nextFile'

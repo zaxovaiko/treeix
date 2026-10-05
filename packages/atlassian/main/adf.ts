@@ -103,7 +103,7 @@ const textOf = (node: unknown): string =>
     : ''
 
 /** Markdown from Atlassian Document Format */
-export function convert(raw: unknown, context: AdfContext): string {
+function convert(raw: unknown, context: AdfContext): string {
   if (typeof raw === 'string') return raw
   const node = object(raw)
   const attrs = object(node.attrs)

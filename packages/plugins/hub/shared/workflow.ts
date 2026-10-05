@@ -15,7 +15,7 @@ export type WorkflowNode =
 /** `branch` is set on edges leaving a condition: only the side that matched runs */
 export type Edge = { id: string; from: string; to: string; branch: 'true' | 'false' | null }
 
-export type Point = { x: number; y: number }
+type Point = { x: number; y: number }
 
 /** `layout` is where each step sits on the canvas; runs ignore it */
 export type Workflow = { id: string; name: string; nodes: WorkflowNode[]; edges: Edge[]; layout: Record<string, Point>; updatedAt: number }

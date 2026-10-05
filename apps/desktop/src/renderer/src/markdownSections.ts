@@ -1,7 +1,7 @@
 /** Minimal shape of the markdown nodes this transform touches */
 type Node = { type: string; depth?: number; children?: Node[] }
 
-export type SectionNode = Node & { type: 'section'; data: { hName: 'section'; hProperties: { dataLevel: number } } }
+type SectionNode = Node & { type: 'section'; data: { hName: 'section'; hProperties: { dataLevel: number } } }
 
 /**
  * Wraps each heading and everything under it, up to the next heading of the same or higher rank,

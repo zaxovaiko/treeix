@@ -133,7 +133,7 @@ function blocks(nodes: RootContent[], mediaOf: MediaOf): Json[] {
   return frames[0].content
 }
 
-export const markdownToAdf = (markdown: string, mediaOf: MediaOf): Json[] =>
+const markdownToAdf = (markdown: string, mediaOf: MediaOf): Json[] =>
   blocks(fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] }).children, mediaOf)
 
 /** Where a block's markdown sits in the edit as whole lines, -1 when the edit changed it */

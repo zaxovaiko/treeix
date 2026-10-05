@@ -23,7 +23,7 @@ export const scopeKeyOf = (repoPaths: string[]): string => repoPaths.join('\n')
 export const cachedPullRequests = (scopeKey: string): PullRequestList | null => lists.get(scopeKey)?.list ?? null
 
 /** Same pull request whatever page of it the address points at (…/437, …/437/diffs, ?tab=files) */
-export const samePullRequestUrl = (url: string, prUrl: string): boolean => {
+const samePullRequestUrl = (url: string, prUrl: string): boolean => {
   const clean = url.replace(/[?#].*$/, '').replace(/\/+$/, '')
   return clean === prUrl || clean.startsWith(`${prUrl}/`)
 }

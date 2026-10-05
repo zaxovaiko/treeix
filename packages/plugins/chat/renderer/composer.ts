@@ -1,5 +1,5 @@
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 export function imageProblem(file: { type: string; size: number }): string | null {
   if (!IMAGE_TYPES.includes(file.type)) return 'PNG, JPEG, GIF or WebP only'
@@ -7,7 +7,7 @@ export function imageProblem(file: { type: string; size: number }): string | nul
   return null
 }
 
-export type CompletionItem = { label: string; detail: string; insert: string }
+type CompletionItem = { label: string; detail: string; insert: string }
 export type Completion = { kind: 'command' | 'file'; query: string; start: number; items: CompletionItem[] }
 
 export function completion(input: string, caret: number, commands: { name: string; description: string }[], files: string[]): Completion | null {

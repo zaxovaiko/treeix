@@ -40,7 +40,7 @@ export function useSlot(): { ref: (element: HTMLDivElement | null) => void; show
   return { ref, shown, elsewhere }
 }
 
-export const slotRect = (): DOMRect | null => winner?.getBoundingClientRect() ?? null
+const slotRect = (): DOMRect | null => winner?.getBoundingClientRect() ?? null
 
 const views = new Map<string, WebviewTag>()
 export const pageOf = (tabId: string): WebviewTag | undefined => views.get(tabId)

@@ -4,5 +4,5 @@
   "semi": false,
   "singleQuote": true,
   "trailingComma": "none",
-  "ignorePatterns": ["**/out/**", "**/dist/**", "**/build/**", "**/test-results/**", "**/*.md", "**/*.html", "marketing/**", "apps/desktop/design/**"]
+  "ignorePatterns": ["**/out/**", "**/dist/**", "**/build/**", "**/test-results/**", "**/*.md", "**/*.html", "apps/desktop/design/**"]
 }

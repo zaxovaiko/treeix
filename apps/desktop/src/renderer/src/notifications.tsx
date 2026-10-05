@@ -37,7 +37,7 @@ export const setWorkspaceSwitcher = (switcher: (id: string) => void): void => {
 }
 
 /** Marks it read and shows what it is about */
-export function openNotification(id: string): void {
+function openNotification(id: string): void {
   const entry = notifications.find((candidate) => candidate.id === id)
   if (!entry) return
   commit(notifications.map((candidate) => (candidate === entry ? { ...candidate, read: true } : candidate)))

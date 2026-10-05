@@ -17,7 +17,7 @@ const channelOf = (pluginId: string, channel: string): string => `plugin:${plugi
 const active = new Map<string, { dispose: () => void }>()
 
 /** Treeix's own MCP server, telling its tools the session's workspace, then whatever enabled plugins add */
-export function sessionEnv(workspaceId?: string): Promise<Record<string, string>> {
+function sessionEnv(workspaceId?: string): Promise<Record<string, string>> {
   const sources = [() => mcpEnv(workspaceId), ...[...active.keys()].flatMap((id) => MAIN_PLUGINS.get(id)?.sessionEnv ?? [])]
   return Promise.all(sources.map((source) => source().catch(() => ({})))).then((parts) => Object.assign({}, ...parts))
 }
@@ -82,4 +82,4 @@ export const enabledTools = (): ToolDefinition[] => {
 }
 
 /** Chat adapters of the enabled plugins, first one wins per id */
-export const enabledChatAdapters = (): ChatAdapter[] => adaptersOf(MAIN_PLUGINS, [...active.keys()])
+const enabledChatAdapters = (): ChatAdapter[] => adaptersOf(MAIN_PLUGINS, [...active.keys()])

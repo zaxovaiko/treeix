@@ -30,7 +30,7 @@ function isExecError(error: unknown): error is { code: number; stdout: string } 
 }
 
 // ponytail: plain fs walk of ~, swap for mdfind if scans get slow
-export async function findRepos(root = homedir(), depth = 0): Promise<string[]> {
+async function findRepos(root = homedir(), depth = 0): Promise<string[]> {
   if (depth > MAX_DEPTH) return []
   const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
   if (entries.some((entry) => entry.name === '.git' && entry.isDirectory())) return [root]
@@ -174,7 +174,7 @@ const IMAGE_TYPES: Record<string, string> = {
 }
 
 /** Image type of a path by its extension; SVG is text and opens as code */
-export const imageType = (filePath: string): string | null => IMAGE_TYPES[filePath.split('.').pop()?.toLowerCase() ?? ''] ?? null
+const imageType = (filePath: string): string | null => IMAGE_TYPES[filePath.split('.').pop()?.toLowerCase() ?? ''] ?? null
 
 /** A picture in the worktree as a data URL, for showing it; null when it is not an image, outside the worktree or too big */
 export async function readImage(worktreePath: string, filePath: string): Promise<string | null> {

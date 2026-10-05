@@ -8,7 +8,7 @@ const STEP = 1.25
 const clamp = (zoom: number): number => Math.min(ZOOM_RANGE.max, Math.max(ZOOM_RANGE.min, zoom))
 
 /** Full-screen view of one image or diagram: scroll or +/- to zoom, drag to move, Esc to close */
-export function Lightbox({ title, onClose, children }: { title?: string; onClose: () => void; children: React.ReactNode }): React.JSX.Element {
+function Lightbox({ title, onClose, children }: { title?: string; onClose: () => void; children: React.ReactNode }): React.JSX.Element {
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   // The overlay covers the title bar, so the toolbar keeps clear of the traffic lights

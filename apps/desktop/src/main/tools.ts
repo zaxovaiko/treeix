@@ -63,7 +63,7 @@ export const signedInAccounts = (output: string): string[] => [
 ]
 
 /** How the tool was installed decides how it updates: Homebrew, its own updater, else we don't guess */
-export async function updateCommandFor(tool: Tool): Promise<string | null> {
+async function updateCommandFor(tool: Tool): Promise<string | null> {
   const installed = await inLoginShell(`brew list --formula ${tool.name}`)
   if (!installed.failed) return `brew upgrade ${tool.name}`
   return tool.selfUpdate ?? null

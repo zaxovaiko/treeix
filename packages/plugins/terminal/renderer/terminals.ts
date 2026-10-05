@@ -18,7 +18,7 @@ import { isJson, isString, list, object, stringValues } from '@treeix/shared/jso
 import { readStored } from '@treeix/app/storage'
 import { notify as notifyCenter } from '@treeix/app/notifications'
 
-export { type SessionKind, type SessionStatus, type SessionView }
+export { type SessionKind, type SessionView }
 
 const bridge = createBridge('terminal')
 
@@ -41,7 +41,7 @@ export type TerminalSession = SessionMeta & {
 }
 
 /** A chat with an agent, drawn by the chat plugin; `status` mirrors the chat's */
-export type ChatSession = SessionMeta & { id: string; view: 'chat'; status: SessionStatus; exitCode: null; lastOutput: number }
+type ChatSession = SessionMeta & { id: string; view: 'chat'; status: SessionStatus; exitCode: null; lastOutput: number }
 
 export type Session = TerminalSession | ChatSession
 
@@ -897,7 +897,7 @@ export function attachSession(id: string, container: HTMLElement): void {
   void wakeSession(id)
 }
 
-export function fitSession(id: string): void {
+function fitSession(id: string): void {
   const session = findTerminal(id)
   if (!session?.opened || !session.element.isConnected) return
   session.fit.fit()

@@ -4,7 +4,7 @@ import type { Workflow, WorkflowNode } from './workflow'
 /** Something that keeps a workflow from running; `node` is null when it's about the whole workflow */
 export type Problem = { node: string | null; message: string }
 
-export const templatesOf = (node: WorkflowNode): string[] => {
+const templatesOf = (node: WorkflowNode): string[] => {
   switch (node.kind) {
     case 'input':
       return []

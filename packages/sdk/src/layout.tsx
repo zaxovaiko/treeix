@@ -11,7 +11,7 @@ import { readStored } from '@treeix/app/storage'
  * Inside a zone j/k move a cursor and Esc steps back a level; the terminal keeps every bare key.
  */
 export type ZoneId = 'rail' | 'list' | 'main' | 'inspector' | 'dock'
-export const ZONE_ORDER: ZoneId[] = ['rail', 'list', 'main', 'inspector', 'dock']
+const ZONE_ORDER: ZoneId[] = ['rail', 'list', 'main', 'inspector', 'dock']
 
 /** Keys and what they do, e.g. ['j k', 'move']; a space separates keys pressed one after another */
 export type KeyHint = [keys: string, label: string]

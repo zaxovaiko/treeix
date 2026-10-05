@@ -97,7 +97,7 @@ export function afterPrompt(state: ChatState): { state: ChatState; next: ChatCon
 }
 
 /** Stopping puts queued texts back into the draft, oldest first, so nothing typed is lost */
-export function restoreQueue(state: ChatState): ChatState {
+function restoreQueue(state: ChatState): ChatState {
   if (state.queue.length === 0) return state
   const texts = state.queue.map((content) => content.flatMap((item) => (item.type === 'text' ? [item.text] : [])).join(''))
   return { ...state, queue: [], draft: [...texts, state.draft].filter(Boolean).join('\n\n') }

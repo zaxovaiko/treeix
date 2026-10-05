@@ -80,7 +80,7 @@ async function storeAttachment(file: File): Promise<Attachment> {
   return { path, name: file.name || 'pasted-file', thumbnail }
 }
 
-export function Attachments({
+function Attachments({
   attachments,
   size = 'md',
   onRemove

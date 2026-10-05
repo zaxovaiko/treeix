@@ -14,7 +14,7 @@ import { isJson } from '../shared/json'
 /** Newest first; an agent asking for one of these gets it back, anything else gets the newest */
 const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
 const BODY_LIMIT = 4 * 1024 * 1024
-export const SERVER_NAME = 'treeix'
+const SERVER_NAME = 'treeix'
 
 const INSTRUCTIONS = [
   'Tools of Treeix, the app this session runs in.',
@@ -51,7 +51,7 @@ async function callTool(params: Record<string, unknown>, call: McpCall): Promise
 }
 
 /** One JSON-RPC message; null for notifications, which get no answer */
-export async function answer(request: Request, call: McpCall = { workspaceId: null }): Promise<Reply | null> {
+async function answer(request: Request, call: McpCall = { workspaceId: null }): Promise<Reply | null> {
   if (request.id === undefined || request.id === null) return null
   const params = isJson(request.params) ? request.params : {}
   switch (request.method) {

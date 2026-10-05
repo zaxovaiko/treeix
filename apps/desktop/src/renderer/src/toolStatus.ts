@@ -4,8 +4,6 @@
  */
 let missing = new Set<string>()
 
-export const missingTools = (): Set<string> => missing
-
 export async function refreshToolStatus(): Promise<void> {
   const statuses = await window.api.checkTools().catch(() => [])
   // A null version means the binary is not on PATH; an error with a version still means it runs

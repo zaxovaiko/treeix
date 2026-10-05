@@ -336,5 +336,3 @@ export function createEngine(deps: {
       })
   }
 }
-
-export type Engine = ReturnType<typeof createEngine>

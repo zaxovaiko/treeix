@@ -92,7 +92,7 @@ const githubPullRequestNode = (raw: unknown): Json => object(object(object(objec
 const GITLAB_STATES: Record<string, PullRequestState> = { opened: 'open', merged: 'merged', closed: 'closed', locked: 'closed' }
 
 /** `gh pr list` has no avatar field; bots come through as `app/<name>` and have no profile image */
-export const githubAvatar = (login: string): string | null => (login && !login.includes('/') ? `https://github.com/${login}.png?size=64` : null)
+const githubAvatar = (login: string): string | null => (login && !login.includes('/') ? `https://github.com/${login}.png?size=64` : null)
 
 export function toGithubPullRequest(raw: Json, repoPath: string): PullRequest {
   return {
@@ -164,7 +164,7 @@ const REVIEW_QUERY = `query($q: String!) {
 const REVIEW_STATES: Record<string, 'approved' | 'changes' | 'commented'> = { APPROVED: 'approved', CHANGES_REQUESTED: 'changes', COMMENTED: 'commented' }
 
 /** Conversation comments plus review threads per PR number, from REVIEW_QUERY's response */
-export function githubCommentCounts(raw: unknown): Map<number, number> {
+function githubCommentCounts(raw: unknown): Map<number, number> {
   const counts = new Map<number, number>()
   for (const pr of list(object(object(object(raw).data).search).nodes)) {
     const number = numberOrNull(pr.number)
@@ -353,7 +353,7 @@ export function githubMyReview(raw: unknown): PullRequestDetail['myReview'] {
 }
 
 /** Files the viewer marked as viewed, from the same pull request query */
-export const githubViewedFiles = (raw: unknown): string[] =>
+const githubViewedFiles = (raw: unknown): string[] =>
   list(object(githubPullRequestNode(raw).files).nodes)
     .filter((file) => file.viewerViewedState === 'VIEWED')
     .map((file) => text(file.path))

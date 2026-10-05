@@ -4,7 +4,7 @@ import { agentOr, isAgent } from './agents'
 import { type Activity, agentActivity } from './activity'
 import type { SessionKind, SessionStatus, SessionSummary } from '@treeix/sdk'
 
-export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
+const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
   input: { label: 'needs you', color: '#fbbf24' },
   running: { label: 'working', color: '#34d399' },
   done: { label: 'finished, not seen yet', color: '#60a5fa' },

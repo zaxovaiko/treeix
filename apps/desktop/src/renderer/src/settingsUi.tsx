@@ -6,15 +6,13 @@ const SettingsQuery = createContext('')
 export const SettingsSearch = SettingsQuery.Provider
 
 /** Every word of the query appears somewhere in the texts */
-export function settingMatches(query: string, ...texts: string[]): boolean {
+function settingMatches(query: string, ...texts: string[]): boolean {
   const haystack = texts.join(' ').toLowerCase()
   return query
     .toLowerCase()
     .split(/\s+/)
     .every((word) => haystack.includes(word))
 }
-
-export const useSettingsQuery = (): string => useContext(SettingsQuery)
 
 export const useSettingMatch = (...texts: string[]): boolean => settingMatches(useContext(SettingsQuery), ...texts)
 

@@ -13,7 +13,7 @@ export function insideWorktree(worktreePath: string, filePath: string): string {
   return absolute
 }
 
-export const SAVE_CONFLICT = 'SAVE_CONFLICT'
+const SAVE_CONFLICT = 'SAVE_CONFLICT'
 
 /**
  * Writes only if the file still holds `expected` (the version the editor loaded); otherwise throws SAVE_CONFLICT

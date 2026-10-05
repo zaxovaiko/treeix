@@ -16,7 +16,7 @@ const merge = (current: NetworkEntry[], updates: NetworkEntry[]): NetworkEntry[]
   return [...byId.values()].slice(-LIMIT)
 }
 
-export function receive(batch: EntryBatch): void {
+function receive(batch: EntryBatch): void {
   const current = batch.reset ? { ...empty, vitals: pages.get(batch.guestId)?.vitals ?? [] } : (pages.get(batch.guestId) ?? empty)
   pages.set(batch.guestId, { ...current, console: [...current.console, ...batch.console].slice(-LIMIT), network: merge(current.network, batch.network) })
   notify()

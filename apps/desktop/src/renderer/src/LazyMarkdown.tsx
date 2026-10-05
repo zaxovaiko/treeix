@@ -5,7 +5,7 @@ import { FoldAllButton } from './ui'
 const Markdown = lazy(() => import('./Markdown').then((module) => ({ default: module.Markdown })))
 
 /** Fold all / unfold all for the sections of every markdown in a scope; `at` makes repeats take effect */
-export type FoldSignal = { open: boolean; at: number }
+type FoldSignal = { open: boolean; at: number }
 type MarkdownFolds = { signal: FoldSignal | null; register: () => () => void; toggleAll: () => void; foldable: boolean }
 
 export const MarkdownFoldsContext = createContext<MarkdownFolds | null>(null)

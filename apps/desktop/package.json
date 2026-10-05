@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "1.5.1",
-    "@electron-toolkit/preload": "3.0.2",
     "@electron-toolkit/tsconfig": "2.0.0",
     "@pierre/diffs": "1.5.1",
     "@pierre/theme": "2.0.0",

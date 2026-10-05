@@ -12,7 +12,6 @@
       },
       "devDependencies": {
         "@agentclientprotocol/sdk": "1.5.1",
-        "@electron-toolkit/preload": "3.0.2",
         "@electron-toolkit/tsconfig": "2.0.0",
         "@pierre/diffs": "1.5.1",
         "@pierre/theme": "2.0.0",
@@ -110,8 +109,6 @@
     "@chevrotain/utils": ["@chevrotain/utils@11.1.2", "", {}, "sha512-4mudFAQ6H+MqBTfqLmU7G1ZwRzCLfJEooL/fsF6rCX5eePMbGhoy5n4g+G4vlh2muDcsCTJtL+uKbOzWxs5LHA=="],
 
     "@electron-internal/extract-zip": ["@electron-internal/extract-zip@1.0.5", "", {}, "sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA=="],
-
-    "@electron-toolkit/preload": ["@electron-toolkit/preload@3.0.2", "", { "peerDependencies": { "electron": ">=13.0.0" } }, "sha512-TWWPToXd8qPRfSXwzf5KVhpXMfONaUuRAZJHsKthKgZR/+LqX1dZVSSClQ8OTAEduvLGdecljCsoT2jSshfoUg=="],
 
     "@electron-toolkit/tsconfig": ["@electron-toolkit/tsconfig@2.0.0", "", { "peerDependencies": { "@types/node": "*" } }, "sha512-AdPsP770WhW7b260h13SHMdmjEEHJL6xFtgi3jwgdsSQbJOkJLeNnnpZW9qxTPCvmRI6vmdzWz5K3gibFS6SNg=="],
 

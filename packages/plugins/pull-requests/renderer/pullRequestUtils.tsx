@@ -31,7 +31,7 @@ export function conversationFeed<Thread extends Pick<ReviewThread, 'comments'>>(
 const COMMENT_ANCHORS: Record<string, string> = { review: 'discussion_r', issue: 'issuecomment-', note: 'note_' }
 
 /** Where a thread lives on the web, from its first comment's id (`review:1`, `issue:1`, `note:1`) */
-export function threadUrl(pr: PullRequest, thread: ReviewThread): string {
+function threadUrl(pr: PullRequest, thread: ReviewThread): string {
   const [kind = '', id = ''] = thread.comments[0]?.id.split(':') ?? []
   const anchor = COMMENT_ANCHORS[kind]
   return anchor && id ? `${pr.url}#${anchor}${id}` : pr.url

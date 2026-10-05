@@ -53,5 +53,3 @@ export const CRON_PRESETS = [
   { cron: '0 * * * *', label: 'Every hour' },
   { cron: '0 9 1 * *', label: 'On the 1st of every month at 9:00' }
 ] as const
-
-export const cronLabel = (cron: string): string => CRON_PRESETS.find((preset) => preset.cron === cron)?.label ?? cron

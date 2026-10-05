@@ -5,7 +5,7 @@ import { app } from 'electron'
 
 const MAX_BYTES = 25 * 1024 * 1024
 
-export const safeFileName = (name: string): string =>
+const safeFileName = (name: string): string =>
   basename(name)
     .replace(/[^\w.-]+/g, '_')
     .slice(-80) || 'file'

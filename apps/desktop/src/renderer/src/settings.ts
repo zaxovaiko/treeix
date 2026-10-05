@@ -78,8 +78,8 @@ export type Settings = {
   terminalFont: string
 }
 
-export const THEME_MODES = ['system', 'light', 'dark'] as const
-export type ThemeMode = (typeof THEME_MODES)[number]
+const THEME_MODES = ['system', 'light', 'dark'] as const
+type ThemeMode = (typeof THEME_MODES)[number]
 
 const nonEmpty = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
 
@@ -97,12 +97,12 @@ export function parseAppearance(stored: Record<string, unknown>): Pick<Settings,
 export const TERMINAL_FONT_WEIGHTS = ['auto', '300', '400', '500', '600'] as const
 export type TerminalFontWeight = (typeof TERMINAL_FONT_WEIGHTS)[number]
 export const TERMINAL_CONTRASTS = [1, 3, 4.5, 7] as const
-export type TerminalContrast = (typeof TERMINAL_CONTRASTS)[number]
+type TerminalContrast = (typeof TERMINAL_CONTRASTS)[number]
 
 const KEY = 'settings'
 export const MIN_OPACITY = 40
 export const BORDER_STRENGTHS = [0, 25, 50, 75, 100] as const
-export type BorderStrength = (typeof BORDER_STRENGTHS)[number]
+type BorderStrength = (typeof BORDER_STRENGTHS)[number]
 const key = (code: string, modifiers: Partial<Shortcut> = {}): Shortcut => ({ code, meta: false, alt: false, ctrl: false, shift: false, ...modifiers })
 
 /** Earlier versions stored one of a few preset accelerators */

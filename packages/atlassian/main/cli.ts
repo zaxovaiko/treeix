@@ -25,7 +25,7 @@ export const acli = async (args: string[]): Promise<unknown> => JSON.parse(await
 
 /** The signed-in site from `acli jira auth status`, e.g. team.atlassian.net; JSON from acli only links internal hosts */
 export const parseSite = (status: string): string | null => status.match(/Site:\s*(\S+)/)?.[1] ?? null
-export const parseEmail = (status: string): string | null => status.match(/Email:\s*(\S+)/)?.[1] ?? null
+const parseEmail = (status: string): string | null => status.match(/Email:\s*(\S+)/)?.[1] ?? null
 
 let site: Promise<string | null> | null = null
 export const atlassianSite = (): Promise<string | null> => {

@@ -116,7 +116,7 @@ export function threadComments(comments: AtlassianComment[]): AtlassianComment[]
   return roots
 }
 
-export function parentOf(raw: unknown): WorkItemDetail['parent'] {
+function parentOf(raw: unknown): WorkItemDetail['parent'] {
   const parent = object(raw)
   const key = text(parent.key)
   return key ? { key, summary: text(object(parent.fields).summary), type: text(object(object(parent.fields).issuetype).name) } : null

@@ -4,7 +4,7 @@ import { type ActionDef, defineActions, key } from '../../shared/keymap'
  * The app's own actions and the keys they ship with. Plugins add theirs the same way, from their own modules.
  * Movement inside a zone (j k, arrows, ⏎, esc) is the focus model rather than an action, so it stays fixed.
  */
-export const CORE_ACTIONS: ActionDef[] = defineActions([
+const CORE_ACTIONS: ActionDef[] = defineActions([
   {
     id: 'app.palette',
     label: 'Search everything: commands, workspaces, files, pull requests, tasks, settings',

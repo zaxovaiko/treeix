@@ -12,7 +12,7 @@ const RESULT_LIMIT = 40
 
 /** Space names by id; Confluence only gives pages a space id */
 let spaces: Promise<Map<string, Space>> | null = null
-export const spaceNames = (): Promise<Map<string, Space>> => {
+const spaceNames = (): Promise<Map<string, Space>> => {
   spaces ??= acli(['confluence', 'space', 'list', '--limit', '250', '--json'])
     .then((raw) => {
       const results = object(raw).results

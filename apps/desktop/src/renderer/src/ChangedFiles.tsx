@@ -5,8 +5,6 @@ import { getSettings, groupOpen, toggleIn, useSettings } from './settings'
 import { ancestorFolders, buildFolderTree, type FolderNode } from './fileTree'
 import { baseName } from './Sidebar'
 
-export const dirName = (path: string): string => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')
-
 /** Folders flipped from the default open state, see groupOpen; lifted when a header controls expanding */
 export type FolderToggles = [Set<string>, React.Dispatch<React.SetStateAction<Set<string>>>]
 

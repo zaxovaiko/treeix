@@ -1,7 +1,7 @@
 import { parseEnv } from 'node:util'
 import type { EnvVar } from '../shared/types'
 
-export const ENV_FILE = /(^|\/)\.env(\.[\w.-]+)?$/
+const ENV_FILE = /(^|\/)\.env(\.[\w.-]+)?$/
 export const isTemplate = (path: string): boolean => /\.(example|sample|template|dist)$/.test(path)
 export const isEnvPath = (path: string): boolean => ENV_FILE.test(path) && !path.includes('node_modules/')
 

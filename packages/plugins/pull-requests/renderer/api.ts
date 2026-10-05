@@ -1,5 +1,4 @@
 import { createBridge, definePluginSettings } from '@treeix/sdk'
-import type { FilePatch } from '@treeix/shared/types'
 import type {
   ConflictResult,
   ImageResult,
@@ -63,8 +62,6 @@ export const imageResolver =
     pending.catch(() => images.delete(source))
     return pending
   }
-
-export type { FilePatch }
 
 export const POLL_MINUTES = [0, 1, 5, 15] as const
 export type PollMinutes = (typeof POLL_MINUTES)[number]
