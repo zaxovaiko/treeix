@@ -25,15 +25,8 @@ const ALLOWED_PERMISSIONS = new Set(['fullscreen', 'clipboard-sanitized-write'])
 /** Electron grants every permission by default; pages get none that would need a prompt in Chrome */
 export const allowsPermission = (permission: string): boolean => ALLOWED_PERMISSIONS.has(permission)
 
-/** Sites like Google sign-in turn away embedded browsers, so pages see the stock Chrome user agent */
-export const browserUserAgent = (fallback: string, appName: string): string =>
-  fallback
-    .split(' ')
-    .filter((token) => !/^electron\//i.test(token) && !token.toLowerCase().startsWith(`${appName.toLowerCase()}/`))
-    .join(' ')
-
-export function configureBrowserSession(browser: Session, userAgentFallback: string, appName: string): void {
+// The user agent stays Electron's own: Google sign-in rejects a Chrome one whose client hints lack the Google Chrome brand
+export function configureBrowserSession(browser: Session): void {
   browser.setPermissionRequestHandler((_, permission, callback) => callback(allowsPermission(permission)))
   browser.setPermissionCheckHandler((_, permission) => allowsPermission(permission))
-  browser.setUserAgent(browserUserAgent(userAgentFallback, appName))
 }

@@ -32,5 +32,5 @@ Users switched to Chrome to check a dev server, a PR preview or a logged-in site
 Changes since the spec:
 
 - Permissions are not prompted per origin. Pages get only `fullscreen` and `clipboard-sanitized-write`; everything else is denied.
-- Pages see the stock Chrome user agent with the Electron and app tokens stripped, for sites that refuse embedded browsers.
+- Pages see Electron's own user agent. A stock Chrome one with the Electron and app tokens stripped got Google sign-in rejected, since the client hints still lack the Google Chrome brand.
 - The palette offers "New browser tab" instead of "Open URL".

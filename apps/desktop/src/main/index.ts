@@ -93,7 +93,7 @@ app.whenReady().then(() => {
   if (headless && process.platform === 'darwin') app.setActivationPolicy('accessory')
   // Packaged builds take the icon from the bundle; dev runs inside the stock Electron app
   if (is.dev) app.dock?.setIcon(join(__dirname, '../../resources/icon.png'))
-  configureBrowserSession(session.fromPartition(BROWSER_PARTITION), app.userAgentFallback, app.getName())
+  configureBrowserSession(session.fromPartition(BROWSER_PARTITION))
   enablePasskeys(session.fromPartition(BROWSER_PARTITION))
   ipcMain.handle('scan', () => scan())
   ipcMain.handle('diff', (_, worktreePath: string) => diff(worktreePath))
