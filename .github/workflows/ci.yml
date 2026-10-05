@@ -13,6 +13,9 @@ jobs:
   check:
     # The same runner as releases: node-pty and the mac-window addon build natively, and e2e drives the real app
     runs-on: macos-26
+    # The renderer build (Monaco, Shiki grammars, Mermaid) peaks around 2.4 GB of heap, past Node's default on this runner
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
 
