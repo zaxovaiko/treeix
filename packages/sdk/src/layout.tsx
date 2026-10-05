@@ -1,4 +1,4 @@
-import { createContext, type CSSProperties, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { createContext, type CSSProperties, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import { ResizeHandle } from '@treeix/app/ui'
 import { HostContext } from './index'
@@ -242,6 +242,9 @@ export function Zone({ id, className = '', style, children }: { id: ZoneId; clas
 }
 
 const LIST_LIMITS = { list: [180, 640], inspector: [220, 640] } as const
+/** In a narrow page, like one opened beside another, main keeps this much: side panels shrink to SIDE_MIN, then the inspector and then the list hide */
+const MAIN_MIN = 240
+const SIDE_MIN = 150
 
 /** Side panels each page's layout offers, so a panel key on a page without that panel can say so instead of flipping hidden state */
 const pageParts = new Map<string, { list: boolean; inspector: boolean }>()
@@ -296,19 +299,28 @@ export function PageLayout({
   const prefs = pagePanels(page)
   const listSize = prefs.listWidth ?? listWidth
   const inspectorSize = prefs.inspectorWidth ?? inspectorWidth
+  const ref = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(Infinity)
+  useLayoutEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    if (ref.current) observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [])
+  const showList = list !== undefined && prefs.list && !shell.zen && width >= MAIN_MIN + SIDE_MIN
+  const showInspector = inspector !== undefined && prefs.inspector && !shell.zen && width >= MAIN_MIN + SIDE_MIN * (showList ? 2 : 1)
   return (
-    <div className="flex min-h-0 min-w-0 flex-1">
-      {list !== undefined && prefs.list && !shell.zen && (
-        <Zone id="list" style={{ width: listSize }} className="shrink-0 border-r border-border bg-sidebar">
+    <div ref={ref} className="flex min-h-0 min-w-0 flex-1">
+      {showList && (
+        <Zone id="list" style={{ width: listSize, minWidth: SIDE_MIN }} className="border-r border-border bg-sidebar">
           {list}
           {resizable && <ResizeHandle width={listSize} min={LIST_LIMITS.list[0]} max={LIST_LIMITS.list[1]} onResize={(next) => setPagePanels(page, { listWidth: next })} />}
         </Zone>
       )}
-      <Zone id="main" className="flex-1 bg-background">
+      <Zone id="main" style={{ minWidth: Math.min(MAIN_MIN, width) }} className="flex-1 bg-background">
         {claimDock && host ? host.withDock(main) : main}
       </Zone>
-      {inspector !== undefined && prefs.inspector && !shell.zen && (
-        <Zone id="inspector" style={{ width: inspectorSize }} className="shrink-0 border-l border-border bg-card">
+      {showInspector && (
+        <Zone id="inspector" style={{ width: inspectorSize, minWidth: SIDE_MIN }} className="border-l border-border bg-card">
           {inspector}
           {resizable && (
             <ResizeHandle

@@ -53,7 +53,7 @@ function PlanButton({ startedAt, name }: { startedAt: number; name?: string | nu
       className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <Icon name="file" className="size-3" />
-      Plan
+      <span className="@max-md:hidden">Plan</span>
     </button>
   )
 }

@@ -119,7 +119,8 @@ function DiagramsButton({ session }: { session: Session }): React.JSX.Element | 
       className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <Icon name="layers" className="size-3" />
-      Diagrams
+      {/* In a narrow toolbar, like the terminal page opened beside another, the icon alone */}
+      <span className="@max-md:hidden">Diagrams</span>
     </button>
   )
 }
@@ -534,11 +535,11 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
   }
   return (
     <Picker
-      title={`Go to folder (${actionKeys('terminal.goToFolder')}); new groups start there`}
+      title={`${label}: go to folder (${actionKeys('terminal.goToFolder')}); new groups start there`}
       trigger={
         <span className="flex h-6 max-w-48 min-w-0 items-center gap-1.5 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           <Icon name="folder" className="size-3 shrink-0" />
-          <span className="truncate">{label}</span>
+          <span className="truncate @max-md:hidden">{label}</span>
           <Icon name="chevron" className="size-3 shrink-0 rotate-90" />
         </span>
       }
@@ -612,7 +613,7 @@ function TabStrip({
   const lone = activeTab && tabPanes(activeTab).length === 1 ? sessions.find((session) => session.id === tabPanes(activeTab)[0]) : undefined
   return (
     <div
-      className={`flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}
+      className={`@container flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}
     >
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
@@ -656,10 +657,11 @@ function TabStrip({
       <span className="min-w-2 flex-1" />
       {lone && <DiagramsButton session={lone} />}
       {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
-      <button title="Split right (⌘D)" aria-label="Split right" onClick={() => void splitPane('right', cwd)} className={stripButton}>
+      {/* Too narrow to split further; the keys still do it */}
+      <button title="Split right (⌘D)" aria-label="Split right" onClick={() => void splitPane('right', cwd)} className={`${stripButton} @max-sm:hidden`}>
         <Icon name="splitRight" className="size-3.5" />
       </button>
-      <button title="Split down (⌘⇧D)" aria-label="Split down" onClick={() => void splitPane('bottom', cwd)} className={stripButton}>
+      <button title="Split down (⌘⇧D)" aria-label="Split down" onClick={() => void splitPane('bottom', cwd)} className={`${stripButton} @max-sm:hidden`}>
         <Icon name="splitDown" className="size-3.5" />
       </button>
       {page && (
