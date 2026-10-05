@@ -54,14 +54,12 @@ export function PlanView({
       <MarkdownFoldScope>
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
           <Icon name="file" className="size-4 text-muted-foreground" />
-          <span className="truncate text-[13px] font-medium">{plan.title}</span>
           <span className="truncate font-mono text-[11px] text-muted-foreground" title={plan.path}>
             {plan.name}
           </span>
           <span className="shrink-0 text-[11px] text-muted-foreground">· updated {timeAgo(new Date(plan.modifiedAt).toISOString())} ago</span>
           <span className="flex-1" />
           {mode === 'preview' && <MarkdownFoldButton />}
-          {mode === 'source' && <span className="truncate text-[11px] text-muted-foreground">Drag lines to comment</span>}
           <div className="flex shrink-0 rounded-md border border-border bg-muted p-0.5">
             {(['source', 'preview'] as const).map((value) => (
               <button
