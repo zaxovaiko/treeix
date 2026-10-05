@@ -5,7 +5,7 @@ import { sessionTools } from './agentTools'
 import { codexConversations } from './codex'
 import { claudeCost, watchStatuses, withStatusHooks } from './hooks'
 import { mermaidDiagrams, readTranscript, searchTranscripts, transcriptUsage } from './transcripts'
-import { createTerminal, reportStatus, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
+import { createTerminal, reportConversation, reportStatus, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
 
 /** Stand-ins for when Treeix's MCP server couldn't start */
 const NO_MCP = { TREEIX_CLAUDE_MCP: '{"mcpServers":{}}', TREEIX_CODEX_MCP: 'mcp_servers.treeix={url="http://127.0.0.1:9/mcp",enabled=false}' }
@@ -22,7 +22,7 @@ const plugin: MainPlugin = {
     { name: 'codex', purpose: 'Codex sessions', auth: false, releases: { url: 'https://registry.npmjs.org/@openai/codex/latest', field: 'version' }, selfUpdate: 'codex update' }
   ],
   activate: (context) => {
-    const statuses = watchStatuses(reportStatus)
+    const statuses = watchStatuses(reportStatus, reportConversation)
     context.onDispose(() => void statuses.then(({ stop }) => stop()))
     // Built-in agent commands expand these, so each needs a harmless value when nothing else sets it
     context.handle('create', async (event, options: TerminalOptions) => {

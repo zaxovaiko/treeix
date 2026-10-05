@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { withStatusHooks } from './hooks'
+import { statusLineConversation, watchStatuses, withStatusHooks } from './hooks'
 
 test('withStatusHooks keeps other settings and reports input on notifications', () => {
   const settings = JSON.parse(withStatusHooks(JSON.stringify({ statusLine: { type: 'command', command: 'x' } })))
@@ -25,4 +25,17 @@ test('a question or a plan to approve reports input, other tools report work', (
   expect(run('{"session_id": "x", "tool_name": "ExitPlanMode"}')).toBe('input')
   expect(run('{"tool_name":"Bash","tool_input":{"command":"echo AskUserQuestion"}}')).toBe('working')
   rmSync(folder, { recursive: true })
+})
+
+test('a status line write reports the conversation Claude writes to now', async () => {
+  const seen: [string, string][] = []
+  const { folder, stop } = await watchStatuses(
+    () => undefined,
+    (sessionId, conversation) => seen.push([sessionId, conversation])
+  )
+  writeFileSync(join(folder, 'usage-tab-1'), JSON.stringify({ session_id: 'after-clear', cost: { total_cost_usd: 1 } }))
+  await new Promise((done) => setTimeout(done, 300))
+  stop()
+  expect(seen).toContainEqual(['tab-1', 'after-clear'])
+  expect(statusLineConversation('not json')).toBeNull()
 })

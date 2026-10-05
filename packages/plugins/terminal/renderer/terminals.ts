@@ -116,6 +116,11 @@ bridge.on('status', (id, status) => {
   if (status !== 'working' && status !== previous) notifyAgent(id, status === 'done' ? 'finished' : 'needs you')
 })
 
+// Claude starts a new conversation on `/clear`, a resume or a plan's fresh start, all in the same terminal
+bridge.on('conversation', (id, conversation) => {
+  if (typeof id === 'string' && typeof conversation === 'string') patchSession(id, { agentSessionId: conversation })
+})
+
 /**
  * Answering a permission prompt or a question fires no hook until the tool finishes, or none at all when it is declined,
  * so a key pressed while the agent waits counts as the answer

@@ -140,6 +140,15 @@ export function reportStatus(id: string, status: AgentHookStatus): void {
   if (!entry.owner.isDestroyed()) entry.owner.send('plugin:terminal:status', id, status)
 }
 
+/** Keeps the session's meta on the conversation its agent writes to now, so its transcript, resume and replies follow along */
+export function reportConversation(id: string, conversation: string): void {
+  const entry = sessions.get(id)
+  const meta: unknown = entry ? JSON.parse(entry.meta || '{}') : null
+  if (!entry || typeof meta !== 'object' || meta === null || Reflect.get(meta, 'agentSessionId') === conversation) return
+  entry.meta = JSON.stringify({ ...meta, agentSessionId: conversation })
+  if (!entry.owner.isDestroyed()) entry.owner.send('plugin:terminal:conversation', id, conversation)
+}
+
 /** Live sessions as agents see them, with the tail of what each printed */
 export const sessionEntries = (): { id: string; meta: string; alive: boolean; status?: AgentHookStatus; screen: () => string }[] =>
   [...sessions].map(([id, entry]) => ({ id, meta: entry.meta, alive: entry.pty !== null, status: entry.status, screen: () => entry.chunks.join('') }))

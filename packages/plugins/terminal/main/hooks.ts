@@ -58,15 +58,33 @@ export async function claudeCost(folder: string, sessionId: string): Promise<num
   }
 }
 
+/** The conversation Claude writes to now: `/clear`, a resume or a plan's fresh start each begin a new one in the same terminal */
+export function statusLineConversation(text: string): string | null {
+  try {
+    const input: unknown = JSON.parse(text)
+    const id = typeof input === 'object' && input !== null ? Reflect.get(input, 'session_id') : null
+    return typeof id === 'string' && id ? id : null
+  } catch {
+    return null
+  }
+}
+
 const isHookStatus = (value: string): value is AgentHookStatus => value === 'input' || value === 'working' || value === 'done'
 
-/** Makes the folder hooks write to and calls `onStatus` for every report; the returned function removes it */
-export async function watchStatuses(onStatus: (sessionId: string, status: AgentHookStatus) => void): Promise<{ folder: string; stop: () => void }> {
+/** Makes the folder hooks write to and calls `onStatus` for every report and `onConversation` for every status line; the returned function removes it */
+export async function watchStatuses(
+  onStatus: (sessionId: string, status: AgentHookStatus) => void,
+  onConversation: (sessionId: string, conversation: string) => void
+): Promise<{ folder: string; stop: () => void }> {
   const folder = await mkdtemp(join(tmpdir(), 'treeix-agent-status-'))
   const watcher = watch(folder, (_event, name) => {
-    if (!name || name.startsWith(USAGE_PREFIX)) return
+    if (!name) return
     void readFile(join(folder, name), 'utf8')
-      .then((text) => isHookStatus(text.trim()) && onStatus(name, text.trim() as AgentHookStatus))
+      .then((text) => {
+        if (!name.startsWith(USAGE_PREFIX)) return isHookStatus(text.trim()) && onStatus(name, text.trim() as AgentHookStatus)
+        const conversation = statusLineConversation(text)
+        if (conversation) onConversation(name.slice(USAGE_PREFIX.length), conversation)
+      })
       .catch(() => undefined)
   })
   return {
