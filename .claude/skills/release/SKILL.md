@@ -1,23 +1,40 @@
 ---
 name: release
-description: Cut a Treeix release - every push to main ships a patch; bump package.json for a minor or major, push, and watch GitHub Actions build and publish the DMG. Use on "cut a release", "ship a new version", "release 0.2.0", "publish a build", "/release".
+description: Cut a Treeix release - every push to main ships a patch, a breaking commit ships a major, a package.json bump a minor; push, and watch GitHub Actions build and publish the DMG. Use on "cut a release", "ship a new version", "release 0.2.0", "publish a build", "/release".
 ---
 
 # Cut a release
 
 `.github/workflows/release.yml` ships a release on every push to `main` that touches the app (landing, docs,
 marketing, `.claude` and markdown-only pushes are skipped). A patch needs nothing but the push. Your job is a
-minor or major bump when asked, and watching the run.
+minor or major when asked, release notes users can read, and watching the run.
 
 ## Before pushing
 
 1. Working tree clean and on `main`. If not, stop and say so.
 2. `bun run typecheck && bun test` pass locally. The workflow runs both, so a failure here is a failed release, not a surprise.
 
-## Minor or major
+## Release notes
+
+The workflow writes them from the commits since the latest tag (`apps/desktop/scripts/release-notes.sh`): breaking
+changes, then `feat` subjects, then `fix` subjects, scope first. Other types are left out. Preview before pushing,
+and reword unpushed subjects that only make sense to us:
+
+```sh
+sh apps/desktop/scripts/release-notes.sh "$(git tag -l 'v*' --sort=-v:refname | head -1)..HEAD"
+```
+
+## Major
+
+A commit since the latest tag marked breaking, `feat(scope)!: ...` or a `BREAKING CHANGE: ...` body line, makes the
+workflow ship the next major (`1.4.2` -> `2.0.0`). Nothing to bump. Only for real breaks, and confirm with the user
+first: there is no undoing a major once installed copies update into it.
+
+## Minor
 
 The workflow ships `apps/desktop/package.json` `version` as is when no tag has it yet; otherwise it releases the
-patch after the latest tag. It never commits the bump, so `package.json` lags behind patch releases on purpose.
+patch after the latest tag (or the major, above). It never commits the bump, so `package.json` lags behind patch
+releases on purpose.
 
 ```sh
 # <version> is bare, e.g. 0.6.0

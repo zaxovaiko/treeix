@@ -1,8 +1,14 @@
 # Releasing
 
 Every push to `main` that touches the app runs `.github/workflows/release.yml`, which picks the next patch version,
-builds, signs, notarizes and publishes the GitHub release, tagging the pushed commit. For a minor or major, set it in
-`apps/desktop/package.json` and push; the workflow ships that version as is.
+builds, signs, notarizes and publishes the GitHub release, tagging the pushed commit.
+
+- **Patch**: any push.
+- **Major**: a commit since the latest tag marked breaking, `feat(scope)!:` or a `BREAKING CHANGE:` body line.
+- **Minor**: set it in `apps/desktop/package.json` and push; the workflow ships that version as is.
+
+The release notes come from the same commits (`apps/desktop/scripts/release-notes.sh`): breaking changes, `feat`
+and `fix` subjects grouped and scope first, other types left out, and a link to the full compare.
 That release is also the update feed: `latest-mac.yml` next to the zip is what the app reads.
 
 ## In-app updates

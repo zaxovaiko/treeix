@@ -29,21 +29,28 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      # A version bumped by hand in package.json (a minor or major) ships as is; otherwise the patch after the
-      # latest tag. The bump lives only in this build, main is never committed to
-      - name: Pick the version
+      # A version bumped by hand in package.json (a minor) ships as is; a breaking commit since the latest tag
+      # (feat!:, BREAKING CHANGE:) ships the next major; otherwise the patch after the latest tag. The bump lives
+      # only in this build, main is never committed to
+      - name: Pick the version and write the notes
         run: |
           pinned=$(bun --print "require('./apps/desktop/package.json').version")
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          notes="$RUNNER_TEMP/notes.md"
+          sh apps/desktop/scripts/release-notes.sh "${latest:+$latest..}HEAD" > "$notes"
+          IFS=. read -r major minor patch <<< "${latest#v}"
           if [ -z "$(git tag -l "v$pinned")" ]; then
             version="$pinned"
+          elif grep -q '^## Breaking' "$notes"; then
+            version="$((major + 1)).0.0"
           else
-            IFS=. read -r major minor patch <<< "${latest#v}"
             version="$major.$minor.$((patch + 1))"
           fi
+          [ -n "$latest" ] && echo "**Full changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$latest...v$version" >> "$notes"
           npm version --no-git-tag-version --prefix apps/desktop "$version" > /dev/null
           echo "TAG=v$version" >> "$GITHUB_ENV"
           echo "Releasing v$version"
+          cat "$notes"
 
       - run: bun install
 
@@ -111,7 +118,7 @@ jobs:
           # A draft until every file is up: installed copies see the release only once latest-mac.yml is there
           # The tag is created on this commit when the draft is published
           gh release view "$TAG" > /dev/null 2>&1 ||
-            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
           gh release upload "$TAG" --clobber \
             Treeix-arm64.dmg Treeix-arm64.dmg.blockmap \
             Treeix-*-arm64-mac.zip Treeix-*-arm64-mac.zip.blockmap \
