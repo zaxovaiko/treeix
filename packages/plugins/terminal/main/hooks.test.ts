@@ -34,7 +34,8 @@ test('a status line write reports the conversation Claude writes to now', async 
     (sessionId, conversation) => seen.push([sessionId, conversation])
   )
   writeFileSync(join(folder, 'usage-tab-1'), JSON.stringify({ session_id: 'after-clear', cost: { total_cost_usd: 1 } }))
-  await new Promise((done) => setTimeout(done, 300))
+  // File watching on a loaded CI runner can take well over a few hundred ms to fire
+  for (let waited = 0; !seen.length && waited < 5000; waited += 50) await new Promise((done) => setTimeout(done, 50))
   stop()
   expect(seen).toContainEqual(['tab-1', 'after-clear'])
   expect(statusLineConversation('not json')).toBeNull()
