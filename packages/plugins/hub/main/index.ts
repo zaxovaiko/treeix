@@ -8,6 +8,7 @@ import { validate } from '../shared/validate'
 import { type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
+import { hubTools } from './mcp'
 import { createOpenAiAdapter } from './openaiAdapter'
 import { createRuns } from './runs'
 import { jsonList } from './store'
@@ -18,12 +19,6 @@ const NOTICE_CHARS = 300
 
 const isAgentRuntime = (value: unknown): value is AgentRuntime =>
   isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
-
-const argument = (args: Record<string, unknown>, name: string): string => {
-  const value = args[name]
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required`)
-  return value
-}
 
 const upsert = <T extends { id: string }>(items: T[], item: T): T[] =>
   items.some((entry) => entry.id === item.id) ? items.map((entry) => (entry.id === item.id ? item : entry)) : [...items, item]
@@ -158,37 +153,7 @@ const plugin: MainPlugin = {
     context.handle('retryRun', (_, runId: string, node: string) => engine.retry(runId, node))
     context.on('answer', (_, runId: string, node: string, requestId: string, optionId: string | null) => engine.answer(runId, node, requestId, optionId))
 
-    context.mcpTool({
-      name: 'hub_agents',
-      description: "Lists the user's AI Hub agents, which hub_ask can ask: each one's name and instructions.",
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      run: async () =>
-        (await agents.get()).map((agent) => `${agent.name}: ${agent.instructions.trim() || '(no instructions)'}`).join('\n\n') ||
-        'No agents yet; the user creates them in the AI Hub tab'
-    })
-    context.mcpTool({
-      name: 'hub_ask',
-      description:
-        'Asks one of the AI Hub agents (see hub_agents) and waits for its answer, up to 10 minutes. Each ask is a fresh conversation, so include everything the agent needs to know. The user sees the run in the AI Hub tab.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          agent: { type: 'string', description: 'The agent name' },
-          message: { type: 'string' },
-          folder: { type: 'string', description: 'Absolute path the agent works in; its own folder by default' }
-        },
-        required: ['agent', 'message'],
-        additionalProperties: false
-      },
-      run: async (args) => {
-        const name = argument(args, 'agent').trim().toLowerCase()
-        const agent = (await agents.get()).find((candidate) => candidate.name.toLowerCase() === name || candidate.id === name)
-        if (!agent) throw new Error(`No agent named ${args.agent}; hub_agents lists them`)
-        const run = await engine.wait(engine.ask(agent.id, argument(args, 'message'), typeof args.folder === 'string' && args.folder ? args.folder : null, true).id)
-        if (run?.status !== 'done') throw new Error(run?.nodes.agent.error ?? `The run ended ${run?.status ?? 'unexpectedly'}`)
-        return run.output || '(no answer)'
-      }
-    })
+    hubTools({ agents: agents.get, saveAgents: write, workflows: workflows.get, saveWorkflows: writeWorkflows, engine }).forEach((tool) => context.mcpTool(tool))
   }
 }
 
