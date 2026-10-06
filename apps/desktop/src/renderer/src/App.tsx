@@ -38,7 +38,7 @@ import {
   Zone,
   zoneBack
 } from '@treeix/sdk'
-import { getAgents } from './agents'
+import { getAgents, isAgent } from './agents'
 import { activityOf } from './sessionUi'
 import { keptPages, visitedIn } from './keepAlive'
 import { CleanupDialog } from './CleanupDialog'
@@ -65,7 +65,7 @@ import { FileIcon, Icon, type IconName } from './Icon'
 import { McpInstallButton } from './mcpInstall'
 import { setWorkspaceSwitcher } from './notifications'
 import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
-import { SendButton } from './SendButton'
+import { SendButton, SUBMIT_AFTER_PASTE } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
 import { isPageId, showSettingsPage } from './settingsNav'
 import { WorkspaceDialog, WorkspaceRail } from './WorkspaceRail'
@@ -95,7 +95,7 @@ import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updat
 import { UpdateBanner } from './updates'
 
 import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, NothingOpen, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
-import { isJson, list, object } from '../../shared/json'
+import { isJson, isString, list, object } from '../../shared/json'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
@@ -142,6 +142,10 @@ function readPlace(workspaceId: string): SavedPlace {
   }
 }
 const SAVED_PLACE = readPlace(getCurrentWorkspaceId())
+
+const SPLITS_KEY = 'app.splitsByWorkspace'
+const readSplits = (): Record<string, string[]> =>
+  Object.fromEntries(Object.entries(object(readStored(SPLITS_KEY))).map(([workspaceId, ids]) => [workspaceId, list(ids, isString)]))
 
 const BROWSED_FOLDERS_KEY = 'explorer.browsedFolders'
 function readBrowsedFolders(): Record<string, string> {
@@ -293,11 +297,16 @@ function App(): React.JSX.Element {
   const pageHidden = hiddenTab === appTab
   /** Plugin pages seen in this workspace; they stay mounted so coming back to one is instant */
   const [visited, setVisited] = useState<{ workspace: string; tabs: string[] }>({ workspace: '', tabs: [] })
-  /** Pages shown beside the active one, left to right; never the active page itself */
-  // Stored joined, as stored values are scalars; plugin tab ids hold no commas
-  const [splitList, setSplitList] = usePersisted<string>('app.splits', '')
-  const splitTabs = splitList ? splitList.split(',') : []
-  const setSplitTabs = (ids: string[]): void => setSplitList(ids.join())
+  const workspacesState = useWorkspaces()
+  const { workspaces, currentId: workspaceId, recentIds } = workspacesState
+  /** Pages shown beside the active one, left to right, per workspace; never the active page itself */
+  const [splitsByWorkspace, setSplitsByWorkspace] = useState<Record<string, string[]>>(readSplits)
+  const splitTabs = splitsByWorkspace[workspaceId] ?? []
+  const setSplitTabs = (ids: string[]): void => {
+    const next = { ...splitsByWorkspace, [workspaceId]: ids }
+    localStorage.setItem(SPLITS_KEY, JSON.stringify(next))
+    setSplitsByWorkspace(next)
+  }
   const [splitWidth, setSplitWidth] = usePersisted<number>('app.splitWidth', 560)
   /** The split pane that has the keyboard, so only that pane's header reads as active; null while the main one has it */
   const [splitFocus, setSplitFocus] = useState<string | null>(null)
@@ -384,8 +393,6 @@ function App(): React.JSX.Element {
   const drag = useCodeDrag(setDraft)
   const dock = useLayout(panelIds)
   const allSessions = useSessions()
-  const workspacesState = useWorkspaces()
-  const { workspaces, currentId: workspaceId, recentIds } = workspacesState
   // Read in the same render the workspace changed in, so no page of the old workspace is mounted again
   const visitedTabs = visitedIn(visited, workspaceId)
   useEffect(
@@ -1037,6 +1044,34 @@ function App(): React.JSX.Element {
     sessions.showFile(root, absolute.slice(root.length + 1))
     goPage('terminal')
   }
+  /** A path typed in the palette: absolute, from ~, or from the selected worktree or where terminals start, with an optional :line */
+  const typedPathCommand = async (query: string): Promise<Command | null> => {
+    const match = query.trim().match(/^((?:~|\.{0,2}\/|[^\s/:]+\/)[^\s:]*?)\/?(?::(\d+))?(?::\d+)?$/)
+    if (!match) return null
+    const [, typed, lineText] = match
+    const absolute = typed.startsWith('/') ? typed : typed.startsWith('~') ? `${window.api.home}${typed.slice(1)}` : `${selected ?? defaultCwd}/${typed.replace(/^\.\//, '')}`
+    const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
+    const name = absolute.slice(absolute.lastIndexOf('/') + 1)
+    const entries = await window.api.listDirectory(parent, '').catch((): string[] => [])
+    const shown = absolute.replace(window.api.home, '~')
+    const line = lineText ? Number(lineText) : null
+    if (entries.includes(`${name}/`))
+      return { id: `path:${absolute}`, group: 'Files', label: `Browse ${baseName(absolute)}`, detail: shown, icon: 'folder', run: () => setBrowsedFolder(absolute) }
+    if (!entries.includes(name)) return null
+    const root = (repos ?? [])
+      .flatMap((repo) => repo.worktrees.map((candidate) => candidate.path))
+      .filter((path) => absolute.startsWith(`${path}/`))
+      .sort((a, b) => b.length - a.length)[0]
+    return {
+      id: `path:${absolute}`,
+      group: 'Files',
+      label: `Go to ${name}${line ? `:${line}` : ''}`,
+      detail: shown,
+      filePath: absolute,
+      // The terminal page shows files of any folder beside the sessions; elsewhere it opens in the worktree view
+      run: () => (root && (root === selected || appTab !== 'terminal') ? openLocation(root, absolute.slice(root.length + 1), line) : openFromFinder(absolute))
+    }
+  }
   const openFromFinderRef = useRef(openFromFinder)
   openFromFinderRef.current = openFromFinder
   useEffect(() => window.api.onOpenFiles?.((paths) => paths.forEach((path) => openFromFinderRef.current(path))), [])
@@ -1096,6 +1131,7 @@ function App(): React.JSX.Element {
     'app.search': () => setSearchOpen(!searchOpen),
     'app.closedSessions': () => void (runShellCommand('closedSessions') || flash('Recently closed sessions need the Terminal plugin')),
     'app.diffStyle': () => setDiffStyle(diffStyle === 'split' ? 'unified' : 'split'),
+    'app.sendComments': () => sendCommentsToActive(),
     'app.copyComments': () => void navigator.clipboard.writeText(commentsPrompt()).then(() => flash(`Copied ${commentCount}`)),
     'app.clearComments': () => clearComments(),
     'workspace.home': toggleHome,
@@ -1360,6 +1396,22 @@ function App(): React.JSX.Element {
         onClear={() => clearCommentsOn(worktreePath, pathComments.length)}
       />
     )
+  }
+
+  /** Pastes the comments into the agent session last focused: the ones on its checkout, else all of this workspace's */
+  const sendCommentsToActive = (): void => {
+    const service = findService('sessions')
+    const activeId = service?.active()
+    const session = sessions.find((candidate) => candidate.id === activeId)
+    if (!service || !session || !isAgent(session.kind)) return flash('Focus an agent session to send the comments to')
+    const onCheckout = comments.filter((comment) => comment.worktreePath === session.worktreePath)
+    const batch = onCheckout.length ? onCheckout : comments
+    if (!batch.length) return flash('No agent comments to send')
+    const checkout = repos?.flatMap((repo) => repo.worktrees).find((candidate) => candidate.path === session.worktreePath)
+    service.sendText(session.id, promptForComments(batch, checkout ? `${branchLabel(checkout)} (${checkout.path})` : session.worktreePath), readStored(SUBMIT_AFTER_PASTE) === true)
+    const message = `Sent ${batch.length} comment${batch.length === 1 ? '' : 's'} to ${session.title}`
+    archiveSent(session.worktreePath, batch, message)
+    flash(message)
   }
 
   /** The Comments panel for any checkout, with sending and clearing */
@@ -1910,7 +1962,7 @@ function App(): React.JSX.Element {
 
   const tabClass = (active: boolean): string =>
     `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag] ${
-      active ? 'bg-primary/15 text-foreground ring-1 ring-primary/50 ring-inset' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+      active ? 'bg-background text-foreground ring-1 ring-border ring-inset' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
     }`
   // Each project is searched once: in the selected worktree when it belongs to it, otherwise in its main checkout
   const searchPaths = (workspaceRepos ? reposInScope(workspaceRepos, scope) : []).map((repo) =>
@@ -2456,7 +2508,7 @@ function App(): React.JSX.Element {
             </div>
           )}
           {!updateDismissed && !shell.zen && <UpdateBanner onDismiss={() => setUpdateDismissed(true)} />}
-          <Suspense fallback={null}>{paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}</Suspense>
+          <Suspense fallback={null}>{paletteOpen && <CommandPalette commands={commands} pathCommand={typedPathCommand} onClose={() => setPaletteOpen(false)} />}</Suspense>
           <Tooltips />
           {plugins.map(({ manifest, plugin }) =>
             plugin.Root ? (

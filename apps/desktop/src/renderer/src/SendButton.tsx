@@ -10,6 +10,8 @@ import { inWorkspace, useWorkspaces, workspaceOf } from './workspaces'
 import { Popup, useMenuKeys, usePersisted } from './ui'
 
 const lastTargets = new Map<string, string>()
+/** Whether a send presses Enter after pasting */
+export const SUBMIT_AFTER_PASTE = 'send.submitAfterPaste'
 
 function defaultTarget(sessions: Session[], worktreePath: string): Session | undefined {
   const alive = sessions.filter((session) => session.status !== 'exited')
@@ -47,7 +49,7 @@ export function SendButton({
   const anchor = useRef<HTMLDivElement>(null)
   const openMenu = (): void => setMenuOpen(true)
   // Off by default so extra context can be typed before sending; a new key so earlier saved choices don't turn it back on
-  const [submit, setSubmit] = usePersisted<boolean>('send.submitAfterPaste', false)
+  const [submit, setSubmit] = usePersisted<boolean>(SUBMIT_AFTER_PASTE, false)
   const target = defaultTarget(sessions, worktreePath)
   const label = `${count} comment${count === 1 ? '' : 's'}`
   const startable = useAgents().filter((agent) => agent.agent)

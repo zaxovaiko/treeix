@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { droppedPaths, findFileLinks, findInFiles, findIssueLinks, findWebLinks, resolvePath } from './fileLinks'
+import { droppedPaths, findFileLinks, findInFiles, findRowFileLinks, findIssueLinks, findWebLinks, resolvePath } from './fileLinks'
 
 const paths = (text: string) => findFileLinks(text).map(({ path, line }) => (line ? `${path}:${line}` : path))
 
@@ -48,4 +48,24 @@ test('droppedPaths escapes what a shell would split or expand, like Terminal', (
   expect(droppedPaths(['/Users/me/Desktop/Screenshot 2026-10-03 at 9.41.12.png', "/tmp/it's (1).jpg", '/tmp/a.png'])).toBe(
     "/Users/me/Desktop/Screenshot\\ 2026-10-03\\ at\\ 9.41.12.png /tmp/it\\'s\\ \\(1\\).jpg /tmp/a.png "
   )
+})
+
+test('findRowFileLinks joins a path an agent cut over two rows', () => {
+  const first = '  /Users/me/projects/treeix/packages/plugin'
+  const second = '  s/terminal/renderer/fileLinks.ts:12'
+  const targets = (text: string, before: string | null, after: string | null) => findRowFileLinks(text, before, after).map((link) => link.targets)
+  const whole = { path: '/Users/me/projects/treeix/packages/plugins/terminal/renderer/fileLinks.ts', line: 12 }
+  expect(targets(first, null, second)[0][0]).toEqual(whole)
+  expect(targets(second, first, null)[0][0]).toEqual(whole)
+  expect(findRowFileLinks(second, first, null)[0]).toMatchObject({ start: 2, end: second.length })
+})
+
+test('findRowFileLinks keeps a path that only looks cut', () => {
+  expect(findRowFileLinks('see src/a.ts', null, 'and more').map((link) => link.targets)).toEqual([
+    [
+      { path: 'src/a.tsand', line: null },
+      { path: 'src/a.ts', line: null }
+    ]
+  ])
+  expect(findRowFileLinks('edit pty.ts', null, 'and more').map((link) => link.targets)).toEqual([[{ path: 'pty.ts', line: null }]])
 })

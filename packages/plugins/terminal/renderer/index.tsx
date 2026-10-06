@@ -44,6 +44,7 @@ import {
   focusNeighbor,
   focusPaneAt,
   focusSession,
+  activePane,
   focusShown,
   getPorts,
   getTerminals,
@@ -196,6 +197,7 @@ function TerminalPage(): React.JSX.Element {
               orientation="horizontal"
               page
               onGoToFolder={(path) => goToFolder(host, path)}
+              groups={tasks}
             />
           </div>
           {preview && (
@@ -262,10 +264,6 @@ function TerminalPage(): React.JSX.Element {
 
 const bridge = createBridge('terminal')
 
-/**
- * ⌘-click on a path in a session: shows the file on the Terminal page, with the Files panel on the folder it is in
- * unless that folder is already shown. Relative paths start where the session's shell is now.
- */
 /** Whether a path is a file, a folder, or nothing */
 async function entryAt(absolute: string): Promise<'file' | 'folder' | null> {
   const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
@@ -274,22 +272,40 @@ async function entryAt(absolute: string): Promise<'file' | 'folder' | null> {
   return entries.includes(`${name}/`) ? 'folder' : entries.includes(name) ? 'file' : null
 }
 
+/** The first target that is there, read from each folder in turn; agents print paths from the repo root, cut short, or bare names */
+async function locate(targets: { path: string; line: number | null }[], bases: string[]): Promise<{ absolute: string; entry: 'file' | 'folder'; line: number | null } | null> {
+  for (const { path, line } of targets)
+    for (const base of bases) {
+      const direct = resolvePath(path, base, window.api.home)
+      const entry = await entryAt(direct)
+      if (entry) return { absolute: direct, entry, line }
+      if (/^[/~]/.test(path)) break
+      const inFiles = findInFiles(path, (await window.api.listFiles(base).catch(() => ({ files: [] }))).files)
+      if (inFiles) return { absolute: `${base}/${inFiles}`, entry: 'file', line }
+    }
+  return null
+}
+
+/**
+ * ⌘-click on a path in a session: shows the file on the Terminal page, with the Files panel on the folder it is in
+ * unless that folder is already shown. Relative paths start where the session's shell is now, else in its group's folder.
+ */
 function useFileLinks(): void {
   const host = useHost()
   const showInspector = (): void => {
     if (getShell().pages[TAB_ID]?.inspector === false) togglePanel('inspector', TAB_ID)
   }
   useEffect(() =>
-    setFileLinkHandler(async (sessionId, path, line) => {
+    setFileLinkHandler(async (sessionId, targets) => {
       const session = getTerminals().sessions.find((candidate) => candidate.id === sessionId)
-      const cwd = (await bridge.invoke<string | null>('cwd', sessionId).catch(() => null)) ?? session?.worktreePath ?? window.api.home
-      const direct = resolvePath(path, cwd, window.api.home)
-      // Agents print paths from the repo root, cut short, or bare names: those are looked up under the shell's folder
-      const directEntry = await entryAt(direct)
-      const found = directEntry || /^[/~]/.test(path) ? null : findInFiles(path, (await window.api.listFiles(cwd).catch(() => ({ files: [] }))).files)
-      if (!directEntry && !found) return
-      const absolute = found ? `${cwd}/${found}` : direct
-      const isFolder = directEntry === 'folder' && !found
+      const shellCwd = await bridge.invoke<string | null>('cwd', sessionId).catch(() => null)
+      // Agents print paths from the group's folder even after their shell moved
+      const bases = [...new Set([shellCwd, session?.worktreePath].filter((base): base is string => !!base))]
+      if (!bases.length) bases.push(window.api.home)
+      const found = await locate(targets, bases)
+      if (!found) return
+      const { absolute, line } = found
+      const isFolder = found.entry === 'folder'
       const parent = absolute.slice(0, absolute.lastIndexOf('/')) || '/'
       // Binary and oversized files have no viewer here; the Finder knows what opens them
       if (!isFolder && (await window.api.readFile(absolute, '').catch(() => null)) === null) return window.api.revealInFinder(absolute)
@@ -689,6 +705,7 @@ const plugin: RendererPlugin = {
       whenReady,
       sendText,
       runCommand: (cwd, command) => createSession(cwd, 'shell', command),
+      active: () => activePane()?.id ?? null,
       reveal: (id) => {
         revealSession(id)
         setTimeout(() => focusSession(id), 50)

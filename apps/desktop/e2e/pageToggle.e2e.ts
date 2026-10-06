@@ -75,3 +75,31 @@ test('the × sits at the end Settings picks', async () => {
   await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   expect(await terminalTab.evaluate((tab) => tab.firstElementChild?.hasAttribute('data-tab-close') ?? false)).toBe(true)
 })
+
+test('pages side by side belong to the workspace they were opened in', async () => {
+  const { page, repo } = launched
+  const ids = await page.locator('[data-page-tab]').evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute('data-page-tab') ?? ''))
+  const [first, second] = ['terminal', ...ids.filter((id) => id !== 'terminal')]
+  const splits = page.locator('[data-split-pane]:not([data-overlay])')
+  await page.evaluate((repoPath) => {
+    const workspace = (id: string, name: string) => ({ id, name, color: '#64748b', repoPaths: [repoPath] })
+    localStorage.setItem('workspaces', JSON.stringify([workspace('split', 'Split'), workspace('single', 'Single')]))
+    localStorage.setItem('workspaces.current', 'split')
+    localStorage.setItem('app.overlay', 'false')
+  }, repo)
+  await page.reload()
+  const switchTo = async (name: string): Promise<void> => {
+    await page.getByRole('button', { name: 'Run command' }).click()
+    await page.getByPlaceholder(/^Search commands/).fill(`Switch to ${name}`)
+    await page.keyboard.press('Enter')
+  }
+
+  await page.locator(`[data-page-tab="${first}"]`).click()
+  await page.locator(`[data-page-tab="${second}"]`).click({ modifiers: ['Shift'] })
+  await expect(splits).toHaveCount(1)
+
+  await switchTo('Single')
+  await expect(splits).toHaveCount(0)
+  await switchTo('Split')
+  await expect(splits).toHaveCount(1)
+})

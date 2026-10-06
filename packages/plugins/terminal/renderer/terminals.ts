@@ -7,7 +7,7 @@ import { agentOr, getAgent, isAgent, isChatOnly, resumeCommandFor, startCommand 
 import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
 import { agentState, agentStatus } from './agentStatus'
-import { findFileLinks, findIssueLinks, findWebLinks } from './fileLinks'
+import { findIssueLinks, findRowFileLinks, findWebLinks } from './fileLinks'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
@@ -158,7 +158,8 @@ type State = {
 }
 
 /** Opens a path ⌘-clicked in a session; set by the plugin, which knows where files show */
-let fileLinkHandler: ((sessionId: string, path: string, line: number | null) => void) | null = null
+/** Opens the first of `targets` that is there */
+let fileLinkHandler: ((sessionId: string, targets: { path: string; line: number | null }[]) => void) | null = null
 export const setFileLinkHandler = (handler: typeof fileLinkHandler): void => {
   fileLinkHandler = handler
 }
@@ -444,7 +445,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
       activate: (event, uri) => {
         if (!event.metaKey) return
         if (/^https?:\/\//.test(uri)) webLinkHandler?.(uri)
-        else if (uri.startsWith('file://')) fileLinkHandler?.(id, decodeURIComponent(new URL(uri).pathname), null)
+        else if (uri.startsWith('file://')) fileLinkHandler?.(id, [{ path: decodeURIComponent(new URL(uri).pathname), line: null }])
       }
     }
   })
@@ -453,10 +454,16 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
   // ⌘-click on a printed path opens it in the app; wrapped lines are read one row at a time
   terminal.registerLinkProvider({
     provideLinks: (row, callback) => {
-      const text = terminal.buffer.active.getLine(row - 1)?.translateToString(true) ?? ''
+      const rowText = (index: number): string => terminal.buffer.active.getLine(index)?.translateToString(true) ?? ''
+      const text = rowText(row - 1)
+      // Agents cut a path longer than the screen over rows that run (nearly) to the edge
+      const reachesEdge = (line: string): boolean => line.trimEnd().length >= terminal.cols - 3
+      const before = row > 1 && reachesEdge(rowText(row - 2)) ? rowText(row - 2) : null
       const webLinks = findWebLinks(text)
       // A path inside a web address (…/merge_requests/437) belongs to the address
-      const fileLinks = findFileLinks(text).filter((file) => !webLinks.some((web) => file.start < web.end && file.end > web.start))
+      const fileLinks = findRowFileLinks(text, before, reachesEdge(text) ? rowText(row) : null).filter(
+        (file) => !webLinks.some((web) => file.start < web.end && file.end > web.start)
+      )
       const taken = [...webLinks, ...fileLinks]
       const issues = findIssueLinks(text).filter((issue) => issueLinks?.isProject(issue.project) && !taken.some((link) => issue.start < link.end && issue.end > link.start))
       // ⌘-click opens, like in other terminals
@@ -469,7 +476,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
         }
       })
       callback([
-        ...fileLinks.map((link) => toLink(link, () => fileLinkHandler?.(id, link.path, link.line))),
+        ...fileLinks.map((link) => toLink(link, () => fileLinkHandler?.(id, link.targets))),
         ...issues.map((link) => toLink(link, () => issueLinks?.open(link.key))),
         ...webLinks.map((link) => toLink(link, () => webLinkHandler?.(link.url)))
       ])

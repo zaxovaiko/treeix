@@ -118,6 +118,8 @@ export type SessionsService = {
   sendText: (id: string, text: string, submit: boolean) => void
   /** Runs a command in a new shell session, so its output is visible */
   runCommand: (cwd: string, command: string) => Promise<string>
+  /** The pane with the keyboard, else the one last focused in the shown tab */
+  active: () => string | null
   /** Shows the session in the terminal area and focuses it */
   reveal: (id: string) => void
   /** Shows a file beside the terminals; `path` is relative to `root` */

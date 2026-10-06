@@ -66,6 +66,7 @@ const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'wt.findFile', label: 'Find a file in the explorer', section: 'Worktrees', page: 'worktrees', keys: key('KeyP', { meta: true }) },
 
   { id: 'app.diffStyle', label: 'Switch between split and unified diffs', menuLabel: 'Split or unified diff', section: 'Go to', keys: null },
+  { id: 'app.sendComments', label: 'Send the agent comments to the active session', section: 'Comments', keys: key('KeyI', { meta: true, shift: true }) },
   { id: 'app.copyComments', label: 'Copy the agent comments of the worktree', section: 'Comments', keys: null },
   { id: 'app.clearComments', label: 'Delete the agent comments of the worktree', section: 'Comments', keys: null },
   {

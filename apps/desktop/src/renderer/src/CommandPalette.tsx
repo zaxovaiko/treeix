@@ -44,11 +44,14 @@ export function CommandPalette({
   commands,
   onClose,
   placeholder,
-  browseFiles = false
+  browseFiles = false,
+  pathCommand
 }: {
   commands: Command[]
   onClose: () => void
   placeholder?: string
+  /** A command opening the file or folder a typed path names, when there is one */
+  pathCommand?: (query: string) => Promise<Command | null>
   /** A picker over just the given files, like a pull request's changed files: listed before typing, no settings or prefixes */
   browseFiles?: boolean
 }): React.JSX.Element {
@@ -73,7 +76,14 @@ export function CommandPalette({
             openSettings()
           }
         }))
-  const results = paletteResults([...commands, ...settingCommands], query, browseFiles)
+  const [typedPath, setTypedPath] = useState<Command | null>(null)
+  useEffect(() => {
+    let current = true
+    setTypedPath(null)
+    void pathCommand?.(query).then((command) => current && setTypedPath(command))
+    return () => void (current = false)
+  }, [query])
+  const results = [...(typedPath ? [{ command: typedPath, score: 0, marks: new Set<number>() }] : []), ...paletteResults([...commands, ...settingCommands], query, browseFiles)]
 
   useEffect(() => setActive(0), [query])
 

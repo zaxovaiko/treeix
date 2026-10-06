@@ -19,7 +19,7 @@ import { droppedPaths } from './fileLinks'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { type DropEdge, edgeAt } from './paneLayout'
 import { activeTabOf, type Task, type TerminalTab, tabPanes } from './tasks'
-import { NameInput, renaming, startRename } from './taskUi'
+import { NameInput, renaming, startRename, switchTask, taskLabel } from './taskUi'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
   attachSession,
@@ -477,11 +477,12 @@ function TabButton({ task, tab, index, count, sessions }: { task: Task; tab: Ter
   )
 }
 
+const GROUP = 'group:'
 const CHOOSE = 'choose:'
 const DEFAULT = 'default:'
 
-/** The folder on screen as a searchable dropdown: the workspace's checkouts, recent picks, home, or any folder (⌘O) */
-function FolderPicker({ label, current, onGo }: { label: string; current: string; onGo: (path: string) => void }): React.JSX.Element {
+/** The workspace's groups, the next one first, then folders: its checkouts, recent picks, home, or any folder (⌘O) */
+function FolderPicker({ label, current, groups, onGo }: { label: string; current: string; groups: Task[]; onGo: (path: string) => void }): React.JSX.Element {
   const host = useHost()
   const open = useFolderPickerOpen()
   const inScope = (host.repos ?? []).filter((repo) => !host.scopeRepoPaths || host.scopeRepoPaths.includes(repo.path))
@@ -509,7 +510,14 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
   ]
   const action = (id: string, text: string): PickerOption => ({ id, label: text, section: '', render: <span className="truncate text-muted-foreground">{text}</span> })
   const picked = pickedFolder(host.workspaceId)
+  // Rotated so ⏎ right after opening goes to the next group, and the shown one comes last
+  const shownAt = groups.findIndex((group) => `${GROUP}${group.id}` === current)
+  const groupOptions = [...groups.slice(shownAt + 1), ...groups.slice(0, shownAt + 1)].map((group): PickerOption => {
+    const name = taskLabel(group, host.repos)
+    return { id: `${GROUP}${group.id}`, label: `Groups ${name} ${group.worktreePath}`, section: 'Groups', render: <FolderRow name={name} path={group.worktreePath} /> }
+  })
   const options = [
+    ...groupOptions,
     ...recent.map((path) => option('Recent')(path)),
     ...projectOptions,
     ...(unseen(home) ? [option('Home')(home)] : []),
@@ -517,6 +525,8 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
     ...(picked ? [action(DEFAULT, `Back to the default, ${worktreeLabel(host.repos, host.defaultCwd)}`)] : [])
   ]
   const pick = (id: string): void => {
+    const group = groups.find((candidate) => `${GROUP}${candidate.id}` === id)
+    if (group) return (switchTask(host, group), focusShown())
     if (id === DEFAULT) return setPickedFolder(host.workspaceId, null)
     if (id !== CHOOSE) return onGo(id)
     void window.api.pickFolder().then((path) => {
@@ -525,17 +535,15 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
   }
   return (
     <Picker
-      title={`${label}: go to folder (${actionKeys('terminal.goToFolder')}); new groups start there`}
+      title={`${label}: go to a group or folder (${actionKeys('terminal.goToFolder')}); new groups start there`}
       trigger={
-        <span className="flex h-6 max-w-48 min-w-0 items-center gap-1.5 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-          <Icon name="folder" className="size-3 shrink-0" />
-          <span className="truncate @max-md:hidden">{label}</span>
-          <Icon name="chevron" className="size-3 shrink-0 rotate-90" />
+        <span className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
+          <Icon name="folder" className="size-3.5" />
         </span>
       }
       options={options}
       current={current}
-      placeholder="Go to folder"
+      placeholder="Go to group or folder"
       open={open}
       onOpenChange={setFolderPickerOpen}
       onPick={pick}
@@ -566,7 +574,8 @@ function TabStrip({
   onHide,
   side,
   onMove,
-  onGoToFolder
+  onGoToFolder,
+  groups = []
 }: {
   task: Task | null
   label: string
@@ -577,6 +586,8 @@ function TabStrip({
   side?: DockSide
   onMove?: (side: DockSide) => void
   onGoToFolder?: (path: string) => void
+  /** The workspace's groups, offered above the folders */
+  groups?: Task[]
 }): React.JSX.Element {
   const panels = usePanels()
   // In zen the page's strip moves up beside the traffic lights and drags the window, in place of the title bar
@@ -608,7 +619,7 @@ function TabStrip({
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
           <ListToggle />
-          {onGoToFolder && <FolderPicker label={label} current={task?.worktreePath ?? cwd} onGo={onGoToFolder} />}
+          {onGoToFolder && <FolderPicker label={label} current={task ? `${GROUP}${task.id}` : cwd} groups={groups} onGo={onGoToFolder} />}
           <span className="ml-1 h-4 w-px shrink-0 bg-border" />
         </div>
       )}
@@ -726,7 +737,8 @@ export function TaskTerminals({
   onHide,
   side,
   onMove,
-  onGoToFolder
+  onGoToFolder,
+  groups = []
 }: {
   task: Task | null
   /** The task's name for headers */
@@ -746,6 +758,8 @@ export function TaskTerminals({
   onMove?: (side: DockSide) => void
   /** Goes to a folder picked from the group's label, on the Terminal page */
   onGoToFolder?: (path: string) => void
+  /** The workspace's groups, offered above the folders */
+  groups?: Task[]
 }): React.JSX.Element {
   const { sessions: allSessions, zoomed } = useTerminals()
   const [weights, setWeights] = useState<Record<string, number>>({})
@@ -764,7 +778,7 @@ export function TaskTerminals({
 
   return (
     <div data-terminal-panes className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} side={side} onMove={onMove} onGoToFolder={onGoToFolder} />
+      <TabStrip task={task} label={label} cwd={cwd} sessions={sessions} page={page} onHide={onHide} side={side} onMove={onMove} onGoToFolder={onGoToFolder} groups={groups} />
       {columns.length === 0 ? (
         <EmptyTask task={task} label={label} cwd={cwd} history={history} repos={repos} />
       ) : (

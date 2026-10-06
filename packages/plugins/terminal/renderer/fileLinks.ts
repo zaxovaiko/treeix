@@ -28,6 +28,37 @@ export function findFileLinks(text: string): FileLink[] {
   return links.sort((a, b) => a.start - b.start)
 }
 
+/** A path in one row, with what to try in order when clicked */
+export type RowFileLink = { start: number; end: number; targets: { path: string; line: number | null }[] }
+
+/**
+ * File links in one row. Agents cut paths longer than the screen over two rows without marking the wrap, so `before` and
+ * `after` are the rows around it when the cut may run through them; a path joined over the cut is tried first, then the
+ * part on this row. `start` and `end` stay within this row
+ */
+export function findRowFileLinks(text: string, before: string | null, after: string | null): RowFileLink[] {
+  const own = findFileLinks(text)
+  const lead = text.length - text.trimStart().length
+  const body = text.trimEnd()
+  const head = before?.trimEnd().match(/[\w.@+~/-]+$/)?.[0] ?? ''
+  const tail = after?.trimStart().match(/^[\w.@+~/:-]+/)?.[0] ?? ''
+  const joined = head + body.slice(lead) + tail
+  const tailStart = joined.length - tail.length
+  const shift = lead - head.length
+  const crossing = findFileLinks(joined)
+    .filter((link) => (head && link.start < head.length && link.end > head.length) || (tail && link.start < tailStart && link.end > tailStart))
+    .map((link) => ({ start: Math.max(link.start + shift, lead), end: Math.min(link.end + shift, body.length), path: link.path, line: link.line }))
+  const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }): boolean => a.start < b.end && a.end > b.start
+  return [
+    ...crossing.map((link) => ({
+      start: link.start,
+      end: link.end,
+      targets: [link, ...own.filter((part) => overlaps(part, link))].map(({ path, line }) => ({ path, line }))
+    })),
+    ...own.filter((link) => !crossing.some((other) => overlaps(link, other))).map(({ start, end, path, line }) => ({ start, end, targets: [{ path, line }] }))
+  ].sort((a, b) => a.start - b.start)
+}
+
 /** Where a path that isn't there from the shell's folder is in the worktree: the shortest file path ending with it */
 export function findInFiles(path: string, files: string[]): string | null {
   const suffix = `/${path.replace(/^(\.{1,2}\/)+/, '')}`
