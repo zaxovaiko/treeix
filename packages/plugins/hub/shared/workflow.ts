@@ -1,11 +1,13 @@
 import type { ChatEvent, ChatSpec } from '@treeix/sdk/main'
 import { isJson } from '@treeix/shared/json'
+import { isSchedule, type Schedule } from './types'
 
 /** An agent node's run: one fresh session, one prompt, the reply as its output */
 export type AgentNode = { id: string; kind: 'agent'; agent: string; prompt: string; folder: string | null; retries: number; onError: 'stop' | 'continue'; timeoutMin: number }
 
 export type WorkflowNode =
-  | { id: string; kind: 'input' }
+  /** `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input */
+  | { id: string; kind: 'input'; schedules?: Schedule[] }
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
   | { id: string; kind: 'condition'; source: string; test: 'contains' | 'equals' | 'regex' | 'empty'; value: string }
@@ -28,7 +30,14 @@ export const isWorkflow = (value: unknown): value is Workflow =>
   typeof value.id === 'string' &&
   typeof value.name === 'string' &&
   Array.isArray(value.nodes) &&
-  value.nodes.every((node) => isJson(node) && typeof node.id === 'string' && typeof node.kind === 'string' && KINDS.includes(node.kind)) &&
+  value.nodes.every(
+    (node) =>
+      isJson(node) &&
+      typeof node.id === 'string' &&
+      typeof node.kind === 'string' &&
+      KINDS.includes(node.kind) &&
+      (node.schedules === undefined || (Array.isArray(node.schedules) && node.schedules.every(isSchedule)))
+  ) &&
   Array.isArray(value.edges) &&
   value.edges.every((edge) => isJson(edge) && typeof edge.from === 'string' && typeof edge.to === 'string') &&
   isJson(value.layout) &&

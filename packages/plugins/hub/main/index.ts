@@ -9,7 +9,7 @@ import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
 import { hubTools } from './mcp'
@@ -136,31 +136,65 @@ const plugin: MainPlugin = {
       const run = engine.launch('schedule', title, askWorkflow(agent.id, null, schedule.timeoutMin), prompt)
       if (schedule.notify) void engine.wait(run.id).then((ended) => ended && notify(agent, ended))
     }
+    const launchWorkflow = async (workflow: Workflow, schedule: Schedule, title: string, input: string): Promise<void> => {
+      const problem = validate(
+        workflow,
+        (await agents.get()).map((agent) => agent.id)
+      )[0]
+      if (problem) return show(`${workflow.name}'s schedule can't start it`, problem.message, null)
+      const run = engine.launch('workflow', title, workflow, input)
+      if (!schedule.notify) return
+      const ended = await engine.wait(run.id)
+      if (!ended) return
+      const failed = ended.status !== 'done'
+      const error = Object.values(ended.nodes).find((node) => node.error)?.error
+      show(failed ? `${workflow.name} ${ended.status}` : workflow.name, (failed ? error : ended.output) ?? '', ended.id)
+    }
+    /** Where a workflow's schedule command runs: its first agent step's folder */
+    const workflowFolder = async (workflow: Workflow): Promise<string | null> => {
+      const step = workflow.nodes.find((node): node is AgentNode => node.kind === 'agent')
+      return step ? (step.folder ?? (await runtimes.get()).find((entry) => entry.agent === step.agent)?.cwd ?? null) : null
+    }
     // A slow command is skipped on the next firing, never stacked
     const polling = new Set<string>()
-    const runCommand = async (agent: HubAgent, schedule: Schedule, command: string): Promise<void> => {
+    const runCommand = async (owner: string, schedule: Schedule, folder: string | null, start: (title: string, input: string) => void): Promise<void> => {
       if (polling.has(schedule.id)) return
       polling.add(schedule.id)
       try {
         // A login shell, so the command sees the user's PATH even when Treeix started from the Dock
-        const { stdout } = await exec(process.env.SHELL || '/bin/zsh', ['-lc', command], { cwd: agent.folder ?? homedir(), timeout: COMMAND_TIMEOUT_MS })
-        for (const item of commandItems(stdout)) launchScheduled(agent, schedule, item.title, render(schedule.prompt, { input: item.input, prev: '', outputs: {} }))
+        const { stdout } = await exec(process.env.SHELL || '/bin/zsh', ['-lc', schedule.command ?? ''], { cwd: folder ?? homedir(), timeout: COMMAND_TIMEOUT_MS })
+        for (const item of commandItems(stdout)) start(item.title, render(schedule.prompt, { input: item.input, prev: '', outputs: {} }))
       } catch (error) {
-        show(`${agent.name}'s schedule command failed`, error instanceof Error ? error.message : String(error), null)
+        show(`${owner}'s schedule command failed`, error instanceof Error ? error.message : String(error), null)
       } finally {
         polling.delete(schedule.id)
       }
     }
+    const fire = (owner: string, schedule: Schedule, folder: () => Promise<string | null>, start: (title: string, input: string) => void): void => {
+      if (schedule.command?.trim()) void folder().then((cwd) => runCommand(owner, schedule, cwd, start))
+      else start(schedule.prompt.trim().split('\n')[0], schedule.prompt)
+    }
 
     // ponytail: schedules fire only while Treeix runs; a minute missed asleep or quit is skipped, not caught up
     const fireSchedules = async (now: Date): Promise<void> => {
+      const due = (schedule: Schedule): boolean => schedule.enabled && schedule.prompt.trim() !== '' && cronMatches(schedule.cron, now)
       for (const agent of await agents.get())
-        for (const schedule of agent.schedules ?? []) {
-          if (!schedule.enabled || !schedule.prompt.trim() || !cronMatches(schedule.cron, now)) continue
-          const command = schedule.command?.trim()
-          if (command) void runCommand(agent, schedule, command)
-          else launchScheduled(agent, schedule, schedule.prompt.trim().split('\n')[0], schedule.prompt)
-        }
+        for (const schedule of (agent.schedules ?? []).filter(due))
+          fire(
+            agent.name,
+            schedule,
+            async () => agent.folder,
+            (title, prompt) => launchScheduled(agent, schedule, title, prompt)
+          )
+      for (const workflow of await workflows.get())
+        for (const node of workflow.nodes)
+          for (const schedule of node.kind === 'input' ? (node.schedules ?? []).filter(due) : [])
+            fire(
+              workflow.name,
+              schedule,
+              () => workflowFolder(workflow),
+              (title, input) => void launchWorkflow(workflow, schedule, title, input)
+            )
     }
     let timer: ReturnType<typeof setTimeout> | undefined
     // Re-aimed at each minute's start, so the clock never drifts past one
