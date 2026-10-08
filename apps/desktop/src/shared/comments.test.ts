@@ -101,3 +101,9 @@ test('changeBlockStarts finds the first row of each run of changes', () => {
   const rows = ['+a', '+b', ' c', '-d', '+e', ' f', '+g'].map((text) => ({ old: null, new: null, text }))
   expect(changeBlockStarts(rows)).toEqual([0, 3, 6])
 })
+
+test('a note made on a pull request names it, not the checkout it was filed under', () => {
+  const comment: ReviewComment = { ...base, id: '1', filePath: 'package.json', range: { start: 74, end: 74 }, text: 'Pin it', context: 'PR #258 chore/x -> dev https://x/pull/258' }
+  expect(formatComments([comment])).toBe('1. package.json:74 on PR #258 chore/x -> dev https://x/pull/258\nPin it')
+  expect(isReviewComment(comment)).toBe(true)
+})

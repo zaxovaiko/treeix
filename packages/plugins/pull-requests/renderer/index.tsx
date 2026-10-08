@@ -27,7 +27,8 @@ function useViewProps(): DetailProps {
   const host = useHost()
   const addForAgent = (pr: PullRequest, comment: Omit<ReviewComment, 'id' | 'worktreePath' | 'code'>, added = 'Added'): void => {
     const worktreePath = checkoutOf(host, pr)
-    host.addComment({ id: crypto.randomUUID(), worktreePath, code: '', ...comment })
+    const context = `${pr.provider === 'github' ? 'PR' : 'MR'} ${prLabel(pr)} ${pr.sourceBranch} -> ${pr.targetBranch} ${pr.url}`
+    host.addComment({ id: crypto.randomUUID(), worktreePath, code: '', context, ...comment })
     host.flash(`${added} to comments on ${baseName(worktreePath)}`)
   }
   return {

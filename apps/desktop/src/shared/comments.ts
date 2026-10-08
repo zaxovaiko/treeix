@@ -36,6 +36,8 @@ export type ReviewComment = {
   /** Set from the drawer to override what the tool check decided */
   inline?: boolean
   attachments?: Attachment[]
+  /** Where the note was made when the checkout doesn't say, e.g. `PR #258 chore/x -> dev https://...` */
+  context?: string
   /** Workspace the comment was made in; older comments have none and belong to whichever workspace holds their checkout */
   workspaceId?: string
 }
@@ -112,7 +114,7 @@ export function formatComments(comments: ReviewComment[]): string {
   return comments
     .map((comment, index) =>
       [
-        `${index + 1}. ${commentLocation(comment)}`,
+        `${index + 1}. ${commentLocation(comment)}${comment.context ? ` on ${comment.context}` : ''}`,
         comment.text.trim(),
         ...browserDetails(comment),
         ...(comment.attachments?.length ? ['Attached files:', ...comment.attachments.map((file) => `- ${file.path}`)] : [])
@@ -169,6 +171,7 @@ export function isReviewComment(value: unknown): value is ReviewComment {
     (candidate.body === undefined || typeof candidate.body === 'string') &&
     (candidate.tool === undefined || typeof candidate.tool === 'string') &&
     (candidate.inline === undefined || typeof candidate.inline === 'boolean') &&
+    (candidate.context === undefined || typeof candidate.context === 'string') &&
     (candidate.workspaceId === undefined || typeof candidate.workspaceId === 'string') &&
     (candidate.attachments === undefined || (Array.isArray(candidate.attachments) && candidate.attachments.every(isAttachment)))
   )
