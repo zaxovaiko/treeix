@@ -141,7 +141,8 @@ export interface Services {
 export type ChatService = {
   View: ComponentType<{ chatId: string }>
   /** A read-only conversation from logged events, e.g. an agent's part of a workflow run; permission prompts still take answers */
-  Transcript: ComponentType<{ events: LoggedChatEvent[]; cwd: string; onAnswer?: (requestId: string, optionId: string) => void }>
+  /** `live` keeps the last turn unfolded while it runs */
+  Transcript: ComponentType<{ events: LoggedChatEvent[]; cwd: string; live?: boolean; onAnswer?: (requestId: string, optionId: string) => void }>
   /** Connects and remembers the agent session id; resolves with it */
   start: (chatId: string, options: ChatSpec & { agent: string; cwd: string; resume: string | null; workspaceId?: string }) => Promise<string>
   /** Sends a message, queued behind a running turn */

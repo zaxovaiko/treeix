@@ -8,7 +8,7 @@ import type { HubAgent } from '../shared/types'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { RunView, shownRun, StatusIcon } from './RunView'
-import { asking, hubAgents, hubApi, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel } from './store'
+import { asking, chatIdOf, hubAgents, hubApi, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel, setConversation } from './store'
 
 // The canvas library is big and only workflows need it
 const WorkflowView = lazy(() => import('./WorkflowView').then((module) => ({ default: module.WorkflowView })))
@@ -27,13 +27,6 @@ const newWorkflow = (): Workflow => ({
   layout: { input: { x: 0, y: 0 }, output: { x: 520, y: 0 } },
   updatedAt: Date.now()
 })
-
-const chatIdOf = (agent: HubAgent): string => `hub:${agent.id}`
-
-const setConversation = (agentId: string, sessionId: string | null): void => {
-  const others = Object.fromEntries(Object.entries(hubSettings.get().conversations).filter(([id]) => id !== agentId))
-  hubSettings.update({ conversations: sessionId ? { ...others, [agentId]: sessionId } : others })
-}
 
 /** The agent's header and its chat, which picks up the last conversation */
 function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () => void; onDelete: () => void }): React.JSX.Element {
