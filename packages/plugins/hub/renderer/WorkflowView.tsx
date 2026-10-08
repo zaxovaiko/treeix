@@ -118,7 +118,7 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
     >
       {step.kind !== 'input' && <Handle type="target" position={Position.Left} className="size-2.5!" />}
       <div className="flex items-center gap-2">
-        {agent ? <AgentAvatar agent={agent} className="size-5 text-[10px]" /> : <Icon name={KIND_ICON[step.kind]} className="size-3.5 text-muted-foreground" />}
+        {agent ? <AgentAvatar agent={agent} size={20} /> : <Icon name={KIND_ICON[step.kind]} className="size-3.5 text-muted-foreground" />}
         <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
         {state && state.status !== 'pending' && <StatusIcon status={shownNode(state)} />}
       </div>
