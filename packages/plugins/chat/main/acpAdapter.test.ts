@@ -1,4 +1,4 @@
-import { AgentSideConnection, type ContentBlock, ndJsonStream, PROTOCOL_VERSION, type RequestPermissionOutcome } from '@agentclientprotocol/sdk'
+import { AgentSideConnection, type ContentBlock, ndJsonStream, PROTOCOL_VERSION, RequestError, type RequestPermissionOutcome } from '@agentclientprotocol/sdk'
 import type { ChatEvent } from '@treeix/sdk/main'
 import { expect, test } from 'bun:test'
 import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
@@ -34,6 +34,7 @@ function fakeAgent(name?: string) {
         }
       },
       loadSession: async ({ sessionId }) => {
+        if (sessionId === 'gone') throw RequestError.resourceNotFound(sessionId)
         for (let index = 0; index <= 5000; index++)
           await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: String(index) } } })
         await connection.sessionUpdate({ sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: 'code' } })
@@ -91,6 +92,12 @@ test('a turn streams events, asks permission and ends', async () => {
   await connection.setOption('mode', 'code')
   expect(agent.mode).toBe('code')
   expect(events.at(-1)).toMatchObject({ type: 'options', options: [{ id: 'mode', currentValue: 'code' }] })
+})
+
+test('resuming a conversation the agent no longer has starts a new one', async () => {
+  const { clientStream } = fakeAgent()
+  const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: 'gone', close: () => undefined })
+  expect(connection.sessionId).toBe('s1')
 })
 
 test('cancel settles a waiting permission as cancelled', async () => {

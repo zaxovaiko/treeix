@@ -13,6 +13,8 @@ const CONNECT_TIMEOUT_MS = 30_000
 const SYSTEM_PROMPT_AGENTS = new Set(['@agentclientprotocol/claude-agent-acp'])
 
 const hasCode = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code
+const RESOURCE_NOT_FOUND = -32002
+const isResourceNotFound = (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && error.code === RESOURCE_NOT_FOUND
 
 /** Where a write to `target` lands: the file's real path, or, for a new file, its real folder plus its name */
 async function realWriteTarget(target: string): Promise<string> {
@@ -135,12 +137,18 @@ export async function connectOverStream(stream: Stream, { cwd, resume, instructi
   const canLoad = agentCapabilities?.loadSession === true
   const canList = Boolean(agentCapabilities?.sessionCapabilities?.list)
 
+  const newSession = () =>
+    connection
+      .newSession({ cwd, mcpServers, _meta: instructions && takesSystemPrompt ? { systemPrompt: { append: instructions } } : undefined })
+      .then((session) => ({ sessionId: session.sessionId, session }))
+  // A conversation the agent no longer has (its transcript deleted, another machine) starts over instead of failing every retry
   const { sessionId, session } =
     resume && canLoad
-      ? { sessionId: resume, session: await connection.loadSession({ sessionId: resume, cwd, mcpServers }) }
-      : await connection
-          .newSession({ cwd, mcpServers, _meta: instructions && takesSystemPrompt ? { systemPrompt: { append: instructions } } : undefined })
-          .then((session) => ({ sessionId: session.sessionId, session }))
+      ? await connection.loadSession({ sessionId: resume, cwd, mcpServers }).then(
+          (session) => ({ sessionId: resume, session }),
+          (error: unknown) => (isResourceNotFound(error) ? newSession() : Promise.reject(error))
+        )
+      : await newSession()
   const hasConfigOptions = Boolean(session?.configOptions?.length)
   emit({ type: 'options', options: optionsFrom(session) })
 
