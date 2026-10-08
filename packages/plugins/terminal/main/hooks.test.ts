@@ -33,9 +33,11 @@ test('a status line write reports the conversation Claude writes to now', async 
     () => undefined,
     (sessionId, conversation) => seen.push([sessionId, conversation])
   )
-  writeFileSync(join(folder, 'usage-tab-1'), JSON.stringify({ session_id: 'after-clear', cost: { total_cost_usd: 1 } }))
-  // File watching on a loaded CI runner can take well over a few hundred ms to fire
-  for (let waited = 0; !seen.length && waited < 5000; waited += 50) await new Promise((done) => setTimeout(done, 50))
+  // Bun can arm the watch after watch() returns, so a write right away goes unseen; Claude rewrites the status line all the time anyway
+  for (let waited = 0; !seen.length && waited < 4000; waited += 100) {
+    writeFileSync(join(folder, 'usage-tab-1'), JSON.stringify({ session_id: 'after-clear', cost: { total_cost_usd: 1 } }))
+    await new Promise((done) => setTimeout(done, 100))
+  }
   stop()
   expect(seen).toContainEqual(['tab-1', 'after-clear'])
   expect(statusLineConversation('not json')).toBeNull()
