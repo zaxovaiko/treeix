@@ -50,3 +50,9 @@ test('a workflow that cannot run is refused with what to fix', () => {
   expect(() => toWorkflow({ name: 'W', ...steps, edges: [{ from: 'in', to: 'nope' }] }, [], [news], 1)).toThrow('nope, which is not a step')
   expect(() => toWorkflow({ name: 'W', ...steps, edges: [{ from: 'in', to: 'ask' }] }, [], [news], 1)).toThrow('out: Connect a step to it')
 })
+
+test('a schedule keeps its command and timeout, a bad timeout is refused', () => {
+  const poll = toAgent({ name: 'Poll', schedules: [{ cron: '*/2 * * * *', prompt: 'Do {{input}}', command: ' node poll.mjs ', timeoutMin: 180 }] }, [], 1)
+  expect(poll.schedules).toMatchObject([{ command: 'node poll.mjs', timeoutMin: 180 }])
+  expect(() => toAgent({ name: 'P', schedules: [{ cron: '* * * * *', prompt: 'p', timeoutMin: 0 }] }, [], 1)).toThrow('timeoutMin')
+})
