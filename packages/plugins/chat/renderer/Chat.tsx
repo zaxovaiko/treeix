@@ -6,7 +6,7 @@ import { useSettings } from '@treeix/app/settings'
 import { baseName } from '@treeix/app/Sidebar'
 import { firstAllow, firstReject, formatElapsed, useElapsed } from './Blocks'
 import { Composer } from './ChatComposer'
-import { FeedBlocks, pendingOf } from './Transcript'
+import { pendingOf, TurnBlocks } from './Transcript'
 import { activityOf, answer, cancel, type ChatState, isBusy, isConnecting, retry, useChat } from './store'
 
 const STICK_PX = 40
@@ -135,7 +135,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
         className="flex min-h-0 flex-1 flex-col overflow-y-auto"
       >
         <div ref={content} className={`mx-auto flex w-full flex-1 ${width} flex-col gap-3 px-4 py-4`}>
-          {empty ? <EmptyState chatId={chatId} chat={chat} cwd={cwd} /> : <FeedBlocks blocks={feed.blocks} cwd={cwd} newest={newest} onAnswer={reply} />}
+          {empty ? <EmptyState chatId={chatId} chat={chat} cwd={cwd} /> : <TurnBlocks blocks={feed.blocks} cwd={cwd} newest={newest} onAnswer={reply} live={feed.running} />}
         </div>
       </div>
       <div className={`mx-auto w-full ${width}`}>

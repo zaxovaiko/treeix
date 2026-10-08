@@ -127,6 +127,31 @@ function reduceOwn(feed: Feed, event: ChatEvent, now: number): Feed {
   }
 }
 
+/** A user message, or an agent turn split into what it did on the way and the reply it ended with */
+export type Turn = { steps: Block[]; answer: Block[] }
+
+const endsTurn = (block: Block): boolean => block.type === 'text' || block.type === 'error'
+
+export function turnsOf(blocks: Block[]): Turn[] {
+  const turns: Turn[] = []
+  let current: Block[] = []
+  const close = (): void => {
+    let cut = current.length
+    while (cut > 0 && endsTurn(current[cut - 1])) cut--
+    if (current.length) turns.push({ steps: current.slice(0, cut), answer: current.slice(cut) })
+    current = []
+  }
+  for (const block of blocks) {
+    if (block.type !== 'text' || block.role !== 'user') current.push(block)
+    else {
+      close()
+      turns.push({ steps: [], answer: [block] })
+    }
+  }
+  close()
+  return turns
+}
+
 const lines = (text: string): string[] => (text === '' ? [] : text.replace(/\n$/, '').split('\n'))
 
 /** Lines only in the new text and only in the old one, counted as multisets; close enough for a card's +/- */
