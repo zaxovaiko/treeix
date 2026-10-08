@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { type ChatOption, useHost } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
+import { Alien, characterOf, type Mood } from './Alien'
 import { Select, type SelectOption } from '@treeix/app/Picker'
 import { Dialog, errorMessage } from '@treeix/app/ui'
 import { shrinkImage } from '@treeix/app/WorkspaceRail'
@@ -26,13 +27,12 @@ const fromChoice = (choice: string): Runtime =>
 
 const glyphOf = (agent: Pick<HubAgent, 'icon' | 'name'>): string => agent.icon || agent.name.trim().slice(0, 1).toUpperCase() || '?'
 
-export function AgentAvatar({ agent, className }: { agent: Pick<HubAgent, 'avatar' | 'icon' | 'name' | 'color'>; className: string }): React.JSX.Element {
+/** The agent's uploaded image, else the alien of its runtime */
+export function AgentAvatar({ agent, size, mood = 'idle' }: { agent: Pick<HubAgent, 'avatar' | 'runtime'>; size: number; mood?: Mood }): React.JSX.Element {
   return agent.avatar ? (
-    <img src={agent.avatar} alt="" className={`shrink-0 rounded-lg object-cover ${className}`} />
+    <img src={agent.avatar} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-lg object-cover" />
   ) : (
-    <span style={{ background: agent.color }} className={`grid shrink-0 place-items-center rounded-lg font-semibold text-white ${className}`}>
-      {glyphOf(agent)}
-    </span>
+    <Alien character={characterOf(agent.runtime.kind === 'agent' ? agent.runtime.agent : undefined)} mood={mood} size={size} />
   )
 }
 
@@ -270,7 +270,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         <div className="flex items-end gap-3">
           <div className="flex shrink-0 flex-col items-center gap-1.5">
             <label title="Upload an image" className="cursor-pointer">
-              <AgentAvatar agent={draft} className="size-11 text-base" />
+              <AgentAvatar agent={draft} size={44} />
               <input type="file" accept="image/*" aria-label="Avatar image" className="hidden" onChange={(event) => pickImage(event.target.files?.[0])} />
             </label>
             {draft.avatar ? (

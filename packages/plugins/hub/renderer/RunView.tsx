@@ -5,9 +5,12 @@ import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
+import type { Mood } from './Alien'
 import { followRunEvents, hubAgents, hubApi } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
+
+const runMood = (run: Run): Mood => (isWaiting(run) ? 'waiting' : run.status === 'running' ? 'working' : run.status === 'done' || run.status === 'failed' ? run.status : 'idle')
 
 const STATUS: Record<Shown, { icon: IconName; className: string; label: string }> = {
   pending: { icon: 'history', className: 'text-muted-foreground', label: 'Waiting' },
@@ -63,7 +66,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
-        {lead ? <AgentAvatar agent={lead} className="size-7 text-sm" /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
+        {lead ? <AgentAvatar agent={lead} size={28} mood={runMood(run)} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{run.title}</div>
           <div className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">

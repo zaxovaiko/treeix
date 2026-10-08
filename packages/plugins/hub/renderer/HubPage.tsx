@@ -66,7 +66,7 @@ function AgentChat({ agent, onEdit, onDelete }: { agent: HubAgent; onEdit: () =>
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
-        <AgentAvatar agent={agent} className="size-7 text-sm" />
+        <AgentAvatar agent={agent} size={28} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{agent.name}</div>
           <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model, agent.mode].filter(Boolean).join(' · ')}</div>
@@ -150,7 +150,7 @@ export function HubPage(): React.JSX.Element {
             onClick={() => hubSelection.set(`agent:${agent.id}`)}
             className={`${ROW} h-9 px-2 text-xs ${agent === selectedAgent ? 'bg-accent' : ''}`}
           >
-            <AgentAvatar agent={agent} className="size-6 text-[11px]" />
+            <AgentAvatar agent={agent} size={24} />
             <span className="min-w-0 flex-1 truncate">{agent.name}</span>
           </button>
         ))}
