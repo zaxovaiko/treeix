@@ -145,8 +145,8 @@ test('the activity names what the newest block is doing', () => {
   const call: ToolCall = { id: '1', title: 'npm test', kind: 'execute', status: 'in_progress', locations: [], output: [], rawInput: null }
   expect(activityOf({ ...emptyChat, sending: true })).toBe('Sending')
   expect(activityOf(running([{ type: 'thought', text: '', startedAt: 0, endedAt: null }]))).toBe('Thinking')
-  expect(activityOf(running([{ type: 'tool', call, permission: null }]))).toBe('npm test')
-  expect(activityOf(running([{ type: 'tool', call: { ...call, status: 'completed' }, permission: null }]))).toBe('Working')
+  expect(activityOf(running([{ type: 'tool', call, permission: null, children: [] }]))).toBe('npm test')
+  expect(activityOf(running([{ type: 'tool', call: { ...call, status: 'completed' }, permission: null, children: [] }]))).toBe('Working')
   expect(activityOf(running([{ type: 'text', role: 'agent', text: 'Hi', images: [] }]))).toBe('Writing')
 })
 

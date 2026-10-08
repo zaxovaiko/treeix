@@ -11,7 +11,7 @@ export function mergeChunks(events: RunEvent[]): RunEvent[] {
   for (const entry of events) {
     const last = merged.at(-1)
     const { event } = entry
-    if (last?.node === entry.node && last.event.type === 'thought_chunk' && event.type === 'thought_chunk') {
+    if (last?.node === entry.node && last.event.type === 'thought_chunk' && event.type === 'thought_chunk' && last.event.parent === event.parent) {
       merged[merged.length - 1] = { ...last, event: { ...last.event, text: last.event.text + event.text } }
     } else if (
       last?.node === entry.node &&
@@ -19,7 +19,8 @@ export function mergeChunks(events: RunEvent[]): RunEvent[] {
       last.event.content.type === 'text' &&
       event.type === 'message_chunk' &&
       event.content.type === 'text' &&
-      last.event.role === event.role
+      last.event.role === event.role &&
+      last.event.parent === event.parent
     ) {
       merged[merged.length - 1] = { ...last, event: { ...last.event, content: { type: 'text', text: last.event.content.text + event.content.text } } }
     } else merged.push(entry)

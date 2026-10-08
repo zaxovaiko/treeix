@@ -203,3 +203,14 @@ test('a permission request with no option to pick maps to null', () => {
   expect(fromPermissionRequest('r4', { toolCall: { toolCallId: 't1', title: 'Run bun test' }, options: [{ optionId: 'x', name: 'Mystery', kind: 'something_else' }] })).toBeNull()
   expect(fromPermissionRequest('r5', { title: 'Run bun test', options: [] })).toBeNull()
 })
+
+test("a subagent's updates carry the call that started it", () => {
+  const meta = { _meta: { claudeCode: { parentToolUseId: 'agent1' } } }
+  expect(fromSessionUpdate({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi' }, ...meta })).toEqual([
+    { type: 'message_chunk', role: 'agent', content: { type: 'text', text: 'Hi' }, parent: 'agent1' }
+  ])
+  expect(fromSessionUpdate({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'Hmm' }, ...meta })).toEqual([
+    { type: 'thought_chunk', text: 'Hmm', parent: 'agent1' }
+  ])
+  expect(fromSessionUpdate({ sessionUpdate: 'tool_call', toolCallId: 't1', title: 'grep', ...meta })).toMatchObject([{ type: 'tool_call', parent: 'agent1', call: { id: 't1' } }])
+})

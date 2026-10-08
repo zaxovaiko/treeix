@@ -35,10 +35,11 @@ export type PermissionOption = { id: string; name: string; kind: 'allow_once' | 
 
 export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
 
+/** `parent` is the id of the tool call whose subagent said or ran it; unset for the session's own agent */
 export type ChatEvent =
-  | { type: 'message_chunk'; role: 'user' | 'agent'; content: ChatContent }
-  | { type: 'thought_chunk'; text: string }
-  | { type: 'tool_call'; call: ToolCall }
+  | { type: 'message_chunk'; role: 'user' | 'agent'; content: ChatContent; parent?: string }
+  | { type: 'thought_chunk'; text: string; parent?: string }
+  | { type: 'tool_call'; call: ToolCall; parent?: string }
   | { type: 'tool_call_update'; id: string; patch: Partial<Omit<ToolCall, 'id'>> }
   | { type: 'plan'; entries: PlanEntry[] }
   | { type: 'usage'; used: number; size: number; cost: { amount: number; currency: string } | null }

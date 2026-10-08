@@ -3,7 +3,8 @@ import type { ChatEvent, ChatOption, PermissionOption, PlanEntry, ToolCall } fro
 export type Block =
   | { type: 'text'; role: 'user' | 'agent'; text: string; images: { mimeType: string; data: string }[] }
   | { type: 'thought'; text: string; startedAt: number; endedAt: number | null }
-  | { type: 'tool'; call: ToolCall; permission: PendingPermission | null }
+  /** `children` is what a subagent started by this call said and ran */
+  | { type: 'tool'; call: ToolCall; permission: PendingPermission | null; children: Block[] }
   | { type: 'permission'; permission: PendingPermission }
   | { type: 'error'; message: string }
 
@@ -27,21 +28,47 @@ function closeThought(blocks: Block[], now: number): Block[] {
   return [...blocks.slice(0, -1), { ...last, endedAt: now }]
 }
 
-function recomputeWaiting(blocks: Block[]): boolean {
-  return blocks.some((block) => (block.type === 'tool' && block.permission !== null) || block.type === 'permission')
+type ToolBlock = Extract<Block, { type: 'tool' }>
+
+export function recomputeWaiting(blocks: Block[]): boolean {
+  return blocks.some((block) => (block.type === 'tool' && (block.permission !== null || recomputeWaiting(block.children))) || block.type === 'permission')
 }
 
-function clearPermission(blocks: Block[], requestId: string): Block[] {
+/** Drops the matching permissions, or all of them when `requestId` is null */
+function clearPermission(blocks: Block[], requestId: string | null): Block[] {
+  const matches = (permission: PendingPermission | null): boolean => permission !== null && (requestId === null || permission.requestId === requestId)
   return blocks
     .map((block): Block | null => {
-      if (block.type === 'tool' && block.permission?.requestId === requestId) return { ...block, permission: null }
-      if (block.type === 'permission' && block.permission.requestId === requestId) return null
+      if (block.type === 'tool') return { ...block, permission: matches(block.permission) ? null : block.permission, children: clearPermission(block.children, requestId) }
+      if (block.type === 'permission' && matches(block.permission)) return null
       return block
     })
     .filter((block): block is Block => block !== null)
 }
 
+/** Applies `change` to the tool block with this id, however deep in subagents it sits; null when there is none */
+function updateTool(blocks: Block[], id: string, change: (block: ToolBlock) => ToolBlock): Block[] | null {
+  for (const [index, block] of blocks.entries()) {
+    if (block.type !== 'tool') continue
+    const own = block.call.id === id
+    const children = own ? null : updateTool(block.children, id, change)
+    const updated = own ? change(block) : children && { ...block, children }
+    if (updated) return blocks.map((other, at) => (at === index ? updated : other))
+  }
+  return null
+}
+
+const parentOf = (event: ChatEvent): string | undefined =>
+  event.type === 'message_chunk' || event.type === 'thought_chunk' || event.type === 'tool_call' ? event.parent : undefined
+
+/** A subagent's event goes into the feed under the tool call that started it; one whose call is unknown stays top level */
 export function reduce(feed: Feed, event: ChatEvent, now: number): Feed {
+  const parent = parentOf(event)
+  const nested = parent && updateTool(feed.blocks, parent, (tool) => ({ ...tool, children: reduceOwn({ ...emptyFeed, blocks: tool.children }, event, now).blocks }))
+  return nested ? { ...feed, blocks: nested } : reduceOwn(feed, event, now)
+}
+
+function reduceOwn(feed: Feed, event: ChatEvent, now: number): Feed {
   switch (event.type) {
     case 'message_chunk': {
       const blocks = closeThought(feed.blocks, now)
@@ -65,24 +92,15 @@ export function reduce(feed: Feed, event: ChatEvent, now: number): Feed {
       const index = feed.blocks.findIndex((block) => block.type === 'tool' && block.call.id === event.call.id)
       if (index !== -1) return { ...feed, blocks: feed.blocks.map((block, at) => (at === index && block.type === 'tool' ? { ...block, call: event.call } : block)) }
       const blocks = closeThought(feed.blocks, now)
-      return { ...feed, blocks: [...blocks, { type: 'tool', call: event.call, permission: null }] }
+      return { ...feed, blocks: [...blocks, { type: 'tool', call: event.call, permission: null, children: [] }] }
     }
-    case 'tool_call_update': {
-      const blocks = feed.blocks.map((block): Block => {
-        if (block.type !== 'tool' || block.call.id !== event.id) return block
-        return { ...block, call: { ...block.call, ...event.patch } }
-      })
-      return { ...feed, blocks }
-    }
+    case 'tool_call_update':
+      return { ...feed, blocks: updateTool(feed.blocks, event.id, (tool) => ({ ...tool, call: { ...tool.call, ...event.patch } })) ?? feed.blocks }
     case 'permission': {
       const blocks = closeThought(feed.blocks, now)
       const permission: PendingPermission = { requestId: event.requestId, title: event.title, options: event.options }
-      const targetIndex = event.toolCallId === null ? -1 : blocks.findIndex((block) => block.type === 'tool' && block.call.id === event.toolCallId)
-      const nextBlocks =
-        targetIndex === -1
-          ? [...blocks, { type: 'permission' as const, permission }]
-          : blocks.map((block, index) => (index === targetIndex && block.type === 'tool' ? { ...block, permission } : block))
-      return { ...feed, blocks: nextBlocks, waiting: true }
+      const onTool = event.toolCallId === null ? null : updateTool(blocks, event.toolCallId, (tool) => ({ ...tool, permission }))
+      return { ...feed, blocks: onTool ?? [...blocks, { type: 'permission', permission }], waiting: true }
     }
     case 'permission_settled': {
       const blocks = clearPermission(feed.blocks, event.requestId)
@@ -103,9 +121,7 @@ export function reduce(feed: Feed, event: ChatEvent, now: number): Feed {
     case 'error':
       return { ...feed, blocks: [...closeThought(feed.blocks, now), { type: 'error', message: event.message }], running: false }
     case 'disconnected': {
-      const cleared = feed.blocks.map((block): Block => (block.type === 'tool' && block.permission !== null ? { ...block, permission: null } : block))
-      const withoutStandalone = cleared.filter((block) => block.type !== 'permission')
-      const blocks = [...closeThought(withoutStandalone, now), { type: 'error' as const, message: event.message }]
+      const blocks = [...closeThought(clearPermission(feed.blocks, null), now), { type: 'error' as const, message: event.message }]
       return { ...feed, blocks, running: false, waiting: false }
     }
   }
