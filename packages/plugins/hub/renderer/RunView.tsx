@@ -6,7 +6,7 @@ import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import type { Mood } from './Alien'
-import { followRunEvents, hubAgents, hubApi } from './store'
+import { chatIdOf, followRunEvents, hubAgents, hubApi, hubSelection, setConversation } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
 
@@ -61,6 +61,16 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   const logged = nodeEvents.some((entry) => entry.event.type === 'error')
   const retryable =
     node && state && (run.status === 'failed' || run.status === 'cancelled' || run.status === 'interrupted') && (state.status === 'failed' || state.status === 'cancelled')
+  const stepAgent = agentOf(node ?? undefined)
+  // The agent's chat opens in its own folder, so a step that ran elsewhere can't be resumed there
+  const resumable = stepAgent && state?.sessionId && state.status !== 'running' && node?.kind === 'agent' && (!node.folder || node.folder === stepAgent.folder)
+  const continueInChat = (): void => {
+    if (!stepAgent || !state?.sessionId) return
+    chat?.stop(chatIdOf(stepAgent))
+    chat?.forget(chatIdOf(stepAgent))
+    setConversation(stepAgent.id, state.sessionId)
+    hubSelection.set(`agent:${stepAgent.id}`)
+  }
   const retry = (id: string): void => void hubApi.retry(run.id, id).catch((error: unknown) => host.flash(errorMessage(error)))
 
   return (
@@ -105,7 +115,12 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
           {node?.kind === 'agent' && chat ? (
-            <chat.Transcript events={nodeEvents} cwd={node.folder ?? host.defaultCwd} onAnswer={(requestId, optionId) => hubApi.answer(run.id, node.id, requestId, optionId)} />
+            <chat.Transcript
+              events={nodeEvents}
+              cwd={node.folder ?? host.defaultCwd}
+              live={state?.status === 'running'}
+              onAnswer={(requestId, optionId) => hubApi.answer(run.id, node.id, requestId, optionId)}
+            />
           ) : (
             state?.output && (
               <div className="text-sm select-text">
@@ -135,6 +150,11 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
             </div>
           )}
           {state?.error && !logged && <div className="rounded-lg bg-red-400/5 px-3 py-2 text-xs text-red-300 ring-1 ring-red-400/30 select-text">{state.error}</div>}
+          {resumable && (
+            <button onClick={continueInChat} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
+              Continue in chat
+            </button>
+          )}
           {retryable && (
             <button onClick={() => retry(node.id)} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
               Retry from this step

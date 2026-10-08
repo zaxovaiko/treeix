@@ -123,6 +123,7 @@ export function createEngine(deps: {
       throw error
     })
     entry.connections.set(node.id, connection)
+    set(entry, node.id, { sessionId: connection.sessionId })
     let reply = ''
     let failure: string | null = null
     // Permissions nobody has answered yet; while any is open the node waits on the user

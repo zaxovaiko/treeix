@@ -94,6 +94,14 @@ export const asking = createStore<{ target: string; openRun: boolean } | null>(n
 /** The last conversation of each agent, by hub agent id, so the page resumes it */
 export const hubSettings = definePluginSettings('hub', (stored) => ({ conversations: stringValues(stored.conversations) }))
 
+export const chatIdOf = (agent: HubAgent): string => `hub:${agent.id}`
+
+/** The conversation the agent's chat picks up when it next opens; null starts a new one */
+export const setConversation = (agentId: string, sessionId: string | null): void => {
+  const others = Object.fromEntries(Object.entries(hubSettings.get().conversations).filter(([id]) => id !== agentId))
+  hubSettings.update({ conversations: sessionId ? { ...others, [agentId]: sessionId } : others })
+}
+
 export const registryId = (agent: HubAgent): string => `${AGENT_PREFIX}${agent.id}`
 
 /** How the runtime chats; null once a registry agent it ran on is gone */

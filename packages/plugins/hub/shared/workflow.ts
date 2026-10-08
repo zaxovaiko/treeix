@@ -57,6 +57,8 @@ export type NodeRun = {
   usage: { used: number; cost: number | null } | null
   /** A running node held up by the user: an approval step, or an agent asking for permission */
   waiting?: 'approval' | 'permission' | null
+  /** The agent step's conversation, which Continue in chat resumes */
+  sessionId?: string | null
 }
 
 export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
