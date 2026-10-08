@@ -128,7 +128,7 @@ test('cancel settles a waiting permission as cancelled', async () => {
   expect(stopReason).toBe('cancelled')
   expect(agent.outcome).toEqual({ outcome: 'cancelled' })
   expect(events.map((event) => event.type)).toEqual(['options', 'turn_start', 'message_chunk', 'permission', 'permission_settled', 'turn_end'])
-  expect(events.at(-1)).toEqual({ type: 'turn_end', stopReason: 'cancelled' })
+  expect(events.at(-1)).toEqual({ type: 'turn_end', stopReason: 'cancelled', usage: null })
 })
 
 test('a dropped agent settles a waiting permission and reports it', async () => {

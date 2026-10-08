@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatOption, PermissionOption, PlanEntry, ToolCall } from '@treeix/sdk'
+import type { ChatEvent, ChatOption, PermissionOption, PlanEntry, ToolCall, TurnUsage } from '@treeix/sdk'
 
 export type Block =
   | { type: 'text'; role: 'user' | 'agent'; text: string; images: { mimeType: string; data: string }[] }
@@ -13,14 +13,16 @@ export type PendingPermission = { requestId: string; title: string; options: Per
 export type Feed = {
   blocks: Block[]
   plan: PlanEntry[]
-  usage: { used: number; size: number } | null
+  usage: { used: number; size: number; cost: { amount: number; currency: string } | null } | null
+  /** The last turn that reported its tokens */
+  turnUsage: TurnUsage | null
   options: ChatOption[]
   commands: { name: string; description: string }[]
   running: boolean
   waiting: boolean
 }
 
-export const emptyFeed: Feed = { blocks: [], plan: [], usage: null, options: [], commands: [], running: false, waiting: false }
+export const emptyFeed: Feed = { blocks: [], plan: [], usage: null, turnUsage: null, options: [], commands: [], running: false, waiting: false }
 
 function closeThought(blocks: Block[], now: number): Block[] {
   const last = blocks[blocks.length - 1]
@@ -109,7 +111,7 @@ function reduceOwn(feed: Feed, event: ChatEvent, now: number): Feed {
     case 'plan':
       return { ...feed, plan: event.entries }
     case 'usage':
-      return { ...feed, usage: { used: event.used, size: event.size } }
+      return { ...feed, usage: { used: event.used, size: event.size, cost: event.cost } }
     case 'options':
       return { ...feed, options: event.options }
     case 'commands':
@@ -117,7 +119,7 @@ function reduceOwn(feed: Feed, event: ChatEvent, now: number): Feed {
     case 'turn_start':
       return { ...feed, running: true }
     case 'turn_end':
-      return { ...feed, blocks: closeThought(feed.blocks, now), running: false }
+      return { ...feed, blocks: closeThought(feed.blocks, now), running: false, turnUsage: event.usage ?? feed.turnUsage }
     case 'error':
       return { ...feed, blocks: [...closeThought(feed.blocks, now), { type: 'error', message: event.message }], running: false }
     case 'disconnected': {

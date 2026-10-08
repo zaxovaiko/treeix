@@ -1,5 +1,5 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk'
-import type { ChatContent, ChatEvent, ChatOption, PermissionOption, PlanEntry, ToolCall, ToolOutput } from '@treeix/sdk/main'
+import type { ChatContent, ChatEvent, ChatOption, PermissionOption, PlanEntry, ToolCall, ToolOutput, TurnUsage } from '@treeix/sdk/main'
 
 // ACP messages come over JSON-RPC from the agent's process, so every field is read defensively
 const record = (value: unknown): Record<string, unknown> => (typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {})
@@ -148,6 +148,19 @@ function selectValues(value: unknown): ChatOption['values'] {
 }
 
 /** Config options (select only) or legacy session modes, both surfaced as `ChatOption`s */
+/** A prompt response's `usage`, which agents may leave out */
+export function turnUsage(usage: unknown): TurnUsage | null {
+  if (typeof usage !== 'object' || usage === null) return null
+  const value = record(usage)
+  return {
+    input: num(value.inputTokens),
+    cacheRead: num(value.cachedReadTokens),
+    cacheWrite: num(value.cachedWriteTokens),
+    output: num(value.outputTokens),
+    thought: num(value.thoughtTokens)
+  }
+}
+
 export function optionsFrom(response: unknown): ChatOption[] {
   const value = record(response)
   const configOptions = list(value.configOptions)

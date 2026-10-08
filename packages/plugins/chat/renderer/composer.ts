@@ -7,6 +7,22 @@ export function imageProblem(file: { type: string; size: number }): string | nul
   return null
 }
 
+/** Commands Treeix runs itself, for agents that don't offer them over ACP */
+export const BUILTIN_COMMANDS = [{ name: 'clear', description: 'Start a new conversation with this agent' }]
+
+/** The agent's own command wins over a built-in of the same name */
+export const withBuiltins = (commands: { name: string; description: string }[]): { name: string; description: string }[] => [
+  ...commands,
+  ...BUILTIN_COMMANDS.filter((builtin) => !commands.some((command) => command.name === builtin.name))
+]
+
+/** The built-in a message runs, or null when it goes to the agent */
+export function builtinOf(text: string, commands: { name: string }[]): string | null {
+  const name = /^\/(\S+)$/.exec(text.trim())?.[1]
+  if (!name || commands.some((command) => command.name === name)) return null
+  return BUILTIN_COMMANDS.find((builtin) => builtin.name === name)?.name ?? null
+}
+
 type CompletionItem = { label: string; detail: string; insert: string }
 export type Completion = { kind: 'command' | 'file'; query: string; start: number; items: CompletionItem[] }
 

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { completion, formatTokens, imageProblem, switchWarning } from './composer'
+import { builtinOf, completion, formatTokens, imageProblem, switchWarning, withBuiltins } from './composer'
 
 test('imageProblem', () => {
   expect(imageProblem({ type: 'image/png', size: 1000 })).toBeNull()
@@ -29,4 +29,13 @@ test('switchWarning and formatTokens', () => {
   expect(switchWarning(null)).toEqual({ tokens: null })
   expect(formatTokens(48123)).toBe('48k')
   expect(formatTokens(1234567)).toBe('1.2M')
+})
+
+test('built-in /clear unless the agent has its own', () => {
+  expect(withBuiltins([]).map((command) => command.name)).toEqual(['clear'])
+  expect(withBuiltins([{ name: 'clear', description: 'Agent clear' }])).toEqual([{ name: 'clear', description: 'Agent clear' }])
+  expect(builtinOf(' /clear ', [])).toBe('clear')
+  expect(builtinOf('/clear', [{ name: 'clear' }])).toBeNull()
+  expect(builtinOf('/clear the cache', [])).toBeNull()
+  expect(builtinOf('/compact', [])).toBeNull()
 })

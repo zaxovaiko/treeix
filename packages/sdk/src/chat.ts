@@ -35,6 +35,9 @@ export type PermissionOption = { id: string; name: string; kind: 'allow_once' | 
 
 export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
 
+/** Tokens one turn spent, as the agent reports them; input excludes the cached part */
+export type TurnUsage = { input: number; cacheRead: number; cacheWrite: number; output: number; thought: number }
+
 /** `parent` is the id of the tool call whose subagent said or ran it; unset for the session's own agent */
 export type ChatEvent =
   | { type: 'message_chunk'; role: 'user' | 'agent'; content: ChatContent; parent?: string }
@@ -48,7 +51,7 @@ export type ChatEvent =
   | { type: 'permission'; requestId: string; title: string; toolCallId: string | null; options: PermissionOption[] }
   | { type: 'permission_settled'; requestId: string }
   | { type: 'turn_start' }
-  | { type: 'turn_end'; stopReason: StopReason }
+  | { type: 'turn_end'; stopReason: StopReason; usage?: TurnUsage | null }
   | { type: 'error'; message: string }
   /** The agent's process or connection ended; the session can be resumed with a new start */
   | { type: 'disconnected'; message: string }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { fromPermissionRequest, fromSessionUpdate, optionsFrom, toPromptBlocks } from './acpEvents'
+import { fromPermissionRequest, fromSessionUpdate, optionsFrom, toPromptBlocks, turnUsage } from './acpEvents'
 
 test('message and thought chunks', () => {
   expect(fromSessionUpdate({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hi' } })).toEqual([
@@ -202,6 +202,11 @@ test('prompt blocks', () => {
 test('a permission request with no option to pick maps to null', () => {
   expect(fromPermissionRequest('r4', { toolCall: { toolCallId: 't1', title: 'Run bun test' }, options: [{ optionId: 'x', name: 'Mystery', kind: 'something_else' }] })).toBeNull()
   expect(fromPermissionRequest('r5', { title: 'Run bun test', options: [] })).toBeNull()
+})
+
+test('turnUsage reads a prompt response usage, missing counts as zero', () => {
+  expect(turnUsage({ totalTokens: 9, inputTokens: 1, outputTokens: 2, cachedReadTokens: 6 })).toEqual({ input: 1, cacheRead: 6, cacheWrite: 0, output: 2, thought: 0 })
+  expect(turnUsage(undefined)).toBeNull()
 })
 
 test("a subagent's updates carry the call that started it", () => {

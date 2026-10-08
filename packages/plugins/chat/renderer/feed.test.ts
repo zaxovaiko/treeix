@@ -54,9 +54,17 @@ test('usage, plan, options, commands and turn end', () => {
     { type: 'usage', used: 48000, size: 200000, cost: null },
     { type: 'plan', entries: [{ content: 'Read', priority: 'high', status: 'in_progress' }] },
     { type: 'commands', commands: [{ name: 'compact', description: '' }] },
-    { type: 'turn_end', stopReason: 'end_turn' }
+    { type: 'turn_end', stopReason: 'end_turn', usage: { input: 10, cacheRead: 40000, cacheWrite: 2000, output: 500, thought: 0 } },
+    { type: 'turn_start' },
+    { type: 'turn_end', stopReason: 'cancelled' }
   ])
-  expect(feed).toMatchObject({ usage: { used: 48000, size: 200000 }, plan: [{ content: 'Read' }], commands: [{ name: 'compact' }], running: false })
+  expect(feed).toMatchObject({
+    usage: { used: 48000, size: 200000 },
+    turnUsage: { cacheRead: 40000 },
+    plan: [{ content: 'Read' }],
+    commands: [{ name: 'compact' }],
+    running: false
+  })
 })
 
 test('errors become blocks and stop the turn', () => {

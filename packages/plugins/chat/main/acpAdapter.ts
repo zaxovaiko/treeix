@@ -3,7 +3,7 @@ import type { ChatAdapter, ChatConnection, ChatEvent, ChatOption, ChatSpec } fro
 import { lstat, readFile, realpath, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { Writable } from 'node:stream'
-import { fromPermissionRequest, fromSessionUpdate, optionsFrom, toPromptBlocks } from './acpEvents'
+import { fromPermissionRequest, fromSessionUpdate, optionsFrom, toPromptBlocks, turnUsage } from './acpEvents'
 import { killGroup, spawnInShell } from './shell'
 
 const STDERR_LIMIT = 4096
@@ -203,8 +203,8 @@ export async function connectOverStream(
       const blocks = toPromptBlocks(preamble ? [{ type: 'text', text: preamble }, ...content] : content)
       preamble = null
       try {
-        const { stopReason } = await connection.prompt({ sessionId, prompt: blocks })
-        emit({ type: 'turn_end', stopReason })
+        const { stopReason, usage } = await connection.prompt({ sessionId, prompt: blocks })
+        emit({ type: 'turn_end', stopReason, usage: turnUsage(usage) })
         return { stopReason }
       } catch (error) {
         emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })

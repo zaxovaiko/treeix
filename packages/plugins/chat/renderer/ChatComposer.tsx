@@ -6,8 +6,9 @@ import { Icon } from '@treeix/app/Icon'
 import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
-import { completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning } from './composer'
-import { cancel, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
+import type { Feed } from './feed'
+import { builtinOf, completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning, withBuiltins } from './composer'
+import { cancel, clear, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 
 const readImage = (file: File): Promise<ChatImage> =>
   new Promise((resolve, reject) => {
@@ -109,6 +110,69 @@ function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
   return <OptionPicker option={option} onChoose={pick} />
 }
 
+function UsageRow({ label, tokens, total }: { label: string; tokens: number; total?: number }): React.JSX.Element {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular-nums">
+        {formatTokens(tokens)}
+        {total ? <span className="text-muted-foreground"> ({Math.round((tokens / total) * 100)}%)</span> : null}
+      </span>
+    </div>
+  )
+}
+
+/** The context bar; clicking it splits the last turn's tokens into cached, new and generated */
+function ContextMeter({ usage, turn }: { usage: NonNullable<Feed['usage']>; turn: Feed['turnUsage'] }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const anchor = useRef<HTMLButtonElement>(null)
+  const fullness = usage.size > 0 ? usage.used / usage.size : 0
+  const prompt = turn ? turn.input + turn.cacheRead + turn.cacheWrite : 0
+  return (
+    <>
+      <button
+        ref={anchor}
+        title="Context used"
+        onClick={() => setOpen((value) => !value)}
+        className="flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <span className="h-1 w-12 overflow-hidden rounded-full bg-muted">
+          <span className={`block h-full ${fullness > 0.8 ? 'bg-amber-400' : 'bg-foreground/40'}`} style={{ width: `${Math.min(100, fullness * 100)}%` }} />
+        </span>
+        {formatTokens(usage.used)} / {formatTokens(usage.size)}
+      </button>
+      {open && (
+        <Popup
+          anchor={anchor}
+          align="end"
+          onDismiss={() => setOpen(false)}
+          className="flex w-60 flex-col gap-1 rounded-lg border border-input bg-popover p-3 text-xs text-foreground"
+        >
+          <UsageRow label="Context" tokens={usage.used} total={usage.size} />
+          {usage.cost && (
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-muted-foreground">Session cost</span>
+              <span className="tabular-nums">{usage.cost.amount.toLocaleString(undefined, { style: 'currency', currency: usage.cost.currency })}</span>
+            </div>
+          )}
+          <div className="mt-1.5 border-t border-border pt-1.5 font-medium">Last turn</div>
+          {turn ? (
+            <>
+              <UsageRow label="Cache read" tokens={turn.cacheRead} total={prompt} />
+              <UsageRow label="Cache write" tokens={turn.cacheWrite} total={prompt} />
+              <UsageRow label="New input" tokens={turn.input} total={prompt} />
+              <UsageRow label="Output" tokens={turn.output} />
+              {turn.thought > 0 && <UsageRow label="Thinking" tokens={turn.thought} />}
+            </>
+          ) : (
+            <span className="text-muted-foreground">This agent doesn't report a turn's tokens</span>
+          )}
+        </Popup>
+      )}
+    </>
+  )
+}
+
 const preview = (content: ChatContent[]): string => content.map((item) => (item.type === 'text' ? item.text : '[image]')).join(' ')
 
 export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string; onSent: () => void }): React.JSX.Element {
@@ -134,7 +198,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
     }
   }, [chatId, cwd])
 
-  const suggestions = dismissed ? null : completion(draft, caret, feed.commands, files)
+  const suggestions = dismissed ? null : completion(draft, caret, withBuiltins(feed.commands), files)
   const items = suggestions?.items ?? []
   const acceptsImages = chat.capabilities?.images === true
   const hasCompact = feed.commands.some((command) => command.name === 'compact')
@@ -159,6 +223,11 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
     const text = draft.trim()
     // A chat that lost its agent reconnects on send; one still connecting waits
     if ((!chat.connected && !chat.error) || (!text && images.length === 0)) return
+    if (builtinOf(text, feed.commands) === 'clear') {
+      setDraft(chatId, '')
+      clear(chatId).catch((reason: unknown) => host.flash(errorMessage(reason)))
+      return
+    }
     send(chatId, [...images, ...(text ? [{ type: 'text' as const, text }] : [])])
     setDraft(chatId, '')
     setImages([])
@@ -357,14 +426,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
             <OptionPicker key={option.id} option={option} onChoose={(value) => choose(option, value)} />
           ))}
           <span className="flex-1" />
-          {feed.usage && (
-            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Context used">
-              <span className="h-1 w-12 overflow-hidden rounded-full bg-muted">
-                <span className={`block h-full ${fullness > 0.8 ? 'bg-amber-400' : 'bg-foreground/40'}`} style={{ width: `${Math.min(100, fullness * 100)}%` }} />
-              </span>
-              {formatTokens(feed.usage.used)} / {formatTokens(feed.usage.size)}
-            </span>
-          )}
+          {feed.usage && <ContextMeter usage={feed.usage} turn={feed.turnUsage} />}
           {busy ? (
             <button onClick={() => cancel(chatId)} className="h-6 rounded-md px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent">
               Stop

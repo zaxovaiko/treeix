@@ -222,8 +222,29 @@ export const retry = (chatId: string): void => void reconnect(chatId).catch(() =
 export function switchAgent(chatId: string, agent: { id: string; chat?: ChatSpec }): Promise<string> {
   const { options } = getChat(chatId)
   if (!options || !agent.chat) return Promise.reject(new Error(`${agent.id} can't chat`))
-  update(chatId, (state) => ({ ...state, connected: false, capabilities: null, terminalCommand: null, agentSessionId: null, feed: emptyFeed }))
-  return connect(chatId, { agent: agent.id, ...agent.chat, cwd: options.cwd, resume: null }, false)
+  return startOver(chatId, { agent: agent.id, ...agent.chat, cwd: options.cwd, resume: null })
+}
+
+/** `/clear`: a new conversation with the same agent */
+export function clear(chatId: string): Promise<string> {
+  const { options } = getChat(chatId)
+  if (!options) return Promise.reject(new Error('Nothing to clear'))
+  return startOver(chatId, { ...options, resume: null })
+}
+
+function startOver(chatId: string, options: ChatStartOptions): Promise<string> {
+  update(chatId, (state) => ({
+    ...state,
+    connected: false,
+    sending: false,
+    turnStartedAt: null,
+    queue: [],
+    capabilities: null,
+    terminalCommand: null,
+    agentSessionId: null,
+    feed: emptyFeed
+  }))
+  return connect(chatId, options, false)
 }
 
 export function stop(chatId: string): void {
