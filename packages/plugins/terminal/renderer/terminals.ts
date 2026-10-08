@@ -932,7 +932,7 @@ function endTerminal(session: TerminalSession): void {
   session.terminal.dispose()
 }
 
-/** Ends the process and moves the session to the history */
+/** Ends the process and moves the session to the history; its group goes too when this was its last session */
 export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
@@ -943,7 +943,8 @@ export function killSession(id: string): void {
     chat?.forget(id)
   } else endTerminal(session)
   const taskId = taskOf(state.tasks, id)?.id
-  update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), tasks: removeSession(state.tasks, id), zoomed: state.zoomed === id ? null : state.zoomed })
+  const tasks = removeSession(state.tasks, id).filter((task) => task.id !== taskId || task.tabs.length > 0)
+  update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), tasks, zoomed: state.zoomed === id ? null : state.zoomed })
   setHistory([{ id, ...metaOf(session), taskId, endedAt: Date.now() }, ...state.history])
 }
 
