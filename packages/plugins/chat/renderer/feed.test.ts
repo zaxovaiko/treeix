@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ChatEvent } from '@treeix/sdk'
-import { diffCounts, emptyFeed, fileTarget, reduce } from './feed'
+import { type Block, diffCounts, emptyFeed, fileTarget, reduce, turnsOf } from './feed'
 
 const run = (events: ChatEvent[]) => events.reduce((feed, event, index) => reduce(feed, event, index * 1000), emptyFeed)
 
@@ -121,4 +121,27 @@ test("a subagent's text and tool calls fold under the call that started it", () 
     { type: 'text', text: 'Looking' },
     { type: 'tool', call: { id: 'grep1', status: 'completed' } }
   ])
+})
+
+test('a turn splits at its last tool call or thought: the steps before, the reply after', () => {
+  const text = (role: 'user' | 'agent', value: string): Block => ({ type: 'text', role, text: value, images: [] })
+  const tool: Block = {
+    type: 'tool',
+    call: { id: 'a', title: 'Read', kind: 'read', status: 'completed', locations: [], output: [], rawInput: null },
+    permission: null,
+    children: []
+  }
+  const shape = (blocks: Block[]) => turnsOf(blocks).map(({ steps, answer }) => [steps.map((block) => block.type), answer.map((block) => block.type)])
+  expect(
+    shape([text('user', 'Fix it'), text('agent', 'Looking'), tool, text('agent', 'Done'), { type: 'error', message: 'x' }, text('user', 'Thanks'), text('agent', 'Sure')])
+  ).toEqual([
+    [[], ['text']],
+    [
+      ['text', 'tool'],
+      ['text', 'error']
+    ],
+    [[], ['text']],
+    [[], ['text']]
+  ])
+  expect(turnsOf([])).toEqual([])
 })
