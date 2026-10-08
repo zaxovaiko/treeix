@@ -10,7 +10,7 @@ import { agentState, agentStatus } from './agentStatus'
 import { findIssueLinks, findRowFileLinks, findWebLinks } from './fileLinks'
 import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
 import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
-import { getCurrentWorkspaceId } from '@treeix/app/workspaces'
+import { getCurrentWorkspaceId, getWorkspaces, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
 import { type ClosedSession, isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseClosedSession, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
@@ -648,12 +648,30 @@ const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)
 // Agents start sessions through Treeix's MCP server (session_new); a shell takes the prompt as its command line
 bridge.on('start', (request, folder, kind, prompt) => {
   if (typeof request !== 'string' || typeof folder !== 'string' || typeof kind !== 'string' || typeof prompt !== 'string') return
-  if (!getAgent(kind)) return bridge.send('started', request, null, `No agent ${kind} in Treeix's settings`)
+  if (!getAgent(kind)) return bridge.send('reply', request, null, `No agent ${kind} in Treeix's settings`)
   const argument = prompt && (isAgent(kind) ? shellQuote(prompt) : prompt)
   createSession(folder, kind, argument || undefined).then(
-    (id) => bridge.send('started', request, id),
-    (reason: unknown) => bridge.send('started', request, null, reason instanceof Error ? reason.message : String(reason))
+    (id) => bridge.send('reply', request, id),
+    (reason: unknown) => bridge.send('reply', request, null, reason instanceof Error ? reason.message : String(reason))
   )
+})
+
+bridge.on('workspaces', (request) => {
+  const lines = getWorkspaces().map((workspace) => `${workspace.id}  "${workspace.name}"  ${workspace.repoPaths.join(' ')}`)
+  bridge.send('reply', request, lines.join('\n') || 'No workspaces')
+})
+
+// Upserts by name, so an agent re-running for the same ticket updates its workspace instead of adding another
+bridge.on('saveWorkspace', (request, name, repoPaths, color) => {
+  if (typeof name !== 'string' || !Array.isArray(repoPaths) || !repoPaths.every(isString) || typeof color !== 'string') return
+  const workspaces = getWorkspaces()
+  const existing = workspaces.find((workspace) => workspace.name === name)
+  const kept = existing && { ...existing, terminalPath: existing.terminalPath && repoPaths.includes(existing.terminalPath) ? existing.terminalPath : undefined }
+  const workspace = kept
+    ? { ...kept, repoPaths, ...(color ? { color } : {}) }
+    : { id: crypto.randomUUID(), name, color: color || WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length], repoPaths }
+  saveWorkspace(workspace)
+  bridge.send('reply', request, `${existing ? 'Updated' : 'Created'} workspace ${workspace.id} "${name}"`)
 })
 
 const waking = new Map<string, Promise<void>>()
