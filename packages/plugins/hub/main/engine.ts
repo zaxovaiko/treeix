@@ -137,8 +137,9 @@ export function createEngine(deps: {
         set(entry, node.id, { waiting: 'permission' })
       }
       if (event.type === 'permission_settled' && asking.delete(event.requestId) && !asking.size) set(entry, node.id, { waiting: null })
-      if (event.type === 'tool_call') reply = ''
-      if (event.type === 'message_chunk' && event.role === 'agent' && event.content.type === 'text') reply += event.content.text
+      // The node's answer is its own agent's last reply, never a subagent's
+      if (event.type === 'tool_call' && !event.parent) reply = ''
+      if (event.type === 'message_chunk' && !event.parent && event.role === 'agent' && event.content.type === 'text') reply += event.content.text
       if (event.type === 'error' || event.type === 'disconnected') failure = event.message
     })
     let timer: ReturnType<typeof setTimeout> | undefined

@@ -61,11 +61,18 @@ function planEntries(value: unknown): PlanEntry[] {
   })
 }
 
+/** claude-agent-acp stamps a subagent's updates with the Agent tool call that started it */
+const parentOf = (update: Record<string, unknown>): { parent?: string } => {
+  const parent = record(record(update._meta).claudeCode).parentToolUseId
+  return typeof parent === 'string' && parent ? { parent } : {}
+}
+
 function toolCallEvent(update: Record<string, unknown>): ChatEvent[] {
   if (typeof update.toolCallId !== 'string') return []
   return [
     {
       type: 'tool_call',
+      ...parentOf(update),
       call: {
         id: update.toolCallId,
         title: text(update.title),
@@ -98,11 +105,11 @@ export function fromSessionUpdate(update: unknown): ChatEvent[] {
 
   if (kind === 'agent_message_chunk' || kind === 'user_message_chunk') {
     const content = chatContent(value.content)
-    return content ? [{ type: 'message_chunk', role: kind === 'agent_message_chunk' ? 'agent' : 'user', content }] : []
+    return content ? [{ type: 'message_chunk', role: kind === 'agent_message_chunk' ? 'agent' : 'user', content, ...parentOf(value) }] : []
   }
   if (kind === 'agent_thought_chunk') {
     const content = chatContent(value.content)
-    return content && content.type === 'text' ? [{ type: 'thought_chunk', text: content.text }] : []
+    return content && content.type === 'text' ? [{ type: 'thought_chunk', text: content.text, ...parentOf(value) }] : []
   }
   if (kind === 'tool_call') return toolCallEvent(value)
   if (kind === 'tool_call_update') return toolCallUpdateEvent(value)

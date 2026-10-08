@@ -102,3 +102,23 @@ test('a repeated tool call replaces its card instead of adding one, keeping its 
   expect(feed.blocks).toHaveLength(1)
   expect(feed.blocks[0]).toMatchObject({ type: 'tool', call: { id: 't1', status: 'in_progress' }, permission: { requestId: 'r1' } })
 })
+
+test("a subagent's text and tool calls fold under the call that started it", () => {
+  const call = (id: string, title: string) => ({ id, title, kind: 'other' as const, status: 'pending' as const, output: [], locations: [], rawInput: {} })
+  const feed = run([
+    { type: 'turn_start' },
+    { type: 'tool_call', call: call('agent1', 'Explore the repo') },
+    { type: 'message_chunk', role: 'agent', content: { type: 'text', text: 'Looking' }, parent: 'agent1' },
+    { type: 'tool_call', call: call('grep1', 'grep deposit'), parent: 'agent1' },
+    { type: 'tool_call_update', id: 'grep1', patch: { status: 'completed' } },
+    { type: 'tool_call', call: call('orphan', 'Read a.ts'), parent: 'unknown' },
+    { type: 'message_chunk', role: 'agent', content: { type: 'text', text: 'Found it' } }
+  ])
+  expect(feed.blocks.map((block) => (block.type === 'tool' ? block.call.id : block.type))).toEqual(['agent1', 'orphan', 'text'])
+  const parent = feed.blocks[0]
+  if (parent.type !== 'tool') throw new Error('expected the Agent call')
+  expect(parent.children).toMatchObject([
+    { type: 'text', text: 'Looking' },
+    { type: 'tool', call: { id: 'grep1', status: 'completed' } }
+  ])
+})

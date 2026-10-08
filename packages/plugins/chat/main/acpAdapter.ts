@@ -126,7 +126,8 @@ export async function connectOverStream(stream: Stream, { cwd, resume, instructi
   })
   const { agentCapabilities, agentInfo } = await connection.initialize({
     protocolVersion: PROTOCOL_VERSION,
-    clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
+    // subagent-transcript: claude-agent-acp streams subagents' text too, stamped with their parent call
+    clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false, _meta: { 'subagent-transcript': true } }
   })
   const takesSystemPrompt = SYSTEM_PROMPT_AGENTS.has(agentInfo?.name ?? '')
   const mcpServers: McpServer[] =
