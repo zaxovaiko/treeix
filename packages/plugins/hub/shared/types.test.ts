@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { isHubAgent } from './types'
+import { commandItems, isHubAgent } from './types'
 
 const agent = {
   id: 'a',
@@ -28,4 +28,20 @@ test('schedules are optional and need a valid crontab line', () => {
   const schedule = { id: 's', cron: '0 9 * * 1', prompt: 'News of the week', notify: true, enabled: true }
   expect(isHubAgent({ ...agent, schedules: [schedule] })).toBe(true)
   expect(isHubAgent({ ...agent, schedules: [{ ...schedule, cron: 'every monday' }] })).toBe(false)
+})
+
+test('a command schedule has a string command and a whole-minute timeout', () => {
+  const schedule = { id: 's', cron: '*/2 * * * *', prompt: 'Work on {{input}}', notify: true, enabled: true, command: 'node poll.mjs', timeoutMin: 180 }
+  expect(isHubAgent({ ...agent, schedules: [schedule] })).toBe(true)
+  expect(isHubAgent({ ...agent, schedules: [{ ...schedule, command: 1 }] })).toBe(false)
+  expect(isHubAgent({ ...agent, schedules: [{ ...schedule, timeoutMin: 0 }] })).toBe(false)
+  expect(isHubAgent({ ...agent, schedules: [{ ...schedule, timeoutMin: 1.5 }] })).toBe(false)
+})
+
+test("each line a command prints is one run's input and title", () => {
+  expect(commandItems('jira:BF-1\tFix the deposit dialog\n\n  \nnotion:abc\n')).toEqual([
+    { input: 'jira:BF-1', title: 'jira:BF-1 Fix the deposit dialog' },
+    { input: 'notion:abc', title: 'notion:abc' }
+  ])
+  expect(commandItems('')).toEqual([])
 })

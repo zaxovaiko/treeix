@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { McpTool } from '@treeix/sdk/main'
 import { isJson, isString } from '@treeix/shared/json'
 import { isCron } from '../shared/cron'
-import { type HubAgent, isHubAgent, type Schedule } from '../shared/types'
+import { type HubAgent, isHubAgent, isTimeout, MAX_TIMEOUT_MIN, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type Edge, type Run, type Workflow, type WorkflowNode } from '../shared/workflow'
 import type { createEngine } from './engine'
@@ -55,7 +55,18 @@ const findWorkflow = (workflows: Workflow[], name: string): Workflow => {
 function toSchedule(value: unknown): Schedule {
   if (!isJson(value) || !isString(value.cron) || !isString(value.prompt)) throw new Error('A schedule needs cron and prompt')
   if (!isCron(value.cron)) throw new Error(`${value.cron} is not a crontab line`)
-  return { id: randomUUID(), cron: value.cron, prompt: value.prompt, notify: value.notify !== false, enabled: value.enabled !== false }
+  const { command, timeoutMin } = value
+  if (command !== undefined && !isString(command)) throw new Error('command must be a string')
+  if (timeoutMin !== undefined && !isTimeout(timeoutMin)) throw new Error(`timeoutMin must be a whole number of minutes, 1 to ${MAX_TIMEOUT_MIN}`)
+  return {
+    id: randomUUID(),
+    cron: value.cron,
+    prompt: value.prompt,
+    notify: value.notify !== false,
+    enabled: value.enabled !== false,
+    ...(command?.trim() ? { command: command.trim() } : {}),
+    ...(timeoutMin === undefined ? {} : { timeoutMin })
+  }
 }
 
 /** The agent named `name` with the given fields changed, or a new one when none has that name */
@@ -210,7 +221,13 @@ export function hubTools(deps: {
               type: 'object',
               properties: {
                 cron: { type: 'string', description: "Five-field crontab line in local time, e.g. '0 8 * * *'" },
-                prompt: { type: 'string' },
+                prompt: { type: 'string', description: 'With a command, {{input}} is the line that started the run' },
+                command: {
+                  type: 'string',
+                  description:
+                    "A shell command run at each firing, in the agent's folder, instead of one prompt: every line it prints, `<input>` or `<input>\\t<title>`, starts its own run"
+                },
+                timeoutMin: { type: 'number', description: 'Minutes each run may take, 10 by default' },
                 notify: { type: 'boolean', description: 'Shows the answer as a notification; true by default' },
                 enabled: { type: 'boolean', description: 'True by default' }
               },

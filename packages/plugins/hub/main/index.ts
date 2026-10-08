@@ -1,9 +1,13 @@
+import { execFile } from 'node:child_process'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { Notification } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { isJson, isString } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
-import { type HubAgent, isHubAgent } from '../shared/types'
+import { render } from '../shared/template'
+import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
 import { type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
 import { createEngine } from './engine'
@@ -16,6 +20,9 @@ import { jsonList } from './store'
 const DETECT_TIMEOUT_MS = 60_000
 const MINUTE_MS = 60_000
 const NOTICE_CHARS = 300
+const COMMAND_TIMEOUT_MS = 60_000
+
+const exec = promisify(execFile)
 
 const isAgentRuntime = (value: unknown): value is AgentRuntime =>
   isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
@@ -112,17 +119,37 @@ const plugin: MainPlugin = {
 
     // Shown notifications are kept until clicked or closed, else Electron collects them and the click goes nowhere
     const notices = new Set<Notification>()
-    const notify = (agent: HubAgent, run: Run): void => {
+    const show = (title: string, body: string, runId: string | null): void => {
       if (!Notification.isSupported()) return
-      const failed = run.status !== 'done'
-      const notice = new Notification({
-        title: failed ? `${agent.name}'s scheduled run ${run.status}` : agent.name,
-        body: ((failed ? run.nodes.agent?.error : run.output) ?? '').slice(0, NOTICE_CHARS)
-      })
+      const notice = new Notification({ title, body: body.slice(0, NOTICE_CHARS) })
       notices.add(notice)
-      notice.on('click', () => (notices.delete(notice), context.broadcast('openRun', run.id)))
+      notice.on('click', () => (notices.delete(notice), runId && context.broadcast('openRun', runId)))
       notice.on('close', () => notices.delete(notice))
       notice.show()
+    }
+    const notify = (agent: HubAgent, run: Run): void => {
+      const failed = run.status !== 'done'
+      show(failed ? `${agent.name}'s scheduled run ${run.status}` : agent.name, (failed ? run.nodes.agent?.error : run.output) ?? '', run.id)
+    }
+
+    const launchScheduled = (agent: HubAgent, schedule: Schedule, title: string, prompt: string): void => {
+      const run = engine.launch('schedule', title, askWorkflow(agent.id, null, schedule.timeoutMin), prompt)
+      if (schedule.notify) void engine.wait(run.id).then((ended) => ended && notify(agent, ended))
+    }
+    // A slow command is skipped on the next firing, never stacked
+    const polling = new Set<string>()
+    const runCommand = async (agent: HubAgent, schedule: Schedule, command: string): Promise<void> => {
+      if (polling.has(schedule.id)) return
+      polling.add(schedule.id)
+      try {
+        // A login shell, so the command sees the user's PATH even when Treeix started from the Dock
+        const { stdout } = await exec(process.env.SHELL || '/bin/zsh', ['-lc', command], { cwd: agent.folder ?? homedir(), timeout: COMMAND_TIMEOUT_MS })
+        for (const item of commandItems(stdout)) launchScheduled(agent, schedule, item.title, render(schedule.prompt, { input: item.input, prev: '', outputs: {} }))
+      } catch (error) {
+        show(`${agent.name}'s schedule command failed`, error instanceof Error ? error.message : String(error), null)
+      } finally {
+        polling.delete(schedule.id)
+      }
     }
 
     // ponytail: schedules fire only while Treeix runs; a minute missed asleep or quit is skipped, not caught up
@@ -130,8 +157,9 @@ const plugin: MainPlugin = {
       for (const agent of await agents.get())
         for (const schedule of agent.schedules ?? []) {
           if (!schedule.enabled || !schedule.prompt.trim() || !cronMatches(schedule.cron, now)) continue
-          const run = engine.launch('schedule', schedule.prompt.trim().split('\n')[0], askWorkflow(agent.id, null), schedule.prompt)
-          if (schedule.notify) void engine.wait(run.id).then((ended) => ended && notify(agent, ended))
+          const command = schedule.command?.trim()
+          if (command) void runCommand(agent, schedule, command)
+          else launchScheduled(agent, schedule, schedule.prompt.trim().split('\n')[0], schedule.prompt)
         }
     }
     let timer: ReturnType<typeof setTimeout> | undefined

@@ -7,7 +7,8 @@ import { Dialog, errorMessage } from '@treeix/app/ui'
 import { shrinkImage } from '@treeix/app/WorkspaceRail'
 import { WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { CRON_PRESETS, isCron } from '../shared/cron'
-import { API_PRESETS, type HubAgent, type Runtime, type Schedule } from '../shared/types'
+import { API_PRESETS, type HubAgent, MAX_TIMEOUT_MIN, type Runtime, type Schedule } from '../shared/types'
+import { ASK_TIMEOUT_MIN } from '../shared/workflow'
 import { useEscape } from './AskDialog'
 import { hubApi, runtimeSpec } from './store'
 
@@ -130,6 +131,28 @@ function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (
             rows={2}
             className={PROMPT_FIELD}
           />
+          <div className="flex gap-2">
+            <label className={`${LABEL} flex-1`}>
+              Command, optional
+              <input
+                value={schedule.command ?? ''}
+                onChange={(event) => patch(schedule.id, { command: event.target.value })}
+                placeholder="e.g. node poll.mjs: each line it prints starts a run, as {{input}}"
+                className={`${FIELD} font-mono text-xs`}
+              />
+            </label>
+            <label className={`${LABEL} w-24`}>
+              Timeout, min
+              <input
+                type="number"
+                min={1}
+                max={MAX_TIMEOUT_MIN}
+                value={schedule.timeoutMin ?? ASK_TIMEOUT_MIN}
+                onChange={(event) => patch(schedule.id, { timeoutMin: Math.min(MAX_TIMEOUT_MIN, Math.max(1, Math.round(Number(event.target.value)) || 1)) })}
+                className={FIELD}
+              />
+            </label>
+          </div>
           <label className="flex items-center gap-1.5 text-foreground">
             <input type="checkbox" checked={schedule.notify} onChange={(event) => patch(schedule.id, { notify: event.target.checked })} />
             Show the answer as a notification

@@ -77,13 +77,13 @@ export type AgentRuntime = ChatSpec & { agent: string; cwd: string }
 export const ASK_TIMEOUT_MIN = 10
 
 /** A question to one agent, run as input → agent → output so it shows like any run */
-export function askWorkflow(agent: string, folder: string | null): Workflow {
+export function askWorkflow(agent: string, folder: string | null, timeoutMin = ASK_TIMEOUT_MIN): Workflow {
   return {
     id: 'ask',
     name: 'Ask',
     nodes: [
       { id: 'input', kind: 'input' },
-      { id: 'agent', kind: 'agent', agent, prompt: '{{input}}', folder, retries: 0, onError: 'stop', timeoutMin: ASK_TIMEOUT_MIN },
+      { id: 'agent', kind: 'agent', agent, prompt: '{{input}}', folder, retries: 0, onError: 'stop', timeoutMin },
       { id: 'output', kind: 'output', template: '{{prev}}' }
     ],
     edges: [
