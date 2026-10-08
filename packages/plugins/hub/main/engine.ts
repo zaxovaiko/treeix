@@ -109,6 +109,7 @@ export function createEngine(deps: {
       command: runtime.command,
       instructions: runtime.instructions,
       preset: runtime.preset,
+      directories: runtime.directories,
       cwd: node.folder ?? runtime.cwd,
       env: entry.delegated ? {} : await deps.sessionEnv(),
       resume: null

@@ -117,6 +117,6 @@ export function asAgent(agent: HubAgent): Agent | null {
     color: agent.color,
     command: null,
     agent: true,
-    chat: { ...base, ...(agent.instructions.trim() ? { instructions: agent.instructions } : {}), preset }
+    chat: { ...base, ...(agent.instructions.trim() ? { instructions: agent.instructions } : {}), ...(agent.directories?.length ? { directories: agent.directories } : {}), preset }
   }
 }

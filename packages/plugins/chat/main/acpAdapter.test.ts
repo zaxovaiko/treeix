@@ -9,7 +9,13 @@ import { confinedPath, connectOverStream, sliceLines } from './acpAdapter'
 function fakeAgent(name?: string) {
   const toAgent = new TransformStream<Uint8Array, Uint8Array>()
   const toClient = new TransformStream<Uint8Array, Uint8Array>()
-  const agent: { mode: string; outcome: RequestPermissionOutcome | null; meta: unknown; prompts: ContentBlock[][] } = { mode: 'ask', outcome: null, meta: null, prompts: [] }
+  const agent: { mode: string; outcome: RequestPermissionOutcome | null; meta: unknown; directories: string[] | null; prompts: ContentBlock[][] } = {
+    mode: 'ask',
+    outcome: null,
+    meta: null,
+    directories: null,
+    prompts: []
+  }
   let cancelArrived = () => undefined as void
   const cancelled = new Promise<void>((resolve) => (cancelArrived = resolve))
 
@@ -17,11 +23,12 @@ function fakeAgent(name?: string) {
     (connection) => ({
       initialize: () => ({
         protocolVersion: PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: true, promptCapabilities: { image: true } },
+        agentCapabilities: { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { additionalDirectories: {} } },
         agentInfo: name ? { name, version: '1' } : undefined
       }),
-      newSession: ({ _meta }) => {
+      newSession: ({ _meta, additionalDirectories }) => {
         agent.meta = _meta ?? null
+        agent.directories = additionalDirectories ?? null
         return {
           sessionId: 's1',
           modes: {
@@ -98,6 +105,15 @@ test('resuming a conversation the agent no longer has starts a new one', async (
   const { clientStream } = fakeAgent()
   const connection = await connectOverStream(clientStream, { cwd: '/tmp', resume: 'gone', close: () => undefined })
   expect(connection.sessionId).toBe('s1')
+})
+
+test('more folders reach a new session, and none stays none', async () => {
+  const added = fakeAgent()
+  await connectOverStream(added.clientStream, { cwd: '/tmp', resume: null, directories: ['/repo'], close: () => undefined })
+  expect(added.agent.directories).toEqual(['/repo'])
+  const plain = fakeAgent()
+  await connectOverStream(plain.clientStream, { cwd: '/tmp', resume: null, directories: [], close: () => undefined })
+  expect(plain.agent.directories).toBeNull()
 })
 
 test('cancel settles a waiting permission as cancelled', async () => {

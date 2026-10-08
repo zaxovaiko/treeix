@@ -8,7 +8,7 @@ import { Dialog, errorMessage } from '@treeix/app/ui'
 import { shrinkImage } from '@treeix/app/WorkspaceRail'
 import { WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { CRON_PRESETS, isCron } from '../shared/cron'
-import { API_PRESETS, type HubAgent, MAX_TIMEOUT_MIN, type Runtime, type Schedule } from '../shared/types'
+import { ALIENS, API_PRESETS, type Character, type HubAgent, MAX_TIMEOUT_MIN, type Runtime, type Schedule } from '../shared/types'
 import { ASK_TIMEOUT_MIN } from '../shared/workflow'
 import { useEscape } from './AskDialog'
 import { hubApi, runtimeSpec } from './store'
@@ -27,12 +27,15 @@ const fromChoice = (choice: string): Runtime =>
 
 const glyphOf = (agent: Pick<HubAgent, 'icon' | 'name'>): string => agent.icon || agent.name.trim().slice(0, 1).toUpperCase() || '?'
 
-/** The agent's uploaded image, else the alien of its runtime */
-export function AgentAvatar({ agent, size, mood = 'idle' }: { agent: Pick<HubAgent, 'avatar' | 'runtime'>; size: number; mood?: Mood }): React.JSX.Element {
+/** The alien it picked, else its runtime's */
+export const alienOf = (agent: Pick<HubAgent, 'alien' | 'runtime'>): Character => agent.alien ?? characterOf(agent.runtime.kind === 'agent' ? agent.runtime.agent : undefined)
+
+/** The agent's uploaded image, else its alien */
+export function AgentAvatar({ agent, size, mood = 'idle' }: { agent: Pick<HubAgent, 'avatar' | 'alien' | 'runtime'>; size: number; mood?: Mood }): React.JSX.Element {
   return agent.avatar ? (
     <img src={agent.avatar} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-lg object-cover" />
   ) : (
-    <Alien character={characterOf(agent.runtime.kind === 'agent' ? agent.runtime.agent : undefined)} mood={mood} size={size} />
+    <Alien character={alienOf(agent)} mood={mood} size={size} />
   )
 }
 
@@ -195,6 +198,8 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
       }
   )
   const patch = (next: Partial<HubAgent>): void => setDraft((current) => ({ ...current, ...next }))
+  // Kept as typed, so a new line can be started; split into paths on save
+  const [directories, setDirectories] = useState((agent?.directories ?? []).join('\n'))
   const [options, setOptions] = useState<ChatOption[]>([])
   const [detecting, setDetecting] = useState(false)
   const [problem, setProblem] = useState('')
@@ -261,7 +266,19 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
   const save = (): void => {
     if (!canSave) return
     storeKey()
-      .then(() => hubApi.save({ ...draft, name, icon: glyphOf(draft), mode: isApi ? null : draft.mode, updatedAt: Date.now() }))
+      .then(() =>
+        hubApi.save({
+          ...draft,
+          name,
+          icon: glyphOf(draft),
+          mode: isApi ? null : draft.mode,
+          directories: directories
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean),
+          updatedAt: Date.now()
+        })
+      )
       .then(
         () => onSaved(draft.id),
         (reason: unknown) => setProblem(errorMessage(reason))
@@ -330,6 +347,25 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             </div>
           </div>
         </div>
+
+        {!draft.avatar && (
+          <div className={LABEL}>
+            Alien
+            <div className="flex gap-1.5">
+              {ALIENS.map((alien) => (
+                <button
+                  key={alien}
+                  aria-label={`Alien ${alien}`}
+                  aria-pressed={alienOf(draft) === alien}
+                  onClick={() => patch({ alien })}
+                  className={`grid size-10 place-items-center rounded-md ${alienOf(draft) === alien ? 'bg-accent ring-1 ring-primary' : 'hover:bg-accent'}`}
+                >
+                  <Alien character={alien} mood="idle" size={28} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-end gap-2">
           <div className={`${LABEL} flex-1`}>
@@ -436,6 +472,19 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             className={`${FIELD} font-mono`}
           />
         </label>
+
+        {!isApi && (
+          <label className={LABEL}>
+            Also loads
+            <textarea
+              value={directories}
+              onChange={(event) => setDirectories(event.target.value)}
+              placeholder="More folders, one per line; it gets their CLAUDE.md, skills and subagents"
+              rows={3}
+              className={`${PROMPT_FIELD} font-mono`}
+            />
+          </label>
+        )}
 
         <label className="flex items-start gap-2 text-xs">
           <input type="checkbox" checked={draft.autoApprove === true} onChange={(event) => patch({ autoApprove: event.target.checked })} className="mt-0.5 shrink-0" />

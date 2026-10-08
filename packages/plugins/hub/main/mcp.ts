@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { McpTool } from '@treeix/sdk/main'
 import { isJson, isString } from '@treeix/shared/json'
 import { isCron } from '../shared/cron'
-import { type HubAgent, isHubAgent, isTimeout, MAX_TIMEOUT_MIN, type Schedule } from '../shared/types'
+import { ALIENS, type HubAgent, isHubAgent, isTimeout, MAX_TIMEOUT_MIN, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type Edge, type Run, type Workflow, type WorkflowNode } from '../shared/workflow'
 import type { createEngine } from './engine'
@@ -95,6 +95,8 @@ export function toAgent(args: Args, agents: HubAgent[], now: number): HubAgent {
     mode: nullable(args, 'mode', existing?.mode ?? null),
     instructions: optional(args, 'instructions') ?? existing?.instructions ?? '',
     folder: nullable(args, 'folder', existing?.folder ?? null),
+    directories: Array.isArray(args.directories) ? args.directories.filter(isString) : existing?.directories,
+    alien: ALIENS.find((alien) => alien === args.alien) ?? existing?.alien,
     autoApprove: typeof autoApprove === 'boolean' ? autoApprove : (existing?.autoApprove ?? false),
     schedules: schedules ? schedules.map(toSchedule) : (existing?.schedules ?? []),
     updatedAt: now
@@ -214,6 +216,12 @@ export function hubTools(deps: {
           model: { type: ['string', 'null'], description: "A model the runtime offers, e.g. 'opus'; null for the runtime's default" },
           mode: { type: ['string', 'null'], description: "A mode the runtime offers; null for the runtime's default" },
           folder: { type: ['string', 'null'], description: 'Absolute path it works in; null for the selected worktree' },
+          directories: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Absolute paths of more folders it loads beside its own: their CLAUDE.md, rules, skills and subagents. Replaces the list'
+          },
+          alien: { type: 'string', enum: [...ALIENS], description: "The alien it shows without an uploaded image; its runtime's by default" },
           icon: { type: 'string', description: 'One glyph; its first letter by default' },
           color: { type: 'string', description: 'A CSS color' },
           autoApprove: { type: 'boolean', description: 'Allows every permission it asks for in runs' },
