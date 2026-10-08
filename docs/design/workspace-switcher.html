@@ -1,0 +1,1410 @@
+<!doctype html>
+<!-- 1:1 static copy of the Treeix window (Neutral, the default dark theme; Terminal page). Classes are copied from the source; treeix.css is built from main.css by build-css.ts -->
+<html
+  data-mode="dark"
+  style="
+    --color-background: #000000;
+    --color-card: #000000;
+    --color-sidebar: #000000;
+    --color-popover: #121212;
+    --color-foreground: #f5f5f5;
+    --color-muted-foreground: #848484;
+    --color-primary: #4f5ff0;
+    --color-border: rgb(255 255 255 / 6%);
+    --color-input: rgb(255 255 255 / 8%);
+    --color-accent: rgb(255 255 255 / 4%);
+    --color-muted: rgb(255 255 255 / 3%);
+    color-scheme: dark;
+  "
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Treeix</title>
+    <link rel="stylesheet" href="treeix.css" />
+    <style>
+      /* Native window chrome the app doesn't draw */
+      .traffic { position: fixed; top: 12px; left: 20px; display: flex; gap: 8px; z-index: 50; }
+      .traffic i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 15%); }
+      .traffic i:nth-child(2) { background: #febc2e; }
+      .traffic i:nth-child(3) { background: #28c840; }
+      .term { font: 16px/18px ui-monospace, 'SF Mono', Menlo, monospace; white-space: pre-wrap; padding: 4px 6px; }
+      .term .link { color: #8b95f7; }
+      .term .dim { color: #848484; }
+      .term .clay { color: #d97757; }
+      /* PatchDiff renders in a shadow root the build can't scan: its look, by hand */
+      .diff { font: 12px/20px ui-monospace, 'SF Mono', Menlo, monospace; }
+      .diff div { white-space: pre; padding-right: 12px; }
+      .diff .num { display: inline-block; width: 40px; padding-right: 10px; text-align: right; color: #848484; }
+      .diff .add { background: rgb(16 185 129 / 12%); }
+      .diff .del { background: rgb(239 68 68 / 12%); }
+      .diff .hunk { background: rgb(255 255 255 / 4%); color: #848484; }
+    </style>
+  </head>
+  <body>
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
+      <!-- Title bar: App.tsx -->
+      <div class="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-2">
+        <div class="flex min-w-0 flex-1 basis-0 items-center gap-0.5">
+          <span class="flex shrink-0 items-center pl-[80px]">
+            <!-- The hub's own list toggle stands where the workspace's arrows and tabs step aside -->
+            <button title="Toggle list (⌘B)" data-hub-list-toggle class="hidden size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+          </span>
+          <span data-workspace-only class="mr-1 flex shrink-0 items-center">
+            <button title="Back" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 text-muted-foreground">
+              <svg data-icon="arrowLeft" class="shrink-0 size-3.5"></svg>
+            </button>
+            <button title="Forward" disabled class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 text-muted-foreground">
+              <svg data-icon="arrowRight" class="shrink-0 size-3.5"></svg>
+            </button>
+          </span>
+          <div id="tabs" data-workspace-only class="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+            <span class="h-full min-w-2 flex-1"></span>
+          </div>
+        </div>
+        <div class="flex h-7 shrink-0 items-center rounded-lg bg-muted p-0.5 ring-1 ring-border">
+          <!-- The two modes: a workspace (chip, filled by the script below) or the AI Hub alone -->
+          <div id="ws" class="flex h-6 items-center"></div>
+          <div class="relative ml-0.5">
+            <button aria-label="AI Hub" data-mode-hub class="flex h-6 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+              <span aria-hidden style="width: 18px; height: 18px" class="relative shrink-0 scale-130">
+                <img src="../../packages/plugins/hub/renderer/aliens/claude.png" alt="" class="absolute inset-0 size-full" />
+              </span>
+              AI Hub
+              <span class="relative flex size-2"><span class="relative size-2 rounded-full bg-emerald-400"></span></span>
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-1 basis-0 items-center justify-end gap-0.5">
+          <!-- Plugin tabs after the search item: filled by renderTabs -->
+          <div id="tabs-right" data-workspace-only class="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"></div>
+          <button title="Agents are working: the Mac stays awake" aria-pressed="true" class="relative flex h-6 items-center rounded-md px-1.5 hover:bg-accent bg-emerald-400/12 text-emerald-400">
+            <svg data-icon="coffee" class="shrink-0 size-3.5"></svg>
+          </button>
+          <button title="Usage limits" class="flex h-6 shrink-0 items-center gap-3 rounded-md px-2 text-[11.5px] hover:bg-accent">
+            <span class="flex items-center gap-1.5 whitespace-nowrap">
+              <span style="color: #d97757" class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">✳</span>
+              <span class="tabular-nums text-amber-400">76%</span> <span class="text-muted-foreground">in 1d</span>
+            </span>
+            <span class="flex items-center gap-1.5 whitespace-nowrap">
+              <span style="color: var(--color-foreground)" class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">◎</span>
+              <span class="tabular-nums text-foreground/80">2%</span> <span class="text-muted-foreground">in 6d</span>
+            </span>
+          </button>
+          <!-- Dock panel toggles for the page (filled by renderTabs) and the agent comments button; the hub hides both -->
+          <span data-workspace-only class="flex items-center gap-0.5">
+            <span id="panel-toggles" class="flex items-center gap-0.5"></span>
+            <button title="Agent comments (⌘⇧I)" data-comments class="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-foreground hover:bg-accent">
+              <svg data-icon="comment" class="shrink-0 size-3.5"></svg>
+              <span class="tabular-nums">3</span>
+              <kbd data-key-hint class="kbd">⌘⇧I</kbd>
+            </button>
+          </span>
+          <button title="Set up the Treeix MCP in Claude Code" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 text-muted-foreground">
+            <svg data-icon="plug" class="shrink-0 size-3.5"></svg>
+          </button>
+          <button title="Run command (⌘K)" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground">
+            <svg data-icon="search" class="shrink-0 size-3.5"></svg>
+          </button>
+          <button title="Settings (⌘, or G S)" data-open-settings class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 text-muted-foreground">
+            <svg data-icon="settings" class="shrink-0 size-3.5"></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="relative flex min-h-0 flex-1">
+        <!-- AI Hub mode: the hub alone, over every workspace -->
+        <div id="hub" data-overlay="hub" class="absolute inset-0 z-40 hidden flex-col bg-background">
+          <!-- HubPage: packages/plugins/hub/renderer -->
+          <!-- Islands, Figma style: the chat or the canvas fills the hub, the list and the inspector float over it and fold to a pill -->
+          <div data-hub-stage class="relative flex min-h-0 min-w-0 flex-1">
+            <div data-hub-list style="width: 280px" class="absolute top-2 bottom-2 left-2 z-20 flex min-h-0 min-w-0 flex-col rounded-xl border border-border bg-popover shadow-xl shadow-black/40">
+              <div data-hub-resize class="group absolute z-20 inset-y-0 -right-1.5 w-3 cursor-col-resize"><span class="pointer-events-none absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-foreground h-8 w-2.5"><svg data-icon="grip" class="shrink-0 size-2.5"></svg></span></div>
+              <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+                <span class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Agents</span>
+                <span class="flex-1"></span>
+                <button title="New agent" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="plus" class="shrink-0 size-3.5"></svg></button>
+                <button title="Hide the list (⌘B)" data-hub-list-hide class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+              </div>
+              <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+                <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-9 px-2 text-xs bg-accent">
+                  <span style="background: #d97757" class="grid shrink-0 place-items-center rounded-lg font-semibold text-white size-6 text-[11px]">C</span>
+                  <span class="min-w-0 flex-1 truncate">Claude</span>
+                  <span class="grid shrink-0 place-items-center size-2.5"><span class="rounded-full size-full animate-spin border-[1.5px] border-emerald-400 border-t-transparent"></span></span>
+                </button>
+                <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-9 px-2 text-xs">
+                  <span style="background: #337ea9" class="grid shrink-0 place-items-center rounded-lg font-semibold text-white size-6 text-[11px]">R</span>
+                  <span class="min-w-0 flex-1 truncate">Reviewer</span>
+                </button>
+                <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-9 px-2 text-xs">
+                  <span style="background: #448361" class="grid shrink-0 place-items-center rounded-lg font-semibold text-white size-6 text-[11px]">P</span>
+                  <span class="min-w-0 flex-1 truncate">Planner</span>
+                </button>
+                <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-9 px-2 text-xs">
+                  <span style="background: #9065b0" class="grid shrink-0 place-items-center rounded-lg font-semibold text-white size-6 text-[11px]">W</span>
+                  <span class="min-w-0 flex-1 truncate">Release writer</span>
+                </button>
+                <div class="flex items-center pt-3 pr-0 pb-0.5 pl-2">
+                  <span class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Workflows</span>
+                  <span class="flex-1"></span>
+                  <button title="New workflow" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="plus" class="shrink-0 size-3.5"></svg></button>
+                </div>
+                <button data-hub-row="workflow" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                  <svg data-icon="layers" class="size-3.5 shrink-0 text-muted-foreground"></svg>
+                  <span class="min-w-0 flex-1 truncate">Ticket to pull request</span>
+                </button>
+                <button data-hub-row="workflow" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                  <svg data-icon="layers" class="size-3.5 shrink-0 text-muted-foreground"></svg>
+                  <span class="min-w-0 flex-1 truncate">Weekly release notes</span>
+                </button>
+                <div class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase px-2 pt-4 pb-1.5">Chats</div>
+                <!-- Every chat with an agent, titled by its first message; older than a day fades, × drops it from the history -->
+                <div class="group relative">
+                  <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                    <span style="background: #d97757" class="grid shrink-0 place-items-center rounded-md font-semibold text-white size-4 text-[9px]">C</span>
+                    <span class="min-w-0 flex-1 truncate">Why does the terminal flicker on resize?</span>
+                    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">4m</span>
+                  </button>
+                  <span class="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex"><button title="Remove from history" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button></span>
+                </div>
+                <div class="group relative">
+                  <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                    <span style="background: #337ea9" class="grid shrink-0 place-items-center rounded-md font-semibold text-white size-4 text-[9px]">R</span>
+                    <span class="min-w-0 flex-1 truncate">Review TRX-142 before merge</span>
+                    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">3h</span>
+                  </button>
+                  <span class="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex"><button title="Remove from history" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button></span>
+                </div>
+                <!-- Inactive for a day: folded into a group, closed until opened -->
+                <button data-older-toggle class="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="chevron" class="shrink-0 size-3 transition-transform"></svg>Older<span class="tabular-nums">1</span></button>
+                <div data-older class="hidden">
+                  <div class="group relative opacity-50 hover:opacity-100">
+                    <button data-hub-row="agent" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                      <span style="background: #448361" class="grid shrink-0 place-items-center rounded-md font-semibold text-white size-4 text-[9px]">P</span>
+                      <span class="min-w-0 flex-1 truncate">Plan the plugin settings migration</span>
+                      <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">2d</span>
+                    </button>
+                    <span class="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex"><button title="Remove from history" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button></span>
+                  </div>
+                </div>
+                <div class="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase px-2 pt-4 pb-1.5">Runs</div>
+                <!-- Running runs have no ×; ended ones drop from the history with it -->
+                <div class="group relative">
+                  <button data-hub-row="run" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                    <svg data-icon="loader" class="size-3.5 shrink-0 animate-spin text-sky-400"></svg>
+                    <span class="min-w-0 flex-1 truncate">Ticket to pull request</span>
+                    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">2m</span>
+                  </button>
+                </div>
+                <div class="group relative">
+                  <button data-hub-row="run" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                    <svg data-icon="alert" class="size-3.5 shrink-0 text-amber-400"></svg>
+                    <span class="min-w-0 flex-1 truncate">Weekly release notes</span>
+                    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">1h</span>
+                  </button>
+                </div>
+                <div class="group relative">
+                  <button data-hub-row="run" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                    <svg data-icon="check" class="size-3.5 shrink-0 text-emerald-400"></svg>
+                    <span class="min-w-0 flex-1 truncate">Ticket to pull request</span>
+                    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">5h</span>
+                  </button>
+                  <span class="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex"><button title="Remove the run" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button></span>
+                </div>
+                <!-- Older than a day but still waiting on you: stays out of the group -->
+                <div class="group relative">
+                  <button data-hub-row="run" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                    <svg data-icon="alert" class="size-3.5 shrink-0 text-amber-400"></svg>
+                    <span class="min-w-0 flex-1 truncate">Ticket to pull request</span>
+                    <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">3d</span>
+                  </button>
+                </div>
+                <button data-older-toggle class="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="chevron" class="shrink-0 size-3 transition-transform"></svg>Older<span class="tabular-nums">1</span></button>
+                <div data-older class="hidden">
+                  <!-- Done and older than a day -->
+                  <div class="group relative opacity-50 hover:opacity-100">
+                    <button data-hub-row="run" class="flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent h-8 px-2 text-xs">
+                      <svg data-icon="check" class="size-3.5 shrink-0 text-emerald-400"></svg>
+                      <span class="min-w-0 flex-1 truncate">Weekly release notes</span>
+                      <span class="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">2d</span>
+                    </button>
+                    <span class="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex"><button title="Remove the run" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- The folded list: a pill in its corner -->
+            <button data-hub-list-show title="Show the list (⌘B)" class="absolute top-2 left-2 z-20 hidden h-10 items-center gap-2 px-3 text-xs hover:bg-accent rounded-xl border border-border bg-popover shadow-xl shadow-black/40">
+              <svg data-icon="panel" class="shrink-0 size-3.5 text-muted-foreground"></svg>Agents
+            </button>
+            <!-- Agent chat: the column moves clear of the open list island -->
+            <div data-hub-main="agent" data-hub-pad class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+              <div class="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
+                <span style="background: #d97757" class="grid shrink-0 place-items-center rounded-lg font-semibold text-white size-7 text-sm">C</span>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium">Claude</div>
+                  <div class="truncate text-[11px] text-muted-foreground">Claude · opus · general purpose agent, any workspace</div>
+                </div>
+                <button title="Chats" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="comment" class="shrink-0 size-3.5"></svg></button>
+                <button title="New chat" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="plus" class="shrink-0 size-3.5"></svg></button>
+                <button title="Edit agent" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="pencil" class="shrink-0 size-3.5"></svg></button>
+                <button title="Delete agent" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="trash" class="shrink-0 size-3.5"></svg></button>
+              </div>
+              <div class="flex h-full min-h-0 flex-col bg-background">
+                <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                  <div class="mx-auto flex w-full flex-1 max-w-3xl flex-col gap-3 px-4 py-4">
+                    <div class="flex justify-end">
+                      <div class="max-w-[80%] rounded-2xl rounded-br-md bg-muted px-3.5 py-2 text-sm whitespace-pre-wrap text-foreground">Which PRs across my workspaces are waiting on me?</div>
+                    </div>
+                    <div class="flex items-center gap-1 text-xs text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3"></svg>Thought for 4s</div>
+                    <div class="overflow-hidden rounded-lg text-xs ring-1 ring-border">
+                      <div class="flex min-w-0 items-center gap-2 px-3 py-1.5">
+                        <svg data-icon="check" class="shrink-0 size-3.5 text-emerald-400"></svg>
+                        <span class="min-w-0 truncate font-mono text-foreground">gh search prs --review-requested=@me --state=open</span>
+                      </div>
+                    </div>
+                    <div class="overflow-hidden rounded-lg text-xs ring-1 ring-border">
+                      <div class="flex min-w-0 items-center gap-2 px-3 py-1.5">
+                        <svg data-icon="check" class="shrink-0 size-3.5 text-emerald-400"></svg>
+                        <span class="min-w-0 truncate font-mono text-foreground">Edit docs/review-queue.md</span>
+                        <span class="font-mono text-emerald-400">+12</span><span class="font-mono text-red-400">-3</span>
+                      </div>
+                    </div>
+                    <div class="text-sm">Three are waiting on your review: <b>#412</b> in Betfeel (odds cache), <b>#88</b> in Blurify (export presets) and <b>#1203</b> in Treeix (workspace switcher). #412 has a failing check.</div>
+                    <div class="flex justify-end">
+                      <div class="max-w-[80%] rounded-2xl rounded-br-md bg-muted px-3.5 py-2 text-sm whitespace-pre-wrap text-foreground">Summarise #1203 for me</div>
+                    </div>
+                    <div class="flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground"><svg data-icon="loader" class="shrink-0 size-3.5 animate-spin text-sky-400"></svg>Reading the diff</div>
+                  </div>
+                </div>
+                <div class="shrink-0 px-4 pb-3">
+                  <div class="mx-auto max-w-3xl">
+                    <div class="relative rounded-lg bg-background ring-1 ring-border">
+                      <textarea rows="2" placeholder="Message Claude" class="block w-full resize-none bg-transparent px-3 py-2 text-sm outline-none"></textarea>
+                      <div class="flex items-center gap-1.5 px-2 pb-2">
+                        <button title="Attach" class="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="paperclip" class="shrink-0 size-3.5"></svg></button>
+                        <button class="flex h-6 max-w-40 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"><span class="truncate">Opus 5.5</span><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg></button>
+                        <span class="relative">
+                          <button title="Context used" data-context-meter class="flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
+                            <span class="h-1 w-12 overflow-hidden rounded-full bg-muted"><span style="width: 18%" class="block h-full bg-foreground/40"></span></span>36k / 200k
+                          </button>
+                          <!-- ContextMeter popup: ChatComposer.tsx. Model and Auto-compacts at are suggestions, not in the app yet -->
+                          <div data-context-popup class="absolute right-0 bottom-full z-50 mb-1 hidden w-60 flex-col gap-1 rounded-lg border border-input bg-popover p-3 text-xs text-foreground shadow-lg">
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Context</span><span class="tabular-nums">36k<span class="text-muted-foreground"> (18%)</span></span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Session cost</span><span class="tabular-nums">$1.84</span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Model</span><span class="tabular-nums">Opus 5.5 · 200k</span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Auto-compacts at</span><span class="tabular-nums">160k<span class="text-muted-foreground"> (80%)</span></span></div>
+                            <div class="mt-1.5 border-t border-border pt-1.5 font-medium">Last turn</div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Cache read</span><span class="tabular-nums">31.2k<span class="text-muted-foreground"> (89%)</span></span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Cache write</span><span class="tabular-nums">2.9k<span class="text-muted-foreground"> (8%)</span></span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">New input</span><span class="tabular-nums">1.1k<span class="text-muted-foreground"> (3%)</span></span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Output</span><span class="tabular-nums">824</span></div>
+                            <div class="flex items-baseline justify-between gap-4"><span class="text-muted-foreground">Thinking</span><span class="tabular-nums">312</span></div>
+                          </div>
+                        </span>
+                        <span class="flex-1"></span>
+                        <button class="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white">Send</button>
+                      </div>
+                    </div>
+                    <div class="mt-1.5 px-1 text-[11px] text-muted-foreground">↵ to send · ⇧↵ for a new line · @ to mention a file</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- RunView: a workflow run -->
+            <div data-hub-main="run" data-hub-pad class="hidden min-h-0 min-w-0 flex-col flex-1 bg-background">
+              <div class="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
+                <svg data-icon="layers" class="shrink-0 size-4 text-muted-foreground"></svg>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium">Ticket to pull request</div>
+                  <div class="truncate text-[11px] text-muted-foreground">Running · started 2m ago · TRX-142</div>
+                </div>
+                <button title="Edit workflow" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="pencil" class="shrink-0 size-3.5"></svg></button>
+                <button title="Stop" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3.5"></svg></button>
+              </div>
+              <div class="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2">
+                <button class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border"><svg data-icon="check" class="shrink-0 size-3.5 text-emerald-400"></svg>Read ticket</button>
+                <button class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border"><svg data-icon="check" class="shrink-0 size-3.5 text-emerald-400"></svg>Plan</button>
+                <button class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border bg-accent"><svg data-icon="alert" class="shrink-0 size-3.5 text-amber-400"></svg>Approve plan</button>
+                <button class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border text-muted-foreground"><svg data-icon="branch" class="shrink-0 size-3.5"></svg>Implement</button>
+                <button class="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border text-muted-foreground"><svg data-icon="pullRequest" class="shrink-0 size-3.5"></svg>Open PR</button>
+              </div>
+              <div class="min-h-0 flex-1 overflow-y-auto">
+                <div class="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
+                  <div class="text-sm font-medium">Approve plan</div>
+                  <div class="text-sm">1. Move the workspace chip into the centre segment.<br />2. Hide page tabs and panel toggles while the hub is open.<br />3. Update the title bar e2e tests.</div>
+                  <div class="flex gap-2">
+                    <button class="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">Approve</button>
+                    <button class="h-7 rounded-md px-3 text-xs ring-1 ring-border">Deny</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- WorkflowView: the canvas fills the hub; the list, the steps toolbar and the inspector float over it -->
+            <div data-hub-main="workflow" class="hidden min-h-0 min-w-0 flex-1 bg-background">
+              <div style="background-image: radial-gradient(rgb(255 255 255 / 10%) 1px, transparent 1px); background-size: 20px 20px" class="relative min-w-0 flex-1 overflow-hidden">
+                <svg class="pointer-events-none absolute inset-0 size-full text-muted-foreground" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M 584 250 C 620 250, 620 250, 656 250" /><path d="M 880 250 C 916 250, 916 170, 952 170" /><path d="M 880 250 C 916 250, 916 330, 952 330" />
+                </svg>
+                <div style="left: 360px; top: 226px" class="absolute w-56 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-sm "><div class="flex items-center gap-1.5 font-medium"><svg data-icon="pointer" class="shrink-0 size-3.5 text-muted-foreground"></svg>Input</div><div class="mt-0.5 truncate text-muted-foreground">Ticket key</div></div>
+                <div style="left: 656px; top: 226px" class="absolute w-56 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-sm ring-1 ring-primary"><div class="flex items-center gap-1.5 font-medium"><svg data-icon="user" class="shrink-0 size-3.5 text-muted-foreground"></svg>Plan</div><div class="mt-0.5 truncate text-muted-foreground">Planner · reads the ticket</div></div>
+                <div style="left: 952px; top: 146px" class="absolute w-56 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-sm "><div class="flex items-center gap-1.5 font-medium"><svg data-icon="lock" class="shrink-0 size-3.5 text-muted-foreground"></svg>Approve plan</div><div class="mt-0.5 truncate text-muted-foreground">Waits for you</div></div>
+                <div style="left: 952px; top: 306px" class="absolute w-56 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-sm "><div class="flex items-center gap-1.5 font-medium"><svg data-icon="check" class="shrink-0 size-3.5 text-muted-foreground"></svg>Output</div><div class="mt-0.5 truncate text-muted-foreground">Pull request link</div></div>
+                <!-- Steps toolbar island, bottom centre like Figma's -->
+                <div class="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 p-1 rounded-xl border border-border bg-popover shadow-xl shadow-black/40">
+                  <button class="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent"><svg data-icon="user" class="shrink-0 size-3.5"></svg>Agent</button>
+                  <button class="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent"><svg data-icon="layers" class="shrink-0 size-3.5"></svg>Merge</button>
+                  <button class="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent"><svg data-icon="branch" class="shrink-0 size-3.5"></svg>Condition</button>
+                  <button class="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent"><svg data-icon="lock" class="shrink-0 size-3.5"></svg>Approval</button>
+                  <button class="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent"><svg data-icon="check" class="shrink-0 size-3.5"></svg>Output</button>
+                  <span class="mx-1 h-5 w-px bg-border"></span>
+                  <button title="Undo (⌘Z)" class="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="undo" class="shrink-0 size-3.5"></svg></button>
+                  <button title="Fit view" class="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="focus" class="shrink-0 size-3.5"></svg></button>
+                  <span class="px-1.5 text-[11px] text-muted-foreground tabular-nums">100%</span>
+                </div>
+              </div>
+              <!-- Inspector island: the workflow's name and Run on top, the selected step below -->
+              <div data-hub-inspector class="absolute top-2 right-2 bottom-2 z-20 flex w-72 min-h-0 flex-col rounded-xl border border-border bg-popover shadow-xl shadow-black/40">
+                <div class="flex h-10 shrink-0 items-center gap-1.5 border-b border-border pr-1.5 pl-3">
+                  <input aria-label="Workflow name" value="Ticket to pull request" class="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none" />
+                  <button title="Remove workflow" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="trash" class="shrink-0 size-3.5"></svg></button>
+                  <button title="Hide the inspector (⌘⌥B)" data-hub-inspector-hide class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="panel" class="shrink-0 size-3.5 -scale-x-100"></svg></button>
+                </div>
+                <div class="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+                  <button class="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="check" class="shrink-0 size-3 text-emerald-400"></svg>Last run 5h ago</button>
+                  <span class="flex-1"></span>
+                  <button class="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white"><svg data-icon="wand" class="shrink-0 size-3.5"></svg>Run</button>
+                </div>
+                <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 text-xs">
+                  <div class="text-sm font-medium">Plan</div>
+                  <label class="flex flex-col gap-1"><span class="text-muted-foreground">Agent</span>
+                    <button class="flex h-8 items-center gap-2 rounded-md px-2 text-left ring-1 ring-border"><span style="background: #448361" class="grid size-4 place-items-center rounded font-semibold text-white text-[9px]">P</span>Planner<span class="flex-1"></span><svg data-icon="chevron" class="shrink-0 size-3 rotate-90 text-muted-foreground"></svg></button>
+                  </label>
+                  <label class="flex flex-col gap-1"><span class="text-muted-foreground">Prompt</span>
+                    <textarea rows="6" class="resize-none rounded-md bg-transparent px-2 py-1.5 ring-1 ring-border outline-none">Read the ticket from the input and write a plan of at most five steps.</textarea>
+                  </label>
+                </div>
+              </div>
+              <!-- The folded inspector keeps the name and Run in reach -->
+              <div data-hub-inspector-show class="absolute top-2 right-2 z-20 hidden h-10 items-center gap-1 pr-1 pl-3 rounded-xl border border-border bg-popover shadow-xl shadow-black/40">
+                <span class="max-w-48 truncate text-xs font-medium">Ticket to pull request</span>
+                <button class="ml-1 flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-white"><svg data-icon="wand" class="shrink-0 size-3.5"></svg>Run</button>
+                <button title="Show the inspector (⌘⌥B)" data-hub-inspector-open class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="panel" class="shrink-0 size-3.5 -scale-x-100"></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="pages" class="flex min-h-0 min-w-0 flex-1">
+          <div data-zone="main" class="relative flex min-h-0 min-w-0 flex-col flex-1">
+            <!-- Terminal page: packages/plugins/terminal -->
+            <div data-page="terminal" class="flex min-h-0 min-w-0 flex-1">
+              <div style="flex: 0.6" class="flex min-w-6 flex-col">
+                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+                  <div class="@container flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5">
+                    <div class="flex min-w-0 shrink-0 items-center gap-1 pr-1">
+                      <button title="Hide list" class="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+                        <svg data-icon="panel" class="shrink-0 size-3.5"></svg>
+                      </button>
+                      <span title="Folder" class="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="folder" class="shrink-0 size-3.5"></svg></span>
+                      <span class="ml-1 h-4 w-px shrink-0 bg-border"></span>
+                    </div>
+                    <div class="flex min-w-0 items-center gap-1 overflow-x-auto">
+                      <div class="group/tab flex h-6 max-w-56 min-w-0 shrink-0 items-center rounded-md text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+                        <button class="flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2">
+                          <span style="color: #d97757" class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">✳</span>
+                          <span class="shrink-0 text-muted-foreground"><svg data-icon="comment" class="shrink-0 size-3"></svg></span>
+                          <span class="min-w-0 truncate">I would like you to add a quick switcher for…</span>
+                          <span class="grid shrink-0 place-items-center size-2.5"><span class="rounded-full size-full border-[1.5px] border-foreground/35"></span></span>
+                        </button>
+                        <button class="mr-1 grid size-4 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground opacity-0 group-hover/tab:opacity-100"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+                      </div>
+                      <div class="group/tab flex h-6 max-w-56 min-w-0 shrink-0 items-center rounded-md text-xs bg-foreground/10 text-foreground">
+                        <button class="flex h-6 min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2">
+                          <span style="color: #d97757" class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">✳</span>
+                          <span class="min-w-0 truncate">Workspace switching UI mockup</span>
+                          <span class="grid shrink-0 place-items-center size-2.5"><span class="rounded-full size-full animate-spin border-[1.5px] border-emerald-400 border-t-transparent"></span></span>
+                        </button>
+                        <button class="mr-1 grid size-4 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+                      </div>
+                    </div>
+                    <button title="New session" class="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="plus" class="shrink-0 size-3.5"></svg></button>
+                    <span class="min-w-2 flex-1"></span>
+                    <button title="Diagrams" class="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="layers" class="shrink-0 size-3"></svg></button>
+                    <button title="Inspector" class="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5 -scale-x-100"></svg></button>
+                  </div>
+                  <div class="term min-h-0 flex-1 overflow-hidden">● I've built the HTML mockup at <span class="link">docs/design/workspace-switcher.html</span>. It's being served
+  at http://localhost:4818/workspace-switcher.html and is already open in a Treeix
+  browser tab. Switch between three versions with the buttons above the window:
+
+  - <b>A - current rail</b>: a copy of <span class="link">WorkspaceRail.tsx</span>, to compare against: 8 tiles,
+    activity marks, <span class="link">+</span>, <span class="link">~</span>, and the rail toggle button.
+  - <b>B - title bar chip</b>: no rail and no rail toggle. A single <span class="link">[avatar] Treeix ▾</span> chip
+    sits in the title bar. A small dot on it means another workspace needs you.
+
+<span class="dim">✻ Churned for 2m 52s · done 16:35 · 1 shell still running</span>
+
+<span style="background: rgb(255 255 255 / 4%)">❯ ok, make UI 1:1 as we currenty have.                                          </span>
+
+● Writing the 1:1 page now.
+
+<span class="clay">✶ Doodling… (20s · ↓ 1.3k tokens · thought for 5s)</span>
+  <span class="dim">⎿ Tip: Paste images into Claude Code using control+v (not cmd+v!)</span>
+
+<span class="dim">──────────────────────────────────────────────────────────────────────────────</span>
+❯ ▍
+<span class="dim">──────────────────────────────────────────────────────────────────────────────</span>
+  Opus 5.5 <span class="clay">high</span> | 85.6k 9.0% | 18.0% ...
+  <span class="clay">▸▸ bypass permissions on</span> · 1 shell</div>
+                </div>
+              </div>
+              <!-- File preview beside the terminal -->
+              <aside style="flex: 0.4" class="relative flex min-w-0 flex-col border-border bg-background border-l">
+                <div class="group absolute z-20 inset-y-0 -left-1.5 w-3 cursor-col-resize">
+                  <span class="pointer-events-none absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground h-8 w-2.5">
+                    <svg data-icon="grip" class="shrink-0 size-2.5"></svg>
+                  </span>
+                </div>
+                <div class="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+                  <div class="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+                    <div class="flex h-6 max-w-52 shrink-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-xs bg-foreground/8 text-foreground ring-1 ring-border">
+                      <button class="flex min-w-0 items-center gap-1.5">
+                        <span aria-hidden style="color: #f97316" class="inline-flex h-3.5 w-5 shrink-0 items-center justify-center font-mono text-[8.5px] leading-none font-bold tracking-tight">&lt;&gt;</span>
+                        <span class="truncate">workspace-switcher.html</span>
+                      </button>
+                      <button class="grid size-4 shrink-0 place-items-center rounded hover:bg-accent"><svg data-icon="close" class="shrink-0 size-2.5"></svg></button>
+                    </div>
+                  </div>
+                  <button title="Preview" class="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="eye" class="shrink-0 size-3.5"></svg></button>
+                  <button title="Maximize" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="maximize" class="shrink-0 size-3.5"></svg></button>
+                  <button title="Close" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+                </div>
+                <div class="min-h-0 w-full flex-1 bg-background"></div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AgentCommentsDrawer: Comments.tsx -->
+    <div id="drawer" data-drawer style="top: 36px; bottom: 0" class="fixed right-0 z-[45] hidden w-[440px] max-w-[90vw] flex-col border-l border-input bg-popover shadow-2xl shadow-black/60">
+      <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+        <svg data-icon="comment" class="shrink-0 size-4 text-muted-foreground"></svg>
+        <span class="text-[13px] font-medium">Agent comments</span>
+        <span class="text-xs text-muted-foreground tabular-nums">3</span>
+        <span class="flex-1"></span>
+        <button title="Close (esc or ⌘⇧I)" data-drawer-close class="flex h-6 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground"><kbd class="kbd">esc</kbd></button>
+      </div>
+      <div class="min-h-0 flex-1 overflow-y-auto p-2">
+        <section class="mb-2 rounded-lg p-1.5 ring-1 ring-input">
+          <button class="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-medium hover:bg-accent">
+            <svg data-icon="branch" class="shrink-0 size-3.5 text-emerald-400"></svg><span class="min-w-0 truncate">treeix / workspace-switcher</span><span class="ml-auto shrink-0 text-muted-foreground tabular-nums">2</span>
+          </button>
+          <div class="mt-1 cursor-default rounded-md p-2 ring-1 bg-foreground/[.08] ring-input">
+            <div class="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+              <span class="min-w-0 truncate font-mono">apps/desktop/src/renderer/src/App.tsx:2301</span><span class="flex-1"></span>
+              <button class="grid size-5 shrink-0 place-items-center rounded hover:bg-accent hover:text-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+            </div>
+            <div class="mt-1.5 truncate rounded bg-background px-2 py-1 font-mono text-[11px] text-foreground/75">&lt;div className={`flex min-w-0 flex-1 basis-0 items-center gap-0.5`}&gt;</div>
+            <div class="mt-1.5 text-xs break-words whitespace-pre-wrap text-foreground/90">Hide back and forward while the hub is open, keep the space so the centre stays put</div>
+          </div>
+          <div class="mt-1 cursor-default rounded-md p-2 ring-1 ring-border hover:bg-accent">
+            <div class="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+              <span class="min-w-0 truncate font-mono">apps/desktop/src/renderer/src/WorkspaceSwitcher.tsx:48</span><span class="flex-1"></span>
+              <button class="grid size-5 shrink-0 place-items-center rounded hover:bg-accent hover:text-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+            </div>
+            <div class="mt-1.5 text-xs break-words whitespace-pre-wrap text-foreground/90">The chip should go back to the workspace on click when the hub is open</div>
+          </div>
+          <div class="mt-1.5">
+            <div class="relative flex items-center text-[11.5px] font-medium h-8 w-full rounded-md bg-primary text-white">
+              <button class="flex h-full min-w-0 flex-1 items-center justify-center gap-1.5 rounded-l-[inherit] pr-2 pl-3 whitespace-nowrap hover:bg-white/5"><span class="truncate">Send 2 comments to Workspace switching UI mockup</span></button>
+              <button class="flex h-full w-7 items-center justify-center rounded-r-[inherit] border-l hover:bg-white/5 border-white/25"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg></button>
+            </div>
+          </div>
+        </section>
+        <section class="mb-2 rounded-lg p-1.5 ring-1 ring-border">
+          <button class="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-medium hover:bg-accent">
+            <svg data-icon="branch" class="shrink-0 size-3.5 text-emerald-400"></svg><span class="min-w-0 truncate">betfeel / odds-cache</span><span class="ml-auto shrink-0 text-muted-foreground tabular-nums">1</span>
+          </button>
+          <div class="mt-1 cursor-default rounded-md p-2 ring-1 ring-border hover:bg-accent">
+            <div class="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+              <span class="min-w-0 truncate font-mono">src/odds/cache.ts:31-36</span><span class="flex-1"></span>
+              <button class="grid size-5 shrink-0 place-items-center rounded hover:bg-accent hover:text-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+            </div>
+            <div class="mt-1.5 text-xs break-words whitespace-pre-wrap text-foreground/90">TTL should come from the feed, not a constant</div>
+          </div>
+        </section>
+        <section class="mt-3">
+          <div class="px-1.5 pb-1 text-[11px] font-medium text-muted-foreground">Sent</div>
+          <div class="group/sent flex h-8 items-center gap-2 rounded-md px-1.5 text-xs hover:bg-accent">
+            <span class="min-w-0 flex-1 truncate">Rename the rail to switcher everywhere <span class="text-muted-foreground">· treeix / main</span></span>
+            <span class="shrink-0 text-muted-foreground tabular-nums">1h</span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Pages, cloned into the zones by pageNode() -->
+    <template data-page-tpl="worktrees">
+      <div class="flex min-h-0 min-w-0 flex-1">
+        <div style="width: 280px" class="flex min-h-0 min-w-0 flex-col border-r border-border bg-sidebar">
+          <div class="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
+            <div class="flex items-center gap-1">
+              <label class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
+                <svg data-icon="search" class="shrink-0 size-3.5"></svg>
+                <input placeholder="Filter worktrees" class="min-w-0 flex-1 bg-transparent text-xs outline-none" />
+                <button title="Only worktrees with changes" class="-mr-1 h-5 shrink-0 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent">Changes</button>
+              </label>
+            </div>
+            <button class="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+              <svg data-icon="folder" class="shrink-0 size-3.5"></svg><span class="min-w-0 flex-1 truncate text-left">All folders</span><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>
+            </button>
+          </div>
+          <nav class="min-h-0 flex-1 overflow-y-auto pb-2">
+            <div class="group/row mx-1.5 mt-1 flex h-7 items-center rounded-md hover:bg-accent">
+              <button class="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5"><svg data-icon="chevron" class="shrink-0 size-3 text-muted-foreground/65 rotate-90"></svg><span class="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">treeix</span></button>
+            </div>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent">
+              <svg data-icon="folder" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">main</span>
+            </button>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent bg-accent">
+              <svg data-icon="branch" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">workspace-switcher</span>
+              <span class="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">4</span>
+            </button>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent">
+              <svg data-icon="branch" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">hub-mode</span>
+              <span class="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">12</span>
+            </button>
+            <div class="mx-1.5 flex h-6 items-center gap-1 rounded-md pr-1 pl-5 text-[10.5px] text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3"></svg>Branches 6</div>
+            <div class="group/row mx-1.5 mt-1 flex h-7 items-center rounded-md hover:bg-accent">
+              <button class="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5"><svg data-icon="chevron" class="shrink-0 size-3 text-muted-foreground/65 rotate-90"></svg><span class="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">treeix-site</span></button>
+            </div>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent">
+              <svg data-icon="folder" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">main</span>
+            </button>
+            <div class="mx-1.5 flex h-6 items-center gap-1 rounded-md pr-1 pl-5 text-[10.5px] text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>Branches 2</div>
+            <div class="mx-1.5 flex h-7 items-center gap-2 rounded-md pr-1 pl-5 text-muted-foreground hover:bg-accent"><svg data-icon="branch" class="shrink-0 size-3.5"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">pricing-page</span></div>
+            <div class="mx-1.5 flex h-7 items-center gap-2 rounded-md pr-1 pl-5 text-muted-foreground hover:bg-accent"><svg data-icon="branch" class="shrink-0 size-3.5"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">changelog-feed</span></div>
+          </nav>
+        </div>
+        <div class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+          <div class="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card px-1.5">
+            <button title="Hide list" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+            <svg data-icon="branch" class="shrink-0 size-3.5 text-muted-foreground"></svg>
+            <span class="min-w-0 truncate font-mono text-xs">workspace-switcher</span>
+            <span class="font-mono text-[11px] text-emerald-400">+12</span><span class="font-mono text-[11px] text-red-400">−3</span>
+            <span class="flex-1"></span>
+            <button title="Changed files" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="list" class="shrink-0 size-3.5"></svg></button>
+            <button title="Inspector" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5 -scale-x-100"></svg></button>
+          </div>
+          <div class="flex min-h-0 min-w-0 flex-1">
+            <div style="width: 240px" class="relative shrink-0 border-r border-border bg-card">
+              <div class="h-full overflow-y-auto p-1.5">
+                <div class="flex h-7 items-center gap-2 pl-2 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Changes <span class="tabular-nums">4</span></div>
+                <div class="flex h-6 w-full items-center gap-1.5 rounded-md pr-1.5 text-[11.5px] text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>src/renderer/src</div>
+                <button class="flex h-7 w-full items-center gap-1.5 rounded-md pr-2 pl-4 bg-accent"><span class="min-w-0 flex-1 truncate text-left text-[13px]">App.tsx</span><span class="font-mono text-[10.5px] text-emerald-400">+8</span><span class="font-mono text-[10.5px] text-red-400">-2</span></button>
+                <button class="flex h-7 w-full items-center gap-1.5 rounded-md pr-2 pl-4 hover:bg-accent"><span class="min-w-0 flex-1 truncate text-left text-[13px]">WorkspaceSwitcher.tsx</span><span class="font-mono text-[10.5px] text-emerald-400">+3</span><span class="font-mono text-[10.5px] text-red-400">-1</span></button>
+                <button class="flex h-7 w-full items-center gap-1.5 rounded-md pr-2 pl-4 hover:bg-accent"><span class="min-w-0 flex-1 truncate text-left text-[13px]">main.css</span><span class="font-mono text-[10.5px] text-emerald-400">+1</span></button>
+                <div class="flex h-6 w-full items-center gap-1.5 rounded-md pr-1.5 text-[11.5px] text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>e2e</div>
+                <button class="flex h-7 w-full items-center gap-1.5 rounded-md pr-2 pl-4 hover:bg-accent"><span class="min-w-0 flex-1 truncate text-left text-[13px]">titleBar.e2e.ts</span><span class="font-mono text-[10.5px] text-emerald-400">+24</span></button>
+              </div>
+            </div>
+            <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div class="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
+                <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">apps/desktop/src/renderer/src/App.tsx</span>
+                <button title="Comment" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="comment" class="shrink-0 size-3.5"></svg></button>
+              </div>
+              <div class="diff min-h-0 flex-1 overflow-auto py-1">
+                <div class="hunk"><span class="num"></span>@@ -2298,7 +2298,7 @@ function App()</div>
+                <div><span class="num">2298</span>            &lt;div</div>
+                <div><span class="num">2299</span>              {...tabDropProps}</div>
+                <div class="del"><span class="num">2300</span>-             &lt;div className="flex min-w-0 flex-1 basis-0 items-center gap-0.5"&gt;</div>
+                <div class="add"><span class="num">2300</span>+             &lt;div className={`flex min-w-0 flex-1 basis-0 items-center gap-0.5 ${overlayOpen ? 'invisible' : ''}`}&gt;</div>
+                <div><span class="num">2301</span>                &lt;span className="mr-1 flex shrink-0 items-center"&gt;</div>
+                <div><span class="num">2302</span>                  &lt;IconButton label="Back"&gt;</div>
+                <div class="hunk"><span class="num"></span>@@ -2311,6 +2311,9 @@ function App()</div>
+                <div><span class="num">2311</span>              {centerSegment}</div>
+                <div class="add"><span class="num">2312</span>+             {/* The chip sits in the centre: in the hub a click goes back to the workspace */}</div>
+                <div class="add"><span class="num">2313</span>+             &lt;WorkspaceSwitcher onReturn={() =&gt; setOverlayOpen(false)} /&gt;</div>
+                <div class="add"><span class="num">2314</span>+             &lt;OverlayButton /&gt;</div>
+                <div><span class="num">2315</span>              &lt;div className="flex flex-1 basis-0 items-center justify-end gap-0.5"&gt;</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="width: 300px" class="flex min-h-0 min-w-0 flex-col border-l border-border bg-card">
+          <div class="flex shrink-0 items-center gap-1 p-2">
+            <label class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
+              <svg data-icon="search" class="shrink-0 size-3"></svg><input placeholder="Filter files" class="min-w-0 flex-1 bg-transparent text-xs outline-none" />
+            </label>
+            <button title="New file" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="filePlus" class="shrink-0 size-3.5"></svg></button>
+            <button title="New folder" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="folderPlus" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+            <div class="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-xs text-foreground/85"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90 text-muted-foreground"></svg><svg data-icon="folderOpen" class="shrink-0 size-3.5 text-muted-foreground"></svg>apps</div>
+            <div style="padding-left: 12px" class="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-xs text-foreground/85"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90 text-muted-foreground"></svg><svg data-icon="folderOpen" class="shrink-0 size-3.5 text-muted-foreground"></svg>desktop</div>
+            <div style="padding-left: 24px" class="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-xs text-foreground/85"><svg data-icon="chevron" class="shrink-0 size-3 text-muted-foreground"></svg><svg data-icon="folder" class="shrink-0 size-3.5 text-muted-foreground"></svg>e2e</div>
+            <div style="padding-left: 24px" class="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-xs text-foreground/85"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90 text-muted-foreground"></svg><svg data-icon="folderOpen" class="shrink-0 size-3.5 text-muted-foreground"></svg>src</div>
+            <div style="padding-left: 52px" class="flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-xs text-foreground/75 bg-accent"><svg data-icon="file" class="shrink-0 size-3.5 text-sky-400"></svg>App.tsx<span class="ml-auto shrink-0 pl-1 font-mono text-[10px] text-amber-400">M</span></div>
+            <div style="padding-left: 52px" class="flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-xs text-foreground/75"><svg data-icon="file" class="shrink-0 size-3.5 text-sky-400"></svg>Shell.tsx</div>
+            <div style="padding-left: 52px" class="flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-xs text-foreground/75"><svg data-icon="file" class="shrink-0 size-3.5 text-sky-400"></svg>WorkspaceSwitcher.tsx<span class="ml-auto shrink-0 pl-1 font-mono text-[10px] text-amber-400">M</span></div>
+            <div style="padding-left: 52px" class="flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-xs text-foreground/75"><svg data-icon="file" class="shrink-0 size-3.5 text-pink-400"></svg>main.css<span class="ml-auto shrink-0 pl-1 font-mono text-[10px] text-amber-400">M</span></div>
+            <div style="padding-left: 24px" class="flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-xs text-foreground/75"><svg data-icon="file" class="shrink-0 size-3.5 text-amber-400"></svg>package.json</div>
+            <div class="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-xs text-foreground/85"><svg data-icon="chevron" class="shrink-0 size-3 text-muted-foreground"></svg><svg data-icon="folder" class="shrink-0 size-3.5 text-muted-foreground"></svg>docs</div>
+            <div class="flex h-6 w-full items-center gap-1 rounded-md pr-2 text-xs text-foreground/85"><svg data-icon="chevron" class="shrink-0 size-3 text-muted-foreground"></svg><svg data-icon="folder" class="shrink-0 size-3.5 text-muted-foreground"></svg>packages</div>
+            <div style="padding-left: 16px" class="flex h-6 w-full items-center gap-1.5 rounded-md pr-2 text-xs text-foreground/75"><svg data-icon="file" class="shrink-0 size-3.5 text-muted-foreground"></svg>AGENTS.md</div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template data-page-tpl="prs">
+      <div class="flex min-h-0 min-w-0 flex-1">
+        <div style="width: 280px" class="flex min-h-0 min-w-0 flex-col border-r border-border bg-sidebar">
+          <div class="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
+            <span class="mr-auto text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Pull requests</span>
+            <button title="Refresh" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="refresh" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
+            <label class="flex min-h-8 flex-wrap items-center gap-1 rounded-lg bg-muted py-1 pr-1.5 pl-2.5 text-muted-foreground ring-1 ring-border">
+              <svg data-icon="search" class="shrink-0 size-3.5"></svg><input placeholder="Filter, or author: label: repo:" class="min-w-0 flex-1 bg-transparent text-xs outline-none" />
+            </label>
+            <div class="flex items-center gap-1.5">
+              <div class="flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5 ring-1 ring-border">
+                <button class="flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap bg-foreground/10 text-foreground">Open <span class="tabular-nums text-muted-foreground">3</span></button>
+                <button class="flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap text-muted-foreground">Merged</button>
+                <button class="flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap text-muted-foreground">Closed</button>
+              </div>
+              <span class="flex-1"></span>
+              <button class="flex h-6 min-w-0 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent"><svg data-icon="sort" class="shrink-0 size-3"></svg>Updated</button>
+            </div>
+            <button class="flex h-6 shrink-0 items-center gap-1.5 self-start rounded-md px-2 text-[11px] ring-1 ring-border bg-accent text-foreground"><svg data-icon="user" class="shrink-0 size-3"></svg>Involves me</button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto pb-2">
+            <button class="flex h-7 w-full shrink-0 items-center gap-1.5 px-3 text-left text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>Review requested 2</button>
+            <div class="mx-1.5 flex cursor-default flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent bg-accent">
+              <div class="flex min-w-0 items-center gap-2"><svg data-icon="pullRequest" class="shrink-0 size-3.5 text-emerald-400"></svg><span class="font-mono text-[11px] text-muted-foreground">#1203</span><span class="min-w-0 flex-1 truncate text-[12.5px] font-medium">Workspace switcher in the title bar</span><span class="text-[10.5px] text-muted-foreground">2h</span></div>
+              <div class="flex min-w-0 items-center gap-1.5 pl-5.5 text-[11px] text-muted-foreground"><span class="min-w-0 truncate font-mono text-[10.5px]">workspace-switcher</span><span class="text-emerald-400">+412</span><span class="text-red-400">-308</span></div>
+            </div>
+            <div class="mx-1.5 flex cursor-default flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent">
+              <div class="flex min-w-0 items-center gap-2"><svg data-icon="pullRequest" class="shrink-0 size-3.5 text-emerald-400"></svg><span class="font-mono text-[11px] text-muted-foreground">#1198</span><span class="min-w-0 flex-1 truncate text-[12.5px] font-medium">Hub: MCP tools for agents and workflows</span><span class="text-[10.5px] text-muted-foreground">1d</span></div>
+              <div class="flex min-w-0 items-center gap-1.5 pl-5.5 text-[11px] text-muted-foreground"><span class="min-w-0 truncate font-mono text-[10.5px]">hub-mcp</span><span class="text-emerald-400">+96</span><span class="text-red-400">-12</span></div>
+            </div>
+            <button class="flex h-7 w-full shrink-0 items-center gap-1.5 px-3 text-left text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>Mine 1</button>
+            <div class="mx-1.5 flex cursor-default flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent">
+              <div class="flex min-w-0 items-center gap-2"><svg data-icon="pullRequest" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="font-mono text-[11px] text-muted-foreground">#1190</span><span class="min-w-0 flex-1 truncate text-[12.5px] font-medium">Terminal: closing the last terminal removes the group</span><span class="text-[10.5px] text-muted-foreground">3d</span></div>
+              <div class="flex min-w-0 items-center gap-1.5 pl-5.5 text-[11px] text-muted-foreground"><span class="min-w-0 truncate font-mono text-[10.5px]">terminal-groups</span><span class="text-emerald-400">+40</span><span class="text-red-400">-9</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+          <div class="flex h-9 min-w-0 items-center gap-2 border-b border-border bg-card px-1.5 text-xs text-muted-foreground">
+            <button title="Hide list" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+            <span class="min-w-0 truncate">zaxovaiko/treeix</span><span>·</span><span class="font-mono">#1203</span>
+            <span class="flex-1"></span>
+            <button title="Copy link" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="copy" class="shrink-0 size-3.5"></svg></button>
+            <button title="Open on GitHub" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="external" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <div class="px-5 pt-3">
+              <div class="flex flex-wrap items-start gap-2">
+                <h1 class="line-clamp-2 min-w-48 flex-1 text-base leading-6 font-semibold">Workspace switcher in the title bar</h1>
+                <button class="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium bg-primary text-white"><svg data-icon="check" class="shrink-0 size-3.5"></svg>Merge</button>
+              </div>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span class="rounded-full bg-emerald-400/12 px-2 py-0.5 text-emerald-400">Open</span>
+                <span>zaxovaiko wants to merge into <span class="font-mono">main</span> from <span class="font-mono">workspace-switcher</span></span>
+                <span class="text-emerald-400">+412</span><span class="text-red-400">-308</span>
+              </div>
+              <div class="mt-3 flex border-b border-border">
+                <button class="-mb-px flex h-8 items-center gap-1.5 border-b-2 border-primary px-3 text-xs text-foreground"><svg data-icon="comment" class="shrink-0 size-3.5"></svg>Conversation</button>
+                <button class="-mb-px flex h-8 items-center gap-1.5 border-b-2 border-transparent px-3 text-xs text-muted-foreground hover:text-foreground"><svg data-icon="file" class="shrink-0 size-3.5"></svg>Files changed <span class="tabular-nums">19</span></button>
+              </div>
+            </div>
+            <div class="mx-auto flex max-w-[860px] flex-col gap-2 px-5 py-4">
+              <div class="rounded-lg border border-border bg-card">
+                <div class="flex h-8 items-center gap-2 border-b border-border px-3 text-xs text-muted-foreground"><span class="font-medium text-foreground">zaxovaiko</span>opened 2h ago</div>
+                <div class="px-3 py-2.5 text-[13px] leading-5">Replaces the workspace rail with one chip in the title bar. A click on a page tab opens it beside the current one, ⇧-click shows it alone. The AI Hub becomes its own mode.</div>
+              </div>
+              <div class="flex items-center gap-2 px-1 text-xs text-muted-foreground"><svg data-icon="check" class="shrink-0 size-3.5 text-emerald-400"></svg>All checks passed · 4 of 4</div>
+              <div class="rounded-lg border border-border bg-card">
+                <div class="flex h-8 items-center gap-2 border-b border-border px-3 text-xs text-muted-foreground"><span class="font-medium text-foreground">reviewer</span>commented on <span class="font-mono">App.tsx</span></div>
+                <div class="px-3 py-2.5 text-[13px] leading-5">Should back and forward stay visible in the hub? They don't do anything there.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template data-page-tpl="browser">
+      <div data-browser class="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <div class="flex h-8 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-1">
+          <div class="group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs bg-accent text-foreground"><svg data-icon="globe" class="shrink-0 size-3"></svg><span class="min-w-0 flex-1 truncate">Treeix docs</span><svg data-icon="close" class="shrink-0 size-3 opacity-60"></svg></div>
+          <div class="group flex h-6 max-w-44 min-w-24 items-center gap-1.5 rounded px-2 text-xs text-muted-foreground hover:bg-accent"><svg data-icon="globe" class="shrink-0 size-3"></svg><span class="min-w-0 flex-1 truncate">localhost:5173</span></div>
+          <button title="New tab" class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="plus" class="shrink-0 size-3.5"></svg></button>
+        </div>
+        <div class="relative flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+          <button title="Back" class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"><svg data-icon="arrowLeft" class="shrink-0 size-3.5"></svg></button>
+          <button title="Forward" disabled class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"><svg data-icon="arrowRight" class="shrink-0 size-3.5"></svg></button>
+          <button title="Reload" class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"><svg data-icon="refresh" class="shrink-0 size-3.5"></svg></button>
+          <div class="relative flex h-6 min-w-0 flex-1 items-center rounded-md border border-border bg-muted/40">
+            <input value="https://treeix.dev/docs/workspaces" class="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-xs outline-none" />
+          </div>
+          <button title="Pick an element for an agent comment" class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"><svg data-icon="pointer" class="shrink-0 size-3.5"></svg></button>
+          <button title="DevTools" class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"><svg data-icon="code" class="shrink-0 size-3.5"></svg></button>
+          <button title="Console" class="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"><svg data-icon="terminal" class="shrink-0 size-3.5"></svg></button>
+        </div>
+        <div class="min-h-0 flex-1 overflow-hidden bg-white px-10 py-8 text-[#141413]">
+          <div class="mx-auto max-w-2xl">
+            <div class="text-xs text-[#73726c]">Docs / Workspaces</div>
+            <div class="mt-2 text-2xl font-semibold">Workspaces</div>
+            <p class="mt-3 text-sm leading-6 text-[#3d3d3a]">A workspace is a set of folders, the agents working in them and the pages you keep open. Switch with the chip in the title bar, or G and a number.</p>
+            <div class="mt-5 h-40 rounded-lg bg-[#f5f4ed]"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template data-page-tpl="settings">
+      <div class="flex min-h-0 min-w-0 flex-1">
+        <div style="width: 220px" class="flex min-h-0 min-w-0 flex-col border-r border-border bg-sidebar">
+          <div class="flex h-9 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Settings</div>
+          <div class="shrink-0 border-b border-border p-2">
+            <label class="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-xs ring-1 ring-border"><svg data-icon="search" class="shrink-0 size-3.5 text-muted-foreground"></svg><input placeholder="Search settings" class="min-w-0 flex-1 bg-transparent outline-none" /></label>
+          </div>
+          <nav class="min-h-0 flex-1 overflow-y-auto p-1.5">
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent bg-accent text-foreground"><svg data-icon="settings" class="shrink-0 size-3.5"></svg>General</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground"><svg data-icon="palette" class="shrink-0 size-3.5"></svg>Appearance</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground"><svg data-icon="code" class="shrink-0 size-3.5"></svg>Editor</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground"><svg data-icon="terminal" class="shrink-0 size-3.5"></svg>Terminal</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground"><svg data-icon="keyboard" class="shrink-0 size-3.5"></svg>Keyboard</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground"><svg data-icon="plug" class="shrink-0 size-3.5"></svg>Plugins</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground"><svg data-icon="cloudCheck" class="shrink-0 size-3.5"></svg>Integrations</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground pl-7">Claude</button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent text-muted-foreground pl-7">Codex</button>
+          </nav>
+        </div>
+        <div class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+          <div class="flex h-9 shrink-0 items-center gap-3 border-b border-border px-3">
+            <span class="text-xs font-medium">General</span><span class="flex-1"></span>
+            <button title="Close settings" data-settings-close class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="close" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <div class="mx-auto max-w-3xl px-6 py-5">
+              <div class="mb-6">
+                <h2 class="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Updates</h2>
+                <div class="rounded-lg border border-border bg-card">
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Version</span><span class="mt-0.5 block text-xs text-muted-foreground">Treeix 3.14.2 · up to date</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><button class="h-7 shrink-0 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent">Check for updates</button></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Feedback</span><span class="mt-0.5 block text-xs text-muted-foreground">Report a bug or ask for a feature</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><button class="h-7 shrink-0 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent">Send feedback</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-6">
+                <h2 class="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Layout</h2>
+                <div class="rounded-lg border border-border bg-card">
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Diff view</span><span class="mt-0.5 block text-xs text-muted-foreground">How changed lines sit next to each other</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><div class="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border"><button class="h-6 rounded-md px-2.5 text-xs bg-accent text-foreground">Unified</button><button class="h-6 rounded-md px-2.5 text-xs text-muted-foreground">Split</button></div></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Bottom panel</span><span class="mt-0.5 block text-xs text-muted-foreground">A docked terminal spans the page or sits under its main pane</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><div class="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border"><button class="h-6 rounded-md px-2.5 text-xs text-muted-foreground">Full width</button><button class="h-6 rounded-md px-2.5 text-xs bg-accent text-foreground">Main pane</button></div></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Tab close button</span><span class="mt-0.5 block text-xs text-muted-foreground">Show it on every tab, or on hover</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><div class="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border"><button class="h-6 rounded-md px-2.5 text-xs text-muted-foreground">Always</button><button class="h-6 rounded-md px-2.5 text-xs bg-accent text-foreground">Hover</button></div></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Close button</span><span class="mt-0.5 block text-xs text-muted-foreground">Where the × sits in every pane header. Left is like macOS</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><div class="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border"><button data-close-side="right" class="h-6 rounded-md px-2.5 text-xs bg-accent text-foreground">Right</button><button data-close-side="left" class="h-6 rounded-md px-2.5 text-xs text-muted-foreground">Left</button></div></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Branches in sidebar</span><span class="mt-0.5 block text-xs text-muted-foreground">List local branches under each repository</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><button role="switch" aria-checked="true" class="relative h-5 w-9 shrink-0 rounded-full bg-primary"><span class="absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow translate-x-4"></span></button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-6">
+                <h2 class="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Window</h2>
+                <div class="rounded-lg border border-border bg-card">
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Global shortcut</span><span class="mt-0.5 block text-xs text-muted-foreground">Shows or hides Treeix from any app</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><button class="h-7 shrink-0 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent">⌥ Space</button></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Agent notifications</span><span class="mt-0.5 block text-xs text-muted-foreground">When an agent finishes or waits for you</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><button role="switch" aria-checked="true" class="relative h-5 w-9 shrink-0 rounded-full bg-primary"><span class="absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow translate-x-4"></span></button></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">MCP in Claude Code and Codex</span><span class="mt-0.5 block text-xs text-muted-foreground">Lets agents drive the browser, sessions and the hub</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><div class="flex items-center gap-3"><span class="text-xs text-muted-foreground">Installed</span><button class="h-7 shrink-0 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">Reinstall</button></div></div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
+                    <div><span class="block text-[13px]">Hide when focus is lost</span><span class="mt-0.5 block text-xs text-muted-foreground">For the global shortcut window</span></div>
+                    <div class="ml-auto flex min-w-0 justify-end"><button role="switch" aria-checked="false" class="relative h-5 w-9 shrink-0 rounded-full bg-muted ring-1 ring-border"><span class="absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow"></span></button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template data-page-tpl="env">
+      <div class="flex min-h-0 min-w-0 flex-1">
+        <div style="width: 280px" class="flex min-h-0 min-w-0 flex-col border-r border-border bg-sidebar">
+          <div class="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border pr-1 pl-3">
+            <span class="mr-auto text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Env</span>
+            <button title="By variable" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="list" class="shrink-0 size-3.5"></svg></button>
+            <button title="By file" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="braces" class="shrink-0 size-3.5"></svg></button>
+            <span class="mx-0.5 h-4 w-px bg-border"></span>
+            <button title="Rescan" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="refresh" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="shrink-0 border-b border-border p-2">
+            <label class="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border"><svg data-icon="search" class="shrink-0 size-3.5"></svg><input placeholder="Filter variables" class="min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto pb-2">
+            <div class="mx-1.5 mt-2 flex h-6 items-center gap-1.5 pl-1.5"><span class="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">treeix</span></div>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-2 text-left hover:bg-accent bg-accent"><svg data-icon="key" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">ANTHROPIC_API_KEY</span><span class="size-1.5 rounded-full bg-amber-400"></span></button>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-2 text-left hover:bg-accent"><svg data-icon="key" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">GITHUB_TOKEN</span></button>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-2 text-left hover:bg-accent"><svg data-icon="key" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">VITE_PORT</span></button>
+            <div class="mx-1.5 mt-2 flex h-6 items-center gap-1.5 pl-1.5"><span class="text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">betfeel</span></div>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-2 text-left hover:bg-accent"><svg data-icon="key" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">DATABASE_URL</span><span class="size-1.5 rounded-full bg-amber-400"></span></button>
+            <button class="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-2 text-left hover:bg-accent"><svg data-icon="key" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">ODDS_FEED_TTL</span></button>
+          </div>
+        </div>
+        <div data-dock-host class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+          <div class="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-[12px]">
+            <button title="Hide list" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+            <span class="font-mono">ANTHROPIC_API_KEY</span><span class="text-muted-foreground">in 3 files</span>
+            <span class="flex-1"></span>
+            <button title="Agent comment" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="comment" class="shrink-0 size-3.5"></svg></button>
+            <button title="Reveal" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="eye" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto py-2">
+            <div class="group mx-2 flex h-8 items-center gap-2 rounded-md px-2.5 hover:bg-accent"><span class="size-2 rounded-full bg-emerald-400"></span><span class="flex w-[340px] min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground"><span class="truncate font-mono">treeix/.env</span></span><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">sk-ant-••••••••••••••••</span></div>
+            <div class="group mx-2 flex h-8 items-center gap-2 rounded-md px-2.5 hover:bg-accent"><span class="size-2 rounded-full bg-emerald-400"></span><span class="flex w-[340px] min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground"><span class="truncate font-mono">treeix/apps/desktop/.env.local</span></span><span class="min-w-0 flex-1 truncate font-mono text-[11.5px]">sk-ant-••••••••••••••••</span></div>
+            <div class="group mx-2 flex h-8 items-center gap-2 rounded-md px-2.5 hover:bg-accent"><span class="size-2 rounded-full bg-amber-400"></span><span class="flex w-[340px] min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground"><span class="truncate font-mono">treeix/.claude/worktrees/hub-mode/.env</span></span><span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted-foreground">missing</span></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template data-page-tpl="tasks">
+      <div class="flex min-h-0 min-w-0 flex-1">
+        <div style="width: 280px" class="flex min-h-0 min-w-0 flex-col border-r border-border bg-sidebar">
+          <div class="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
+            <span class="mr-auto text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Tasks</span>
+            <button title="Refresh" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="refresh" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
+            <label class="flex min-h-8 flex-wrap items-center gap-1 rounded-lg bg-muted py-1 pr-1.5 pl-2.5 text-muted-foreground ring-1 ring-border"><svg data-icon="search" class="shrink-0 size-3.5"></svg><input placeholder="Filter, or status: type: label:" class="min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>
+            <div class="flex h-6 shrink-0 items-center self-start rounded-md bg-muted p-0.5 ring-1 ring-border">
+              <button class="flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap bg-foreground/10 text-foreground">Mine</button>
+              <button class="flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap text-muted-foreground">Sprint</button>
+              <button class="flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap text-muted-foreground">All</button>
+            </div>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+            <button class="mt-1 flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>In progress 2</button>
+            <button class="flex w-full min-w-0 flex-col gap-1 rounded-md px-2 py-1.5 text-left hover:bg-accent bg-accent">
+              <span class="flex min-w-0 items-start gap-2"><svg data-icon="ticket" class="mt-0.5 shrink-0 size-3.5 text-sky-400"></svg><span class="line-clamp-2 text-[12.5px] leading-5">Workspace switcher: chip in the title bar instead of the rail</span></span>
+              <span class="pl-6 text-[11px] text-muted-foreground"><span class="font-mono">TRX-142</span> · Story · 2h</span>
+            </button>
+            <button class="flex w-full min-w-0 flex-col gap-1 rounded-md px-2 py-1.5 text-left hover:bg-accent">
+              <span class="flex min-w-0 items-start gap-2"><svg data-icon="alert" class="mt-0.5 shrink-0 size-3.5 text-red-400"></svg><span class="line-clamp-2 text-[12.5px] leading-5">Terminal loses its scrollback after a GPU reset</span></span>
+              <span class="pl-6 text-[11px] text-muted-foreground"><span class="font-mono">TRX-139</span> · Bug · 1d</span>
+            </button>
+            <button class="mt-1 flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>To do 1</button>
+            <button class="flex w-full min-w-0 flex-col gap-1 rounded-md px-2 py-1.5 text-left hover:bg-accent">
+              <span class="flex min-w-0 items-start gap-2"><svg data-icon="ticket" class="mt-0.5 shrink-0 size-3.5 text-sky-400"></svg><span class="line-clamp-2 text-[12.5px] leading-5">AI Hub as its own mode, without workspaces</span></span>
+              <span class="pl-6 text-[11px] text-muted-foreground"><span class="font-mono">TRX-150</span> · Story · 3d</span>
+            </button>
+          </div>
+        </div>
+        <div data-dock-host class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+          <div class="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-1.5 text-xs text-muted-foreground">
+            <button title="Hide list" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+            <span class="font-mono">TRX-142</span>
+            <span class="flex-1"></span>
+            <button title="Agent comment" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="comment" class="shrink-0 size-3.5"></svg></button>
+            <button title="Open in Jira" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="external" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <div class="mx-auto flex max-w-[860px] flex-col gap-3 px-5 py-4">
+              <div class="flex flex-wrap items-start gap-2">
+                <h1 class="min-w-48 flex-1 text-base leading-6 font-semibold">Workspace switcher: chip in the title bar instead of the rail</h1>
+                <button class="flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-white"><svg data-icon="branch" class="shrink-0 size-3.5"></svg>Go to worktree</button>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                <span class="text-muted-foreground">Status</span><span class="rounded bg-sky-400/12 px-1.5 py-0.5 text-sky-400">In progress</span>
+                <span class="text-muted-foreground">Assignee</span><span>Volodymyr</span>
+                <span class="text-muted-foreground">Labels</span><span class="rounded bg-muted px-1.5 py-0.5">ui</span>
+              </div>
+              <div class="text-[13px] leading-6">The rail takes a column of the window for something used a few times a day. Move the current workspace into the title bar as one chip with a dropdown, and make page tabs open beside the current page.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template data-page-tpl="confluence">
+      <div class="flex min-h-0 min-w-0 flex-1">
+        <div style="width: 280px" class="flex min-h-0 min-w-0 flex-col border-r border-border bg-sidebar">
+          <div class="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+            <span class="mr-auto text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Confluence</span>
+            <button title="Fold all spaces" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="collapseAll" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="shrink-0 border-b border-border p-2">
+            <label class="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border"><svg data-icon="search" class="shrink-0 size-3.5"></svg><input placeholder="Search, or paste a page link" class="min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+            <div class="flex h-6 items-center gap-1 px-2 text-[11px] text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3 rotate-90"></svg>Engineering</div>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 pl-6 text-left text-xs hover:bg-accent bg-accent"><svg data-icon="file" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 truncate">Workspace switching RFC</span></button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 pl-6 text-left text-xs hover:bg-accent"><svg data-icon="file" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 truncate">Release process</span></button>
+            <button class="flex h-7 w-full items-center gap-2 rounded-md px-2 pl-6 text-left text-xs hover:bg-accent"><svg data-icon="file" class="shrink-0 size-3.5 text-muted-foreground"></svg><span class="min-w-0 truncate">On-call runbook</span></button>
+            <div class="flex h-6 items-center gap-1 px-2 text-[11px] text-muted-foreground"><svg data-icon="chevron" class="shrink-0 size-3"></svg>Product</div>
+          </div>
+        </div>
+        <div data-dock-host class="flex min-h-0 min-w-0 flex-col flex-1 bg-background">
+          <div class="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-xs text-muted-foreground">
+            <button title="Hide list" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground bg-accent text-foreground"><svg data-icon="panel" class="shrink-0 size-3.5"></svg></button>
+            <span class="min-w-0 truncate">Engineering</span><svg data-icon="chevron" class="shrink-0 size-3"></svg><span class="min-w-0 truncate text-foreground">Workspace switching RFC</span>
+            <span class="flex-1"></span>
+            <button title="Reload" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="refresh" class="shrink-0 size-3.5"></svg></button>
+            <button class="flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] ring-1 ring-border hover:bg-accent"><svg data-icon="comment" class="shrink-0 size-3"></svg>Comment</button>
+            <button title="Copy link" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="copy" class="shrink-0 size-3.5"></svg></button>
+            <button title="Open in Confluence" class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground"><svg data-icon="external" class="shrink-0 size-3.5"></svg></button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <article class="mx-auto max-w-[760px] min-w-0 px-8 py-6">
+              <h1 class="text-[22px] leading-8 font-semibold">Workspace switching RFC</h1>
+              <div class="mt-1 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>Volodymyr</span><span>2h ago</span><span>4 min read</span></div>
+              <p class="mb-3 text-sm leading-6">Today a workspace switch takes a rail of eight tiles on the left of the window. We want the same reach with one element.</p>
+              <h2 class="mt-5 mb-2 text-base font-semibold">Proposal</h2>
+              <p class="mb-3 text-sm leading-6">The current workspace becomes a chip in the centre of the title bar, next to Run command and the AI Hub. Its menu lists every workspace, with G and a number to jump.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- The Terminal dock panel, under the main pane of Env, Tasks and Confluence -->
+    <template data-dock-tpl>
+      <aside data-dock-frame style="height: 220px" class="relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card border-t">
+        <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+          <div class="flex h-7 shrink-0 cursor-grab items-center gap-2 border-b border-border bg-card px-2 text-foreground">
+            <svg data-icon="grip" class="-mx-1 shrink-0 size-3 text-muted-foreground/50"></svg>
+            <span style="color: #d97757" class="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">✳</span>
+            <span class="min-w-0 truncate text-xs font-medium">Workspace switching UI mockup</span>
+            <span class="min-w-0 truncate text-[11px] text-muted-foreground">treeix / workspace-switcher</span>
+            <span class="flex-1"></span>
+            <button title="Close" class="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"><svg data-icon="close" class="shrink-0 size-3"></svg></button>
+          </div>
+          <div class="term min-h-0 flex-1 overflow-hidden"><span class="dim">❯</span> bun run typecheck
+<span class="dim">$ tsc -b</span>
+● Done in 4.2s
+
+❯ ▍</div>
+        </div>
+      </aside>
+    </template>
+
+    <script>
+      // Lucide paths rendered from Icon.tsx
+      const ICONS = {"chevron":"<path d=\"m9 18 6-6-6-6\"></path>","globe":"<circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20\"></path>","star":"<path d=\"M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z\"></path>","arrowLeft":"<path d=\"m12 19-7-7 7-7M19 12H5\"></path>","arrowRight":"<path d=\"M5 12h14M12 5l7 7-7 7\"></path>","pointer":"<path d=\"M4.04 4.69a.5.5 0 0 1 .65-.65l16 6.5a.5.5 0 0 1-.06.95l-6.12 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.12a.5.5 0 0 1-.95.06z\"></path>","code":"<path d=\"m16 18 6-6-6-6M8 6l-6 6 6 6\"></path>","folder":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"></path>","branch":"<path d=\"M6 3v12\"></path><circle cx=\"18\" cy=\"6\" r=\"3\"></circle><circle cx=\"6\" cy=\"18\" r=\"3\"></circle><path d=\"M18 9a9 9 0 0 1-9 9\"></path>","search":"<circle cx=\"11\" cy=\"11\" r=\"8\"></circle><path d=\"m21 21-4.3-4.3\"></path>","refresh":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M8 16H3v5\"></path>","focus":"<circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2\"></path>","file":"<path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"></path><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"></path>","terminal":"<path d=\"m7 11 2-2-2-2\"></path><path d=\"M11 13h4\"></path><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect>","external":"<path d=\"M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"></path>","pullRequest":"<circle cx=\"18\" cy=\"18\" r=\"3\"></circle><circle cx=\"6\" cy=\"6\" r=\"3\"></circle><path d=\"M13 6h3a2 2 0 0 1 2 2v7M6 9v12\"></path>","coffee":"<path d=\"M10 2v2M14 2v2M6 2v2\"></path><path d=\"M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1\"></path>","power":"<path d=\"M12 2v10\"></path><path d=\"M18.4 6.6a9 9 0 1 1-12.77.04\"></path>","settings":"<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\"></path><circle cx=\"12\" cy=\"12\" r=\"3\"></circle>","folderOpen":"<path d=\"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2\"></path>","panel":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect><path d=\"M9 3v18\"></path>","list":"<path d=\"M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13\"></path>","bell":"<path d=\"M10.268 21a2 2 0 0 0 3.464 0\"></path><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"></path>","comment":"<path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path>","check":"<path d=\"M20 6 9 17l-5-5\"></path>","close":"<path d=\"M18 6 6 18M6 6l12 12\"></path>","plus":"<path d=\"M12 5v14M5 12h14\"></path>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path>","paperclip":"<path d=\"m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48\"></path>","grip":"<circle cx=\"9\" cy=\"12\" r=\"1\"></circle><circle cx=\"9\" cy=\"5\" r=\"1\"></circle><circle cx=\"9\" cy=\"19\" r=\"1\"></circle><circle cx=\"15\" cy=\"12\" r=\"1\"></circle><circle cx=\"15\" cy=\"5\" r=\"1\"></circle><circle cx=\"15\" cy=\"19\" r=\"1\"></circle>","smilePlus":"<path d=\"M22 11v1a10 10 0 1 1-9-10\"></path><path d=\"M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01M16 5h6M19 2v6\"></path>","keyboard":"<path d=\"M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01\"></path><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"></rect>","palette":"<circle cx=\"13.5\" cy=\"6.5\" r=\".5\" fill=\"currentColor\"></circle><circle cx=\"17.5\" cy=\"10.5\" r=\".5\" fill=\"currentColor\"></circle><circle cx=\"8.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle><circle cx=\"6.5\" cy=\"12.5\" r=\".5\" fill=\"currentColor\"></circle><path d=\"M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z\"></path>","folderPlus":"<path d=\"M12 10v6M9 13h6\"></path><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"></path>","filePlus":"<path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"></path><path d=\"M14 2v4a2 2 0 0 0 2 2h4M9 15h6M12 18v-6\"></path>","cloudCheck":"<path d=\"m17 15-5.5 5.5L9 18\"></path><path d=\"M5 17.743A7 7 0 1 1 15.71 10h1.79a4.5 4.5 0 0 1 1.5 8.742\"></path>","expandAll":"<path d=\"m7 15 5 5 5-5M7 9l5-5 5 5\"></path>","collapseAll":"<path d=\"m7 20 5-5 5 5M7 4l5 5 5-5\"></path>","loader":"<path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path>","alert":"<circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"M12 8v4M12 16h.01\"></path>","pencil":"<path d=\"M12 20h9\"></path><path d=\"M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z\"></path>","history":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"></path><path d=\"M3 3v5h5M12 7v5l4 2\"></path>","plug":"<path d=\"M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z\"></path>","sort":"<path d=\"M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4\"></path>","user":"<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"></path><circle cx=\"12\" cy=\"7\" r=\"4\"></circle>","tag":"<path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"></path><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle>","maximize":"<path d=\"M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7\"></path>","minimize":"<path d=\"M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7\"></path>","widen":"<path d=\"m18 8 4 4-4 4M6 8l-4 4 4 4M2 12h20\"></path>","narrow":"<path d=\"M2 12h7M22 12h-7M6 9l3 3-3 3M18 9l-3 3 3 3M12 5v14\"></path>","trash":"<path d=\"M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"></path>","eye":"<path d=\"M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z\"></path><circle cx=\"12\" cy=\"12\" r=\"3\"></circle>","splitRight":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect><path d=\"M12 3v18\"></path>","splitDown":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect><path d=\"M3 12h18\"></path>","kanban":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect><path d=\"M8 7v7\"></path><path d=\"M12 7v4\"></path><path d=\"M16 7v9\"></path>","bookOpen":"<path d=\"M12 7v14\"></path><path d=\"M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z\"></path>","lock":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path>","key":"<path d=\"M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z\"></path><circle cx=\"16.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"></circle>","braces":"<path d=\"M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1\"></path>","layers":"<path d=\"m12 2 10 5-10 5L2 7zM2 17l10 5 10-5M2 12l10 5 10-5\"></path>","compare":"<circle cx=\"18\" cy=\"18\" r=\"3\"></circle><circle cx=\"6\" cy=\"6\" r=\"3\"></circle><path d=\"M13 6h3a2 2 0 0 1 2 2v7M11 18H8a2 2 0 0 1-2-2V9\"></path>","undo":"<path d=\"M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13\"></path>","sparkles":"<path d=\"M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0zM20 3v4M22 5h-4M4 17v2M5 18H3\"></path>","wand":"<path d=\"m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72M14 7l3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9\"></path>","ticket":"<path d=\"M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z\"></path><path d=\"M13 5v2M13 17v2M13 11v2\"></path>"}
+      // Notion's dark palette: the icon in the colour, on its tint
+      const COLORS = {
+        gray: ['#9b9b9b', '#2f2f2f'],
+        brown: ['#ba856f', '#4a3228'],
+        orange: ['#c77d48', '#5c3b23'],
+        yellow: ['#ca9849', '#564328'],
+        green: ['#529e72', '#243d30'],
+        blue: ['#5e87c9', '#143a4e'],
+        purple: ['#9d68d3', '#3c2d49'],
+        pink: ['#d15796', '#4e2c3c'],
+        red: ['#df5452', '#522e2a']
+      }
+      const PICKABLE = ['star', 'sparkles', 'code', 'braces', 'terminal', 'branch', 'globe', 'folder', 'bookOpen', 'pencil', 'kanban', 'ticket', 'tag', 'user', 'coffee', 'palette', 'wand', 'focus', 'eye', 'bell', 'key', 'lock', 'layers', 'plug', 'power', 'cloudCheck', 'keyboard', 'comment', 'history', 'smilePlus']
+      const WORKSPACES = [
+        { id: 'bet', name: 'Betfeel', icon: 'ticket', color: 'gray', activity: 'running' },
+        { id: 'blu', name: 'Blurify', icon: 'focus', color: 'blue' },
+        { id: 'dyve', name: 'Dyve', icon: 'globe', color: 'green' },
+        { id: 'demo', name: 'Demo', icon: 'sparkles', color: 'yellow' },
+        { id: 'blog', name: 'Blog', icon: 'pencil', color: 'purple' },
+        { id: 'ari', name: 'Ari', icon: 'user', color: 'orange' },
+        { id: 'yt', name: 'YouTube', icon: 'eye', color: 'red' },
+        { id: 'trx', name: 'Treeix', icon: 'branch', color: 'brown', activity: 'running' }
+      ]
+      let editing = null
+      let current = 'trx'
+
+      const icon = (svg) => {
+        svg.setAttribute('viewBox', '0 0 24 24')
+        svg.setAttribute('fill', 'none')
+        svg.setAttribute('stroke', 'currentColor')
+        svg.setAttribute('stroke-width', '2')
+        svg.setAttribute('stroke-linecap', 'round')
+        svg.setAttribute('stroke-linejoin', 'round')
+        svg.innerHTML = ICONS[svg.dataset.icon] ?? ''
+      }
+      const MARKS = {
+        running: 'size-full animate-spin border-[1.5px] border-emerald-400 border-t-transparent',
+        input: 'size-full bg-amber-400 ring-2 ring-amber-400/25',
+        done: 'size-full bg-blue-400'
+      }
+      const DOTS = { running: 'bg-emerald-400', input: 'bg-amber-400', done: 'bg-blue-400' }
+      const dot = (activity) =>
+        DOTS[activity] ? `<span class="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full ring-2 ring-card ${DOTS[activity]}"></span>` : ''
+      const glyph = (name, size = 'size-4') => `<svg data-icon="${name}" class="shrink-0 ${size}"></svg>`
+      const tint = (color) => (color ? `style="color:${COLORS[color][0]};background:${COLORS[color][1]}"` : '')
+      const iconButton = (title, name, attr) =>
+        `<button title="${title}" ${attr} class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground text-muted-foreground">${glyph(name, 'size-3.5')}</button>`
+
+      // One chip in the title bar: the current workspace; the menu lists them all. A dot on the chip: an agent elsewhere is busy or waiting
+      const HOME = { id: 'home', name: 'Home' }
+      let menuOpen = false
+      let mode = 'workspaces'
+      function applyMode() {
+        const hub = mode === 'hub'
+        document.querySelectorAll('[data-workspace-only]').forEach((el) => el.classList.toggle('hidden', hub))
+        document.getElementById('hub').classList.toggle('hidden', !hub)
+        document.getElementById('hub').classList.toggle('flex', hub)
+        const button = document.querySelector('[data-mode-hub]')
+        button.classList.toggle('bg-background', hub)
+        button.classList.toggle('text-foreground', hub)
+        button.classList.toggle('ring-1', hub)
+        button.classList.toggle('ring-border', hub)
+        button.classList.toggle('ring-inset', hub)
+        button.classList.toggle('text-muted-foreground', !hub)
+        document.querySelector('[data-hub-list-toggle]').classList.toggle('hidden', !hub)
+        document.querySelector('[data-hub-list-toggle]').classList.toggle('inline-flex', hub)
+        renderWorkspaces()
+        // The list only has a width once the hub shows
+        if (hub) requestAnimationFrame(() => padIslands())
+      }
+      let hubList = true
+      // The chat and run columns keep clear of the list island, or of its pill when folded
+      const padIslands = () => {
+        const island = document.querySelector(hubList ? '[data-hub-list]' : '[data-hub-list-show]')
+        document.querySelectorAll('[data-hub-pad]').forEach((pane) => (pane.style.paddingLeft = `${island.offsetWidth + 8}px`))
+      }
+      let hubInspector = true
+      const toggleHubInspector = () => {
+        hubInspector = !hubInspector
+        document.querySelector('[data-hub-inspector]').classList.toggle('hidden', !hubInspector)
+        document.querySelector('[data-hub-inspector]').classList.toggle('flex', hubInspector)
+        document.querySelector('[data-hub-inspector-show]').classList.toggle('hidden', hubInspector)
+        document.querySelector('[data-hub-inspector-show]').classList.toggle('flex', !hubInspector)
+      }
+      const toggleHubList = () => {
+        hubList = !hubList
+        document.querySelector('[data-hub-list]').classList.toggle('hidden', !hubList)
+        document.querySelector('[data-hub-list]').classList.toggle('flex', hubList)
+        document.querySelector('[data-hub-list-show]').classList.toggle('hidden', hubList)
+        document.querySelector('[data-hub-list-show]').classList.toggle('flex', !hubList)
+        padIslands()
+        for (const name of ['bg-accent', 'text-foreground']) document.querySelector('[data-hub-list-toggle]').classList.toggle(name, hubList)
+        document.querySelector('[data-hub-list-toggle]').classList.toggle('text-muted-foreground', !hubList)
+      }
+      const contextPopup = (open) => {
+        const popup = document.querySelector('[data-context-popup]')
+        popup.classList.toggle('hidden', !open)
+        popup.classList.toggle('flex', open)
+      }
+      // ResizeHandle: drag the list's right edge
+      document.querySelector('[data-hub-resize]').addEventListener('pointerdown', (event) => {
+        const handle = event.currentTarget
+        const list = handle.parentElement
+        const start = event.clientX
+        const width = list.getBoundingClientRect().width
+        handle.setPointerCapture(event.pointerId)
+        handle.onpointermove = (move) => ((list.style.width = `${Math.round(Math.max(180, Math.min(520, width + move.clientX - start)))}px`), padIslands())
+        handle.onpointerup = () => (handle.onpointermove = null)
+      })
+      const badge = (w, size) =>
+        `<span ${tint(w.color)} class="grid ${size === 'sm' ? 'size-[18px] rounded-[5px]' : 'size-5 rounded-md'} shrink-0 place-items-center ${w.color ? '' : 'bg-foreground/8 text-muted-foreground'}">${
+          w.icon ? glyph(w.icon, 'size-3') : '<span class="font-mono text-[12px] leading-none">~</span>'
+        }</span>`
+      function renderWorkspaces() {
+        const active = [HOME, ...WORKSPACES].find((w) => w.id === current)
+        const elsewhere = WORKSPACES.find((w) => w.id !== current && DOTS[w.activity])
+        const on = mode === 'workspaces'
+        document.getElementById('ws').innerHTML = `<button title="${on ? 'Workspaces' : 'Back to the workspace'}" data-ws-menu aria-expanded="${menuOpen}" class="relative flex h-6 items-center gap-1.5 rounded-md pr-1.5 pl-1 text-xs hover:bg-accent ${
+          on ? 'bg-background text-foreground ring-1 ring-border ring-inset' : 'text-muted-foreground hover:text-foreground'
+        }">
+            ${badge(active, 'sm')}<span class="max-w-32 truncate">${active.name}</span>${glyph('chevron', 'size-3 rotate-90 text-muted-foreground')}${elsewhere ? dot(elsewhere.activity) : ''}</button>`
+        document.getElementById('ws-menu')?.remove()
+        if (menuOpen) {
+          const anchor = document.getElementById('ws').getBoundingClientRect()
+          const menu = document.createElement('div')
+          menu.id = 'ws-menu'
+          menu.style.cssText = `left:${anchor.left}px;top:${anchor.bottom + 6}px`
+          menu.className = 'fixed z-40 flex w-60 flex-col rounded-xl bg-popover p-1 text-xs shadow-2xl ring-1 ring-foreground/8'
+          const item = (w, key) => `<button data-ws="${w.id}" class="flex h-8 items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent ${w.id === current ? 'bg-accent' : ''}">
+              ${badge(w)}<span class="min-w-0 flex-1 truncate">${w.name}</span>
+              ${MARKS[w.activity] ? `<span class="grid shrink-0 place-items-center size-2.5"><span class="rounded-full ${MARKS[w.activity]}"></span></span>` : ''}
+              ${key ? `<kbd class="kbd">${key}</kbd>` : ''}</button>`
+          menu.innerHTML =
+            WORKSPACES.map((w, at) => item(w, at < 9 ? `G ${at + 1}` : '')).join('') +
+            `<span class="my-1 h-px bg-border"></span>${item(HOME, 'G ~')}
+             <button class="flex h-8 items-center gap-2 rounded-md px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"><span class="grid size-5 place-items-center">${glyph('plus', 'size-3.5')}</span>New workspace</button>`
+          document.body.append(menu)
+          menu.querySelectorAll('svg[data-icon]').forEach(icon)
+        }
+        document.querySelectorAll('#ws svg[data-icon]').forEach(icon)
+        renderPicker()
+      }
+
+      // Right-click a workspace: pick its colour and icon, like Notion's icon picker
+      function renderPicker() {
+        document.getElementById('picker')?.remove()
+        const workspace = WORKSPACES.find((w) => w.id === editing)
+        if (!workspace) return
+        const anchor = document.querySelector(`#ws-menu [data-ws="${editing}"]`).getBoundingClientRect()
+        const picker = document.createElement('div')
+        picker.id = 'picker'
+        picker.style.cssText = `left:${anchor.right + 10}px;top:${anchor.top - 4}px`
+        picker.className = 'fixed z-50 flex w-64 flex-col gap-2 rounded-xl bg-popover p-2 text-xs shadow-2xl ring-1 ring-foreground/8'
+        picker.innerHTML = `
+          <div class="flex items-center gap-2 px-1 pt-0.5">
+            <span ${tint(workspace.color)} class="grid size-6 place-items-center rounded-md">${glyph(workspace.icon, 'size-3.5')}</span>
+            <span class="font-medium">${workspace.name}</span>
+          </div>
+          <div class="flex justify-between px-1">${Object.entries(COLORS)
+            .map(
+              ([name, [ink, bg]]) =>
+                `<button title="${name}" data-color="${name}" style="color:${ink};background:${bg}" class="grid size-6 place-items-center rounded-md ${workspace.color === name ? 'ring-2 ring-foreground/60' : 'ring-1 ring-border'}">${workspace.color === name ? glyph('check', 'size-3') : ''}</button>`
+            )
+            .join('')}</div>
+          <span class="h-px bg-border"></span>
+          <div class="grid grid-cols-8 gap-0.5">${PICKABLE.map(
+            (name) =>
+              `<button title="${name}" data-pick-icon="${name}" style="color:${COLORS[workspace.color][0]}" class="grid size-7 place-items-center rounded-md hover:bg-accent ${workspace.icon === name ? 'bg-foreground/8' : ''}">${glyph(name)}</button>`
+          ).join('')}</div>`
+        document.body.append(picker)
+        picker.querySelectorAll('svg[data-icon]').forEach(icon)
+      }
+
+      // Pages: App.tsx keeps one main page and up to MAX_SPLITS beside it
+      const PAGES = [
+        { id: 'terminal', label: 'Terminal', icon: 'terminal', badge: '2' },
+        { id: 'browser', label: 'Browser', icon: 'globe', badge: '1' },
+        { id: 'prs', label: 'Pull requests', icon: 'pullRequest', badge: '3' },
+        { id: 'worktrees', label: 'Worktrees', icon: 'branch' },
+        // Settings sits in the strip only while it is open; the gear opens it
+        { id: 'settings', label: 'Settings', icon: 'settings', onlyOpen: true },
+        { id: 'env', label: 'Env', icon: 'key', right: true },
+        { id: 'tasks', label: 'Tasks', icon: 'kanban', right: true },
+        { id: 'confluence', label: 'Confluence', icon: 'bookOpen', right: true }
+      ]
+      // Pages with panels: ['terminal'] get the Terminal toggle and dock it under their main pane
+      const DOCKED = ['env', 'tasks', 'confluence']
+      const MAX_SPLITS = 2
+      let main = 'terminal'
+      let splits = []
+      let dockOpen = false
+      let drawerOpen = false
+      let closeSide = 'right'
+      const nodes = { terminal: document.querySelector('[data-page="terminal"]') }
+      const pageNode = (id) => {
+        if (nodes[id]) return nodes[id]
+        const node = document.querySelector(`template[data-page-tpl="${id}"]`).content.firstElementChild.cloneNode(true)
+        node.querySelectorAll('svg[data-icon]').forEach(icon)
+        return (nodes[id] = node)
+      }
+      const openBeside = (id) => (splits = [...(splits.length < MAX_SPLITS ? splits : splits.slice(0, -1)), id])
+      // A split page trades places with the main one
+      const goPage = (id) => {
+        const at = splits.indexOf(id)
+        if (at >= 0) splits[at] = main
+        main = id
+      }
+      const closePage = (id) => {
+        if (splits.includes(id)) splits = splits.filter((s) => s !== id)
+        else if (splits.length) [main, ...splits] = splits
+        else if (id !== 'terminal') main = 'terminal'
+      }
+      // A click opens the page beside the ones on screen, or takes it out of the split; ⇧-click shows it alone
+      const clickTab = (id, shift) => {
+        if (shift) {
+          goPage(id)
+          splits = []
+        } else if (splits.includes(id)) closePage(id)
+        else if (id !== main) openBeside(id)
+      }
+
+      const tabButton = (tab, ids) => {
+        const slot = ids.indexOf(tab.id)
+        const open = slot >= 0
+        const split = open && splits.length > 0
+        const hint = split ? 'click to take it out of the split, ⇧-click to show it alone' : open ? '⇧-click to show it alone' : 'click to open beside, ⇧-click to show it alone'
+        return `<button data-page-tab="${tab.id}" ${open ? 'aria-current="page"' : ''} title="${tab.label} · ${hint}" class="flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ${
+          open ? 'text-primary [&_.text-muted-foreground]:text-primary/70' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        }">${glyph(tab.icon, 'size-3.5')}${tab.badge ? `<span class="text-muted-foreground tabular-nums">${tab.badge}</span>` : ''}${
+          split
+            ? `<span data-tab-slot class="flex gap-px opacity-60">${ids.map((_, at) => `<span class="h-2 w-1 rounded-[1px] border border-current ${at === slot ? 'bg-current' : ''}"></span>`).join('')}</span>`
+            : ''
+        }${open ? `<span data-tab-close="${tab.id}" title="Close" class="-mx-1 grid size-4 shrink-0 place-items-center rounded opacity-50 hover:bg-foreground/12 hover:opacity-100">${glyph('close', 'size-3')}</span>` : ''}</button>`
+      }
+
+      function renderTabs() {
+        const ids = [main, ...splits]
+        const strip = (right) =>
+          PAGES.filter((tab) => !!tab.right === right && (!tab.onlyOpen || ids.includes(tab.id)))
+            .map((tab) => tabButton(tab, ids))
+            .join('')
+        document.getElementById('tabs').innerHTML =
+          strip(false) +
+          `<button title="More" class="flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">${glyph('chevron', 'size-3.5')}</button>
+           <span class="h-full min-w-2 flex-1"></span>`
+        document.getElementById('tabs-right').innerHTML = `<span class="h-full min-w-2 flex-1"></span>${strip(true)}`
+        document.getElementById('panel-toggles').innerHTML = DOCKED.includes(main)
+          ? `<button data-panel-toggle title="Terminal · drag to dock, right-click to move" class="relative inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${
+              dockOpen ? 'bg-accent text-foreground' : 'text-muted-foreground'
+            }">${glyph('terminal', 'size-3.5')}</button>`
+          : ''
+        const gear = document.querySelector('[data-open-settings]')
+        const settingsOpen = ids.includes('settings')
+        gear.classList.toggle('bg-accent', settingsOpen)
+        gear.classList.toggle('text-foreground', settingsOpen)
+        gear.classList.toggle('text-muted-foreground', !settingsOpen)
+        document.querySelectorAll('#tabs svg[data-icon], #tabs-right svg[data-icon], #panel-toggles svg[data-icon]').forEach(icon)
+      }
+
+      // Every pane header has a ×, on the right or, like macOS, on the left (Settings › Layout › Close button)
+      const paneHeader = (id, isMain) => {
+        const page = PAGES.find((p) => p.id === id)
+        const close = iconButton('Close', 'close', `data-pane-close="${id}"`)
+        const left = closeSide === 'left'
+        return `<div data-pane-header class="flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card px-1 text-xs text-muted-foreground">
+            ${left ? close : ''}<span class="flex min-w-0 flex-1 items-center gap-1.5 ${left ? '' : 'pl-1.5'}">${glyph(page.icon, 'size-3.5')}<span class="min-w-0 truncate">${page.label}</span></span>
+            ${isMain ? '' : iconButton('Make it the main page', 'compare', `data-make-main="${id}"`)}${left ? '' : close}
+          </div>`
+      }
+
+      function renderPages() {
+        const zone = document.querySelector('[data-zone="main"]')
+        zone.replaceChildren(pageNode(main))
+        zone.insertAdjacentHTML('afterbegin', paneHeader(main, true))
+        if (splits.length) zone.insertAdjacentHTML('afterbegin', '<span class="pointer-events-none absolute inset-x-0 top-0 z-30 h-0.5 bg-primary/70"></span>')
+        document.querySelectorAll('[data-split-pane]').forEach((pane) => pane.remove())
+        document.querySelectorAll('[data-dock-frame]').forEach((dock) => dock.remove())
+        if (dockOpen && DOCKED.includes(main)) {
+          const dock = document.querySelector('template[data-dock-tpl]').content.firstElementChild.cloneNode(true)
+          dock.querySelectorAll('svg[data-icon]').forEach(icon)
+          pageNode(main).querySelector('[data-dock-host]').append(dock)
+        }
+        const resizable = splits.length === 1
+        for (const id of splits) {
+          const pane = document.createElement('div')
+          pane.dataset.splitPane = id
+          if (resizable) pane.style.width = '560px'
+          pane.className = `relative flex min-h-0 min-w-0 flex-col border-l border-border ${resizable ? 'shrink-0' : 'flex-1'}`
+          pane.innerHTML = `${
+            resizable
+              ? '<div class="group absolute z-20 inset-y-0 -left-1.5 w-3 cursor-col-resize"><span class="pointer-events-none absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground h-8 w-2.5"><svg data-icon="grip" class="shrink-0 size-2.5"></svg></span></div>'
+              : ''
+          }${paneHeader(id, false)}`
+          pane.querySelectorAll('svg[data-icon]').forEach(icon)
+          pane.append(pageNode(id))
+          document.getElementById('pages').append(pane)
+        }
+      }
+      const render = () => (renderTabs(), renderPages())
+
+      document.addEventListener('contextmenu', (event) => {
+        const ws = event.target.closest('#ws-menu [data-ws]')
+        if (!ws || ws.dataset.ws === 'home') return
+        event.preventDefault()
+        editing = ws.dataset.ws
+        renderPicker()
+      })
+      const toggleDrawer = (open = !drawerOpen) => {
+        drawerOpen = open
+        const drawer = document.getElementById('drawer')
+        drawer.classList.toggle('hidden', !open)
+        drawer.classList.toggle('flex', open)
+        document.querySelector('[data-comments]').classList.toggle('bg-foreground/8', open)
+        document.querySelector('[data-comments]').classList.toggle('ring-1', open)
+        document.querySelector('[data-comments]').classList.toggle('ring-border', open)
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.code === 'KeyB' && event.metaKey && event.altKey && mode === 'hub') return event.preventDefault(), toggleHubInspector()
+        if (event.key === 'b' && event.metaKey && mode === 'hub') return event.preventDefault(), toggleHubList()
+        if (event.key !== 'Escape') return
+        if (!document.querySelector('[data-context-popup]').classList.contains('hidden')) contextPopup(false)
+        else if (editing) (editing = null), renderPicker()
+        else if (drawerOpen) toggleDrawer(false)
+        else (menuOpen = false), renderWorkspaces()
+      })
+      document.addEventListener('click', (event) => {
+        const workspace = WORKSPACES.find((w) => w.id === editing)
+        const color = event.target.closest('[data-color]')?.dataset.color
+        const picked = event.target.closest('[data-pick-icon]')?.dataset.pickIcon
+        if (workspace && (color || picked)) {
+          if (color) workspace.color = color
+          if (picked) workspace.icon = picked
+          return renderWorkspaces()
+        }
+        if (event.target.closest('#picker')) return
+        if (editing) (editing = null), renderPicker()
+        const ws = event.target.closest('[data-ws]')
+        if (event.target.closest('[data-mode-hub]')) return (mode = mode === 'hub' ? 'workspaces' : 'hub'), (menuOpen = false), applyMode()
+        // In the hub the chip goes back to the workspace; there it opens the menu
+        if (event.target.closest('[data-ws-menu]') && mode === 'hub') return (mode = 'workspaces'), applyMode()
+        const toggle = !!event.target.closest('[data-ws-menu]')
+        if (ws) current = ws.dataset.ws
+        if (ws || toggle || (menuOpen && !event.target.closest('#ws-menu'))) (menuOpen = toggle && !menuOpen), renderWorkspaces()
+        if (!event.target.closest('[data-context-popup]')) contextPopup(!!event.target.closest('[data-context-meter]') && document.querySelector('[data-context-popup]').classList.contains('hidden'))
+        if (event.target.closest('[data-hub-list-toggle], [data-hub-list-hide], [data-hub-list-show]')) return toggleHubList()
+        if (event.target.closest('[data-hub-inspector-hide], [data-hub-inspector-open]')) return toggleHubInspector()
+        const older = event.target.closest('[data-older-toggle]')
+        if (older) return older.nextElementSibling.classList.toggle('hidden'), older.querySelector('svg').classList.toggle('rotate-90')
+        if (event.target.closest('[data-comments], [data-drawer-close]')) return toggleDrawer()
+        const removed = event.target.closest('[title="Remove from history"], [title="Remove the run"]')
+        if (removed) return removed.closest('.group').remove()
+        const row = event.target.closest('[data-hub-row]')
+        if (row) {
+          document.querySelectorAll('[data-hub-row]').forEach((r) => r.classList.toggle('bg-accent', r === row))
+          document.querySelectorAll('[data-hub-main]').forEach((pane) => {
+            pane.classList.toggle('hidden', pane.dataset.hubMain !== row.dataset.hubRow)
+            pane.classList.toggle('flex', pane.dataset.hubMain === row.dataset.hubRow)
+          })
+          return
+        }
+        const side = event.target.closest('[data-close-side]')
+        if (side) {
+          closeSide = side.dataset.closeSide
+          for (const option of side.parentElement.children) {
+            const on = option === side
+            option.classList.toggle('bg-accent', on)
+            option.classList.toggle('text-foreground', on)
+            option.classList.toggle('text-muted-foreground', !on)
+          }
+          return renderPages()
+        }
+        const target = event.target.closest('[data-tab-close], [data-pane-close], [data-make-main], [data-page-tab], [data-settings-close], [data-open-settings], [data-panel-toggle]')
+        if (!target) return
+        const { tabClose, paneClose, makeMain, pageTab } = target.dataset
+        if (tabClose || paneClose) closePage(tabClose || paneClose)
+        else if (makeMain) goPage(makeMain)
+        else if ('settingsClose' in target.dataset) closePage('settings')
+        else if ('openSettings' in target.dataset) [main, ...splits].includes('settings') ? closePage('settings') : goPage('settings')
+        else if ('panelToggle' in target.dataset) dockOpen = !dockOpen
+        else clickTab(pageTab, event.shiftKey)
+        render()
+      })
+      document.querySelectorAll('svg[data-icon]').forEach(icon)
+      renderWorkspaces()
+      render()
+    </script>
+  </body>
+</html>

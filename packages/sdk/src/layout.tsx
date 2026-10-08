@@ -10,8 +10,8 @@ import { readStored } from '@treeix/app/storage'
  * Focus zones, v3's keyboard model: the window is split into zones that F6 cycles through, the focused one framed.
  * Inside a zone j/k move a cursor and Esc steps back a level; the terminal keeps every bare key.
  */
-export type ZoneId = 'rail' | 'list' | 'main' | 'inspector' | 'dock'
-const ZONE_ORDER: ZoneId[] = ['rail', 'list', 'main', 'inspector', 'dock']
+export type ZoneId = 'list' | 'main' | 'inspector' | 'dock'
+const ZONE_ORDER: ZoneId[] = ['list', 'main', 'inspector', 'dock']
 
 /** Keys and what they do, e.g. ['j k', 'move']; a space separates keys pressed one after another */
 export type KeyHint = [keys: string, label: string]
@@ -20,10 +20,10 @@ export type KeyHint = [keys: string, label: string]
 export type ShortcutInfo = { keys: string; label: string; section: string; page?: string }
 
 /** Panels a key toggles; list and inspector are remembered per page, the others for the whole window */
-export type PanelName = 'list' | 'inspector' | 'rail' | 'title'
+export type PanelName = 'list' | 'inspector' | 'title'
 
 type PagePanels = { list: boolean; inspector: boolean; listWidth: number | null; inspectorWidth: number | null }
-type StoredPanels = { rail: boolean; title: boolean; pages: Record<string, PagePanels> }
+type StoredPanels = { title: boolean; pages: Record<string, PagePanels> }
 
 export type ShellState = StoredPanels & {
   zone: ZoneId
@@ -39,13 +39,12 @@ const PANELS_KEY = 'shell.panels'
 const DEFAULT_PAGE: PagePanels = { list: true, inspector: true, listWidth: null, inspectorWidth: null }
 
 function loadPanels(): StoredPanels {
-  const defaults: StoredPanels = { rail: true, title: true, pages: {} }
+  const defaults: StoredPanels = { title: true, pages: {} }
   const record = readStored(PANELS_KEY)
   if (!isJson(record)) return defaults
   const flag = (value: unknown, fallback: boolean): boolean => (typeof value === 'boolean' ? value : fallback)
   const width = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
   return {
-    rail: flag(record.rail, defaults.rail),
     title: flag(record.title, defaults.title),
     pages: Object.fromEntries(
       Object.entries(object(record.pages)).flatMap(([page, prefs]) =>
@@ -68,9 +67,9 @@ export const getShell = (): ShellState => state
 
 export function updateShell(patch: Partial<ShellState>): void {
   state = { ...state, ...patch }
-  if ('rail' in patch || 'title' in patch || 'pages' in patch) {
-    const { rail, title, pages } = state
-    localStorage.setItem(PANELS_KEY, JSON.stringify({ rail, title, pages }))
+  if ('title' in patch || 'pages' in patch) {
+    const { title, pages } = state
+    localStorage.setItem(PANELS_KEY, JSON.stringify({ title, pages }))
   }
   listeners.forEach((listener) => listener())
 }
@@ -185,7 +184,6 @@ const useActivePage = (): string => useContext(HostContext)?.activePage ?? ''
 export function usePanels(page?: string): {
   list: boolean
   inspector: boolean
-  rail: boolean
   title: boolean
   zen: boolean
   toggle: (panel: PanelName) => void
@@ -199,7 +197,6 @@ export function usePanels(page?: string): {
   return {
     list: visible(prefs.list),
     inspector: visible(prefs.inspector),
-    rail: visible(shell.rail),
     title: visible(shell.title),
     zen: shell.zen,
     toggle: (panel) => togglePanel(panel, key),
@@ -242,6 +239,9 @@ export function Zone({ id, className = '', style, children }: { id: ZoneId; clas
   )
 }
 
+/** A panel floating over the page, as the AI Hub's list and inspector do */
+export const ISLAND = 'rounded-xl border border-border bg-popover shadow-xl shadow-black/40'
+
 /** In a narrow page, like one opened beside another, main keeps this much: side panels shrink to SIDE_MIN, then the inspector and then the list hide */
 const MAIN_MIN = 240
 const SIDE_MIN = 150
@@ -269,9 +269,18 @@ export function PageLayout({
   listWidth = 280,
   inspectorWidth = 300,
   resizable = true,
-  defaults
+  defaults,
+  islands,
+  ownInspector = false
 }: {
   id?: string
+  /**
+   * Floats the list over main as an island, Figma style, folding to a pill with this label. Main stays full width and
+   * gets `--island-left`, the room the island or pill takes, to pad what must stay clear of it
+   */
+  islands?: string
+  /** Main draws its own inspector, so the panel key toggles it; it reads the flag from usePanels */
+  ownInspector?: boolean
   /** Panels shown until the user toggles them on this page */
   defaults?: Partial<Pick<PagePanels, 'list' | 'inspector'>>
   list?: ReactNode
@@ -287,7 +296,7 @@ export function PageLayout({
   const shell = useShell()
   if (defaults) pageDefaults.set(page, defaults)
   // Also under the active page, which is what the panel keys name
-  for (const key of new Set([page, activePage])) pageParts.set(key, { list: list !== undefined, inspector: inspector !== undefined })
+  for (const key of new Set([page, activePage])) pageParts.set(key, { list: list !== undefined, inspector: inspector !== undefined || ownInspector })
   useEffect(() => {
     if (page === activePage) return
     pageViews.set(activePage, page)
@@ -308,6 +317,39 @@ export function PageLayout({
   }, [])
   const showList = list !== undefined && prefs.list && !shell.zen && width >= MAIN_MIN + SIDE_MIN
   const showInspector = inspector !== undefined && prefs.inspector && !shell.zen && width >= MAIN_MIN + SIDE_MIN * (showList ? 2 : 1)
+  const pill = useRef<HTMLButtonElement>(null)
+  const [pillWidth, setPillWidth] = useState(0)
+  useLayoutEffect(() => setPillWidth(pill.current?.offsetWidth ?? 0), [showList, islands])
+  if (islands !== undefined)
+    return (
+      <div ref={ref} className="relative flex min-h-0 min-w-0 flex-1">
+        {showList ? (
+          <Zone id="list" style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }} className={`absolute top-2 bottom-2 left-2 z-20 ${ISLAND}`}>
+            {list}
+            {resizable && <ResizeHandle onResize={(next) => setPagePanels(page, { listWidth: next })} />}
+          </Zone>
+        ) : (
+          list !== undefined && (
+            <button
+              ref={pill}
+              title={`Show the list (${actionKeys('panel.listAlt')})`}
+              onClick={() => togglePanel('list', page)}
+              className={`absolute top-2 left-2 z-20 flex h-10 items-center gap-2 px-3 text-xs hover:bg-accent ${ISLAND}`}
+            >
+              <Icon name="panel" className="size-3.5 shrink-0 text-muted-foreground" />
+              {islands}
+            </button>
+          )
+        )}
+        <Zone
+          id="main"
+          style={{ minWidth: Math.min(MAIN_MIN, width), '--island-left': `${(showList ? listSize : pillWidth) + 8}px` } as CSSProperties}
+          className="flex-1 bg-background"
+        >
+          {claimDock && host ? host.withDock(main) : main}
+        </Zone>
+      </div>
+    )
   return (
     <div ref={ref} className="flex min-h-0 min-w-0 flex-1">
       {showList && (

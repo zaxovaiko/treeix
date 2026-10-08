@@ -1,4 +1,4 @@
-import { type ChatOption, type ChatSpec, createBridge, createStore, definePluginSettings } from '@treeix/sdk'
+import { type ChatOption, type ChatService, type ChatSpec, createBridge, createStore, definePluginSettings } from '@treeix/sdk'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
 import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
@@ -19,6 +19,7 @@ export const hubApi = {
   setRuntimes: (runtimes: AgentRuntime[]) => bridge.invoke<void>('setRuntimes', runtimes),
   runs: () => bridge.invoke<Run[]>('runs'),
   runEvents: (id: string) => bridge.invoke<RunEvent[]>('runEvents', id),
+  removeRun: (id: string) => bridge.invoke<void>('deleteRun', id),
   /** Starts a recorded one-off question; resolves with the run id */
   ask: (agent: string, message: string) => bridge.invoke<string>('ask', agent, message),
   workflows: () => bridge.invoke<Workflow[]>('workflows'),
@@ -56,7 +57,9 @@ export const onOpenRun = (listener: (runId: string) => void): (() => void) => br
 
 export function followRuns(): () => void {
   void hubApi.runs().then(hubRuns.set)
-  return bridge.on('run', (run) => isRun(run) && hubRuns.set([run, ...hubRuns.get().filter((entry) => entry.id !== run.id)].sort((a, b) => b.startedAt - a.startedAt)))
+  const unfollowRun = bridge.on('run', (run) => isRun(run) && hubRuns.set([run, ...hubRuns.get().filter((entry) => entry.id !== run.id)].sort((a, b) => b.startedAt - a.startedAt)))
+  const unfollowRemoved = bridge.on('runRemoved', (id) => hubRuns.set(hubRuns.get().filter((run) => run.id !== id)))
+  return () => (unfollowRun(), unfollowRemoved())
 }
 
 /** A run's events so far, then each batch as it streams; batches that arrive before the load are already in it */
@@ -87,12 +90,54 @@ const storedSelection = (): string | null => {
 /** What the page shows: `agent:<id>`, `workflow:<id>` or `run:<id>` */
 export const hubSelection = createStore<string | null>(storedSelection())
 hubSelection.subscribe(() => localStorage.setItem(SELECTED_KEY, JSON.stringify(hubSelection.get())))
+/** `<run>:<step>`, the step a run opens on when the canvas asks for its log */
+export const hubRunStep = createStore<string | null>(null)
 
 /** What the Ask dialog starts, `agent:<id>` or `workflow:<id>`, and whether the run's page opens after */
 export const asking = createStore<{ target: string; openRun: boolean } | null>(null)
 
-/** The last conversation of each agent, by hub agent id, so the page resumes it */
-export const hubSettings = definePluginSettings('hub', (stored) => ({ conversations: stringValues(stored.conversations) }))
+/** A conversation with a hub agent, kept so it can be opened again */
+export type HubChat = { sessionId: string; agentId: string; title: string; updatedAt: number }
+
+const isHubChat = (value: unknown): value is HubChat =>
+  typeof value === 'object' &&
+  value !== null &&
+  'sessionId' in value &&
+  typeof value.sessionId === 'string' &&
+  'agentId' in value &&
+  typeof value.agentId === 'string' &&
+  'title' in value &&
+  typeof value.title === 'string' &&
+  'updatedAt' in value &&
+  typeof value.updatedAt === 'number'
+
+/** The last conversation of each agent, by hub agent id, so the page resumes it, and every conversation that got a message, newest first */
+export const hubSettings = definePluginSettings('hub', (stored) => ({
+  conversations: stringValues(stored.conversations),
+  chats: Array.isArray(stored.chats) ? stored.chats.filter(isHubChat) : []
+}))
+
+const ACTIVE_MS = 60_000
+
+/** Puts each hub agent's chat in the history once it has a message, and bumps it while the agent works; returns the unfollow */
+export function followChats(chat: ChatService): () => void {
+  const record = (): void => {
+    let { chats } = hubSettings.get()
+    for (const agent of hubAgents.get()) {
+      const chatId = chatIdOf(agent)
+      const sessionId = chat.agentSessionId(chatId)
+      const title = chat.title(chatId)
+      if (!sessionId || !title) continue
+      const known = chats.find((entry) => entry.sessionId === sessionId)
+      const working = chat.status(chatId) === 'running'
+      if (known && known.title === title && !(working && Date.now() - known.updatedAt > ACTIVE_MS)) continue
+      chats = [{ sessionId, agentId: agent.id, title, updatedAt: Date.now() }, ...chats.filter((other) => other.sessionId !== sessionId)]
+    }
+    if (chats !== hubSettings.get().chats) hubSettings.update({ chats })
+  }
+  record()
+  return chat.subscribe(record)
+}
 
 export const chatIdOf = (agent: HubAgent): string => `hub:${agent.id}`
 

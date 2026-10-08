@@ -14,7 +14,7 @@ test('a file opened with Treeix from Finder shows beside the terminals, even out
   const { app, page, repo } = launched
   const outside = join(dirname(dirname(repo)), 'notes.txt')
   writeFileSync(outside, 'written outside the repo\n')
-  await page.locator('[data-page-tab="worktrees"]').click()
+  await page.locator('[data-page-tab="worktrees"]').click({ modifiers: ['Shift'] })
   await app.evaluate(({ app }, path) => app.emit('open-file', { preventDefault: () => undefined }, path), outside)
   await expect(page.locator('[data-page-tab="terminal"]')).toHaveAttribute('aria-current', 'page')
   await expect(page.getByRole('button', { name: 'Close notes.txt' })).toBeVisible()
@@ -23,7 +23,7 @@ test('a file opened with Treeix from Finder shows beside the terminals, even out
 
 test('a file dropped from Finder on the window opens like one opened with Treeix', async () => {
   const { page, repo } = launched
-  await page.locator('[data-page-tab="worktrees"]').click()
+  await page.locator('[data-page-tab="worktrees"]').click({ modifiers: ['Shift'] })
   // A real file on disk, as Finder hands over, carried in a drop's DataTransfer
   await page.evaluate(() => {
     const input = document.createElement('input')

@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Repo } from '../../shared/types'
 import { openMenu } from './contextMenu'
 import { Icon } from './Icon'
 import { digitLabel } from './settings'
 import { baseName } from './Sidebar'
-import { Kbd, type ListRowProps, type SessionSummary, useListNav, useShell, useZone, Zone } from '@treeix/sdk'
+import { Kbd, type SessionSummary } from '@treeix/sdk'
 import { type Activity, ActivityMark, NEWS } from './activity'
 import { activityOf } from './sessionUi'
 import { useSessions } from './plugins'
-import { Dialog } from './ui'
+import { Dialog, Popup } from './ui'
 import { actionKeys } from '../../shared/keymap'
 import {
   deleteWorkspace,
@@ -20,6 +20,7 @@ import {
   suggestWorkspaceName,
   useWorkspaces,
   type Workspace,
+  workspaceOf,
   shades,
   WORKSPACE_COLORS
 } from './workspaces'
@@ -27,94 +28,55 @@ import {
 const workspaceActivity = (sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): Activity =>
   activityOf(sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces)))
 
-function Tile({
-  active,
-  title,
-  activity,
-  color,
-  onClick,
-  onContextMenu,
-  drag,
-  cursor,
-  leaderKey,
-  children
-}: {
-  active: boolean
-  title: string
-  activity: Activity
-  color?: string
-  onClick: () => void
-  onContextMenu?: (event: React.MouseEvent) => void
-  drag?: React.HTMLAttributes<HTMLButtonElement> & { draggable: true; dropEdge: 'top' | 'bottom' | null }
-  /** Marks the tile under the rail's keyboard cursor */
-  cursor?: ListRowProps
-  /** Shown while the leader key waits, e.g. 1 for G 1 */
-  leaderKey?: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  const { dropEdge, ...dragProps } = drag ?? { dropEdge: null }
+const WORKSPACE_MIME = 'application/x-treeix-workspace'
+
+function Badge({ workspace, className }: { workspace: Workspace; className: string }): React.JSX.Element {
+  const home = workspace.id === HOME.id
   return (
-    <button title={title} onClick={onClick} onContextMenu={onContextMenu} {...dragProps} {...cursor} className="group/tile relative grid w-full place-items-center py-1">
-      {dropEdge && <span className={`pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-[3px]' : '-bottom-[3px]'}`} />}
-      {active && <span data-active-mark className="pointer-events-none absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-r-full bg-foreground" />}
-      <span
-        style={color ? { background: color } : undefined}
-        className={`relative grid size-8 place-items-center rounded-[9px] text-[11px] font-bold ${color ? 'text-white' : active ? 'bg-foreground text-background' : 'bg-foreground/8 text-muted-foreground'} ${
-          active ? 'ring-2 ring-foreground ring-offset-2 ring-offset-sidebar' : 'opacity-50 group-hover/tile:opacity-100'
-        }`}
-      >
-        {children}
-        {NEWS.includes(activity) && (
-          <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-card">
-            <ActivityMark activity={activity} className="size-2" />
-          </span>
-        )}
-      </span>
-      {leaderKey && (
-        <span className="absolute right-0.5 bottom-0">
-          <Kbd on>{leaderKey}</Kbd>
-        </span>
-      )}
-    </button>
+    <span
+      style={home ? undefined : { background: workspace.color }}
+      className={`grid shrink-0 place-items-center overflow-hidden font-bold ${home ? 'bg-foreground/8 font-mono text-muted-foreground' : 'text-white'} ${className}`}
+    >
+      {home ? '~' : <Avatar workspace={workspace} />}
+    </span>
   )
 }
 
-export function WorkspaceRail({
+/** The title bar's workspace chip: the current workspace, a menu of all of them, and a mark when an agent elsewhere is busy or waiting */
+export function WorkspaceSwitcher({
   repos,
   onSwitch,
-  onEdit
+  onEdit,
+  onReturn
 }: {
   repos: Repo[] | null
   onSwitch: (id: string) => void
   /** Opens the editor; null creates a new workspace */
   onEdit: (workspace: Workspace | null) => void
+  /** Set while the AI Hub fills the window: a click goes back to the workspace instead of opening the menu */
+  onReturn?: () => void
 }): React.JSX.Element {
   const { workspaces, currentId } = useWorkspaces()
   const sessions = useSessions()
-  const { leader } = useShell()
-  const { zone } = useZone()
-  // The rail's cursor moves on its own; Enter switches, so walking past workspaces doesn't load each one
-  const [cursor, setCursor] = useState(-1)
-  const currentIndex = workspaces.findIndex((workspace) => workspace.id === currentId)
-  useEffect(() => setCursor(-1), [currentId])
-  const nav = useListNav({
-    zone: 'rail',
-    count: workspaces.length,
-    index: cursor < 0 ? currentIndex : cursor,
-    onSelect: setCursor,
-    onOpen: (index) => onSwitch(workspaces[index].id)
-  })
+  const [open, setOpen] = useState(false)
   const [drop, setDrop] = useState<{ id: string; edge: 'top' | 'bottom' } | null>(null)
-  const WORKSPACE_MIME = 'application/x-treeix-workspace'
-  const dragProps = (workspace: Workspace, index: number) => ({
-    draggable: true as const,
-    dropEdge: drop?.id === workspace.id ? drop.edge : null,
+  const button = useRef<HTMLButtonElement>(null)
+  const current = workspaceOf(workspaces, currentId)
+  const elsewhere = current ? activityOf(sessions.filter((session) => !inWorkspace(session, current, repos, workspaces))) : 'none'
+  const close = (): void => setOpen(false)
+  const pick = (id: string): void => {
+    close()
+    if (id !== currentId) onSwitch(id)
+  }
+
+  const dragProps = (workspace: Workspace, index: number): React.HTMLAttributes<HTMLButtonElement> & { draggable: true } => ({
+    draggable: true,
     // No state updates in dragstart: React re-rendering there makes Chromium cancel the drag
-    onDragStart: (event: React.DragEvent) => {
+    onDragStart: (event) => {
       event.dataTransfer.setData(WORKSPACE_MIME, workspace.id)
       event.dataTransfer.effectAllowed = 'move'
     },
-    onDragOver: (event: React.DragEvent) => {
+    onDragOver: (event) => {
       if (!event.dataTransfer.types.includes(WORKSPACE_MIME)) return
       event.preventDefault()
       const box = event.currentTarget.getBoundingClientRect()
@@ -123,7 +85,7 @@ export function WorkspaceRail({
     },
     onDragLeave: () => setDrop(null),
     onDragEnd: () => setDrop(null),
-    onDrop: (event: React.DragEvent) => {
+    onDrop: (event) => {
       const id = event.dataTransfer.getData(WORKSPACE_MIME)
       if (!id) return
       event.preventDefault()
@@ -133,52 +95,91 @@ export function WorkspaceRail({
     }
   })
 
-  return (
-    <Zone id="rail" className="w-[52px] shrink-0 items-center gap-1 border-r border-border bg-sidebar py-2">
-      {workspaces.map((workspace, index) => (
-        <Tile
-          key={workspace.id}
-          active={currentId === workspace.id}
-          title={`${workspace.name} · ${workspace.repoPaths.map(baseName).join(', ') || 'no projects'}${index < 9 ? ` (${[`G ${index + 1}`, digitLabel('workspaces', index + 1)].filter(Boolean).join(', ')})` : ''}`}
-          color={workspace.color}
-          activity={workspaceActivity(sessions, workspace, repos, workspaces)}
-          onClick={() => onSwitch(workspace.id)}
-          drag={dragProps(workspace, index)}
-          cursor={zone === 'rail' ? nav.rowProps(index) : undefined}
-          leaderKey={leader && index < 9 ? String(index + 1) : undefined}
-          onContextMenu={(event) =>
-            openMenu(event, [
-              { label: 'Open', run: () => onSwitch(workspace.id) },
-              { label: 'Edit workspace…', run: () => onEdit(workspace) },
-              null,
-              {
-                label: 'Delete workspace…',
-                run: () => window.confirm(`Delete workspace ${workspace.name}? Projects and sessions are not affected.`) && deleteWorkspace(workspace.id)
-              }
-            ])
-          }
-        >
-          <Avatar workspace={workspace} />
-        </Tile>
-      ))}
+  const row = (workspace: Workspace, title: string, keys: string, extra?: Partial<React.ComponentProps<'button'>>): React.JSX.Element => {
+    const activity = workspaceActivity(sessions, workspace, repos, workspaces)
+    const dropEdge = drop?.id === workspace.id ? drop.edge : null
+    return (
       <button
-        title="New workspace"
-        onClick={() => onEdit(null)}
-        className="mt-1 grid size-8 shrink-0 place-items-center rounded-[9px] border border-dashed border-foreground/15 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+        key={workspace.id}
+        data-workspace={workspace.id}
+        title={title}
+        aria-current={workspace.id === currentId || undefined}
+        onClick={() => pick(workspace.id)}
+        {...extra}
+        className={`relative flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent ${workspace.id === currentId ? 'bg-accent' : ''}`}
       >
-        <Icon name="plus" className="size-4" />
+        {dropEdge && <span className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-px' : '-bottom-px'}`} />}
+        <Badge workspace={workspace} className="size-5 rounded-md text-[9px]" />
+        <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+        {NEWS.includes(activity) && <ActivityMark activity={activity} />}
+        {keys && <Kbd hint>{keys}</Kbd>}
       </button>
-      <div data-home-workspace className="mt-auto w-full">
-        <Tile
-          active={currentId === HOME.id}
-          title={`Home: terminals in ~, outside every workspace (${actionKeys('workspace.home')})`}
-          activity={workspaceActivity(sessions, HOME, repos, workspaces)}
-          onClick={() => onSwitch(HOME.id)}
+    )
+  }
+
+  return (
+    <>
+      <button
+        ref={button}
+        data-workspace-switcher
+        title={onReturn ? 'Back to the workspace' : `Workspaces${current ? ` · ${current.name}` : ''}`}
+        aria-expanded={open}
+        onClick={() => (onReturn ? onReturn() : setOpen(!open))}
+        className={`relative flex h-6 max-w-48 min-w-0 shrink-0 items-center gap-1.5 rounded-md pr-1.5 pl-1 text-xs hover:bg-accent ${
+          onReturn ? 'text-muted-foreground hover:text-foreground' : `text-foreground ring-1 ring-border ring-inset ${open ? 'bg-accent' : 'bg-background'}`
+        }`}
+      >
+        {current ? <Badge workspace={current} className="size-[18px] rounded-[5px] text-[8px]" /> : <Icon name="folder" className="size-3.5 text-muted-foreground" />}
+        <span className="truncate">{current?.name ?? 'All projects'}</span>
+        <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground" />
+        {NEWS.includes(elsewhere) && (
+          <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-card">
+            <ActivityMark activity={elsewhere} className="size-2" />
+          </span>
+        )}
+      </button>
+      {open && (
+        <Popup
+          anchor={button}
+          onDismiss={close}
+          // Esc closes the menu, and only it: the shell must not also move focus to another zone
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return
+            event.stopPropagation()
+            close()
+          }}
+          className="flex max-h-[70vh] w-64 flex-col overflow-y-auto rounded-lg border border-input bg-popover p-1 text-xs"
         >
-          <span className="font-mono text-[15px]">~</span>
-        </Tile>
-      </div>
-    </Zone>
+          {workspaces.map((workspace, index) => {
+            const keys = index < 9 ? [`G ${index + 1}`, digitLabel('workspaces', index + 1)].filter(Boolean) : []
+            return row(workspace, `${workspace.repoPaths.map(baseName).join(', ') || 'no projects'}${keys.length ? ` (${keys.join(', ')})` : ''}`, keys[0] ?? '', {
+              ...dragProps(workspace, index),
+              onContextMenu: (event) =>
+                openMenu(event, [
+                  { label: 'Open', run: () => pick(workspace.id) },
+                  { label: 'Edit workspace…', run: () => (close(), onEdit(workspace)) },
+                  null,
+                  {
+                    label: 'Delete workspace…',
+                    run: () => window.confirm(`Delete workspace ${workspace.name}? Projects and sessions are not affected.`) && deleteWorkspace(workspace.id)
+                  }
+                ])
+            })
+          })}
+          {workspaces.length > 0 && <hr className="my-1 border-border" />}
+          {row(HOME, `Home: terminals in ~, outside every workspace (${actionKeys('workspace.home')})`, actionKeys('workspace.home'))}
+          <button
+            onClick={() => (close(), onEdit(null))}
+            className="flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-1.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <span className="grid size-5 place-items-center">
+              <Icon name="plus" className="size-3.5" />
+            </span>
+            New workspace
+          </button>
+        </Popup>
+      )}
+    </>
   )
 }
 

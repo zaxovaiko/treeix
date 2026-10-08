@@ -11,7 +11,10 @@ test.afterAll(() => launched.close())
 
 test('terminals sharing a glyph atlas still draw text after the GPU process resets', async () => {
   const { page, app } = launched
-  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
+  await page
+    .getByRole('button', { name: 'Terminal', exact: true })
+    .first()
+    .click({ modifiers: ['Shift'] })
   await page.getByRole('button', { name: 'Shell' }).click()
   const panes = page.locator('.xterm')
   await expect(panes).toHaveCount(1)

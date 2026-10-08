@@ -16,7 +16,10 @@ test('an agent starts a session through session_new and finds it in sessions_lis
   const { page, repo } = launched
   const envFile = join(dirname(repo), 'claude-mcp.json')
   const startedFile = join(dirname(repo), 'started.txt')
-  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
+  await page
+    .getByRole('button', { name: 'Terminal', exact: true })
+    .first()
+    .click({ modifiers: ['Shift'] })
   await page.getByRole('button', { name: 'Shell' }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()

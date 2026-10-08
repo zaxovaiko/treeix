@@ -6,7 +6,7 @@ import { notify } from '@treeix/app/notifications'
 import { type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
 import { HubFace, HubPeek } from './Peek'
-import { asAgent, asking, followAgents, followRuns, followWorkflows, hubAgents, hubApi, hubRuns, hubSelection, hubWorkflows, onOpenRun, TAB_ID } from './store'
+import { asAgent, asking, followAgents, followChats, followRuns, followWorkflows, hubAgents, hubApi, hubRuns, hubSelection, hubWorkflows, onOpenRun, TAB_ID } from './store'
 
 // The page pulls in the editor and the chat view, so it loads when first opened
 const HubPage = lazy(() => import('./HubPage').then((module) => ({ default: module.HubPage })))
@@ -74,7 +74,9 @@ function useRunNotifications(): void {
 }
 
 function Root(): React.JSX.Element {
+  const chat = useHost().service('chat')
   useEffect(followAgents, [])
+  useEffect(() => (chat ? followChats(chat) : undefined), [chat])
   useEffect(followWorkflows, [])
   useEffect(followRuns, [])
   useRuntimes()

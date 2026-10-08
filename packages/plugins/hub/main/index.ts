@@ -94,6 +94,7 @@ const plugin: MainPlugin = {
 
     context.handle('runs', () => engine.list())
     context.handle('runEvents', (_, id: string) => engine.events(id))
+    context.handle('deleteRun', async (_, id: string) => (await engine.remove(id)) && context.broadcast('runRemoved', id))
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
     const workflows = jsonList(join(context.dataPath, 'workflows.json'), isWorkflow)
     const writeWorkflows = async (next: Workflow[]): Promise<void> => {

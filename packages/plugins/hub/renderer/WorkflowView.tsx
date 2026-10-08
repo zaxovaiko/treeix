@@ -6,16 +6,17 @@ import {
   applyNodeChanges,
   Background,
   type Connection,
-  Controls,
   type Edge as FlowEdge,
   Handle,
   type Node as FlowNode,
   type NodeProps,
   Panel,
   Position,
-  ReactFlow
+  ReactFlow,
+  useReactFlow
 } from '@xyflow/react'
-import { useHost } from '@treeix/sdk'
+import { ISLAND, usePanels, useHost, Zone } from '@treeix/sdk'
+import { actionKeys } from '@treeix/shared/keymap'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton } from '@treeix/app/ui'
@@ -24,7 +25,7 @@ import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar, Schedules } from './AgentEditor'
 import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
-import { asking, hubAgents, hubApi, hubRuns, hubSelection } from './store'
+import { asking, hubAgents, hubApi, hubRunStep, hubRuns, hubSelection } from './store'
 
 type StepNode = FlowNode<{ step: WorkflowNode }, 'step'>
 
@@ -310,6 +311,34 @@ function Inspector({
   )
 }
 
+const STEP_KINDS = ['agent', 'merge', 'condition', 'approval', 'output'] as const
+const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
+
+/** Steps to add and the view's controls, one island at the bottom of the canvas */
+function Toolbar({ onAdd, onUndo }: { onAdd: (kind: (typeof STEP_KINDS)[number]) => void; onUndo: () => void }): React.JSX.Element {
+  const flow = useReactFlow()
+  return (
+    <Panel position="bottom-center" className={`flex items-center gap-0.5 p-1 ${ISLAND}`}>
+      {STEP_KINDS.map((kind) => (
+        <button key={kind} onClick={() => onAdd(kind)} className={TOOL}>
+          <Icon name={KIND_ICON[kind]} className="size-3.5" />
+          {KIND_LABEL[kind]}
+        </button>
+      ))}
+      <span className="mx-1 h-5 w-px bg-border" />
+      <IconButton label="Undo (⌘Z)" onClick={onUndo}>
+        <Icon name="undo" className="size-3.5" />
+      </IconButton>
+      <IconButton label="Fit view" onClick={() => void flow.fitView(FIT)}>
+        <Icon name="focus" className="size-3.5" />
+      </IconButton>
+    </Panel>
+  )
+}
+
+// Clear of the list and inspector islands
+const FIT = { maxZoom: 1, minZoom: 0.5, padding: { left: '300px', right: '300px', top: '40px', bottom: '80px' } } as const
+
 /** The workflow on a canvas: steps to add, connect and fill in, saved as you go, with the last run's state on each */
 export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.Element {
   const host = useHost()
@@ -447,107 +476,128 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     deleted.current = true
     hubApi.removeWorkflow(workflow.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
   }
+  const panels = usePanels('hub')
+  const runButton = (
+    <button
+      onClick={run}
+      disabled={problems.length > 0}
+      title={problems.map((problem) => problem.message).join('\n') || undefined}
+      className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-50"
+    >
+      <Icon name="wand" className="size-3.5" />
+      Run
+    </button>
+  )
+  const inspectorToggle = (
+    <IconButton label={`${panels.inspector ? 'Hide' : 'Show'} the inspector (${actionKeys('panel.inspector')})`} onClick={() => panels.toggle('inspector')}>
+      <Icon name="panel" className="size-3.5 -scale-x-100" />
+    </IconButton>
+  )
 
   return (
-    <div ref={root} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col outline-none">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-        <Icon name="layers" className="size-4 text-muted-foreground" />
-        <input
-          aria-label="Workflow name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
-        />
-        {lastRun && (
-          <button
-            onClick={() => hubSelection.set(`run:${lastRun.id}`)}
-            className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <StatusIcon status={lastRun.status} className="size-3" />
-            Last run {timeAgo(new Date(lastRun.startedAt).toISOString())}
-          </button>
-        )}
-        <IconButton label="Delete workflow" onClick={remove}>
-          <Icon name="trash" className="size-3.5" />
-        </IconButton>
-        <button
-          onClick={run}
-          disabled={problems.length > 0}
-          title={problems.map((problem) => problem.message).join('\n') || undefined}
-          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-50"
+    <div ref={root} tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 outline-none">
+      <CanvasContext value={canvas}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={NODE_TYPES}
+          onNodesChange={(changes) => {
+            if (changes.some((change) => change.type === 'remove')) checkpoint()
+            setNodes((current) => applyNodeChanges(changes, current))
+          }}
+          onEdgesChange={(changes) => {
+            if (changes.some((change) => change.type === 'remove')) checkpoint()
+            setEdges((current) => applyEdgeChanges(changes, current))
+          }}
+          onConnect={(connection) => {
+            checkpoint()
+            setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID() }, current))
+          }}
+          isValidConnection={connectable}
+          deleteKeyCode={['Backspace', 'Delete']}
+          fitView
+          fitViewOptions={FIT}
+          style={THEME}
         >
-          <Icon name="wand" className="size-3.5" />
-          Run
-        </button>
-      </header>
-      <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
-          <CanvasContext value={canvas}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={NODE_TYPES}
-              onNodesChange={(changes) => {
-                if (changes.some((change) => change.type === 'remove')) checkpoint()
-                setNodes((current) => applyNodeChanges(changes, current))
-              }}
-              onEdgesChange={(changes) => {
-                if (changes.some((change) => change.type === 'remove')) checkpoint()
-                setEdges((current) => applyEdgeChanges(changes, current))
-              }}
-              onConnect={(connection) => {
-                checkpoint()
-                setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID() }, current))
-              }}
-              isValidConnection={connectable}
-              deleteKeyCode={['Backspace', 'Delete']}
-              fitView
-              fitViewOptions={{ maxZoom: 1, minZoom: 0.5 }}
-              style={THEME}
-            >
-              <Background gap={20} />
-              <Controls showInteractive={false} />
-              <Panel position="top-left" className="flex gap-1">
-                {(['agent', 'merge', 'condition', 'approval', 'output'] as const).map((kind) => (
-                  <button key={kind} onClick={() => add(kind)} className="flex h-7 items-center gap-1 rounded-md bg-popover px-2 text-xs ring-1 ring-border hover:bg-accent">
-                    <Icon name="plus" className="size-3" />
-                    {KIND_LABEL[kind]}
-                  </button>
-                ))}
-              </Panel>
-            </ReactFlow>
-          </CanvasContext>
+          <Background gap={20} />
+          <Toolbar onAdd={add} onUndo={undo} />
+        </ReactFlow>
+      </CanvasContext>
+      {panels.inspector ? (
+        // The workflow's name and Run on top, the selected step below
+        <Zone id="inspector" className={`absolute top-2 right-2 bottom-2 z-20 w-72 ${ISLAND}`}>
+          <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3">
+            <input
+              aria-label="Workflow name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
+            />
+            <IconButton label="Delete workflow" onClick={remove}>
+              <Icon name="trash" className="size-3.5" />
+            </IconButton>
+            {inspectorToggle}
+          </div>
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+            {lastRun && (
+              <button
+                onClick={() => hubSelection.set(`run:${lastRun.id}`)}
+                className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <StatusIcon status={lastRun.status} className="size-3" />
+                Last run {timeAgo(new Date(lastRun.startedAt).toISOString())}
+              </button>
+            )}
+            <span className="flex-1" />
+            {runButton}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {selected && lastRun && (lastRun.nodes[selected.id]?.status ?? 'pending') !== 'pending' && (
+              <button
+                onClick={() => (hubRunStep.set(`${lastRun.id}:${selected.id}`), hubSelection.set(`run:${lastRun.id}`))}
+                className="mb-3 flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border hover:bg-accent"
+              >
+                <StatusIcon status={shownNode(lastRun.nodes[selected.id])} className="size-3" />
+                Open the step's log
+              </button>
+            )}
+            {selected ? (
+              <Inspector key={selected.id} step={selected.data.step} sources={sources} onChange={update} onDelete={() => removeStep(selected.id)} />
+            ) : problems.length ? (
+              <div className="flex flex-col gap-2 text-xs">
+                <span className="text-sm font-medium">Before it can run</span>
+                {problems.map((problem, index) => {
+                  const step = draft.nodes.find((node) => node.id === problem.node)
+                  return (
+                    <button
+                      key={index}
+                      disabled={!problem.node}
+                      onClick={() => setNodes(nodes.map((node) => ({ ...node, selected: node.id === problem.node })))}
+                      className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent disabled:hover:bg-transparent"
+                    >
+                      <Icon name="alert" className="mt-px size-3.5 shrink-0 text-red-400" />
+                      {step && <span className="font-medium">{labelOf(step)}:</span>}
+                      <span className="text-muted-foreground">{problem.message}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Select a step to edit it, or add one with the buttons on the canvas; it goes after the selected step. Drag from a step's right edge to another to connect them, and
+                press Backspace to delete what's selected. ⌘Z undoes.
+              </p>
+            )}
+          </div>
+        </Zone>
+      ) : (
+        // Folded, it keeps the name and Run in reach
+        <div className={`absolute top-2 right-2 z-20 flex h-10 items-center gap-1 pr-1 pl-3 ${ISLAND}`}>
+          <span className="mr-1 max-w-48 truncate text-xs font-medium">{name}</span>
+          {runButton}
+          {inspectorToggle}
         </div>
-        <aside className="w-72 shrink-0 overflow-y-auto border-l border-border p-3">
-          {selected ? (
-            <Inspector key={selected.id} step={selected.data.step} sources={sources} onChange={update} onDelete={() => removeStep(selected.id)} />
-          ) : problems.length ? (
-            <div className="flex flex-col gap-2 text-xs">
-              <span className="text-sm font-medium">Before it can run</span>
-              {problems.map((problem, index) => {
-                const step = draft.nodes.find((node) => node.id === problem.node)
-                return (
-                  <button
-                    key={index}
-                    disabled={!problem.node}
-                    onClick={() => setNodes(nodes.map((node) => ({ ...node, selected: node.id === problem.node })))}
-                    className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent disabled:hover:bg-transparent"
-                  >
-                    <Icon name="alert" className="mt-px size-3.5 shrink-0 text-red-400" />
-                    {step && <span className="font-medium">{labelOf(step)}:</span>}
-                    <span className="text-muted-foreground">{problem.message}</span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Select a step to edit it, or add one with the buttons on the canvas; it goes after the selected step. Drag from a step's right edge to another to connect them, and
-              press Backspace to delete what's selected. ⌘Z undoes.
-            </p>
-          )}
-        </aside>
-      </div>
+      )}
     </div>
   )
 }

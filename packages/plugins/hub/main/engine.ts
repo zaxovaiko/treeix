@@ -287,6 +287,12 @@ export function createEngine(deps: {
       const live = [...active.values()].map((entry) => entry.run)
       return [...live, ...stored.filter((run) => !active.has(run.id))].sort((a, b) => b.startedAt - a.startedAt)
     },
+    /** Drops an ended run from the history; a live one stays */
+    remove: async (id: string): Promise<boolean> => {
+      if (active.has(id)) return false
+      await deps.runs.remove([id])
+      return true
+    },
     /** A live run's events come from memory, so they line up with the batches broadcast after */
     events: (id: string): RunEvent[] | Promise<RunEvent[]> => active.get(id)?.events ?? deps.runs.events(id),
     cancel: (id: string): void => {

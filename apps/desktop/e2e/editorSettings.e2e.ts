@@ -39,7 +39,7 @@ test("word wrap turns on and off from the editor's right-click menu", async () =
   const wrapItem = (): Promise<boolean | undefined> =>
     app.evaluate(() => (globalThis as unknown as { shownMenus: { label?: string; checked?: boolean }[][] }).shownMenus.at(-1)?.find((item) => item.label === 'Word wrap')?.checked)
   const wordWrap = (): Promise<unknown> => page.evaluate(() => JSON.parse(localStorage.getItem('settings') ?? '{}').editorWordWrap)
-  await page.locator('[data-page-tab="worktrees"]').click()
+  await page.locator('[data-page-tab="worktrees"]').click({ modifiers: ['Shift'] })
 
   await page.locator('.monaco-editor .view-lines').click({ button: 'right' })
   await expect.poll(wordWrap).toBe(true)

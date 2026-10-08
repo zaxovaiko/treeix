@@ -240,15 +240,22 @@ export const acpAdapter: ChatAdapter = {
     // Claude Code reads the CLAUDE.md and rules of added folders only with this set
     const child = spawnInShell(command, cwd, directories?.length ? { ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1' } : env)
     let stderr = ''
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString()).slice(-STDERR_LIMIT)
-    })
     const withTail = (message: string) => new Error(`${message}: ${stderr.trim() || 'no output'}`)
+    // Counts silence, not total time: a slow start that keeps reporting progress is not a hang
     let timer: ReturnType<typeof setTimeout> | undefined
+    let rewind = (): void => undefined
     const failed = new Promise<never>((_, reject) => {
       child.on('error', reject)
       child.once('exit', () => reject(withTail(`${command} exited`)))
-      timer = setTimeout(() => reject(withTail(`${command} did not answer in ${CONNECT_TIMEOUT_MS / 1000}s`)), CONNECT_TIMEOUT_MS)
+      rewind = () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => reject(withTail(`${command} went silent for ${CONNECT_TIMEOUT_MS / 1000}s`)), CONNECT_TIMEOUT_MS)
+      }
+      rewind()
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-STDERR_LIMIT)
+      rewind()
     })
     failed.catch(() => undefined)
 
@@ -257,6 +264,7 @@ export const acpAdapter: ChatAdapter = {
     const fromAgent = new ReadableStream<Uint8Array>({
       start: (controller) => {
         child.stdout.on('data', (chunk: Buffer) => {
+          rewind()
           if (!done) controller.enqueue(new Uint8Array(chunk))
         })
         // On 'close', after 'exit', so an early exit reports stderr rather than a closed connection
@@ -290,6 +298,7 @@ export const acpAdapter: ChatAdapter = {
       killGroup(child)
       throw error
     } finally {
+      rewind = () => undefined
       clearTimeout(timer)
     }
   }

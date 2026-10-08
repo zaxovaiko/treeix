@@ -13,14 +13,14 @@ test.afterAll(() => launched.close())
 test('⌘⇧H opens a shell in ~ in zen, outside the workspace, and takes you back', async () => {
   const { page, repo } = launched
   const terminalTab = page.locator('[data-page-tab="terminal"]')
-  const rail = page.locator('[data-zone="rail"]')
-  await expect(rail).toBeVisible()
+  const switcher = page.locator('[data-workspace-switcher]')
+  await expect(switcher).toBeVisible()
 
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 
   await page.keyboard.press('Meta+Shift+H')
-  // Zen hides the rail and the page tabs, leaving the terminal alone
-  await expect(rail).toHaveCount(0)
+  // Zen hides the title bar with the workspaces and the page tabs, leaving the terminal alone
+  await expect(switcher).toHaveCount(0)
   await expect(terminalTab).toHaveCount(0)
   const terminal = page.locator('.xterm').first()
   await expect(terminal).toBeVisible({ timeout: 15_000 })
@@ -31,6 +31,6 @@ test('⌘⇧H opens a shell in ~ in zen, outside the workspace, and takes you ba
   await expect.poll(() => readFile(join(home, 'here.txt'), 'utf8').catch(() => ''), { timeout: 15_000 }).toBe(`${home}\n`)
 
   await page.keyboard.press('Meta+Shift+H')
-  await expect(rail).toBeVisible()
+  await expect(switcher).toBeVisible()
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 })

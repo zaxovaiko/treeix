@@ -161,7 +161,7 @@ export function PanelToggle({
   badge?: React.ReactNode
   onToggle: () => void
   onMove: (side: DockSide) => void
-  onDragStart: () => void
+  onDragStart: (event: React.DragEvent) => void
   onDragEnd: () => void
 }): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -182,7 +182,7 @@ export function PanelToggle({
         }}
         onDragStart={(event) => {
           event.dataTransfer.setData('text/plain', id)
-          onDragStart()
+          onDragStart(event)
         }}
         onDragEnd={onDragEnd}
         className={`relative inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${

@@ -16,21 +16,28 @@ test('the title bar arrows walk back to the AI Hub and the page before it, and f
   const terminalTab = page.locator('[data-page-tab="terminal"]')
   const hub = page.locator('[data-overlay]')
 
-  await worktreesTab.click()
+  await worktreesTab.click({ modifiers: ['Shift'] })
   await page.locator('[data-overlay-button]').click()
   await expect(hub).toBeVisible()
-  await terminalTab.click()
+  // The hub hides the workspace's bar; its chip leads back
+  await page.locator('[data-workspace-switcher]').click()
+  await terminalTab.click({ modifiers: ['Shift'] })
   await expect(hub).not.toBeVisible()
   await expect(forward).toBeDisabled()
 
   await back.click()
-  await expect(hub).toBeVisible()
+  await expect(worktreesTab).toHaveAttribute('aria-current', 'page')
   await back.click()
+  await expect(hub).toBeVisible()
+  // The arrows step aside in the hub, their keys still walk
+  await page.keyboard.press('Control+Minus')
   await expect(hub).not.toBeVisible()
   await expect(worktreesTab).toHaveAttribute('aria-current', 'page')
 
   await forward.click()
   await expect(hub).toBeVisible()
+  await page.keyboard.press('Control+Shift+Minus')
+  await expect(hub).not.toBeVisible()
   await forward.click()
   await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   await expect(forward).toBeDisabled()

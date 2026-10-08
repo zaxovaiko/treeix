@@ -24,20 +24,25 @@ function fakeHome(files: Record<string, string>): { home: string; repo: string }
 export type Launched = { app: ElectronApplication; page: Page; repo: string; close: () => Promise<void> }
 
 /** The built app on a fake home, opened on `open` in the worktree's file viewer when given */
-export async function launch(files: Record<string, string>, open?: string): Promise<Launched> {
+export async function launch(files: Record<string, string>, open?: string, firstRun = false): Promise<Launched> {
   const { home, repo } = fakeHome(files)
-  const app = await electron.launch({ args: [appDir], cwd: appDir, env: { ...process.env, HOME: home, TREEIX_USER_DATA: join(home, 'user-data'), TREEIX_HEADLESS: '1' } })
+  // A run killed mid-test leaves macOS window state behind, and its "reopen windows?" alert then blocks every launch
+  const app = await electron.launch({
+    args: [appDir, '-ApplePersistenceIgnoreState', 'YES'],
+    cwd: appDir,
+    env: { ...process.env, HOME: home, TREEIX_USER_DATA: join(home, 'user-data'), TREEIX_HEADLESS: '1' }
+  })
   const page = await app.firstWindow()
   // Without the repository scan the app starts with nothing selected and drops the seeded place
   await page.waitForFunction(() => localStorage.getItem('scan.cache'), null, { timeout: 30_000 })
-  // On a file, as if left there, so without the AI Hub a first launch opens over it
-  if (open)
+  // A first launch opens the AI Hub; tests start in the workspace, on a file if asked, as if left there
+  if (!firstRun)
     await page.evaluate(
       (place) => {
-        localStorage.setItem('app.place@all', JSON.stringify(place))
+        if (place) localStorage.setItem('app.place@all', JSON.stringify(place))
         localStorage.setItem('app.overlay', 'false')
       },
-      { appTab: 'worktrees', selected: repo, viewer: { path: open, line: null } }
+      open ? { appTab: 'worktrees', selected: repo, viewer: { path: open, line: null } } : null
     )
   await page.reload()
   return {

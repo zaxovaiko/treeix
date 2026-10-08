@@ -17,7 +17,10 @@ const dropNear = async (target: ReturnType<Launched['page']['locator']>, edge: '
 
 test('tabs and pane headers dropped on a pane split it', async () => {
   const { page } = launched
-  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
+  await page
+    .getByRole('button', { name: 'Terminal', exact: true })
+    .first()
+    .click({ modifiers: ['Shift'] })
   await page.getByRole('button', { name: 'Shell' }).click()
   await page.getByRole('button', { name: 'New tab', exact: true }).click()
   const tabs = page.locator('div[draggable="true"]:has(button[aria-label="Close tab"])')

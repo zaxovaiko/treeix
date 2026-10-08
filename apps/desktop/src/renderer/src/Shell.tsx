@@ -18,7 +18,7 @@ export function useKeyExtras(): ShortcutInfo[] {
     digitShortcuts[target] === 'off' ? [] : [{ keys: `${DIGIT_MODIFIERS[digitShortcuts[target]]}1-9`, label, section: 'Go to' }]
   return [
     ...digits('tabs', 'Title bar page by position, 9 is the last'),
-    ...digits('workspaces', 'Workspace by rail order'),
+    ...digits('workspaces', 'Workspace by menu order'),
     {
       keys: 'G then a letter',
       label: 'Pages: T terminal, P pull requests, W worktrees, J tasks, C Confluence, E env, S settings, H closed sessions, A agent comments',
@@ -42,7 +42,7 @@ type ShellKeys = {
   enabled: boolean
   /** The key pressed after the leader */
   onLeader: (event: KeyboardEvent) => void
-  onTogglePanel: (panel: 'list' | 'inspector' | 'rail' | 'title') => void
+  onTogglePanel: (panel: 'list' | 'inspector' | 'title') => void
   onSheet: () => void
 }
 
@@ -50,7 +50,6 @@ type ShellKeys = {
 const shellActions = (latest: React.RefObject<ShellKeys>): Record<string, () => void> => ({
   'panel.list': () => latest.current.onTogglePanel('list'),
   'panel.inspector': () => latest.current.onTogglePanel('inspector'),
-  'panel.rail': () => latest.current.onTogglePanel('rail'),
   'panel.title': () => latest.current.onTogglePanel('title'),
   'shell.zen': toggleZen,
   'app.shortcuts': () => latest.current.onSheet()
@@ -178,8 +177,8 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
             </div>
           ))}
           <div className="break-inside-avoid rounded-md border border-border p-2.5 text-[11px] leading-4 text-muted-foreground">
-            <b className="text-foreground/80">Model.</b> Zones are rail, list, main, inspector and bottom terminal. F6 cycles them, the focused one has a frame. Inside a zone j k
-            move a cursor, ⏎ acts, esc steps back. Terminals keep every bare key, so from a terminal use chords, ⌘G or F6.
+            <b className="text-foreground/80">Model.</b> Zones are list, main, inspector and bottom terminal. F6 cycles them, the focused one has a frame. Inside a zone j k move a
+            cursor, ⏎ acts, esc steps back. Terminals keep every bare key, so from a terminal use chords, ⌘G or F6.
           </div>
         </div>
       </div>

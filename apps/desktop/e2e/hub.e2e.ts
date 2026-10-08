@@ -90,6 +90,11 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
   await page.getByPlaceholder('Message Scout').fill('Show me')
   await page.keyboard.press('Enter')
   await expect(page.getByText('Here is a picture')).toBeVisible()
+  // The chat joins the history, which keeps it until removed
+  const chatRow = page.locator('[data-list-row]', { hasText: 'Show me' })
+  await chatRow.hover()
+  await page.getByRole('button', { name: 'Remove from history' }).click()
+  await expect(chatRow).toBeHidden()
 
   await page.getByRole('button', { name: 'Edit agent' }).click()
   await expect(page.getByPlaceholder(/^Who the agent is/)).toHaveValue('You scout ahead.')
@@ -141,12 +146,24 @@ test('asking an agent from the palette records a run with its thinking and answe
   await page.getByPlaceholder(/^Search commands/).fill('Ask Courier')
   await page.keyboard.press('Enter')
   await page.getByPlaceholder(/^A one-off question/).fill('Where to?')
+  // Short enough that the answer overflows the run, which has to follow it down
+  await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 200))
   await page.keyboard.press('Enter')
 
   await expect(page.getByText('Here is a picture')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText(/^Thought for \d+s$/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Where to\?/ })).toBeVisible()
   await expect(page.locator('header').getByTitle('Done')).toBeVisible()
+  const transcript = page.locator('.overflow-y-auto', { has: page.getByText('Here is a picture') }).last()
+  await expect
+    .poll(() => transcript.evaluate((element) => [element.scrollHeight > element.clientHeight, element.scrollHeight - element.scrollTop - element.clientHeight < 2]))
+    .toEqual([true, true])
+  await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 740))
+
+  const runRow = page.locator('[data-list-row]', { hasText: 'Where to?' })
+  await runRow.hover()
+  await page.getByRole('button', { name: 'Remove the run' }).click()
+  await expect(runRow).toBeHidden()
 })
 
 test('a workflow built on the canvas runs its agent, shows each step done and undoes edits', async () => {
@@ -185,7 +202,9 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await page.getByPlaceholder(/^The input/).fill('Go')
   await page.keyboard.press('Enter')
   await expect(steps.filter({ hasText: 'Courier' }).getByTitle('Done')).toBeVisible({ timeout: 20_000 })
-  await page.getByRole('button', { name: /^Last run/ }).click()
+  // A step that ran opens its own log from the canvas
+  await steps.filter({ hasText: 'Courier' }).click()
+  await page.getByRole('button', { name: "Open the step's log" }).click()
   await expect(page.getByText('Here is a picture')).toBeVisible()
 
   await page.getByRole('button', { name: 'Run command' }).click()
@@ -220,8 +239,23 @@ test('an approval step holds the run, lighting the hub button, until approved', 
   await expect(needsYou).toBeHidden()
 })
 
+test('the AI Hub list hides from its header and comes back from the title bar or ⌘B', async () => {
+  const { page } = launched
+  await showHub(page)
+  const heading = page.locator('[data-overlay] [data-zone="list"]').getByText('Agents', { exact: true })
+  await expect(heading).toBeVisible()
+  await page.getByRole('button', { name: /^Hide the list/ }).click()
+  await expect(heading).toBeHidden()
+  await page.getByRole('button', { name: /^Toggle list/ }).click()
+  await expect(heading).toBeVisible()
+  await page.keyboard.press('Meta+b')
+  await expect(heading).toBeHidden()
+  await page.keyboard.press('Meta+b')
+  await expect(heading).toBeVisible()
+})
+
 test('a first launch opens the AI Hub', async () => {
-  const fresh = await launch({ 'README.md': 'alpha' })
+  const fresh = await launch({ 'README.md': 'alpha' }, undefined, true)
   try {
     await expect(fresh.page.getByRole('button', { name: 'Create an agent' })).toBeVisible()
   } finally {

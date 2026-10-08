@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useHost } from '@treeix/sdk'
 import { errorMessage } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
@@ -6,7 +6,7 @@ import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import type { Mood } from './Alien'
-import { chatIdOf, followRunEvents, hubAgents, hubApi, hubSelection, setConversation } from './store'
+import { chatIdOf, followRunEvents, hubAgents, hubApi, hubSelection, setConversation, hubRunStep } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
 
@@ -37,6 +37,9 @@ export function StatusIcon({ status, className = 'size-3.5' }: { status: Shown; 
   )
 }
 
+// Within this of the bottom the transcript follows new output, as in a chat
+const STICK_PX = 40
+
 const duration = (ms: number): string => {
   const seconds = Math.max(1, Math.round(ms / 1000))
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
@@ -51,7 +54,16 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   useEffect(() => followRunEvents(run.id, setEvents), [run.id])
 
   const steps = run.workflow.nodes.filter((node) => node.kind !== 'input')
-  const [selectedId, setSelectedId] = useState(() => (steps.find((node) => run.nodes[node.id].waiting) ?? steps.find((node) => node.kind === 'agent') ?? steps[0])?.id ?? null)
+  const [selectedId, setSelectedId] = useState(
+    () =>
+      (
+        steps.find((node) => `${run.id}:${node.id}` === hubRunStep.get()) ??
+        steps.find((node) => run.nodes[node.id].waiting) ??
+        steps.find((node) => run.nodes[node.id].status === 'running') ??
+        steps.find((node) => node.kind === 'agent') ??
+        steps[0]
+      )?.id ?? null
+  )
   const node = steps.find((step) => step.id === selectedId) ?? null
   const state = node ? run.nodes[node.id] : null
   const nodeEvents = useMemo(() => events.filter((entry) => entry.node === node?.id), [events, node?.id])
@@ -72,6 +84,26 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
     hubSelection.set(`agent:${stepAgent.id}`)
   }
   const retry = (id: string): void => void hubApi.retry(run.id, id).catch((error: unknown) => host.flash(errorMessage(error)))
+
+  const scroller = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
+  const atBottom = useRef(true)
+  const toBottom = (): void => {
+    const element = scroller.current
+    if (element) element.scrollTop = element.scrollHeight
+  }
+  // Another run or step opens at its latest message
+  useLayoutEffect(() => {
+    atBottom.current = true
+    toBottom()
+  }, [run.id, selectedId])
+  useEffect(() => {
+    const element = content.current
+    if (!element) return
+    const observer = new ResizeObserver(() => atBottom.current && toBottom())
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -112,8 +144,15 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           })}
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
+      <div
+        ref={scroller}
+        onScroll={(event) => {
+          const element = event.currentTarget
+          atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+        }}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
+        <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
           {node?.kind === 'agent' && chat ? (
             <chat.Transcript
               events={nodeEvents}

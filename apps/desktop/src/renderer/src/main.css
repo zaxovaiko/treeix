@@ -18,7 +18,7 @@
   --color-primary: #4f5ff0;
 }
 
-/* The window never scrolls as a whole; panes scroll inside it, keeping the rail and title bar in place */
+/* The window never scrolls as a whole; panes scroll inside it, keeping the title bar in place */
 html,
 body {
   height: 100%;

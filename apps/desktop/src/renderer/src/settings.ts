@@ -31,7 +31,7 @@ export type Settings = {
   sections: 'expanded' | 'hidden'
   /** A bottom panel sits under the content beside the sidebar, or spans the full width under it */
   bottomPanel: 'content' | 'full'
-  /** Title bar tabs other than the active one show only their icon */
+  /** Title bar tabs show only their icon; panes and the tooltip carry the name */
   compactTabs: boolean
   /** Which end of an open title bar tab holds its close button */
   tabCloseSide: 'left' | 'right'

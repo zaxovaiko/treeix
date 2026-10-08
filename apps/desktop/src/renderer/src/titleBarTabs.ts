@@ -6,18 +6,32 @@ export type BarLayout = string[]
 /** The one page tab the app brings itself; plugins bring the rest */
 export const WORKTREES_TAB = { id: 'worktrees', label: 'Worktrees', icon: 'branch', order: 30 } as const
 
-/** Items every title bar has; plugin tab ids never contain a colon, so these can't clash with one */
+/** Items every title bar has, the search one now being the workspace and AI Hub segment; plugin tab ids never contain a colon, so these can't clash with one */
 export const SEARCH_ITEM = 'bar:search'
 export const SPACE_ITEMS = ['bar:space-left', 'bar:space-right'] as const
 const FIXED_ITEMS: string[] = [SPACE_ITEMS[0], SEARCH_ITEM, SPACE_ITEMS[1]]
 
 export const isSpace = (id: string): boolean => (SPACE_ITEMS as readonly string[]).includes(id)
 
-/** The row in order: tabs and fixed items the layout names, then any fixed item it lacks; tabs it doesn't name yet go before the first space */
-export function arrangeBar(tabIds: string[], layout: BarLayout): string[] {
-  const known = new Set([...tabIds, ...FIXED_ITEMS])
+/** The back and forward arrows, and the title bar's buttons after the tabs: comments, MCP, Run command, settings and the dock panel toggles */
+export const NAV_ITEM = 'bar:nav'
+export const PANELS_ITEM = 'bar:panels'
+export const COMMENTS_ITEM = 'bar:comments'
+export const MCP_ITEM = 'bar:mcp'
+export const PALETTE_ITEM = 'bar:palette'
+export const SETTINGS_ITEM = 'bar:settings'
+/** A plugin's title bar item, by its key */
+export const pluginBarItem = (key: string): string => `bar:plugin:${key}`
+
+/**
+ * The row in order: tabs and items the layout names, then any fixed item it lacks; tabs it doesn't name yet go before
+ * the first space. Items it lacks from `lead` start the row and from `trail` end it, so older layouts keep them in place
+ */
+export function arrangeBar(tabIds: string[], layout: BarLayout, lead: string[] = [], trail: string[] = []): string[] {
+  const known = new Set([...tabIds, ...FIXED_ITEMS, ...lead, ...trail])
   const placed = layout.filter((id, index) => known.has(id) && layout.indexOf(id) === index)
-  const order = [...placed, ...FIXED_ITEMS.filter((id) => !placed.includes(id))]
+  const missing = (ids: string[]): string[] => ids.filter((id) => !placed.includes(id))
+  const order = [...missing(lead), ...placed, ...missing(FIXED_ITEMS), ...missing(trail)]
   order.splice(order.indexOf(SPACE_ITEMS[0]), 0, ...tabIds.filter((id) => !placed.includes(id)))
   return order
 }

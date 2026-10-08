@@ -270,7 +270,7 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
 
 const DIGIT_TARGETS: { target: DigitTarget; label: string; description: string }[] = [
   { target: 'tabs', label: 'Tabs', description: 'Title bar pages, then open PR and plan tabs; 9 is the last tab. Off by default: G and a letter goes to a page from anywhere.' },
-  { target: 'workspaces', label: 'Workspaces', description: 'Workspaces in rail order, like G and a number. ⌃ digits also switch macOS desktops.' }
+  { target: 'workspaces', label: 'Workspaces', description: 'Workspaces in menu order, like G and a number. ⌃ digits also switch macOS desktops.' }
 ]
 
 type SettingSpec = {
@@ -435,8 +435,8 @@ const SETTINGS: SettingSpec[] = [
   {
     section: 'General',
     card: 'Layout',
-    label: 'Tab close button',
-    description: 'Which end of an open title bar tab holds its ×.',
+    label: 'Close button',
+    description: 'Which end of an open title bar tab and of a pane header in a split holds its ×, like the window buttons on a Mac.',
     Control: segmented('tabCloseSide', [
       ['left', 'Left'],
       ['right', 'Right']

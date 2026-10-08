@@ -83,7 +83,7 @@ export const useWorkspaces = (): State =>
 
 export const setCurrentWorkspace = (id: string): void => commit({ ...state, currentId: id, recentIds: [id, ...state.recentIds.filter((candidate) => candidate !== id)] })
 
-/** Workspaces other than `currentId`, most recently switched to first; ones never visited keep rail order at the end */
+/** Workspaces other than `currentId`, most recently switched to first; ones never visited keep menu order at the end */
 export function recentWorkspaces({ workspaces, currentId, recentIds }: State): Workspace[] {
   const others = workspaces.filter((workspace) => workspace.id !== currentId)
   return [...others].sort((a, b) => {

@@ -25,3 +25,19 @@ test('the older left and right sides read as a row', () => {
   expect(parseBarLayout('x')).toEqual([])
   expect(parseBarLayout(['a', 2, SEARCH_ITEM])).toEqual(['a', SEARCH_ITEM])
 })
+
+test('buttons an older layout lacks keep their place: the arrows lead, the rest trail', () => {
+  expect(arrangeBar(tabs, ['prs', left, SEARCH_ITEM, right, 'browser'], ['bar:nav'], ['bar:settings'])).toEqual([
+    'bar:nav',
+    'prs',
+    'terminal',
+    'worktrees',
+    left,
+    SEARCH_ITEM,
+    right,
+    'browser',
+    'bar:settings'
+  ])
+  // Dragged ones stay where they were dropped
+  expect(arrangeBar(tabs, ['bar:settings', left, SEARCH_ITEM, right], ['bar:nav'], ['bar:settings'])).toEqual(['bar:nav', 'bar:settings', ...tabs, left, SEARCH_ITEM, right])
+})

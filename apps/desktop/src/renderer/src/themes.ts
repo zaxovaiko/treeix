@@ -7,7 +7,7 @@ export type Theme = {
   mode: 'dark' | 'light'
   background: string
   card: string
-  /** Lists and the workspace rail; defaults to card */
+  /** Lists; defaults to card */
   sidebar?: string
   popover: string
   foreground: string

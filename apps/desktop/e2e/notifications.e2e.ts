@@ -11,13 +11,13 @@ test.afterAll(() => launched.close())
 test('a session that needs the user lights the AI Hub button, and a peek at it puts the light out', async () => {
   const { page } = launched
   const terminalTab = page.locator('[data-page-tab="terminal"]')
-  await terminalTab.click()
+  await terminalTab.click({ modifiers: ['Shift'] })
   await page.getByRole('button', { name: 'Shell' }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   // Reports what an agent's hook would, once the user is on another page
   await page.keyboard.type('sleep 3 && printf input > "$TREEIX_AGENT_STATUS/$TREEIX_SESSION_ID"\n')
-  await page.locator('[data-page-tab="worktrees"]').click()
+  await page.locator('[data-page-tab="worktrees"]').click({ modifiers: ['Shift'] })
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 
   const hubButton = page.locator('[data-overlay-button]')

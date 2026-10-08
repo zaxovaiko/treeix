@@ -7,7 +7,7 @@ export type Activity = 'input' | 'done' | 'running' | 'ready' | 'none'
 export const agentActivity = (statuses: SessionStatus[]): Activity =>
   (['input', 'done', 'running'] as const).find((status) => statuses.includes(status)) ?? (statuses.includes('idle') ? 'ready' : 'none')
 
-/** States worth a mark where space is short, like the workspace rail and the sidebar */
+/** States worth a mark where space is short, like the workspace menu and the sidebar */
 export const NEWS: Activity[] = ['input', 'done', 'running']
 
 const ACTIVITY_LABEL: Record<Activity, string> = {
