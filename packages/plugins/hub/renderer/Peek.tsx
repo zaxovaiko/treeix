@@ -7,7 +7,9 @@ import { useSessions } from '@treeix/app/plugins'
 import { timeAgo } from '@treeix/app/time'
 import { useWorkspaces, workspaceOf } from '@treeix/app/workspaces'
 import { type AgentNode, isWaiting, type Run } from '../shared/workflow'
-import { Alien, type Character, characterOf, type Mood } from './Alien'
+import { Alien, characterOf, type Mood } from './Alien'
+import { alienOf } from './AgentEditor'
+import type { Character } from '../shared/types'
 import { asking, hubAgents, hubRuns, hubSelection, TAB_ID } from './store'
 
 /** One agent at work anywhere: a hub run, or an agent session in any workspace */
@@ -93,7 +95,7 @@ function useEntries(): Entry[] {
         title: run.title,
         who: agent?.name ?? run.workflow.name,
         via: 'AI Hub',
-        character: characterOf(agent?.runtime.kind === 'agent' ? agent.runtime.agent : undefined),
+        character: agent ? alienOf(agent) : 'shell',
         at: run.endedAt ?? run.startedAt,
         workspaceId: null,
         open

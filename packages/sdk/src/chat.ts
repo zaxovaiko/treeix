@@ -83,6 +83,8 @@ export type ChatSpec = {
   instructions?: string
   /** Model and mode set on a new conversation, by option value */
   preset?: { model?: string; mode?: string }
+  /** More folders the agent loads beside its own, where it supports that: their instructions, skills and subagents */
+  directories?: string[]
 }
 
 export type ChatAdapter = {

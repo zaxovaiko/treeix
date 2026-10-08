@@ -52,7 +52,7 @@ export function sliceLines(content: string, line: number | null | undefined, lim
 
 /** Treeix's own MCP server, from the session environment */
 type TreeixMcp = { url: string; token: string }
-type ConnectOptions = Pick<ChatSpec, 'instructions' | 'preset'> & {
+type ConnectOptions = Pick<ChatSpec, 'instructions' | 'preset' | 'directories'> & {
   cwd: string
   resume: string | null
   close: () => void
@@ -60,7 +60,10 @@ type ConnectOptions = Pick<ChatSpec, 'instructions' | 'preset'> & {
   mcp?: TreeixMcp | null
 }
 
-export async function connectOverStream(stream: Stream, { cwd, resume, instructions, preset, close, stderrTail = () => '', mcp = null }: ConnectOptions): Promise<ChatConnection> {
+export async function connectOverStream(
+  stream: Stream,
+  { cwd, resume, instructions, preset, directories, close, stderrTail = () => '', mcp = null }: ConnectOptions
+): Promise<ChatConnection> {
   const listeners = new Set<(event: ChatEvent) => void>()
   // Events before the first listener (a loaded session's replay) wait for it, newest kept; options are state and sent on subscribe
   let backlog: ChatEvent[] | null = []
@@ -136,15 +139,16 @@ export async function connectOverStream(stream: Stream, { cwd, resume, instructi
     mcp && agentCapabilities?.mcpCapabilities?.http ? [{ type: 'http', name: 'treeix', url: mcp.url, headers: [{ name: 'Authorization', value: `Bearer ${mcp.token}` }] }] : []
   const canLoad = agentCapabilities?.loadSession === true
   const canList = Boolean(agentCapabilities?.sessionCapabilities?.list)
+  const additionalDirectories = directories?.length && agentCapabilities?.sessionCapabilities?.additionalDirectories ? directories : undefined
 
   const newSession = () =>
     connection
-      .newSession({ cwd, mcpServers, _meta: instructions && takesSystemPrompt ? { systemPrompt: { append: instructions } } : undefined })
+      .newSession({ cwd, mcpServers, additionalDirectories, _meta: instructions && takesSystemPrompt ? { systemPrompt: { append: instructions } } : undefined })
       .then((session) => ({ sessionId: session.sessionId, session }))
   // A conversation the agent no longer has (its transcript deleted, another machine) starts over instead of failing every retry
   const { sessionId, session } =
     resume && canLoad
-      ? await connection.loadSession({ sessionId: resume, cwd, mcpServers }).then(
+      ? await connection.loadSession({ sessionId: resume, cwd, mcpServers, additionalDirectories }).then(
           (session) => ({ sessionId: resume, session }),
           (error: unknown) => (isResourceNotFound(error) ? newSession() : Promise.reject(error))
         )
@@ -232,8 +236,9 @@ export async function connectOverStream(stream: Stream, { cwd, resume, instructi
 export const acpAdapter: ChatAdapter = {
   id: 'acp',
   label: 'Agent Client Protocol',
-  connect: async ({ cwd, command, instructions, preset, env, resume }) => {
-    const child = spawnInShell(command, cwd, env)
+  connect: async ({ cwd, command, instructions, preset, directories, env, resume }) => {
+    // Claude Code reads the CLAUDE.md and rules of added folders only with this set
+    const child = spawnInShell(command, cwd, directories?.length ? { ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1' } : env)
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-STDERR_LIMIT)
@@ -274,6 +279,7 @@ export const acpAdapter: ChatAdapter = {
           resume,
           instructions,
           preset,
+          directories,
           close: () => killGroup(child),
           stderrTail: () => stderr,
           mcp: env.TREEIX_MCP_URL && env.TREEIX_MCP_TOKEN ? { url: env.TREEIX_MCP_URL, token: env.TREEIX_MCP_TOKEN } : null
