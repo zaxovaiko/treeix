@@ -67,6 +67,7 @@ function commit(next: State): void {
 }
 
 export const getCurrentWorkspaceId = (): string => state.currentId
+export const getWorkspaces = (): Workspace[] => state.workspaces
 
 /** A storage key for UI state that each workspace keeps separately, like filters and the open tab */
 export const workspaceKey = (key: string, workspaceId = state.currentId): string => `${key}@${workspaceId}`

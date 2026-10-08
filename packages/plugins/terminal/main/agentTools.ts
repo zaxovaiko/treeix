@@ -8,7 +8,7 @@ import { existingFolder, listeningPorts, pasteTerminal, reportStatus, sessionEnt
 const SCREEN_LINES = 60
 /** Lets the agent's input box take the pasted prompt before Enter sends it */
 const SUBMIT_DELAY_MS = 150
-const START_TIMEOUT_MS = 30_000
+const REPLY_TIMEOUT_MS = 30_000
 
 type Meta = { title: string; kind: string; worktreePath: string; agentSessionId: string | null }
 
@@ -51,11 +51,24 @@ const SESSION = { session: { type: 'string', description: 'Session id from sessi
 
 /** `window` is the Treeix window that opens the sessions agents start */
 export function sessionTools(context: MainContext, window: () => WebContents | null): McpTool[] {
-  /** Starts the renderer asked for, by request id: the new session's id, or why it couldn't start */
-  const starting = new Map<string, (result: { id: string } | { error: string }) => void>()
-  context.on('started', (_, request: string, id: unknown, error: unknown) =>
-    starting.get(request)?.(typeof id === 'string' ? { id } : { error: typeof error === 'string' ? error : 'The session did not start' })
+  /** Requests the window answers by id: what it returned, or why it couldn't */
+  const pending = new Map<string, (reply: { value: string } | { error: string }) => void>()
+  context.on('reply', (_, request: string, value: unknown, error: unknown) =>
+    pending.get(request)?.(typeof value === 'string' ? { value } : { error: typeof error === 'string' ? error : 'Treeix could not do that' })
   )
+  /** Asks the window, which holds sessions and workspaces, and resolves with its answer */
+  const ask = async (channel: string, ...args: unknown[]): Promise<string> => {
+    const target = window()
+    if (!target) throw new Error('Treeix has no window open')
+    const request = randomUUID()
+    const reply = await new Promise<{ value: string } | { error: string }>((settle) => {
+      const timer = setTimeout(() => settle({ error: 'Treeix did not answer' }), REPLY_TIMEOUT_MS)
+      pending.set(request, (answer) => (clearTimeout(timer), settle(answer)))
+      context.send(target, channel, request, ...args)
+    }).finally(() => pending.delete(request))
+    if ('error' in reply) throw new Error(reply.error)
+    return reply.value
+  }
   return [
     {
       name: 'sessions_list',
@@ -142,16 +155,40 @@ export function sessionTools(context: MainContext, window: () => WebContents | n
         if (existingFolder(folder) !== folder) throw new Error(`No folder ${args.folder}`)
         const kind = typeof args.kind === 'string' && args.kind ? args.kind : 'claude'
         const prompt = typeof args.prompt === 'string' ? args.prompt : ''
-        const target = window()
-        if (!target) throw new Error('Treeix has no window open')
-        const request = randomUUID()
-        const result = await new Promise<{ id: string } | { error: string }>((settle) => {
-          const timer = setTimeout(() => settle({ error: 'Treeix did not start the session' }), START_TIMEOUT_MS)
-          starting.set(request, (started) => (clearTimeout(timer), settle(started)))
-          context.send(target, 'start', request, folder, kind, prompt)
-        }).finally(() => starting.delete(request))
-        if ('error' in result) throw new Error(result.error)
-        return `Started ${result.id} (${kind}) in ${folder}`
+        const id = await ask('start', folder, kind, prompt)
+        return `Started ${id} (${kind}) in ${folder}`
+      }
+    },
+    {
+      name: 'workspaces_list',
+      description: "Lists the Treeix workspaces, the groups of projects in Treeix's rail: id, name and project folders.",
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      run: () => ask('workspaces')
+    },
+    {
+      name: 'workspace_save',
+      description:
+        "Creates a Treeix workspace, or replaces the projects of the one with that name. Its projects' worktrees and the sessions in them group under it in Treeix's rail.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          repoPaths: { type: 'array', items: { type: 'string' }, description: 'Absolute paths of the git repositories it holds' },
+          color: { type: 'string', description: 'Hex colour like #4f5ff0; a new workspace picks one when unset' }
+        },
+        required: ['name', 'repoPaths'],
+        additionalProperties: false
+      },
+      run: async (args) => {
+        const name = typeof args.name === 'string' ? args.name.trim() : ''
+        if (!name) throw new Error('name is required')
+        if (!Array.isArray(args.repoPaths) || !args.repoPaths.length) throw new Error('repoPaths needs at least one folder')
+        const repoPaths = args.repoPaths.map((path: unknown) => {
+          if (typeof path !== 'string' || !isAbsolute(path) || existingFolder(resolve(path)) !== resolve(path)) throw new Error(`No folder ${String(path)}`)
+          return resolve(path)
+        })
+        const color = typeof args.color === 'string' && /^#[0-9a-f]{6}$/i.test(args.color) ? args.color : ''
+        return ask('saveWorkspace', name, repoPaths, color)
       }
     }
   ]
