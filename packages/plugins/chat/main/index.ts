@@ -36,8 +36,8 @@ const plugin: MainPlugin = {
 
       const token = generations.begin(chatId)
       const owner = event.sender
-      const { cwd, command, instructions, preset, resume, workspaceId } = options
-      const connection = await adapter.connect({ cwd, command, instructions, preset, env: await context.sessionEnv(workspaceId), resume })
+      const { cwd, command, instructions, preset, directories, resume, workspaceId } = options
+      const connection = await adapter.connect({ cwd, command, instructions, preset, directories, env: await context.sessionEnv(workspaceId), resume })
 
       // A newer start for this chat id arrived while connecting: let it own the map, this connection has nowhere to go
       if (!generations.isCurrent(chatId, token)) {

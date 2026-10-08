@@ -1,7 +1,7 @@
 import { useState } from 'react'
+import type { Character } from '../shared/types'
 
 export type Mood = 'idle' | 'working' | 'waiting' | 'done' | 'failed'
-export type Character = 'claude' | 'codex' | 'shell'
 type Clip = 'idle' | 'running' | 'input' | 'done' | 'curious' | 'giggle'
 
 // Rendered in ElevenLabs (Kling 3.0 Pro) with the still as start and end frame, keyed out with ffmpeg into VP9 webm with alpha

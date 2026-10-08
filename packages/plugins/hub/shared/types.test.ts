@@ -24,6 +24,12 @@ test('a stored agent passes, one from an older or broken file does not', () => {
   expect(isHubAgent(missing)).toBe(false)
 })
 
+test('an alien is one with renders, and more folders are paths', () => {
+  expect(isHubAgent({ ...agent, alien: 'codex', directories: ['/repo'] })).toBe(true)
+  expect(isHubAgent({ ...agent, alien: 'robot' })).toBe(false)
+  expect(isHubAgent({ ...agent, directories: '/repo' })).toBe(false)
+})
+
 test('schedules are optional and need a valid crontab line', () => {
   const schedule = { id: 's', cron: '0 9 * * 1', prompt: 'News of the week', notify: true, enabled: true }
   expect(isHubAgent({ ...agent, schedules: [schedule] })).toBe(true)
