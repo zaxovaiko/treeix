@@ -66,7 +66,7 @@ const isNullableString = (value: unknown): value is string | null => value === n
 
 const isRuntime = (value: unknown): value is Runtime => isJson(value) && ((value.kind === 'agent' && isString(value.agent)) || (value.kind === 'api' && isString(value.baseUrl)))
 
-const isSchedule = (value: unknown): value is Schedule =>
+export const isSchedule = (value: unknown): value is Schedule =>
   isJson(value) &&
   isString(value.id) &&
   isString(value.cron) &&

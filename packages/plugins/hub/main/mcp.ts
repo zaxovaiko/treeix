@@ -108,8 +108,11 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
   const id = value.id.trim()
   const field = (name: string, fallback: string): string => optional(value, name) ?? fallback
   switch (value.kind) {
-    case 'input':
-      return { id, kind: 'input' }
+    case 'input': {
+      const { schedules } = value
+      if (schedules !== undefined && !Array.isArray(schedules)) throw new Error('schedules must be a list')
+      return { id, kind: 'input', ...(schedules?.length ? { schedules: schedules.map(toSchedule) } : {}) }
+    }
     case 'agent':
       return {
         id,
@@ -292,7 +295,7 @@ export function hubTools(deps: {
       description: [
         'Creates an AI Hub workflow, or replaces the steps of the one with this name. It is saved only when it can run, else the call fails with what to fix.',
         'Steps by kind:',
-        '- input: where the run input enters; exactly one.',
+        "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}]}; where the run input enters; exactly one. A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
         '- agent: {agent: name, prompt, folder?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output.',
         '- merge | output: {template}; at least one output, whose text is the run result.',
         '- condition: {source, test: "contains"|"equals"|"regex"|"empty", value}; edges leaving it set branch "true" or "false".',

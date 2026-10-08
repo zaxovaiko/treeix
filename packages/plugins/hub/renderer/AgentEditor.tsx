@@ -83,8 +83,8 @@ const detected = new Map<string, Promise<ChatOption[]>>()
 const PROMPT_FIELD =
   'resize-y rounded-md border border-input bg-muted px-2.5 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 
-/** Prompts the agent gets on a schedule while Treeix runs, each optionally shown as a notification */
-function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (schedules: Schedule[]) => void }): React.JSX.Element {
+/** Prompts an agent gets on a schedule while Treeix runs, or the inputs a workflow starts with, each optionally shown as a notification */
+export function Schedules({ schedules, onChange, workflow = false }: { schedules: Schedule[]; onChange: (schedules: Schedule[]) => void; workflow?: boolean }): React.JSX.Element {
   const patch = (id: string, next: Partial<Schedule>): void => onChange(schedules.map((entry) => (entry.id === id ? { ...entry, ...next } : entry)))
   return (
     <div className={LABEL}>
@@ -98,7 +98,11 @@ function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (
           Add
         </button>
       </span>
-      {schedules.length === 0 && <span className="text-[11px]">None. A schedule sends the agent a prompt on its own, e.g. every Monday morning, while Treeix is open.</span>}
+      {schedules.length === 0 && (
+        <span className="text-[11px]">
+          None. A schedule {workflow ? 'runs the workflow' : 'sends the agent a prompt'} on its own, e.g. every Monday morning, while Treeix is open.
+        </span>
+      )}
       {schedules.map((schedule) => (
         <div key={schedule.id} className="flex flex-col gap-2 rounded-md border border-border p-2.5">
           <div className="flex items-center gap-2">
@@ -127,7 +131,11 @@ function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (
           <textarea
             value={schedule.prompt}
             onChange={(event) => patch(schedule.id, { prompt: event.target.value })}
-            placeholder="What to do each time, e.g. Sum up this week's AI news in five bullets."
+            placeholder={
+              workflow
+                ? 'The input each time; with a command, {{input}} is the line that started the run'
+                : "What to do each time, e.g. Sum up this week's AI news in five bullets."
+            }
             rows={2}
             className={PROMPT_FIELD}
           />
@@ -141,17 +149,20 @@ function Schedules({ schedules, onChange }: { schedules: Schedule[]; onChange: (
                 className={`${FIELD} font-mono text-xs`}
               />
             </label>
-            <label className={`${LABEL} w-24`}>
-              Timeout, min
-              <input
-                type="number"
-                min={1}
-                max={MAX_TIMEOUT_MIN}
-                value={schedule.timeoutMin ?? ASK_TIMEOUT_MIN}
-                onChange={(event) => patch(schedule.id, { timeoutMin: Math.min(MAX_TIMEOUT_MIN, Math.max(1, Math.round(Number(event.target.value)) || 1)) })}
-                className={FIELD}
-              />
-            </label>
+            {/* A workflow's steps have their own timeouts */}
+            {!workflow && (
+              <label className={`${LABEL} w-24`}>
+                Timeout, min
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_TIMEOUT_MIN}
+                  value={schedule.timeoutMin ?? ASK_TIMEOUT_MIN}
+                  onChange={(event) => patch(schedule.id, { timeoutMin: Math.min(MAX_TIMEOUT_MIN, Math.max(1, Math.round(Number(event.target.value)) || 1)) })}
+                  className={FIELD}
+                />
+              </label>
+            )}
           </div>
           <label className="flex items-center gap-1.5 text-foreground">
             <input type="checkbox" checked={schedule.notify} onChange={(event) => patch(schedule.id, { notify: event.target.checked })} />

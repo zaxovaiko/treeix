@@ -22,7 +22,7 @@ import { errorMessage, IconButton } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
-import { AgentAvatar } from './AgentEditor'
+import { AgentAvatar, Schedules } from './AgentEditor'
 import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
 import { asking, hubAgents, hubApi, hubRuns, hubSelection } from './store'
 
@@ -102,7 +102,10 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
   const title = step.kind === 'agent' ? (agent?.name ?? 'Pick an agent') : KIND_LABEL[step.kind]
   const detail =
     step.kind === 'input'
-      ? 'What the run starts with'
+      ? (step.schedules ?? [])
+          .filter((schedule) => schedule.enabled)
+          .map((schedule) => [schedule.cron, schedule.command].filter(Boolean).join(' · '))
+          .join('; ') || 'What the run starts with'
       : step.kind === 'agent'
         ? step.prompt
         : step.kind === 'condition'
@@ -205,7 +208,12 @@ function Inspector({
           </IconButton>
         )}
       </div>
-      {step.kind === 'input' && <p className="text-xs text-muted-foreground">The text you run the workflow with. Steps read it as {'{{input}}'}.</p>}
+      {step.kind === 'input' && (
+        <>
+          <p className="text-xs text-muted-foreground">The text you run the workflow with, or a schedule starts it with. Steps read it as {'{{input}}'}.</p>
+          <Schedules workflow schedules={step.schedules ?? []} onChange={(schedules) => onChange({ ...step, schedules })} />
+        </>
+      )}
       {step.kind === 'agent' && (
         <>
           <div className={LABEL}>

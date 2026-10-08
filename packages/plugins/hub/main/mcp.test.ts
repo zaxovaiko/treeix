@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { HubAgent } from '../shared/types'
+import { isWorkflow } from '../shared/workflow'
 import { toAgent, toWorkflow } from './mcp'
 
 const news = toAgent({ name: 'News', instructions: 'Summarize the news', schedules: [{ cron: '0 8 * * *', prompt: 'Yesterday' }] }, [], 1)
@@ -55,4 +56,15 @@ test('a schedule keeps its command and timeout, a bad timeout is refused', () =>
   const poll = toAgent({ name: 'Poll', schedules: [{ cron: '*/2 * * * *', prompt: 'Do {{input}}', command: ' node poll.mjs ', timeoutMin: 180 }] }, [], 1)
   expect(poll.schedules).toMatchObject([{ command: 'node poll.mjs', timeoutMin: 180 }])
   expect(() => toAgent({ name: 'P', schedules: [{ cron: '* * * * *', prompt: 'p', timeoutMin: 0 }] }, [], 1)).toThrow('timeoutMin')
+})
+
+test('an input step keeps its schedules, and a bad one is refused', () => {
+  const nodes = [{ id: 'in', kind: 'input', schedules: [{ cron: '*/2 * * * *', prompt: '{{input}}', command: ' node poll.mjs ' }] }, ...steps.nodes.slice(1)]
+  const workflow = toWorkflow({ name: 'Tickets', nodes, edges: steps.edges }, [], [news], 1)
+  expect(workflow.nodes[0]).toMatchObject({ kind: 'input', schedules: [{ cron: '*/2 * * * *', prompt: '{{input}}', command: 'node poll.mjs', notify: true, enabled: true }] })
+  expect(isWorkflow(workflow)).toBe(true)
+  expect(isWorkflow({ ...workflow, nodes: [{ id: 'in', kind: 'input', schedules: [{ cron: 'daily' }] }] })).toBe(false)
+  expect(() =>
+    toWorkflow({ name: 'Bad', nodes: [{ id: 'in', kind: 'input', schedules: [{ cron: 'daily', prompt: 'p' }] }, ...steps.nodes.slice(1)], edges: steps.edges }, [], [news], 1)
+  ).toThrow('crontab')
 })
