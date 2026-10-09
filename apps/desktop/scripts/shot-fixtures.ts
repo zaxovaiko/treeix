@@ -485,3 +485,90 @@ else { process.stderr.write('not in the demo: glab ' + line + '\\n'); process.ex
   await Bun.write(`${home}/bin/glab`, glab)
   Bun.spawnSync(['chmod', '+x', `${home}/bin/gh`, `${home}/bin/glab`])
 }
+
+const hubAgent = (id: string, name: string, color: string, alien: string, instructions: string): Record<string, unknown> => ({
+  id,
+  name,
+  icon: name[0],
+  avatar: null,
+  alien,
+  color,
+  runtime: { kind: 'agent', agent: id === 'triage' ? 'codex' : 'claude' },
+  model: id === 'triage' ? 'gpt-5' : 'opus',
+  mode: null,
+  instructions,
+  folder: null,
+  directories: [],
+  autoApprove: true,
+  schedules: [],
+  updatedAt: Date.now()
+})
+
+const step = (id: string, prompt: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+  id,
+  kind: 'agent',
+  agent: 'ticket',
+  prompt,
+  folder: null,
+  retries: 0,
+  onError: 'stop',
+  timeoutMin: 30,
+  ...extra
+})
+
+const SHIP = {
+  id: 'ship',
+  name: 'Ship a ticket',
+  nodes: [
+    { id: 'input', kind: 'input', schedules: [{ id: 'every-hour', cron: '0 * * * *', prompt: 'Any ticket moved to Ready for me?', notify: true, enabled: true }] },
+    step('build', 'Pick up {{input}}, write the change and push a branch.'),
+    step('review', 'Review the branch of {{prev}}.', { subagent: '.claude/agents/code-reviewer.md', model: 'sonnet' }),
+    { id: 'gate', kind: 'condition', source: '{{prev}}', test: 'contains', value: 'LGTM' },
+    { id: 'approve', kind: 'approval', message: 'Open the pull request?' },
+    { id: 'output', kind: 'output', template: '{{prev}}' }
+  ],
+  edges: [
+    { id: 'e1', from: 'input', to: 'build', branch: null },
+    { id: 'e2', from: 'build', to: 'review', branch: null },
+    { id: 'e3', from: 'review', to: 'gate', branch: null },
+    { id: 'e4', from: 'gate', to: 'approve', branch: 'true' },
+    { id: 'e5', from: 'gate', to: 'output', branch: 'false' },
+    { id: 'e6', from: 'approve', to: 'output', branch: null }
+  ],
+  layout: { input: { x: 0, y: 0 }, build: { x: 240, y: 0 }, review: { x: 480, y: 0 }, gate: { x: 720, y: 0 }, approve: { x: 960, y: -220 }, output: { x: 960, y: 220 } },
+  updatedAt: Date.now()
+}
+
+const IDLE = ['Triage new issues', 'Nightly dependency bump', 'Answer the on-call page'].map((name, index) => ({
+  id: `idle-${index}`,
+  name,
+  nodes: [
+    { id: 'input', kind: 'input' },
+    { id: 'output', kind: 'output', template: '{{prev}}' }
+  ],
+  edges: [{ id: 'e', from: 'input', to: 'output', branch: null }],
+  layout: {},
+  updatedAt: Date.now() - (index + 1) * 86_400_000
+}))
+
+/** AI Hub: three agents, a ticket workflow whose review step borrows the repo's own reviewer subagent */
+export async function writeHubFixtures(home: string, repo: string): Promise<void> {
+  const hub = `${home}/Library/Application Support/Treeix/plugins/hub`
+  await Bun.write(
+    `${repo}/.claude/agents/code-reviewer.md`,
+    '---\nname: code-reviewer\ndescription: Reads a diff and names what would break\nmodel: sonnet\n---\nYou review diffs and answer LGTM when nothing would break.\n'
+  )
+  await Bun.write(
+    `${hub}/agents.json`,
+    JSON.stringify(
+      [
+        hubAgent('ticket', 'Ticket', '#d9823b', 'claude', 'You pick up a ticket, ship the change and report back on the branch you pushed.'),
+        hubAgent('triage', 'Triage', '#5b8def', 'codex', 'You read new issues, label them and say who should take them.'),
+        hubAgent('release', 'Release', '#4caf7d', 'shell', 'You cut releases and write the notes from the commits.')
+      ],
+      null,
+      2
+    )
+  )
+  await Bun.write(`${hub}/workflows.json`, JSON.stringify([SHIP, ...IDLE], null, 2))
+}

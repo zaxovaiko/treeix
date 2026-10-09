@@ -11,7 +11,16 @@
 import { realpathSync } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { confluenceState, ignoreEnvFixtures, jiraState, ORBIT_BILLING_PAGE, writeEnvFixtures, writeLimitFixtures, writePullRequestFixtures } from './shot-fixtures'
+import {
+  confluenceState,
+  ignoreEnvFixtures,
+  jiraState,
+  ORBIT_BILLING_PAGE,
+  writeEnvFixtures,
+  writeHubFixtures,
+  writeLimitFixtures,
+  writePullRequestFixtures
+} from './shot-fixtures'
 
 const appDir = resolve(import.meta.dir, '..')
 const root = resolve(appDir, '../..')
@@ -254,7 +263,8 @@ async function main(): Promise<void> {
     only.length && !only.includes('browser') ? null : Bun.serve({ port: 3000, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
   const child = Bun.spawn([await electronBinary(), appDir, `--remote-debugging-port=${port}`], {
     cwd: appDir,
-    env: { ...process.env, HOME: home, PATH: `${home}/bin:${process.env.PATH ?? ''}` },
+    // macOS resolves appData from the real user, not HOME, so without this the demo run reads and writes your own data
+    env: { ...process.env, HOME: home, TREEIX_USER_DATA: `${home}/Library/Application Support/Treeix`, PATH: `${home}/bin:${process.env.PATH ?? ''}` },
     stdout: 'ignore',
     stderr: 'ignore'
   })
@@ -461,6 +471,37 @@ async function main(): Promise<void> {
           await seed({ ...baseState(), 'app.place@all': { appTab: 'worktrees', selected: invoices, viewer: { path: 'src/billing/portal.ts', line: 27 } } })
           await until(`!!document.querySelector('.monaco-editor .view-lines')`)
           await settle(1500)
+        }
+      },
+      {
+        name: 'hub',
+        run: async () => {
+          await writeHubFixtures(home, repo)
+          await seed({
+            ...baseState(),
+            settings: { ...object(baseState().settings), plugins: { ...object(object(baseState().settings).plugins), hub: true } },
+            'hub.selected': 'workflow:ship'
+          })
+          await evaluate(`document.querySelector('[data-overlay-button]')?.click()`)
+          await until(`!!document.body.textContent?.includes('Ship a ticket')`)
+          // React Flow selects on mousedown, so a click() on the card would leave the inspector empty
+          const [x, y] = (await evaluate(
+            `(() => { const box = document.querySelector('.react-flow__node[data-id="review"]')?.getBoundingClientRect(); return box ? [box.x + box.width / 2, box.y + box.height / 2] : [0, 0] })()`
+          )) as [number, number]
+          await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 })
+          await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
+          await settle(600)
+          await evaluate(`document.querySelector('[title="Fit view"]')?.click()`)
+          await settle(1200)
+        }
+      },
+      {
+        name: 'agent',
+        run: async () => {
+          await evaluate(`localStorage.setItem('hub.selected', JSON.stringify('agent:ticket'))`)
+          await reload()
+          await evaluate(`document.querySelector('[title="Edit agent"]')?.click()`)
+          await settle(1000)
         }
       },
       {
