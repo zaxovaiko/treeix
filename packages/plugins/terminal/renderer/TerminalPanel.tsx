@@ -659,6 +659,16 @@ function TabStrip({
       <span className="min-w-2 flex-1" />
       {lone && <DiagramsButton session={lone} />}
       {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
+      {page && (
+        <button
+          title={`${panels.inspector ? 'Hide' : 'Show'} inspector${actionKeys('panel.inspector') ? ` (${actionKeys('panel.inspector')})` : ''}`}
+          aria-label="Toggle inspector"
+          onClick={() => panels.toggle('inspector')}
+          className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}
+        >
+          <Icon name="panel" className="size-3.5 -scale-x-100" />
+        </button>
+      )}
       {side && onMove && (
         <button
           title={`Docked ${side}; click to move`}
