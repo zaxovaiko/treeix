@@ -59,9 +59,13 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
   }
   return (
     <div className="m-auto flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
-      <span style={{ color: agent.color }} className="text-3xl">
-        {agent.mark}
-      </span>
+      {agent.image ? (
+        <img src={agent.image} alt="" className="size-14 rounded-lg object-cover" />
+      ) : (
+        <span style={{ color: agent.color }} className="text-3xl">
+          {agent.mark}
+        </span>
+      )}
       <div className="text-base text-foreground">Chat with {agent.label}</div>
       <div className="font-mono text-xs" title={cwd}>
         {baseName(cwd)}

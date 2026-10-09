@@ -335,7 +335,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         </div>
       )}
       <div
-        className="relative rounded-lg bg-background ring-1 ring-border focus-within:ring-foreground/30"
+        className="relative rounded-lg border border-input/60 bg-background focus-within:border-foreground/50"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           if (event.dataTransfer.files.length === 0) return
@@ -344,7 +344,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         }}
       >
         {suggestions && items.length > 0 && (
-          <div className="absolute bottom-full left-0 z-10 mb-1 max-h-64 w-full overflow-auto rounded-md bg-popover py-1 text-xs shadow-lg ring-1 ring-border">
+          <div className="absolute bottom-full left-0 z-10 mb-1 max-h-64 w-full overflow-auto rounded-md bg-popover py-1 text-xs ring-1 ring-border">
             {items.map((item, index) => (
               <button
                 key={item.label}
