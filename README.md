@@ -6,14 +6,14 @@
 
 **Your AI workspace. Everything you use daily, in one app.**
 
-Agents, worktrees, diffs, pull requests and tickets in one Mac app, and your review notes go back to the agent as its next prompt.
+Your own agents, worktrees, diffs, pull requests and tickets in one Mac app, and your review notes go back to the agent as its next prompt.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)](#install)
 [![Electron](https://img.shields.io/badge/Electron-39-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://react.dev/)
 [![Bun](https://img.shields.io/badge/Bun-tests-000000.svg?logo=bun&logoColor=white)](https://bun.sh/)
-[![Plugins](https://img.shields.io/badge/plugins-12-8b5cf6.svg)](packages/README.md)
+[![Plugins](https://img.shields.io/badge/plugins-14-8b5cf6.svg)](packages/README.md)
 
 [Download](https://treeix.dyvertex.com/download) · [Website](https://treeix.dyvertex.com) · [Plugin docs](packages/README.md) · [Architecture](docs/architecture.md)
 
@@ -29,6 +29,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## What it does
 
+- **AI Hub.** Your own agents on top of Claude Code, Codex, OpenRouter or Ollama: a name, a face, a model and its instructions. Chat with one, ask it a question, or chain several into a workflow on a canvas with conditions, approvals and cron schedules.
 - **Worktrees.** Every repository and checkout in your folders shows up in one sidebar, with the diff against the base branch, split or unified.
 - **Review in place.** Select lines, leave comments, then send them to a Claude or Codex session or copy them out.
 - **Sessions keep running.** Claude, Codex, a shell or any CLI agent you add survive a reload, docked next to the diff or in their own tab.
@@ -39,6 +40,12 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - **Env.** Every `.env` file across your worktrees in one table: what is secret, what is exposed to the browser, what is missing or differs from `main`.
 - **Usage limits.** Claude and Codex 5-hour and weekly limits in the title bar, so a long run does not stop by surprise.
 - **History.** Closed sessions stay in History. Reopen one and the agent picks up the same conversation.
+- **Workspaces.** Group the folders of one job together and switch between them with a digit. Each keeps its own tabs, worktrees and sessions.
+- **Search everything.** One palette for commands, workspaces, files, pull requests, tickets and settings, plus `G` and a letter to jump from anywhere, terminals included.
+- **Agents can drive Treeix.** It serves its own MCP tools, so a session can open a page in the browser, start another session, save a workspace or run one of your workflows.
+- **Always a key away.** A global shortcut brings Treeix to the front over any other app, and it keeps the Mac awake while an agent works, with the lid closed if you ask.
+- **Dictation.** Hold a key, speak, and the text lands in any app. Recognised on the Mac, optionally cleaned up by a local model.
+- **Themes.** Light and dark, after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized.
 - **Markdown.** Headings fold, mermaid blocks render, private uploads load their images, and full screen zooms.
 - **Everything is a plugin.** Switch any feature above off in Settings and it stops loading its code entirely.
 
@@ -55,6 +62,14 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 | Switch agents | `git checkout`, hope nothing is dirty | Click the group, its worktree is already there |
 
 ## Screenshots
+
+**Your own agents, chained on a canvas.** The AI Hub runs a workflow in the background: an agent builds, another reviews with your repo's own subagent, a condition picks the branch and an approval waits for you.
+
+<img src="apps/landing/assets/hub.webp" alt="The AI Hub with a Ship a ticket workflow on the canvas and the review step open in the inspector" width="900" />
+
+**An agent is a name, a model and its instructions.** Put it on Claude Code, Codex, OpenRouter or Ollama, point it at the folders it may work in, and it shows up everywhere an agent can be picked.
+
+<img src="apps/landing/assets/agent.webp" alt="The agent editor with a colour, a face, Claude as the runtime, a model and its instructions" width="900" />
 
 **Every worktree, its diff and your comments on one screen.** Split or unified, comments sit on the lines they belong to.
 
@@ -86,7 +101,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 **Every feature is a plugin.** Switch off what you don't use and its code never loads.
 
-<img src="apps/landing/assets/plugins.webp" alt="Settings, Plugins page with a toggle for each of the twelve plugins" width="900" />
+<img src="apps/landing/assets/plugins.webp" alt="Settings, Plugins page with a toggle for each plugin" width="900" />
 
 ## Install
 
@@ -107,6 +122,7 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 
 | Plugin | Default | What it adds |
 | --- | --- | --- |
+| [`hub`](packages/plugins/hub) | on | AI Hub tab: your own agents on Claude, Codex, OpenRouter or Ollama, workflows on a canvas, runs, schedules and an MCP server |
 | [`terminal`](packages/plugins/terminal) | on | Terminal tab, docked panel, sessions for Claude, Codex, a shell or any agent you configure, surviving reloads |
 | [`chat`](packages/plugins/chat) | on | Chat view for Claude, Codex and any agent with a chat command, next to their terminals |
 | [`pull-requests`](packages/plugins/pull-requests) | on | GitHub and GitLab pull requests, review threads, viewed files, conflicts |
