@@ -74,15 +74,15 @@ function show(context: MainContext, guest: WebContents): void {
   if (id && guest.hostWebContents) context.send(guest.hostWebContents, 'show', id)
 }
 
-/** Where a ref sits on screen, scrolled into view first */
-async function centerOf(guest: WebContents, ref: number): Promise<{ x: number; y: number }> {
+/** Where a ref sits on screen, scrolled into view first, or null when it has no box to hit */
+async function centerOf(guest: WebContents, ref: number): Promise<{ x: number; y: number } | null> {
   try {
     await cdp(guest, 'DOM.scrollIntoViewIfNeeded', { backendNodeId: ref })
     const { model } = await cdp<{ model: { content: number[] } }>(guest, 'DOM.getBoxModel', { backendNodeId: ref })
     const [x1, y1, x2, y2, x3, y3, x4, y4] = model.content
     return { x: (x1 + x2 + x3 + x4) / 4, y: (y1 + y2 + y3 + y4) / 4 }
   } catch {
-    throw new Error(`Ref ${ref} is gone or not visible; take a new browser_snapshot`)
+    return null
   }
 }
 
@@ -108,6 +108,44 @@ const SYNTHETIC_KEY = `function (key, code, text, modifiers) {
   }
   target.dispatchEvent(new KeyboardEvent('keyup', init))
 }`
+
+/**
+ * The click inside the page, for when a real one can't land: a page the user has out of sight has no layout for a
+ * mouse to hit. Its events are untrusted, so the defaults a click brings are done by hand.
+ */
+const SYNTHETIC_CLICK = `function (double) {
+  const init = { bubbles: true, cancelable: true, composed: true, view: window }
+  for (let count = 1; count <= (double ? 2 : 1); count++) {
+    this.dispatchEvent(new MouseEvent('mousedown', { ...init, detail: count }))
+    this.dispatchEvent(new MouseEvent('mouseup', { ...init, detail: count }))
+    this.click()
+  }
+  if (double) this.dispatchEvent(new MouseEvent('dblclick', { ...init, detail: 2 }))
+}`
+
+/** A real mouse click when the page takes it, else the same click fired inside the page */
+async function click(guest: WebContents, ref: number, double: boolean): Promise<void> {
+  const { object } = await cdp<{ object: { objectId?: string } }>(guest, 'DOM.resolveNode', { backendNodeId: ref }).catch(() => {
+    throw new Error(`Ref ${ref} is gone; take a new browser_snapshot`)
+  })
+  const flag = '__treeixClickLanded'
+  await cdp(guest, 'Runtime.callFunctionOn', {
+    objectId: object.objectId,
+    functionDeclaration: `function (name) { window[name] = false; this.addEventListener('mousedown', () => { window[name] = true }, { once: true, capture: true }) }`,
+    arguments: [{ value: flag }]
+  })
+  const spot = await centerOf(guest, ref)
+  if (spot) {
+    await cdp(guest, 'Input.dispatchMouseEvent', { type: 'mouseMoved', ...spot })
+    for (let count = 1; count <= (double ? 2 : 1); count++) {
+      await cdp(guest, 'Input.dispatchMouseEvent', { type: 'mousePressed', ...spot, button: 'left', clickCount: count })
+      await cdp(guest, 'Input.dispatchMouseEvent', { type: 'mouseReleased', ...spot, button: 'left', clickCount: count })
+    }
+    const { result } = await cdp<{ result: { value?: unknown } }>(guest, 'Runtime.evaluate', { expression: `window.${flag}`, returnByValue: true })
+    if (result.value === true) return
+  }
+  await cdp(guest, 'Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: SYNTHETIC_CLICK, arguments: [{ value: double }] })
+}
 
 /** A real key press when the page takes it, else the same key fired inside the page */
 async function press(guest: WebContents, combo: string): Promise<void> {
@@ -239,13 +277,7 @@ export function browserTools(context: MainContext): McpTool[] {
       inputSchema: schema({ ...TAB, ...REF, double: { type: 'boolean', description: 'Double click' } }, ['tab', 'ref']),
       run: async (args) => {
         const guest = pageOf(args)
-        const { x, y } = await centerOf(guest, refOf(args))
-        const clickCount = args.double === true ? 2 : 1
-        await cdp(guest, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y })
-        for (let count = 1; count <= clickCount; count++) {
-          await cdp(guest, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: count })
-          await cdp(guest, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: count })
-        }
+        await click(guest, refOf(args), args.double === true)
         await pause(150)
         await settled(guest)
         return `Clicked. ${describe(guest)}`
