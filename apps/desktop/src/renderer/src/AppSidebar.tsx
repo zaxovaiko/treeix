@@ -15,7 +15,7 @@ import { actionKeys } from '../../shared/keymap'
 
 const TERMINAL_TAB = 'terminal'
 const HEADING = 'text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
-const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md pr-1 text-left text-xs hover:bg-accent'
+const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md pr-1 text-left text-xs hover:text-foreground'
 const WORKSPACE_MIME = 'application/x-treeix-workspace'
 
 /** The scope with no workspace picked: every project, and every session but Home's. Only listed while it is the one on screen */
@@ -51,7 +51,7 @@ function Sessions({ sessions }: { sessions: SessionSummary[] }): React.JSX.Eleme
   return (
     <>
       {sessions.map((session) => (
-        <button key={session.id} onClick={() => open(session.id)} className={`${ROW} h-7 pl-7 ${session.id === active ? 'bg-accent' : ''}`}>
+        <button key={session.id} onClick={() => open(session.id)} className={`${ROW} h-7 pl-7 ${session.id === active ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
           {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
           <StatusDot session={session} />
@@ -133,8 +133,11 @@ function Workspaces({
           <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
           <Badge workspace={workspace} className="size-5 rounded-md text-[9px]" />
           <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-          {NEWS.includes(activity) && <ActivityMark activity={activity} />}
-          {!current && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums group-hover:invisible">{own.length}</span>}
+          {/* The sessions show their own marks while the group is open; the plus takes this spot on hover */}
+          <span className="flex shrink-0 items-center gap-1.5 pr-1 group-hover:invisible">
+            {!open && NEWS.includes(activity) && <ActivityMark activity={activity} className="size-2" />}
+            {!current && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
+          </span>
           <span className="absolute right-0.5 hidden group-hover:flex">
             <IconButton label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} onClick={() => newShell(workspace)}>
               <Icon name="plus" className="size-3.5" />
