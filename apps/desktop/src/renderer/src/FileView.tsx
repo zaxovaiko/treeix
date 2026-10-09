@@ -344,7 +344,7 @@ function TextFileView({
         </div>
       )}
       {editable && (
-        <div className="absolute top-1.5 right-4 z-20 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 text-muted-foreground shadow-md shadow-black/30 backdrop-blur">
+        <div className="absolute top-1.5 right-4 z-20 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 text-muted-foreground backdrop-blur">
           <span
             title={
               status === 'failed'

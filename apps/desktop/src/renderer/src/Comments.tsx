@@ -122,7 +122,7 @@ function Attachments({
   )
 }
 
-const cardClass = 'mx-3 my-2 rounded-lg border border-border bg-card font-sans text-[13px] text-foreground shadow-sm'
+const cardClass = 'mx-3 my-2 rounded-lg border border-border bg-card font-sans text-[13px] text-foreground'
 
 /** A reference sends its own text when nothing on this machine could fetch it; this is the manual override */
 function InlineToggle({ comment, onChange }: { comment: ReviewComment; onChange: (comment: ReviewComment) => void }): React.JSX.Element {
@@ -524,7 +524,7 @@ export function AgentCommentsDrawer({
       data-drawer
       tabIndex={-1}
       style={{ top, bottom: 0 }}
-      className="fixed right-0 z-[45] flex w-[440px] max-w-[90vw] flex-col border-l border-input bg-popover shadow-2xl shadow-black/60 outline-none [-webkit-app-region:no-drag]"
+      className="fixed right-0 z-[45] flex w-[440px] max-w-[90vw] flex-col border-l border-input bg-popover outline-none [-webkit-app-region:no-drag]"
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <Icon name="comment" className="size-4 text-muted-foreground" />

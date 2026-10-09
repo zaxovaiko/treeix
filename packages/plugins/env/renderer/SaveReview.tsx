@@ -63,7 +63,7 @@ export function SaveReview({ scoped, onClose }: { scoped: ScopedWorktree[]; onCl
   }
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div onClick={(event) => event.stopPropagation()} className="w-[720px] max-w-[90vw] overflow-hidden rounded-xl border border-input bg-popover shadow-2xl shadow-black/60">
+      <div onClick={(event) => event.stopPropagation()} className="w-[720px] max-w-[90vw] overflow-hidden rounded-xl border border-input bg-popover">
         <div className="flex h-11 items-center gap-2 border-b border-border px-4">
           <span className="text-[13px] font-medium">
             Save {plural(edits.length, 'change')} <span className="font-normal text-muted-foreground">in {plural(fileCount, 'file')}</span>

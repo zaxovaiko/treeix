@@ -16,6 +16,8 @@
   --color-accent: rgb(255 255 255 / 4%);
   --color-muted: rgb(255 255 255 / 3%);
   --color-primary: #4f5ff0;
+  /* Text on a primary fill: black or white, whichever reads on the accent (applyTheme picks it per theme) */
+  --color-primary-foreground: #ffffff;
 }
 
 /* The window never scrolls as a whole; panes scroll inside it, keeping the title bar in place */
@@ -205,13 +207,19 @@ body {
   scroll-behavior: auto !important;
 }
 
+/* The one exception: a spinner has to turn, else working reads as stuck */
+.animate-spin {
+  animation: var(--animate-spin) !important;
+}
+
 /* Every icon button gives tactile feedback on press */
 button:not(:disabled):active svg {
   scale: 0.85;
 }
 
 /* Focus zones carry no frame; the row under a list's keyboard cursor is a neutral tint, a little stronger while its zone has focus */
-[data-zone] {
+/* This file is unlayered, so it would beat a positioning utility: an island zone keeps its own absolute */
+[data-zone]:not([class*='absolute'], [class*='fixed']) {
   position: relative;
 }
 

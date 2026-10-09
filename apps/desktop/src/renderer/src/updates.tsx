@@ -58,7 +58,7 @@ export function UpdateBanner({ onDismiss }: { onDismiss: () => void }): React.JS
   const status = useUpdates()
   if (status.phase !== 'ready') return null
   return (
-    <div className="fixed right-3 bottom-3 z-50 flex items-center gap-2.5 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-2xl shadow-black/60">
+    <div className="fixed right-3 bottom-3 z-50 flex items-center gap-2.5 rounded-lg border border-border bg-popover px-3 py-2 text-xs">
       <Icon name="refresh" className="size-3.5 shrink-0 text-primary" />
       <span className="text-foreground">Treeix {status.version} is ready</span>
       <button onClick={() => window.api.updates.install()} className="h-6 shrink-0 rounded-md bg-foreground/10 px-2 font-medium text-foreground ring-1 ring-border hover:bg-accent">

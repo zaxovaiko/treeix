@@ -22,7 +22,8 @@ import {
   type Workspace,
   workspaceOf,
   shades,
-  WORKSPACE_COLORS
+  WORKSPACE_COLORS,
+  WORKSPACE_ICONS
 } from './workspaces'
 
 const workspaceActivity = (sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): Activity =>
@@ -34,13 +35,16 @@ function Badge({ workspace, className }: { workspace: Workspace; className: stri
   const home = workspace.id === HOME.id
   return (
     <span
-      style={home ? undefined : { background: workspace.color }}
-      className={`grid shrink-0 place-items-center overflow-hidden font-bold ${home ? 'bg-foreground/8 font-mono text-muted-foreground' : 'text-white'} ${className}`}
+      style={home ? undefined : badgeStyle(workspace)}
+      className={`grid shrink-0 place-items-center overflow-hidden font-bold ${home ? 'bg-foreground/8 font-mono text-muted-foreground' : workspace.icon ? '' : 'text-white'} ${className}`}
     >
       {home ? '~' : <Avatar workspace={workspace} />}
     </span>
   )
 }
+
+/** An icon sits in its colour on a tint of it; initials stay white on the full colour */
+const badgeStyle = ({ color, icon }: Pick<Workspace, 'color' | 'icon'>): React.CSSProperties => (icon ? { background: `${color}2e`, color } : { background: color })
 
 /** The title bar's workspace chip: the current workspace, a menu of all of them, and a mark when an agent elsewhere is busy or waiting */
 export function WorkspaceSwitcher({
@@ -203,16 +207,7 @@ export function WorkspaceDialog({
     setColor(next)
     setShadeBase(next)
   }
-  const [avatarText, setAvatarText] = useState(workspace?.avatarText ?? '')
-  const [avatarImage, setAvatarImage] = useState(workspace?.avatarImage ?? '')
-  const [imageError, setImageError] = useState('')
-  const pickImage = (file: File | undefined): void => {
-    if (!file) return
-    shrinkImage(file).then(
-      (image) => (setAvatarImage(image), setImageError('')),
-      () => setImageError(`${file.name} isn't an image`)
-    )
-  }
+  const [icon, setIcon] = useState(workspace?.icon)
   const [selected, setSelected] = useState<string[]>(workspace?.repoPaths ?? [])
   const [terminalPath, setTerminalPath] = useState(workspace?.terminalPath ?? '')
   const [filter, setFilter] = useState('')
@@ -252,8 +247,7 @@ export function WorkspaceDialog({
       id: workspace?.id ?? crypto.randomUUID(),
       name: finalName,
       color,
-      ...(avatarText.trim() ? { avatarText: avatarText.trim() } : {}),
-      ...(avatarImage ? { avatarImage } : {}),
+      ...(icon ? { icon } : {}),
       repoPaths: selected,
       ...(terminalPath && selected.includes(terminalPath) ? { terminalPath } : {})
     }
@@ -271,29 +265,13 @@ export function WorkspaceDialog({
       </div>
 
       <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-4">
-        <div className="flex items-end gap-3">
-          <div className="flex shrink-0 flex-col items-center gap-1.5">
-            <label
-              title="Upload an image"
-              style={{ background: color }}
-              className="grid size-11 cursor-pointer place-items-center overflow-hidden rounded-xl text-base font-bold text-white"
-            >
-              <Avatar workspace={{ name: finalName || '?', avatarText: avatarText.trim(), avatarImage }} />
-              <input type="file" accept="image/*" aria-label="Avatar image" className="hidden" onChange={(event) => pickImage(event.target.files?.[0])} />
-            </label>
-            <input
-              value={avatarText}
-              onChange={(event) => setAvatarText(event.target.value.slice(0, 4))}
-              aria-label="Avatar text"
-              placeholder={initials(finalName || '?')}
-              className="h-6 w-11 rounded-md border border-input bg-muted text-center text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60"
-            />
-            {avatarImage && (
-              <button onClick={() => setAvatarImage('')} className="text-[11px] text-muted-foreground hover:text-foreground">
-                Remove
-              </button>
-            )}
-          </div>
+        <div className="flex items-start gap-3">
+          <span
+            style={badgeStyle({ color, icon })}
+            className={`grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl text-base font-bold ${icon ? '' : 'text-white'}`}
+          >
+            <Avatar workspace={{ name: finalName || '?', icon }} />
+          </span>
           <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs text-muted-foreground">
             Name
             <input
@@ -346,7 +324,32 @@ export function WorkspaceDialog({
               onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
               className="h-6 w-20 rounded-md border border-input bg-muted px-1.5 font-mono text-[11px] text-foreground outline-none"
             />
-            {imageError && <span className="text-[11px] text-destructive">{imageError}</span>}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+          Icon
+          <div className="flex flex-wrap gap-1">
+            <button
+              aria-label="Initials"
+              aria-pressed={!icon}
+              onClick={() => setIcon(undefined)}
+              className={`grid size-7 place-items-center rounded-md text-[10px] font-bold hover:bg-accent ${icon ? '' : 'bg-accent text-foreground ring-1 ring-foreground/40'}`}
+            >
+              {initials(finalName || '?')}
+            </button>
+            {WORKSPACE_ICONS.map((name) => (
+              <button
+                key={name}
+                aria-label={`Icon ${name}`}
+                aria-pressed={icon === name}
+                onClick={() => setIcon(name)}
+                style={icon === name ? { color } : undefined}
+                className={`grid size-7 place-items-center rounded-md hover:bg-accent hover:text-foreground ${icon === name ? 'bg-accent ring-1 ring-foreground/40' : ''}`}
+              >
+                <Icon name={name} className="size-4" />
+              </button>
+            ))}
           </div>
         </div>
 
@@ -464,11 +467,9 @@ export function WorkspaceDialog({
   )
 }
 
-function Avatar({ workspace }: { workspace: Pick<Workspace, 'name' | 'avatarText' | 'avatarImage'> }): React.JSX.Element {
-  if (workspace.avatarImage) return <img src={workspace.avatarImage} alt="" className="size-full rounded-[inherit] object-cover" />
-  const text = workspace.avatarText || initials(workspace.name)
-  // Four letters fit the same square a size down
-  return text.length > 3 ? <span className="text-[0.8em] tracking-tight">{text}</span> : <>{text}</>
+function Avatar({ workspace }: { workspace: Pick<Workspace, 'name' | 'icon'> }): React.JSX.Element {
+  if (workspace.icon) return <Icon name={workspace.icon} className="size-[62%]" />
+  return <>{initials(workspace.name)}</>
 }
 
 const AVATAR_PIXELS = 96

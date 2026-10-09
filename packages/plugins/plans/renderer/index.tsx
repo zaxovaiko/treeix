@@ -50,10 +50,10 @@ function PlanButton({ startedAt, name }: { startedAt: number; name?: string | nu
     <button
       title={`Open plan: ${plan.title}`}
       onClick={() => openPlan(host, plan)}
-      className="flex h-5 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+      aria-label={`Open plan: ${plan.title}`}
+      className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
     >
-      <Icon name="file" className="size-3" />
-      <span className="@max-md:hidden">Plan</span>
+      <Icon name="list" className="size-3.5" />
     </button>
   )
 }

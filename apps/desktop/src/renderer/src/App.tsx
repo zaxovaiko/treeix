@@ -39,6 +39,7 @@ import {
   zoneBack
 } from '@treeix/sdk'
 import { getAgents, isAgent } from './agents'
+import { onColor } from './themes'
 import { activityOf } from './sessionUi'
 import { keptPages, visitedIn } from './keepAlive'
 import { CleanupDialog } from './CleanupDialog'
@@ -373,7 +374,6 @@ function App(): React.JSX.Element {
   )
   const tabs = defaultTabs.toSorted((a, b) => barOrder.indexOf(a.id) - barOrder.indexOf(b.id))
   const overlayTab = pluginTabs.find((tab) => tab.overlay)
-  const overlayPanels = usePanels(overlayTab?.id ?? '')
   /** The tabs that open in a pane, in the title bar strip */
   const paneTabs = tabs.filter((tab) => tab.id !== overlayTab?.id)
   const [draggingTab, setDraggingTab] = useState(false)
@@ -2271,16 +2271,17 @@ function App(): React.JSX.Element {
     </div>
   )
 
+  /** Open settings read as a tab in the gear's own place, so the overlay's bar shows them too */
+  const settingsTab = (
+    <div data-page-tab="settings" aria-current="page" aria-label="Settings" title="Settings" className={tabClass(true)}>
+      {settings.tabCloseSide === 'left' && closeButton('Close settings', closeSettings)}
+      <Icon name="settings" className="size-3.5" />
+      {settings.tabCloseSide === 'right' && closeButton('Close settings', closeSettings)}
+    </div>
+  )
+
   const openDocs = (
     <>
-      {appTab === 'settings' && (
-        <div data-page-tab="settings" aria-current="page" className={tabClass(true)}>
-          {settings.tabCloseSide === 'left' && closeButton('Close settings', closeSettings)}
-          <Icon name="settings" className="size-3.5" />
-          Settings
-          {settings.tabCloseSide === 'right' && closeButton('Close settings', closeSettings)}
-        </div>
-      )}
       {docTabs.map((tab) => (
         <div
           key={tab.key}
@@ -2363,14 +2364,7 @@ function App(): React.JSX.Element {
     if (id === NAV_ITEM)
       return barButton(
         id,
-        overlayOpen ? (
-          // The overlay's own list toggle stands where the workspace's arrows step aside
-          overlayTab && pageHasPanel(overlayTab.id, 'list') && (
-            <IconButton label={`Toggle list (${actionKeys('panel.list')})`} active={overlayPanels.list} onClick={() => toggleShellPanel('list')}>
-              <Icon name="panel" />
-            </IconButton>
-          )
-        ) : (
+        overlayOpen ? null : ( // The overlay carries its own list toggle in its header, so the bar shows nothing here
           <>
             <IconButton label={`Back (${actionKeys('app.back')})`} disabled={!stepPlace(places, -1)} onClick={() => goToPlace(-1)}>
               <Icon name="arrowLeft" className="size-3.5" />
@@ -2409,13 +2403,13 @@ function App(): React.JSX.Element {
     if (id === SETTINGS_ITEM)
       return barButton(
         id,
-        <IconButton
-          label={`Settings (${actionKeys('app.settings')} or G S)`}
-          active={appTab === 'settings'}
-          onClick={() => (appTab === 'settings' ? closeSettings() : openSettings())}
-        >
-          <Icon name="settings" />
-        </IconButton>
+        appTab === 'settings' ? (
+          settingsTab
+        ) : (
+          <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} onClick={() => openSettings()}>
+            <Icon name="settings" />
+          </IconButton>
+        )
       )
     const item = pluginBarItems.find((candidate) => pluginBarItem(candidate.key) === id)
     if (item)
@@ -2447,6 +2441,8 @@ function App(): React.JSX.Element {
           {showTitle && (
             <div
               {...tabDropProps}
+              // The open tab, and everything else the bar paints in the accent, take the workspace's own colour
+              style={workspace ? ({ '--color-primary': workspace.color, '--color-primary-foreground': onColor(workspace.color) } as React.CSSProperties) : undefined}
               className={`flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
             >
               {/* Equal sides keep the centre segment in the middle of the window */}
@@ -2585,7 +2581,7 @@ function App(): React.JSX.Element {
           )}
 
           {notice && (
-            <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground shadow-lg shadow-black/40">
+            <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-foreground">
               {notice}
             </div>
           )}
@@ -2735,7 +2731,7 @@ function OverlayButton({
         <div
           data-overlay-peek
           ref={slide}
-          className="absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-2xl bg-popover text-xs text-popover-foreground shadow-2xl ring-1 ring-foreground/8"
+          className="absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-2xl bg-popover text-xs text-popover-foreground ring-1 ring-foreground/8"
         >
           <overlay.Peek close={close} />
         </div>

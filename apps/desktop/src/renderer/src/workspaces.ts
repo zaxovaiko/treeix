@@ -1,15 +1,14 @@
 import { useSyncExternalStore } from 'react'
 import type { Repo } from '../../shared/types'
 import { isString, list, parseJson } from '../../shared/json'
+import { type IconName, isIconName } from './Icon'
 
 export type Workspace = {
   id: string
   name: string
   color: string
-  /** Replaces the initials on the avatar */
-  avatarText?: string
-  /** A small data URL drawn instead of the colour and text */
-  avatarImage?: string
+  /** Drawn in `color` on the badge; unset shows the initials */
+  icon?: IconName
   repoPaths: string[]
   /** Project new terminals open in; unset means the folder holding all the workspace's projects */
   terminalPath?: string
@@ -22,6 +21,32 @@ export const HOME: Workspace = { id: 'home', name: 'Home', color: '#64748b', rep
 
 /** The workspace with that id, Home included */
 export const workspaceOf = (workspaces: Workspace[], id: string): Workspace | undefined => (id === HOME.id ? HOME : workspaces.find((workspace) => workspace.id === id))
+export const WORKSPACE_ICONS: IconName[] = [
+  'folder',
+  'code',
+  'terminal',
+  'braces',
+  'branch',
+  'globe',
+  'star',
+  'sparkles',
+  'wand',
+  'coffee',
+  'bookOpen',
+  'kanban',
+  'layers',
+  'ticket',
+  'tag',
+  'user',
+  'key',
+  'lock',
+  'palette',
+  'plug',
+  'bell',
+  'eye',
+  'cloudCheck',
+  'power'
+]
 export const WORKSPACE_COLORS = ['#4f5ff0', '#e0703d', '#10a37f', '#d946ef', '#eab308', '#64748b']
 
 const KEY = 'workspaces'
@@ -37,7 +62,8 @@ const isWorkspace = (value: unknown): value is Workspace => {
     ['id', 'name', 'color'].every((key) => typeof candidate[key] === 'string') &&
     Array.isArray(candidate.repoPaths) &&
     candidate.repoPaths.every((path) => typeof path === 'string') &&
-    ['terminalPath', 'avatarText', 'avatarImage'].every((key) => candidate[key] === undefined || typeof candidate[key] === 'string')
+    (candidate.terminalPath === undefined || typeof candidate.terminalPath === 'string') &&
+    (candidate.icon === undefined || isIconName(candidate.icon))
   )
 }
 

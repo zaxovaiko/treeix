@@ -274,7 +274,7 @@ export function EnvPage(): React.JSX.Element {
     <>
       <PageLayout inspectorWidth={270} listWidth={240} list={list} main={main} inspector={inspector} />
       {edits.size > 0 && !reviewing && (
-        <div className="fixed bottom-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-input bg-popover py-1.5 pr-1.5 pl-3 text-xs shadow-2xl shadow-black/60">
+        <div className="fixed bottom-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-input bg-popover py-1.5 pr-1.5 pl-3 text-xs">
           <span className="rounded bg-amber-400/12 px-1.5 font-mono text-amber-400">{edits.size}</span>
           <span>unsaved {edits.size === 1 ? 'change' : 'changes'}</span>
           <button onClick={() => pending.set(new Map())} className="text-muted-foreground hover:text-foreground">

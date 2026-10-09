@@ -131,7 +131,7 @@ export function SendButton({
     </button>
   )
 
-  const shell = variant === 'pill' ? 'h-7 rounded-full border border-primary/40 bg-card text-primary shadow-lg shadow-black/40' : 'h-8 w-full rounded-md bg-primary text-white'
+  const shell = variant === 'pill' ? 'h-7 rounded-full border border-primary/40 bg-card text-primary' : 'h-8 w-full rounded-md bg-primary text-white'
   const divider = variant === 'pill' ? 'border-primary/30' : 'border-white/25'
 
   return (

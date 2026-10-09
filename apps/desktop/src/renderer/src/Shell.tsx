@@ -118,7 +118,7 @@ export function WhichKey({ pages, workspaces }: { pages: { letter: string; label
     <>
       {/* A click anywhere cancels the leader, even over a terminal that would swallow it */}
       <div className="fixed inset-0 z-[69]" onMouseDown={() => updateShell({ leader: false })} />
-      <div className="fixed bottom-8 left-16 z-[70] max-h-[calc(100vh-4rem)] w-[440px] max-w-[calc(100vw-5rem)] overflow-y-auto rounded-lg border border-input bg-popover p-3 shadow-2xl shadow-black/60">
+      <div className="fixed bottom-8 left-16 z-[70] max-h-[calc(100vh-4rem)] w-[440px] max-w-[calc(100vw-5rem)] overflow-y-auto rounded-lg border border-input bg-popover p-3">
         <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
           <Keys combo="G" />
           <span className="font-medium text-foreground">Go to</span>
@@ -156,7 +156,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
   }, [])
   return (
     <div onClick={(event) => event.target === event.currentTarget && onClose()} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-      <div className="flex max-h-[86vh] w-[1040px] max-w-[94vw] flex-col rounded-xl border border-input bg-popover shadow-2xl shadow-black/60">
+      <div className="flex max-h-[86vh] w-[1040px] max-w-[94vw] flex-col rounded-xl border border-input bg-popover">
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
           <span className="text-[13px] font-medium">Keyboard</span>
           <span className="truncate text-xs text-muted-foreground">Chords with ⌘ work everywhere, single letters work outside text fields and the terminal.</span>

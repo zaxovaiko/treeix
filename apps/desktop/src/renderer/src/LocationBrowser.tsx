@@ -242,7 +242,7 @@ export function LocationsDialog({
     <div ref={rootRef} data-locations-dialog className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[8vh] backdrop-blur-[2px]" onClick={onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex h-[76vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl"
+        className="flex h-[76vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover backdrop-blur-2xl"
       >
         <div className="flex min-h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs text-muted-foreground">
           {header}

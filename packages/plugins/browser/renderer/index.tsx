@@ -125,7 +125,8 @@ function ServerNotices(): React.JSX.Element | null {
           key: portKey(port),
           url: port.url,
           label: `localhost:${port.port}`,
-          detail: portDetail(service.getSessions(), host?.repos ?? null, port)
+          // What runs it first: the command tells a bun dev server from a python one at a glance
+          detail: [port.command, portDetail(service.getSessions(), host?.repos ?? null, port)].filter(Boolean).join(' · ')
         }))
       setNotices((list) => {
         // Stopped servers take their card with them
@@ -136,31 +137,30 @@ function ServerNotices(): React.JSX.Element | null {
   }, [service])
   if (!notices.length) return null
   return (
-    <div className="fixed right-4 bottom-4 z-40 flex w-72 flex-col gap-2">
+    // Under the title bar on the right, clear of the work below
+    <div className="fixed top-11 right-3 z-40 flex w-56 flex-col gap-1.5">
       {notices.map((notice) => (
-        <div key={notice.id} role="status" className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
+        <div key={notice.id} role="status" aria-label={`${notice.label} is up`} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2 py-1.5">
           <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs text-foreground">
-              <span className="font-mono">{notice.label}</span> is up
-            </div>
-            {notice.detail && <div className="truncate text-[11px] text-muted-foreground">{notice.detail}</div>}
+            <div className="truncate font-mono text-[11px] text-foreground">{notice.label}</div>
+            {notice.detail && <div className="truncate text-[10px] text-muted-foreground">{notice.detail}</div>}
           </div>
           <button
             onClick={() => {
               openUrl(notice.url)
               dismiss(notice.id)
             }}
-            className="h-6 shrink-0 rounded-md border border-border px-2 text-xs hover:bg-accent"
+            className="h-5 shrink-0 rounded border border-border px-1.5 text-[11px] hover:bg-accent"
           >
             Open
           </button>
           <button
             aria-label="Dismiss"
             onClick={() => dismiss(notice.id)}
-            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            <Icon name="close" className="size-3" />
+            <Icon name="close" className="size-2.5" />
           </button>
         </div>
       ))}

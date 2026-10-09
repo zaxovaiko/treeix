@@ -104,7 +104,7 @@ export function Suggestions({
     // Clicks on labels and the scrollbar must not blur the address bar, which closes this
     <div
       onMouseDown={(event) => event.preventDefault()}
-      className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg"
+      className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-popover p-1"
     >
       {sections.map((section) => (
         <div key={section.title}>

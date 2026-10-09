@@ -240,7 +240,7 @@ export function Zone({ id, className = '', style, children }: { id: ZoneId; clas
 }
 
 /** A panel floating over the page, as the AI Hub's list and inspector do */
-export const ISLAND = 'rounded-xl border border-border bg-popover shadow-xl shadow-black/40'
+export const ISLAND = 'rounded-xl border border-border bg-popover'
 
 /** In a narrow page, like one opened beside another, main keeps this much: side panels shrink to SIDE_MIN, then the inspector and then the list hide */
 const MAIN_MIN = 240

@@ -83,6 +83,12 @@ export function withAlpha(hex: string, alpha: number): string {
   return alpha >= 1 ? hex : `rgb(${r} ${g} ${b} / ${Math.round(alpha * 100)}%)`
 }
 
+/** Black or white, whichever reads on the given fill; sRGB luminance is enough for flat UI colors */
+export function onColor(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55 ? '#000000' : '#ffffff'
+}
+
 /** Overrides the Tailwind color tokens, so every bg-card or text-foreground utility follows the theme */
 /** `borderStrength` scales hairlines and input outlines, 0-1 */
 export function applyTheme(id: string, theme: Theme, opacity: number, borderStrength = 1): void {
@@ -96,6 +102,8 @@ export function applyTheme(id: string, theme: Theme, opacity: number, borderStre
   root.setProperty('--color-foreground', theme.foreground)
   root.setProperty('--color-muted-foreground', theme.mutedForeground)
   root.setProperty('--color-primary', theme.primary)
+  // Text on a primary fill: whichever of black or white reads on that accent, never the backdrop (its alpha would show through)
+  root.setProperty('--color-primary-foreground', onColor(theme.primary))
   // Hairlines and hover fills are the foreground at low alpha, so they flip with the mode
   const tint = theme.mode === 'light' ? '0 0 0' : '255 255 255'
   root.setProperty('--color-border', `rgb(${tint} / ${(theme.mode === 'light' ? 10 : 6) * borderStrength}%)`)

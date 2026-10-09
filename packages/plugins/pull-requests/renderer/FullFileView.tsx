@@ -49,7 +49,7 @@ export function FullFileView({ path, subtitle, load, onClose }: { path: string; 
         role="dialog"
         aria-label={path}
         onClick={(event) => event.stopPropagation()}
-        className="flex h-[84vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl"
+        className="flex h-[84vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover backdrop-blur-2xl"
       >
         <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs">
           <FileIcon path={path} />

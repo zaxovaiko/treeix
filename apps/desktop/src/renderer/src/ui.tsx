@@ -108,11 +108,7 @@ export function Dialog({
 }: { onClose: () => void; offset: string; className: string; children: React.ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, 'className' | 'onClick'>): React.JSX.Element {
   return (
     <div className={`fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-[2px] ${offset}`} onClick={onClose}>
-      <div
-        {...panel}
-        onClick={(event) => event.stopPropagation()}
-        className={`rounded-xl border border-border bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl ${className}`}
-      >
+      <div {...panel} onClick={(event) => event.stopPropagation()} className={`rounded-xl border border-border bg-popover backdrop-blur-2xl ${className}`}>
         {children}
       </div>
     </div>
@@ -371,7 +367,7 @@ export function Tooltips(): React.JSX.Element | null {
       ref={fitInWindow}
       role="tooltip"
       style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
-      className="pointer-events-none fixed z-[100] flex w-max max-w-[min(24rem,calc(100vw-16px))] items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground shadow-lg shadow-black/40"
+      className="pointer-events-none fixed z-[100] flex w-max max-w-[min(24rem,calc(100vw-16px))] items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground"
     >
       <span>{tip.text}</span>
       {tip.shortcut && <kbd className="shrink-0 rounded bg-foreground/8 px-1 font-sans text-[10.5px] text-muted-foreground">{tip.shortcut}</kbd>}

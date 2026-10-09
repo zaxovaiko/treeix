@@ -121,7 +121,7 @@ export function CommandPalette({
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[12vh] backdrop-blur-[2px]" onClick={close}>
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[70vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover shadow-2xl shadow-black/60 backdrop-blur-2xl"
+        className="flex max-h-[70vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover backdrop-blur-2xl"
       >
         <label className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4 text-muted-foreground">
           <Icon name="search" className="size-4 shrink-0" />
