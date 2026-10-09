@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useHost } from '@treeix/sdk'
-import { errorMessage } from '@treeix/app/ui'
+import { ISLAND, useHost } from '@treeix/sdk'
+import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
@@ -54,6 +54,8 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   useEffect(() => followRunEvents(run.id, setEvents), [run.id])
 
   const steps = run.workflow.nodes.filter((node) => node.kind !== 'input')
+  const sidebar = steps.length > 2
+  const [openSteps, setOpenSteps] = usePersisted<boolean>('hub.run.steps', true)
   const [selectedId, setSelectedId] = useState(
     () =>
       (
@@ -106,7 +108,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   }, [])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
         {lead ? <AgentAvatar agent={lead} size={28} mood={runMood(run)} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
         <div className="min-w-0 flex-1">
@@ -122,35 +124,13 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           </button>
         )}
       </header>
-      {/* An ask is one agent and its output; the strip earns its place in workflows */}
-      {steps.length > 2 && (
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2">
-          {steps.map((step) => {
-            const stepRun = run.nodes[step.id]
-            return (
-              <button
-                key={step.id}
-                aria-pressed={step === node}
-                onClick={() => setSelectedId(step.id)}
-                className={`flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs ring-1 ring-border hover:bg-accent ${step === node ? 'bg-accent' : ''}`}
-              >
-                <StatusIcon status={shownNode(stepRun)} className="size-3" />
-                {labelOf(step)}
-                {stepRun.startedAt !== null && stepRun.endedAt !== null && (
-                  <span className="text-muted-foreground tabular-nums">{duration(stepRun.endedAt - stepRun.startedAt)}</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
       <div
         ref={scroller}
         onScroll={(event) => {
           const element = event.currentTarget
           atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
         }}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className={`min-h-0 flex-1 overflow-y-auto ${sidebar && openSteps ? 'pr-60' : ''}`}
       >
         <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
           {node?.kind === 'agent' && chat ? (
@@ -206,6 +186,45 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           )}
         </div>
       </div>
+      {/* An ask is one agent and its output; the step list earns its own island in workflows */}
+      {sidebar && !openSteps && (
+        <div className={`absolute top-2 right-2 z-20 flex p-1 ${ISLAND}`}>
+          <IconButton label="Show the steps" onClick={() => setOpenSteps(true)}>
+            <Icon name="panel" className="size-3.5" />
+          </IconButton>
+        </div>
+      )}
+      {sidebar && openSteps && (
+        <aside className={`absolute top-2 right-2 bottom-2 z-20 flex w-56 flex-col ${ISLAND}`}>
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+            <span className="flex-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Steps</span>
+            <IconButton label="Hide the steps" onClick={() => setOpenSteps(false)}>
+              <Icon name="panel" className="size-3.5" />
+            </IconButton>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1.5 pt-0">
+            {steps.map((step) => {
+              const stepRun = run.nodes[step.id]
+              const shown = shownNode(stepRun)
+              const untouched = shown === 'pending' || shown === 'skipped'
+              return (
+                <button
+                  key={step.id}
+                  aria-pressed={step === node}
+                  onClick={() => setSelectedId(step.id)}
+                  className={`flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${step === node ? 'bg-accent' : untouched ? 'text-muted-foreground' : ''}`}
+                >
+                  <StatusIcon status={shown} className="size-3" />
+                  <span className="min-w-0 flex-1 truncate">{labelOf(step)}</span>
+                  {stepRun.startedAt !== null && stepRun.endedAt !== null && (
+                    <span className="shrink-0 text-muted-foreground tabular-nums">{duration(stepRun.endedAt - stepRun.startedAt)}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </aside>
+      )}
     </div>
   )
 }

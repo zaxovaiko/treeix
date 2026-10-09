@@ -1,7 +1,9 @@
 import { type ChatOption, type ChatService, type ChatSpec, createBridge, createStore, definePluginSettings } from '@treeix/sdk'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
+import { alienStill, characterOf } from './Alien'
 import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
+import type { Subagent } from '../shared/subagents'
 import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type Workflow } from '../shared/workflow'
 
 export const TAB_ID = 'hub'
@@ -22,6 +24,8 @@ export const hubApi = {
   removeRun: (id: string) => bridge.invoke<void>('deleteRun', id),
   /** Starts a recorded one-off question; resolves with the run id */
   ask: (agent: string, message: string) => bridge.invoke<string>('ask', agent, message),
+  /** The subagents the agent's folders define, which a workflow step can run */
+  subagents: (agent: string) => bridge.invoke<Subagent[]>('subagents', agent),
   workflows: () => bridge.invoke<Workflow[]>('workflows'),
   saveWorkflow: (workflow: Workflow) => bridge.invoke<void>('saveWorkflow', workflow),
   removeWorkflow: (id: string) => bridge.invoke<void>('deleteWorkflow', id),
@@ -128,6 +132,8 @@ export function followChats(chat: ChatService): () => void {
       const sessionId = chat.agentSessionId(chatId)
       const title = chat.title(chatId)
       if (!sessionId || !title) continue
+      // A chat armed with no conversation gets one when its first message starts the agent
+      if (hubSettings.get().conversations[agent.id] !== sessionId) setConversation(agent.id, sessionId)
       const known = chats.find((entry) => entry.sessionId === sessionId)
       const working = chat.status(chatId) === 'running'
       if (known && known.title === title && !(working && Date.now() - known.updatedAt > ACTIVE_MS)) continue
@@ -167,6 +173,7 @@ export function asAgent(agent: HubAgent): Agent | null {
     id: registryId(agent),
     label: agent.name,
     mark: agent.icon,
+    image: agent.avatar ?? alienStill(agent.alien ?? characterOf(agent.runtime.kind === 'agent' ? agent.runtime.agent : undefined)),
     color: agent.color,
     command: null,
     agent: true,

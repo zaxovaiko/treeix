@@ -25,6 +25,7 @@ const runtimeChoice = (runtime: Runtime): string =>
 const fromChoice = (choice: string): Runtime =>
   choice.startsWith('agent:') ? { kind: 'agent', agent: choice.slice('agent:'.length) } : { kind: 'api', baseUrl: choice.slice('api:'.length) }
 
+/** The one-character badge an agent falls back to where no picture fits; the avatar or alien is the agent's real face */
 const glyphOf = (agent: Pick<HubAgent, 'icon' | 'name'>): string => agent.icon || agent.name.trim().slice(0, 1).toUpperCase() || '?'
 
 /** The alien it picked, else its runtime's */
@@ -107,14 +108,14 @@ export function Schedules({ schedules, onChange, workflow = false }: { schedules
         </span>
       )}
       {schedules.map((schedule) => (
-        <div key={schedule.id} className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+        <div key={schedule.id} className="flex flex-col gap-2 border-t border-border pt-2.5 first:border-t-0">
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <Select
                 custom
                 title="When, as a preset or a crontab line like 30 8 * * 1-5"
                 value={schedule.cron}
-                options={CRON_PRESETS.map((preset) => ({ value: preset.cron, label: preset.label, hint: preset.cron }))}
+                options={CRON_PRESETS.map((preset) => ({ value: preset.cron, label: preset.label }))}
                 onChange={(cron) => patch(schedule.id, { cron })}
               />
             </div>
@@ -134,12 +135,9 @@ export function Schedules({ schedules, onChange, workflow = false }: { schedules
           <textarea
             value={schedule.prompt}
             onChange={(event) => patch(schedule.id, { prompt: event.target.value })}
-            placeholder={
-              workflow
-                ? 'The input each time; with a command, {{input}} is the line that started the run'
-                : "What to do each time, e.g. Sum up this week's AI news in five bullets."
-            }
-            rows={2}
+            placeholder={workflow ? 'The input each time, e.g. a topic to research' : "What to do each time, e.g. Sum up this week's AI news."}
+            title={workflow ? 'With a command, {{input}} is the line that started the run' : 'The prompt the agent gets each time'}
+            rows={3}
             className={PROMPT_FIELD}
           />
           <div className="flex gap-2">
@@ -148,7 +146,8 @@ export function Schedules({ schedules, onChange, workflow = false }: { schedules
               <input
                 value={schedule.command ?? ''}
                 onChange={(event) => patch(schedule.id, { command: event.target.value })}
-                placeholder="e.g. node poll.mjs: each line it prints starts a run, as {{input}}"
+                title="Each line the command prints starts a run, as {{input}}"
+                placeholder="e.g. node poll.mjs"
                 className={`${FIELD} font-mono text-xs`}
               />
             </label>
@@ -248,7 +247,8 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         (list) => isPicked() && (setOptions(list), list.length === 0 && setProblem('The runtime lists no models; type one in')),
         (reason: unknown) => isPicked() && setProblem(errorMessage(reason))
       )
-      .finally(() => isPicked() && setDetecting(false))
+      // Always stops: an answer for a runtime no longer picked still ends its turn, else nothing detects again
+      .finally(() => setDetecting(false))
   }
   const detectOnOpen = (): void => void (options.length === 0 && detect(false))
 
@@ -301,18 +301,10 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
               <AgentAvatar agent={draft} size={44} />
               <input type="file" accept="image/*" aria-label="Avatar image" className="hidden" onChange={(event) => pickImage(event.target.files?.[0])} />
             </label>
-            {draft.avatar ? (
+            {draft.avatar && (
               <button onClick={() => patch({ avatar: null })} className="h-6 text-[11px] text-muted-foreground hover:text-foreground">
                 Remove
               </button>
-            ) : (
-              <input
-                value={draft.icon}
-                onChange={(event) => patch({ icon: [...event.target.value.trim()].slice(0, 2).join('') })}
-                aria-label="Icon"
-                placeholder={glyphOf({ ...draft, icon: '' })}
-                className="h-6 w-11 rounded-md border border-input bg-muted text-center text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary"
-              />
             )}
           </div>
           <label className={`${LABEL} flex-1`}>

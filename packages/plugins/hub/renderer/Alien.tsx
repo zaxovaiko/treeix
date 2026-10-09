@@ -14,6 +14,9 @@ export const characterOf = (agent: string | undefined): Character => (agent === 
 // The pointer and a click each get one of a few reactions, so it never answers the same way twice in a row for long
 const HOVER: Clip[] = ['input', 'curious']
 const CLICK: Clip[] = ['done', 'giggle']
+/** The character's still pose, for places that take a plain image */
+export const alienStill = (character: Character): string | undefined => FILES[`./aliens/${character}.png`]
+
 const clipUrl = (character: Character, clip: Clip): string | undefined => FILES[`./aliens/${character}-${clip}.webm`]
 const react = (character: Character, clips: Clip[]): Clip | null => {
   const ready = clips.filter((clip) => clipUrl(character, clip))

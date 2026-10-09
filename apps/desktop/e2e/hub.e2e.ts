@@ -169,6 +169,8 @@ test('asking an agent from the palette records a run with its thinking and answe
 test('a workflow built on the canvas runs its agent, shows each step done and undoes edits', async () => {
   const { page } = launched
   const steps = page.locator('.react-flow__node')
+  // Room for the canvas between the islands, which float over it
+  await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   await showHub(page)
   await page.getByRole('button', { name: 'New workflow' }).click()
   await page.getByRole('textbox', { name: 'Workflow name' }).fill('Relay')
@@ -198,7 +200,8 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await page.keyboard.press('ControlOrMeta+Shift+z')
   await expect(steps).toHaveCount(3)
 
-  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await page.locator('[data-list-row]', { hasText: 'Relay' }).hover()
+  await page.getByRole('button', { name: 'Run Relay' }).click()
   await page.getByPlaceholder(/^The input/).fill('Go')
   await page.keyboard.press('Enter')
   await expect(steps.filter({ hasText: 'Courier' }).getByTitle('Done')).toBeVisible({ timeout: 20_000 })
@@ -219,6 +222,7 @@ test('an approval step holds the run, lighting the hub button, until approved', 
   // The first Esc clears the last test's query, the next closes the palette
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
+  await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   await showHub(page)
   await page.getByRole('button', { name: 'New workflow' }).click()
   await page.getByRole('textbox', { name: 'Workflow name' }).fill('Gate')
@@ -226,7 +230,8 @@ test('an approval step holds the run, lighting the hub button, until approved', 
   await page.getByRole('button', { name: 'Approval', exact: true }).click()
   await expect(page.locator('.react-flow__edge')).toHaveCount(2)
 
-  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await page.locator('[data-list-row]', { hasText: 'Gate' }).hover()
+  await page.getByRole('button', { name: 'Run Gate' }).click()
   await page.getByPlaceholder(/^The input/).fill('v1')
   await page.keyboard.press('Enter')
   await expect(steps.filter({ hasText: 'Approval' }).getByTitle('Needs you')).toBeVisible({ timeout: 20_000 })
@@ -239,16 +244,12 @@ test('an approval step holds the run, lighting the hub button, until approved', 
   await expect(needsYou).toBeHidden()
 })
 
-test('the AI Hub list hides from its header and comes back from the title bar or ⌘B', async () => {
+test('the AI Hub list hides from its header and comes back with ⌘B', async () => {
   const { page } = launched
   await showHub(page)
   const heading = page.locator('[data-overlay] [data-zone="list"]').getByText('Agents', { exact: true })
   await expect(heading).toBeVisible()
   await page.getByRole('button', { name: /^Hide the list/ }).click()
-  await expect(heading).toBeHidden()
-  await page.getByRole('button', { name: /^Toggle list/ }).click()
-  await expect(heading).toBeVisible()
-  await page.keyboard.press('Meta+b')
   await expect(heading).toBeHidden()
   await page.keyboard.press('Meta+b')
   await expect(heading).toBeVisible()

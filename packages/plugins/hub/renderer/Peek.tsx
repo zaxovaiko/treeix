@@ -10,7 +10,7 @@ import { type AgentNode, isWaiting, type Run } from '../shared/workflow'
 import { Alien, characterOf, type Mood } from './Alien'
 import { alienOf } from './AgentEditor'
 import type { Character } from '../shared/types'
-import { asking, hubAgents, hubRuns, hubSelection, TAB_ID } from './store'
+import { hubAgents, hubRuns, hubSelection, TAB_ID } from './store'
 
 /** One agent at work anywhere: a hub run, or an agent session in any workspace */
 type Entry = {
@@ -162,7 +162,6 @@ const STATUS: Record<Mood, string> = {
 export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
   const host = useHost()
   const entries = useEntries()
-  const agents = hubAgents.use()
   const { workspaces } = useWorkspaces()
   // Peeking counts as seeing the news, so the dot goes out
   useEffect(markAllRead, [])
@@ -217,15 +216,6 @@ export function HubPeek({ close }: { close: () => void }): React.JSX.Element {
           <Icon name="sparkles" />
           Open AI Hub
         </button>
-        {agents[0] && (
-          <button
-            onClick={() => go(() => asking.set({ target: `agent:${agents[0].id}`, openRun: true }))}
-            className="flex h-[26px] items-center gap-1.5 rounded-md px-2.5 text-foreground ring-1 ring-input ring-inset"
-          >
-            <Icon name="comment" />
-            Ask an agent
-          </button>
-        )}
       </div>
     </div>
   )

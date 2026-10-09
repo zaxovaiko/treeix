@@ -3,7 +3,20 @@ import { isJson } from '@treeix/shared/json'
 import { isSchedule, type Schedule } from './types'
 
 /** An agent node's run: one fresh session, one prompt, the reply as its output */
-export type AgentNode = { id: string; kind: 'agent'; agent: string; prompt: string; folder: string | null; retries: number; onError: 'stop' | 'continue'; timeoutMin: number }
+export type AgentNode = {
+  id: string
+  kind: 'agent'
+  agent: string
+  prompt: string
+  folder: string | null
+  retries: number
+  onError: 'stop' | 'continue'
+  timeoutMin: number
+  /** Runs this step on another model, so one agent can both build and review; missing is the agent's own */
+  model?: string | null
+  /** Path of a subagent one of the agent's repos defines; the step runs with that subagent's prompt and model */
+  subagent?: string | null
+}
 
 export type WorkflowNode =
   /** `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input */

@@ -19,8 +19,9 @@ import { ISLAND, usePanels, useHost, Zone } from '@treeix/sdk'
 import { actionKeys } from '@treeix/shared/keymap'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
-import { errorMessage, IconButton } from '@treeix/app/ui'
+import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
+import type { Subagent } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar, Schedules } from './AgentEditor'
@@ -44,9 +45,10 @@ const THEME = {
   '--xy-edge-stroke': 'var(--color-muted-foreground)',
   '--xy-edge-stroke-selected': 'var(--color-primary)',
   '--xy-connectionline-stroke': 'var(--color-primary)',
-  '--xy-handle-background-color': 'var(--color-muted-foreground)',
+  '--xy-handle-background-color': 'color-mix(in srgb, var(--color-muted-foreground) 45%, transparent)',
   '--xy-handle-border-color': 'var(--color-popover)',
-  '--xy-background-pattern-dots-color': 'var(--color-border)',
+  // React Flow reads this one for every pattern; its `-dots-color` sibling is only a default it ignores once this is set
+  '--xy-background-pattern-color': 'color-mix(in srgb, var(--color-foreground) 20%, transparent)',
   '--xy-controls-button-background-color': 'var(--color-popover)',
   '--xy-controls-button-background-color-hover': 'var(--color-accent)',
   '--xy-controls-button-color': 'var(--color-foreground)',
@@ -118,7 +120,7 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
   return (
     <div
       title={issues?.join('\n')}
-      className={`w-56 rounded-lg border bg-popover py-2 pl-3 text-xs shadow-sm ${step.kind === 'condition' ? 'pr-9' : 'pr-3'} ${issues ? 'border-red-400/60' : 'border-border'} ${selected ? 'ring-1 ring-primary' : ''}`}
+      className={`w-56 rounded-lg border bg-popover py-2 pl-3 text-xs ${step.kind === 'condition' ? 'pr-9' : 'pr-3'} ${issues ? 'border-red-400/60' : 'border-border'} ${selected ? 'ring-1 ring-primary' : ''}`}
     >
       {step.kind !== 'input' && <Handle type="target" position={Position.Left} className="size-2.5!" />}
       <div className="flex items-center gap-2">
@@ -199,6 +201,7 @@ function Inspector({
   onDelete: () => void
 }): React.JSX.Element {
   const agents = hubAgents.use()
+  const [subagents, setSubagents] = useState<Subagent[] | null>(null)
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -227,7 +230,42 @@ function Inspector({
               onChange={(agent) => onChange({ ...step, agent })}
             />
           </div>
+          <div className={LABEL}>
+            Subagent
+            <Select
+              title="Runs the step with the prompt and model of a subagent the agent's repos define"
+              value={step.subagent ?? ''}
+              placeholder="The agent itself"
+              note={
+                subagents === null
+                  ? undefined
+                  : subagents.length === 0
+                    ? "The agent's folders define none"
+                    : (subagents.find((entry) => entry.path === step.subagent)?.description ?? undefined)
+              }
+              options={[
+                { value: '', label: 'The agent itself' },
+                ...(subagents ?? []).map((subagent) => ({
+                  value: subagent.path,
+                  label: subagent.name,
+                  hint: subagent.model ?? undefined,
+                  section: subagent.folder.split('/').pop() ?? subagent.folder
+                }))
+              ]}
+              onOpen={() => void hubApi.subagents(step.agent).then(setSubagents, () => setSubagents([]))}
+              onChange={(subagent) => onChange({ ...step, subagent: subagent || null })}
+            />
+          </div>
           <TemplateField label="Prompt" value={step.prompt} sources={sources} onChange={(prompt) => onChange({ ...step, prompt })} />
+          <label className={LABEL}>
+            Model
+            <input
+              value={step.model ?? ''}
+              onChange={(event) => onChange({ ...step, model: event.target.value.trim() || null })}
+              placeholder={step.subagent ? "The subagent's own" : "The agent's own"}
+              className={`${FIELD} h-8 font-mono text-xs`}
+            />
+          </label>
           <label className={LABEL}>
             Folder
             <input
@@ -311,14 +349,37 @@ function Inspector({
   )
 }
 
+/** Left to right by depth: a step sits one column after its deepest source, stacked in rows within its column, top-to-bottom as it already was */
+function tidy(nodes: StepNode[], edges: FlowEdge[]): StepNode[] {
+  const depth = new Map<string, number>()
+  const depthOf = (id: string, seen: Set<string>): number => {
+    const known = depth.get(id)
+    if (known !== undefined) return known
+    if (seen.has(id)) return 0
+    const value = Math.max(0, ...edges.filter((edge) => edge.target === id).map((edge) => depthOf(edge.source, new Set(seen).add(id)) + 1))
+    depth.set(id, value)
+    return value
+  }
+  const taken = new Map<number, number>()
+  const placed = new Map<string, { x: number; y: number }>()
+  for (const node of [...nodes].sort((a, b) => a.position.y - b.position.y)) {
+    const column = depthOf(node.id, new Set())
+    const row = taken.get(column) ?? 0
+    taken.set(column, row + 1)
+    placed.set(node.id, { x: column * COLUMN, y: row * ROW })
+  }
+  return nodes.map((node) => ({ ...node, position: placed.get(node.id) ?? node.position }))
+}
+
 const STEP_KINDS = ['agent', 'merge', 'condition', 'approval', 'output'] as const
 const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
 
 /** Steps to add and the view's controls, one island at the bottom of the canvas */
-function Toolbar({ onAdd, onUndo }: { onAdd: (kind: (typeof STEP_KINDS)[number]) => void; onUndo: () => void }): React.JSX.Element {
+function Toolbar({ onAdd, onUndo, onTidy, room }: { onAdd: (kind: (typeof STEP_KINDS)[number]) => void; onUndo: () => void; onTidy: () => void; room: number }): React.JSX.Element {
   const flow = useReactFlow()
   return (
-    <Panel position="bottom-center" className={`flex items-center gap-0.5 p-1 ${ISLAND}`}>
+    // Centred between the islands, not under them; inline, as React Flow's own panel margin would win
+    <Panel position="bottom-center" style={{ marginLeft: `calc((var(--island-left) - ${room}px) / 2)` }} className={`flex items-center gap-0.5 p-1 ${ISLAND}`}>
       {STEP_KINDS.map((kind) => (
         <button key={kind} onClick={() => onAdd(kind)} className={TOOL}>
           <Icon name={KIND_ICON[kind]} className="size-3.5" />
@@ -328,6 +389,9 @@ function Toolbar({ onAdd, onUndo }: { onAdd: (kind: (typeof STEP_KINDS)[number])
       <span className="mx-1 h-5 w-px bg-border" />
       <IconButton label="Undo (⌘Z)" onClick={onUndo}>
         <Icon name="undo" className="size-3.5" />
+      </IconButton>
+      <IconButton label="Tidy layout" onClick={onTidy}>
+        <Icon name="wand" className="size-3.5" />
       </IconButton>
       <IconButton label="Fit view" onClick={() => void flow.fitView(FIT)}>
         <Icon name="focus" className="size-3.5" />
@@ -388,6 +452,11 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     return () => clearTimeout(timer)
   }, [content])
   useEffect(() => () => void latestCommit.current(), [])
+  // Run from the list asks for the input first, so a still-pending edit lands before the run reads the saved workflow
+  const ask = asking.use()
+  useEffect(() => {
+    if (ask?.target === `workflow:${workflow.id}`) void latestCommit.current()
+  }, [ask, workflow.id])
 
   const restore = (version: Workflow): void => {
     const flow = toFlow(version)
@@ -461,6 +530,11 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     setEdges([...moved, { id: crypto.randomUUID(), source: after.id, target: id, sourceHandle: branching ? 'true' : null }])
   }
 
+  const prettify = (): void => {
+    checkpoint()
+    setNodes(tidy(nodes, edges))
+  }
+
   const update = (step: WorkflowNode): void => setNodes(nodes.map((node) => (node.id === step.id ? { ...node, data: { step } } : node)))
   const removeStep = (id: string): void => {
     checkpoint()
@@ -477,6 +551,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     hubApi.removeWorkflow(workflow.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
   }
   const panels = usePanels('hub')
+  const [inspectorWidth, setInspectorWidth] = usePersisted<number>('hub.inspector.width', 288)
   const runButton = (
     <button
       onClick={run}
@@ -484,7 +559,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
       title={problems.map((problem) => problem.message).join('\n') || undefined}
       className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-50"
     >
-      <Icon name="wand" className="size-3.5" />
+      <Icon name="play" className="size-3.5" />
       Run
     </button>
   )
@@ -520,12 +595,13 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
           style={THEME}
         >
           <Background gap={20} />
-          <Toolbar onAdd={add} onUndo={undo} />
+          <Toolbar onAdd={add} onUndo={undo} onTidy={prettify} room={panels.inspector ? inspectorWidth + 8 : 0} />
         </ReactFlow>
       </CanvasContext>
       {panels.inspector ? (
         // The workflow's name and Run on top, the selected step below
-        <Zone id="inspector" className={`absolute top-2 right-2 bottom-2 z-20 w-72 ${ISLAND}`}>
+        <Zone id="inspector" style={{ width: inspectorWidth }} className={`absolute top-2 right-2 bottom-2 z-20 ${ISLAND}`}>
+          <ResizeHandle edge="left" onResize={setInspectorWidth} />
           <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3">
             <input
               aria-label="Workflow name"
@@ -538,8 +614,9 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
             </IconButton>
             {inspectorToggle}
           </div>
-          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-            {lastRun && (
+          {lastRun && (
+            // Run lives on the workflow's row in the list; here only its last run
+            <div className="flex shrink-0 items-center gap-2 border-b border-border px-1.5 py-1.5">
               <button
                 onClick={() => hubSelection.set(`run:${lastRun.id}`)}
                 className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -547,10 +624,8 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
                 <StatusIcon status={lastRun.status} className="size-3" />
                 Last run {timeAgo(new Date(lastRun.startedAt).toISOString())}
               </button>
-            )}
-            <span className="flex-1" />
-            {runButton}
-          </div>
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {selected && lastRun && (lastRun.nodes[selected.id]?.status ?? 'pending') !== 'pending' && (
               <button

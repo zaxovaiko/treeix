@@ -14,6 +14,19 @@ import { asking, chatIdOf, type HubChat, hubAgents, hubApi, hubRuns, hubSelectio
 const WorkflowView = lazy(() => import('./WorkflowView').then((module) => ({ default: module.WorkflowView })))
 
 const ROW = 'flex w-full min-w-0 items-center gap-2 rounded-md text-left hover:bg-accent'
+/** A run started by a command schedule is titled `jira:BF-7 BF-7 Fix it` or `notion:<id>`: the source becomes an icon, the key is not repeated */
+const SOURCE = { jira: 'ticket', notion: 'bookOpen' } as const
+function runTitle(title: string): React.JSX.Element {
+  const [, source, key, rest] = /^(jira|notion):(\S+)\s*(.*)$/.exec(title) ?? []
+  if (!source) return <span className="min-w-0 flex-1 truncate">{title}</span>
+  return (
+    <>
+      <Icon name={SOURCE[source as keyof typeof SOURCE]} className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate">{rest || key}</span>
+    </>
+  )
+}
+
 const HEADING = 'text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -39,8 +52,9 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
 
   const open = (resume: string | null): void => {
     if (!chat || !persona?.chat) return
+    const options = { agent: persona.id, ...persona.chat, cwd: agent.folder ?? host.defaultCwd, resume }
     // The chat shows a failed start itself
-    chat.start(chatId, { agent: persona.id, ...persona.chat, cwd: agent.folder ?? host.defaultCwd, resume }).then(
+    chat.start(chatId, options).then(
       (sessionId) => setConversation(agent.id, sessionId),
       () => undefined
     )
@@ -153,6 +167,11 @@ export function HubPage(): React.JSX.Element {
     hubSettings.update({ chats: hubSettings.get().chats.filter((other) => other.sessionId !== entry.sessionId) })
   }
 
+  const removeWorkflow = (workflow: Workflow): void => {
+    if (!window.confirm(`Delete ${workflow.name}?`)) return
+    hubApi.removeWorkflow(workflow.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
+  }
+
   const removeRun = (id: string): void => void hubApi.removeRun(id).catch((reason: unknown) => host.flash(errorMessage(reason)))
 
   /** A history row with a × on hover; faded inside the Older group */
@@ -243,15 +262,24 @@ export function HubPage(): React.JSX.Element {
           </IconButton>
         </div>
         {workflows.map((workflow, index) => (
-          <button
-            key={workflow.id}
-            {...nav.rowProps(agents.length + index)}
-            onClick={() => hubSelection.set(`workflow:${workflow.id}`)}
-            className={`${ROW} h-8 px-2 text-xs ${workflow === selectedWorkflow ? 'bg-accent' : ''}`}
-          >
-            <Icon name="layers" className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate">{workflow.name}</span>
-          </button>
+          <div key={workflow.id} className="group relative">
+            <button
+              {...nav.rowProps(agents.length + index)}
+              onClick={() => hubSelection.set(`workflow:${workflow.id}`)}
+              className={`${ROW} h-8 px-2 text-xs ${workflow === selectedWorkflow ? 'bg-accent' : ''}`}
+            >
+              <Icon name="layers" className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{workflow.name}</span>
+            </button>
+            <span className="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex">
+              <IconButton label={`Run ${workflow.name}`} onClick={() => asking.set({ target: `workflow:${workflow.id}`, openRun: false })}>
+                <Icon name="play" className="size-3" />
+              </IconButton>
+              <IconButton label={`Delete ${workflow.name}`} onClick={() => removeWorkflow(workflow)}>
+                <Icon name="trash" className="size-3" />
+              </IconButton>
+            </span>
+          </div>
         ))}
         {knownChats.length > 0 && <div className={`${HEADING} px-2 pt-4 pb-1.5`}>Chats</div>}
         {chats.map((entry, index) => {
@@ -285,7 +313,7 @@ export function HubPage(): React.JSX.Element {
             index >= freshRuns.length,
             <>
               <StatusIcon status={shownRun(run)} />
-              <span className="min-w-0 flex-1 truncate">{run.title}</span>
+              {runTitle(run.title)}
             </>
           )
         ])}

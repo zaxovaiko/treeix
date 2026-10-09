@@ -38,7 +38,18 @@ const steps = {
 
 test('a workflow resolves agents by name and fills step defaults', () => {
   const workflow = toWorkflow({ name: 'Digest', ...steps }, [], [news], 1)
-  expect(workflow.nodes[1]).toEqual({ id: 'ask', kind: 'agent', agent: news.id, prompt: '{{input}}', folder: null, retries: 0, onError: 'stop', timeoutMin: 10 })
+  expect(workflow.nodes[1]).toEqual({
+    id: 'ask',
+    kind: 'agent',
+    agent: news.id,
+    prompt: '{{input}}',
+    folder: null,
+    model: null,
+    subagent: null,
+    retries: 0,
+    onError: 'stop',
+    timeoutMin: 10
+  })
   expect(workflow.nodes[2]).toEqual({ id: 'out', kind: 'output', template: '{{prev}}' })
   expect(workflow.edges[0]).toEqual({ id: 'in-ask', from: 'in', to: 'ask', branch: null })
   const replaced = toWorkflow({ name: 'digest', ...steps }, [{ ...workflow, layout: { in: { x: 1, y: 2 }, gone: { x: 0, y: 0 } } }], [news], 2)

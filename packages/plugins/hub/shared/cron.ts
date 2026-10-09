@@ -47,9 +47,13 @@ export function cronMatches(expression: string, date: Date): boolean {
 
 /** Common schedules by name; any other crontab line works too */
 export const CRON_PRESETS = [
-  { cron: '0 9 * * 1', label: 'Every Monday at 9:00' },
-  { cron: '0 9 * * 1-5', label: 'Every weekday at 9:00' },
   { cron: '0 9 * * *', label: 'Every day at 9:00' },
+  { cron: '*/15 * * * *', label: 'Every 15 minutes' },
+  { cron: '*/30 * * * *', label: 'Every 30 minutes' },
   { cron: '0 * * * *', label: 'Every hour' },
+  { cron: '0 */6 * * *', label: 'Every 6 hours' },
+  { cron: '0 9 * * 1-5', label: 'Every weekday at 9:00' },
+  { cron: '0 9 * * 1', label: 'Every Monday at 9:00' },
+  { cron: '0 9 * * 6,0', label: 'Every weekend day at 9:00' },
   { cron: '0 9 1 * *', label: 'On the 1st of every month at 9:00' }
 ] as const

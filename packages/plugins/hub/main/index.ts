@@ -10,6 +10,7 @@ import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
 import { type AgentNode, type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
+import { readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
 import { hubTools } from './mcp'
@@ -96,6 +97,10 @@ const plugin: MainPlugin = {
     context.handle('runEvents', (_, id: string) => engine.events(id))
     context.handle('deleteRun', async (_, id: string) => (await engine.remove(id)) && context.broadcast('runRemoved', id))
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
+    context.handle('subagents', async (_, id: string) => {
+      const agent = (await agents.get()).find((entry) => entry.id === id)
+      return agent ? readSubagents([agent.folder, ...(agent.directories ?? [])].filter((folder): folder is string => folder !== null)) : []
+    })
     const workflows = jsonList(join(context.dataPath, 'workflows.json'), isWorkflow)
     const writeWorkflows = async (next: Workflow[]): Promise<void> => {
       await workflows.set(next)
