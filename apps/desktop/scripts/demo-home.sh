@@ -177,7 +177,8 @@ EOF
 
 # --- v3 screenshot fixtures: fake claude and codex on PATH, and a login shell with a stable prompt ---
 mkdir -p "$home/bin" "$home/.claude/projects/demo"
-printf 'export PATH="$HOME/bin:$PATH"\nexport PS1="%%1~ %%# "\nunset RPS1 RPROMPT\n' > "$home/.zprofile"
+# SHELL_SESSIONS_DISABLE keeps /etc/zshrc_Apple_Terminal from printing "Restored session: <date>" into a shot
+printf 'export PATH="$HOME/bin:$PATH"\nexport PS1="%%1~ %%# "\nexport SHELL_SESSIONS_DISABLE=1\nunset RPS1 RPROMPT\n' > "$home/.zprofile"
 cp "$home/.zprofile" "$home/.zshrc"
 
 cat > "$home/bin/claude" <<'EOF'
@@ -197,6 +198,8 @@ printf '\033[1mRun bun test src/billing? \033[0m\n'
 printf '\033[36m❯ 1. Yes\033[0m\n'
 printf '  2. Yes, and don'"'"'t ask again for bun test\n'
 printf '  3. No, tell Claude what to do differently\n\n'
+# Claude sessions take their status from the hooks, never from the screen, so the prompt has to report itself
+[ -n "$TREEIX_SESSION_ID" ] && printf input > "$TREEIX_AGENT_STATUS/$TREEIX_SESSION_ID" 2>/dev/null
 while :; do read -r _ 2>/dev/null || sleep 3600; done
 EOF
 
