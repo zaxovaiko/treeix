@@ -1,37 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Repo } from '../../shared/types'
-import { openMenu } from './contextMenu'
 import { Icon } from './Icon'
-import { digitLabel } from './settings'
 import { baseName } from './Sidebar'
-import { Kbd, type SessionSummary } from '@treeix/sdk'
-import { type Activity, ActivityMark, NEWS } from './activity'
-import { activityOf } from './sessionUi'
-import { useSessions } from './plugins'
-import { Dialog, Popup } from './ui'
-import { actionKeys } from '../../shared/keymap'
-import {
-  deleteWorkspace,
-  HOME,
-  initials,
-  inWorkspace,
-  moveWorkspace,
-  saveWorkspace,
-  suggestWorkspaceName,
-  useWorkspaces,
-  type Workspace,
-  workspaceOf,
-  shades,
-  WORKSPACE_COLORS,
-  WORKSPACE_ICONS
-} from './workspaces'
+import { Dialog } from './ui'
+import { deleteWorkspace, HOME, initials, saveWorkspace, suggestWorkspaceName, useWorkspaces, type Workspace, shades, WORKSPACE_COLORS, WORKSPACE_ICONS } from './workspaces'
 
-const workspaceActivity = (sessions: SessionSummary[], workspace: Workspace, repos: Repo[] | null, workspaces: Workspace[]): Activity =>
-  activityOf(sessions.filter((session) => inWorkspace(session, workspace, repos, workspaces)))
-
-const WORKSPACE_MIME = 'application/x-treeix-workspace'
-
-function Badge({ workspace, className }: { workspace: Workspace; className: string }): React.JSX.Element {
+/** A workspace's square: its picture or initials on its colour, `~` for Home */
+export function Badge({ workspace, className }: { workspace: Workspace; className: string }): React.JSX.Element {
   const home = workspace.id === HOME.id
   return (
     <span
@@ -45,147 +20,6 @@ function Badge({ workspace, className }: { workspace: Workspace; className: stri
 
 /** An icon sits in its colour on a tint of it; initials stay white on the full colour */
 const badgeStyle = ({ color, icon }: Pick<Workspace, 'color' | 'icon'>): React.CSSProperties => (icon ? { background: `${color}2e`, color } : { background: color })
-
-/** The title bar's workspace chip: the current workspace, a menu of all of them, and a mark when an agent elsewhere is busy or waiting */
-export function WorkspaceSwitcher({
-  repos,
-  onSwitch,
-  onEdit,
-  onReturn
-}: {
-  repos: Repo[] | null
-  onSwitch: (id: string) => void
-  /** Opens the editor; null creates a new workspace */
-  onEdit: (workspace: Workspace | null) => void
-  /** Set while the AI Hub fills the window: a click goes back to the workspace instead of opening the menu */
-  onReturn?: () => void
-}): React.JSX.Element {
-  const { workspaces, currentId } = useWorkspaces()
-  const sessions = useSessions()
-  const [open, setOpen] = useState(false)
-  const [drop, setDrop] = useState<{ id: string; edge: 'top' | 'bottom' } | null>(null)
-  const button = useRef<HTMLButtonElement>(null)
-  const current = workspaceOf(workspaces, currentId)
-  const elsewhere = current ? activityOf(sessions.filter((session) => !inWorkspace(session, current, repos, workspaces))) : 'none'
-  const close = (): void => setOpen(false)
-  const pick = (id: string): void => {
-    close()
-    if (id !== currentId) onSwitch(id)
-  }
-
-  const dragProps = (workspace: Workspace, index: number): React.HTMLAttributes<HTMLButtonElement> & { draggable: true } => ({
-    draggable: true,
-    // No state updates in dragstart: React re-rendering there makes Chromium cancel the drag
-    onDragStart: (event) => {
-      event.dataTransfer.setData(WORKSPACE_MIME, workspace.id)
-      event.dataTransfer.effectAllowed = 'move'
-    },
-    onDragOver: (event) => {
-      if (!event.dataTransfer.types.includes(WORKSPACE_MIME)) return
-      event.preventDefault()
-      const box = event.currentTarget.getBoundingClientRect()
-      const edge = event.clientY < box.top + box.height / 2 ? 'top' : 'bottom'
-      if (drop?.id !== workspace.id || drop.edge !== edge) setDrop({ id: workspace.id, edge })
-    },
-    onDragLeave: () => setDrop(null),
-    onDragEnd: () => setDrop(null),
-    onDrop: (event) => {
-      const id = event.dataTransfer.getData(WORKSPACE_MIME)
-      if (!id) return
-      event.preventDefault()
-      setDrop(null)
-      const beforeId = drop?.edge === 'bottom' ? (workspaces[index + 1]?.id ?? null) : workspace.id
-      moveWorkspace(id, beforeId === id ? (workspaces[index + 2]?.id ?? null) : beforeId)
-    }
-  })
-
-  const row = (workspace: Workspace, title: string, keys: string, extra?: Partial<React.ComponentProps<'button'>>): React.JSX.Element => {
-    const activity = workspaceActivity(sessions, workspace, repos, workspaces)
-    const dropEdge = drop?.id === workspace.id ? drop.edge : null
-    return (
-      <button
-        key={workspace.id}
-        data-workspace={workspace.id}
-        title={title}
-        aria-current={workspace.id === currentId || undefined}
-        onClick={() => pick(workspace.id)}
-        {...extra}
-        className={`relative flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-accent ${workspace.id === currentId ? 'bg-accent' : ''}`}
-      >
-        {dropEdge && <span className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-px' : '-bottom-px'}`} />}
-        <Badge workspace={workspace} className="size-5 rounded-md text-[9px]" />
-        <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-        {NEWS.includes(activity) && <ActivityMark activity={activity} />}
-        {keys && <Kbd hint>{keys}</Kbd>}
-      </button>
-    )
-  }
-
-  return (
-    <>
-      <button
-        ref={button}
-        data-workspace-switcher
-        title={onReturn ? 'Back to the workspace' : `Workspaces${current ? ` · ${current.name}` : ''}`}
-        aria-expanded={open}
-        onClick={() => (onReturn ? onReturn() : setOpen(!open))}
-        className={`relative flex h-6 max-w-48 min-w-0 shrink-0 items-center gap-1.5 rounded-md pr-1.5 pl-1 text-xs hover:bg-accent ${
-          onReturn ? 'text-muted-foreground hover:text-foreground' : `text-foreground ring-1 ring-border ring-inset ${open ? 'bg-accent' : 'bg-background'}`
-        }`}
-      >
-        {current ? <Badge workspace={current} className="size-[18px] rounded-[5px] text-[8px]" /> : <Icon name="folder" className="size-3.5 text-muted-foreground" />}
-        <span className="truncate">{current?.name ?? 'All projects'}</span>
-        <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground" />
-        {NEWS.includes(elsewhere) && (
-          <span className="absolute -top-1 -right-1 grid size-3.5 place-items-center rounded-full bg-card">
-            <ActivityMark activity={elsewhere} className="size-2" />
-          </span>
-        )}
-      </button>
-      {open && (
-        <Popup
-          anchor={button}
-          onDismiss={close}
-          // Esc closes the menu, and only it: the shell must not also move focus to another zone
-          onKeyDown={(event) => {
-            if (event.key !== 'Escape') return
-            event.stopPropagation()
-            close()
-          }}
-          className="flex max-h-[70vh] w-64 flex-col overflow-y-auto rounded-lg border border-input bg-popover p-1 text-xs"
-        >
-          {workspaces.map((workspace, index) => {
-            const keys = index < 9 ? [`G ${index + 1}`, digitLabel('workspaces', index + 1)].filter(Boolean) : []
-            return row(workspace, `${workspace.repoPaths.map(baseName).join(', ') || 'no projects'}${keys.length ? ` (${keys.join(', ')})` : ''}`, keys[0] ?? '', {
-              ...dragProps(workspace, index),
-              onContextMenu: (event) =>
-                openMenu(event, [
-                  { label: 'Open', run: () => pick(workspace.id) },
-                  { label: 'Edit workspace…', run: () => (close(), onEdit(workspace)) },
-                  null,
-                  {
-                    label: 'Delete workspace…',
-                    run: () => window.confirm(`Delete workspace ${workspace.name}? Projects and sessions are not affected.`) && deleteWorkspace(workspace.id)
-                  }
-                ])
-            })
-          })}
-          {workspaces.length > 0 && <hr className="my-1 border-border" />}
-          {row(HOME, `Home: terminals in ~, outside every workspace (${actionKeys('workspace.home')})`, actionKeys('workspace.home'))}
-          <button
-            onClick={() => (close(), onEdit(null))}
-            className="flex h-8 w-full shrink-0 items-center gap-2 rounded-md px-1.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <span className="grid size-5 place-items-center">
-              <Icon name="plus" className="size-3.5" />
-            </span>
-            New workspace
-          </button>
-        </Popup>
-      )}
-    </>
-  )
-}
 
 export function WorkspaceDialog({
   workspace,
@@ -329,12 +163,15 @@ export function WorkspaceDialog({
 
         <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
           Icon
-          <div className="flex flex-wrap gap-1">
+          {/* A fixed grid that scrolls, so adding icons never pushes the projects out of the dialog */}
+          <div className="grid max-h-[136px] grid-cols-[repeat(auto-fill,minmax(36px,1fr))] gap-1 overflow-y-auto rounded-lg border border-border p-1.5">
             <button
               aria-label="Initials"
               aria-pressed={!icon}
+              title="The workspace initials"
               onClick={() => setIcon(undefined)}
-              className={`grid size-7 place-items-center rounded-md text-[10px] font-bold hover:bg-accent ${icon ? '' : 'bg-accent text-foreground ring-1 ring-foreground/40'}`}
+              style={icon ? undefined : { background: `${color}2e`, color }}
+              className={`grid aspect-square place-items-center rounded-lg text-[11px] font-bold hover:bg-accent ${icon ? '' : 'ring-1 ring-current'}`}
             >
               {initials(finalName || '?')}
             </button>
@@ -344,8 +181,8 @@ export function WorkspaceDialog({
                 aria-label={`Icon ${name}`}
                 aria-pressed={icon === name}
                 onClick={() => setIcon(name)}
-                style={icon === name ? { color } : undefined}
-                className={`grid size-7 place-items-center rounded-md hover:bg-accent hover:text-foreground ${icon === name ? 'bg-accent ring-1 ring-foreground/40' : ''}`}
+                style={icon === name ? { background: `${color}2e`, color } : undefined}
+                className={`grid aspect-square place-items-center rounded-lg hover:bg-accent hover:text-foreground ${icon === name ? 'ring-1 ring-current' : ''}`}
               >
                 <Icon name={name} className="size-4" />
               </button>

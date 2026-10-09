@@ -9,23 +9,16 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => launched.close())
 
-test('terminals sharing a glyph atlas still draw text after the GPU process resets', async () => {
+test('a terminal still draws text after the GPU process resets', async () => {
   const { page, app } = launched
-  await page
-    .getByRole('button', { name: 'Terminal', exact: true })
-    .first()
-    .click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
   await page.getByRole('button', { name: 'Shell' }).click()
   const panes = page.locator('.xterm')
   await expect(panes).toHaveCount(1)
-  await page.keyboard.press('Meta+D')
-  await expect(panes).toHaveCount(2)
-  // The shells start their prompts
+  // The shell starts its prompt
   await page.waitForTimeout(2000)
-  for (const i of [0, 1]) {
-    await panes.nth(i).click()
-    await page.keyboard.type(PRINT)
-  }
+  await panes.first().click()
+  await page.keyboard.type(PRINT)
   // Only the text half: the cursor sits below it and blinks
   const text = async (i: number): Promise<string> => {
     const box = await panes.nth(i).evaluate((element) => {
@@ -36,7 +29,7 @@ test('terminals sharing a glyph atlas still draw text after the GPU process rese
   }
   // The GPU renderer keeps its text out of the DOM, so the print is given time instead
   await page.waitForTimeout(1500)
-  const before = [await text(0), await text(1)]
+  const before = await text(0)
 
   const restored = page.waitForEvent('console', (message) => message.text().includes('webglcontextrestored'))
   await app.evaluate(({ app }) => {
@@ -44,5 +37,5 @@ test('terminals sharing a glyph atlas still draw text after the GPU process rese
     if (gpu) process.kill(gpu.pid, 'SIGKILL')
   })
   await restored
-  await expect.poll(async () => [await text(0), await text(1)], { timeout: 10_000 }).toEqual(before)
+  await expect.poll(() => text(0), { timeout: 10_000 }).toEqual(before)
 })

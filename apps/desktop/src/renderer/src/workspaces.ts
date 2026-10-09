@@ -45,7 +45,28 @@ export const WORKSPACE_ICONS: IconName[] = [
   'bell',
   'eye',
   'cloudCheck',
-  'power'
+  'power',
+  'pullRequest',
+  'compare',
+  'play',
+  'history',
+  'comment',
+  'list',
+  'file',
+  'search',
+  'focus',
+  'refresh',
+  'keyboard',
+  'smilePlus',
+  'paperclip',
+  'alert',
+  'pencil',
+  'maximize',
+  'folderOpen',
+  'filePlus',
+  'folderPlus',
+  'splitRight',
+  'splitDown'
 ]
 export const WORKSPACE_COLORS = ['#4f5ff0', '#e0703d', '#10a37f', '#d946ef', '#eab308', '#64748b']
 

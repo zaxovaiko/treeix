@@ -39,6 +39,13 @@ const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'panel.list', label: 'Toggle list', menuLabel: 'List', section: 'Panels', keys: key('KeyE', { meta: true, shift: true }) },
   { id: 'panel.listAlt', label: 'Toggle list, second key', section: 'Panels', keys: key('KeyB', { meta: true }) },
   { id: 'panel.inspector', label: 'Toggle inspector', menuLabel: 'Inspector', section: 'Panels', keys: key('KeyB', { meta: true, alt: true }) },
+  {
+    id: 'app.sidebar',
+    label: 'Toggle the sidebar: workspaces, sessions, agents and workflows',
+    menuLabel: 'Sidebar',
+    section: 'Panels',
+    keys: key('KeyB', { meta: true, shift: true })
+  },
   { id: 'panel.title', label: 'Toggle title bar', menuLabel: 'Title bar', section: 'Panels', keys: key('KeyT', { meta: true, ctrl: true }) },
   { id: 'shell.zen', label: 'Zen: the main zone and tabs alone, no bars', menuLabel: 'Zen', section: 'Panels', keys: key('Enter', { meta: true, shift: true }) },
   { id: 'app.shortcuts', label: 'Keyboard sheet', section: 'Panels', keys: key('Slash', { meta: true }) },

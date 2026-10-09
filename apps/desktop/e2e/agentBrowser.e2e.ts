@@ -47,10 +47,7 @@ test('agent sessions get an MCP server that drives the built-in browser', async 
   const { page, repo } = launched
   // A session's shell carries the server's address and token
   const envFile = join(dirname(repo), 'mcp.txt')
-  await page
-    .getByRole('button', { name: 'Terminal', exact: true })
-    .first()
-    .click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
   await page.getByRole('button', { name: 'Shell' }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()

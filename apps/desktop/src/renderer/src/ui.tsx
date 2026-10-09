@@ -63,12 +63,10 @@ export function ResizeHandle({
 export function ResizeGrip({ across }: { across: boolean }): React.JSX.Element {
   return (
     <span
-      className={`pointer-events-none absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground group-active:text-foreground ${
-        across ? 'h-2.5 w-8' : 'h-8 w-2.5'
+      className={`pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border transition-colors group-hover:bg-foreground/40 group-active:bg-foreground/60 ${
+        across ? 'h-1 w-8' : 'h-8 w-1'
       }`}
-    >
-      <Icon name="grip" className={`size-2.5 ${across ? 'rotate-90' : ''}`} />
-    </span>
+    />
   )
 }
 

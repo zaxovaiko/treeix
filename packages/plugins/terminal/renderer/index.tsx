@@ -12,7 +12,6 @@ import {
   type SessionKind,
   type SessionSummary,
   type ShortcutInfo,
-  showPanel,
   togglePanel,
   useHost
 } from '@treeix/sdk'
@@ -29,41 +28,32 @@ import { getCurrentWorkspaceId, inWorkspace, useWorkspaces, workspaceOf } from '
 import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } from './folder'
 import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
-import { TaskList } from './TaskList'
-import { startRename, switchTask, taskLabel } from './taskUi'
-import { openTab, TaskTerminals } from './TerminalPanel'
+import { startRename } from './rename'
+import { openSession, WorkspaceTerminals } from './SessionPanel'
 import { findInFiles, resolvePath } from './fileLinks'
 import { NEW_TAB_ACTIONS } from './sessionMeta'
-import { type Task, taskOf, uniqueName } from './tasks'
 import {
+  activeSession,
   type ClosedSession,
-  closeActivePane,
+  closeActiveSession,
   createSession,
-  createTask,
-  deleteTask,
-  focusNeighbor,
-  focusPaneAt,
   focusSession,
-  activePane,
   focusShown,
   getPorts,
   getTerminals,
   isTerminalFocused,
   restoreClosedSession,
   revealSession,
-  selectTask,
+  selectSession,
   type Session,
   type SessionView,
   sendText,
-  setActiveTab,
   setFileLinkHandler,
   setSessionRevealer,
   setIssueLinks,
   setWebLinkHandler,
-  splitPane,
   subscribeTerminals,
   syncChats,
-  toggleZoom,
   useTerminals,
   whenReady
 } from './terminals'
@@ -131,37 +121,30 @@ function sessionSummaries(): SessionSummary[] {
   return summaries.list
 }
 
-type TaskScope = { tasks: Task[]; task: Task | null; sessions: Session[]; history: ClosedSession[] }
+type Scope = { sessions: Session[]; session: Session | null; history: ClosedSession[] }
 
-/** Tasks, sessions and closed sessions of the current workspace, and the task on screen */
-function useTaskScope(): TaskScope {
+/** Sessions and closed sessions of the current workspace, and the session on screen */
+function useScope(): Scope {
   const { repos } = useHost()
   const { workspaces, currentId } = useWorkspaces()
   const workspace = workspaceOf(workspaces, currentId)
   const state = useTerminals()
   const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
-  const tasks = state.tasks.filter(include)
-  const task = tasks.find((candidate) => candidate.id === state.selected[currentId]) ?? tasks[0] ?? null
-  return { tasks, task, sessions: state.sessions.filter(include), history: state.history.filter(include) }
+  const sessions = state.sessions.filter(include)
+  return { sessions, session: sessions.find((candidate) => candidate.id === state.selected[currentId]) ?? sessions[0] ?? null, history: state.history.filter(include) }
 }
 
 /** The latest scope, for keys handled outside React; kept by Root, which is always mounted */
-let scope: TaskScope = { tasks: [], task: null, sessions: [], history: [] }
-
-/** Closed sessions of a task; those of deleted tasks, or from before tasks, go with the task on their folder */
-const historyOf = (history: ClosedSession[], task: Task): ClosedSession[] => {
-  const tasks = getTerminals().tasks
-  return history.filter((entry) => entry.taskId === task.id || (!tasks.some((candidate) => candidate.id === entry.taskId) && entry.worktreePath === task.worktreePath))
-}
+let scope: Scope = { sessions: [], session: null, history: [] }
 
 const WaitingDot = ({ className }: { className: string }): React.JSX.Element | null => {
-  const waiting = useTaskScope().sessions.filter((session) => session.status === 'input').length
+  const waiting = useScope().sessions.filter((session) => session.status === 'input').length
   return waiting > 0 ? <span title={`${waiting} waiting for input`} className={`rounded-full bg-amber-400 ${className}`} /> : null
 }
 
 function TerminalPage(): React.JSX.Element {
   const host = useHost()
-  const { tasks, task, sessions, history } = useTaskScope()
+  const { session, history } = useScope()
   const { previews, fileTabs, previewMaximized } = view.use()
   const { currentId } = useWorkspaces()
   const preview = previews[currentId] ?? null
@@ -178,26 +161,20 @@ function TerminalPage(): React.JSX.Element {
   useEffect(() => host.registerFileOpener(TAB_ID, open), [])
   const previewRoot = preview?.root ?? host.explorerRoot
   const cwd = useTerminalCwd(host)
-  const label = task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, cwd)
 
   return (
     <PageLayout
-      defaults={{ list: false }}
-      listWidth={240}
-      list={<TaskList tasks={tasks} current={task} sessions={sessions} repos={host.repos} onNew={() => startTask(host)} history={task ? historyOf(history, task) : history} />}
       main={
         <div ref={row} className="flex min-h-0 min-w-0 flex-1">
           <div style={{ flex: preview ? 1 - previewShare : 1 }} className={`min-w-6 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
-            <TaskTerminals
-              task={task}
-              label={label}
+            <WorkspaceTerminals
+              session={session}
+              label={worktreeLabel(host.repos, cwd)}
               cwd={cwd}
-              history={task ? historyOf(history, task) : history}
+              history={history}
               repos={host.repos}
-              orientation="horizontal"
               page
               onGoToFolder={(path) => goToFolder(host, path)}
-              groups={tasks}
             />
           </div>
           {preview && (
@@ -288,7 +265,7 @@ async function locate(targets: { path: string; line: number | null }[], bases: s
 
 /**
  * ⌘-click on a path in a session: shows the file on the Terminal page, with the Files panel on the folder it is in
- * unless that folder is already shown. Relative paths start where the session's shell is now, else in its group's folder.
+ * unless that folder is already shown. Relative paths start where the session's shell is now, else where it started.
  */
 function useFileLinks(): void {
   const host = useHost()
@@ -299,7 +276,7 @@ function useFileLinks(): void {
     setFileLinkHandler(async (sessionId, targets) => {
       const session = getTerminals().sessions.find((candidate) => candidate.id === sessionId)
       const shellCwd = await bridge.invoke<string | null>('cwd', sessionId).catch(() => null)
-      // Agents print paths from the group's folder even after their shell moved
+      // Agents print paths from the folder the session started in even after their shell moved
       const bases = [...new Set([shellCwd, session?.worktreePath].filter((base): base is string => !!base))]
       if (!bases.length) bases.push(window.api.home)
       const found = await locate(targets, bases)
@@ -336,7 +313,7 @@ function useFileLinks(): void {
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
   const host = useHost()
   const cwd = useTerminalCwd(host)
-  const { task, sessions, history } = useTaskScope()
+  const { session, sessions, history } = useScope()
   // The panel closes itself once the last session exits; opened empty by hand (⌘J) it stays
   const hadSessions = useRef(sessions.length > 0)
   useEffect(() => {
@@ -347,13 +324,12 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
     }
   }, [sessions.length])
   return (
-    <TaskTerminals
-      task={task}
-      label={task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, cwd)}
+    <WorkspaceTerminals
+      session={session}
+      label={worktreeLabel(host.repos, cwd)}
       cwd={cwd}
-      history={task ? historyOf(history, task) : history}
+      history={history}
       repos={host.repos}
-      orientation={side === 'bottom' ? 'horizontal' : 'vertical'}
       page={false}
       onHide={() => host.hidePanel(TAB_ID)}
       side={side}
@@ -364,7 +340,7 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
 
 /** On the Terminal tab: how many sessions are open, with an amber dot while any waits for an answer */
 function SessionsCount(): React.JSX.Element | null {
-  const { sessions } = useTaskScope()
+  const { sessions } = useScope()
   const waiting = sessions.filter((session) => session.status === 'input').length
   if (!sessions.length) return null
   return (
@@ -397,26 +373,16 @@ function reveal(host: HostApi, id: string): void {
   setTimeout(() => focusSession(id), 50)
 }
 
-/** A new tab of the task on screen, focused */
-function newTab(host: HostApi, kind: SessionKind, view: SessionView = 'terminal'): void {
-  openTab(scope.task?.worktreePath ?? terminalCwd(host), kind, scope.task?.id, view)
+/** A session in the folder the one on screen runs in, focused */
+function newSession(host: HostApi, kind: SessionKind, view: SessionView = 'terminal'): void {
+  openSession(scope.session?.worktreePath ?? terminalCwd(host), kind, view)
   showTerminals(host)
 }
 
 /** A chat with the agent last picked in one; chats need the chat plugin on */
 function newChat(host: HostApi): void {
   const agent = chatAgent()
-  if (agent && host.service('chat')) newTab(host, agent.id, 'chat')
-}
-
-/** ⌘⇧T: a task with a shell in the current folder, named after that folder */
-function startTask(host: HostApi, cwd = terminalCwd(host)): void {
-  const name = uniqueName(
-    worktreeLabel(host.repos, cwd),
-    scope.tasks.map((task) => taskLabel(task, host.repos))
-  )
-  openTab(cwd, 'shell', createTask(name, cwd))
-  showTerminals(host)
+  if (agent && host.service('chat')) newSession(host, agent.id, 'chat')
 }
 
 /** The folder dropdown lives on the Terminal page, so it goes there first */
@@ -425,38 +391,39 @@ function openFolderPicker(host: HostApi): void {
   setFolderPickerOpen(true)
 }
 
-/** Goes to a folder: its group if there is one, else a new group with a shell there; later groups start there too */
+/** Goes to a folder: a session already there, else a new shell in it; later sessions start there too */
 function goToFolder(host: HostApi, path: string): void {
   setPickedFolder(host.workspaceId, path)
-  const existing = scope.tasks.find((task) => task.worktreePath === path)
-  if (existing) switchTask(host, existing)
-  else startTask(host, path)
+  const existing = scope.sessions.find((session) => session.worktreePath === path)
+  if (existing) return reveal(host, existing.id)
+  openSession(path, 'shell')
+  showTerminals(host)
 }
 
-/** ⌃⌘↑ ⌃⌘↓: the previous or next task; focus follows into its terminal unless it is on the task list */
-function stepTask(host: HostApi, step: 1 | -1): void {
-  const { tasks, task } = scope
-  if (tasks.length === 0) return
-  const index = tasks.findIndex((candidate) => candidate.id === task?.id)
-  switchTask(host, tasks[(index + step + tasks.length) % tasks.length])
+/** ⌃⌘↑ ⌃⌘↓: the previous or next session of the workspace, focused */
+function stepSession(host: HostApi, step: 1 | -1): void {
+  const { sessions, session } = scope
+  if (sessions.length === 0) return
+  const index = sessions.findIndex((candidate) => candidate.id === session?.id)
+  selectSession(sessions[(index + step + sessions.length) % sessions.length].id)
   showTerminals(host)
-  if (getShell().zone !== 'list') focusShown()
+  focusShown()
 }
 
 function Root(): React.JSX.Element | null {
   const host = useHost()
   const { sessions: switcher } = dialogs.use()
-  const current = useTaskScope()
+  const current = useScope()
   scope = current
   const { currentId } = useWorkspaces()
   useFileLinks()
   // Chats go dormant while the chat plugin is off
   const chat = useService('chat')
   useEffect(syncChats, [chat])
-  // Keys and new terminals act on the task on screen, so the store knows which that is
+  // Keys and new sessions act on the session on screen, so the store knows which that is
   useEffect(() => {
-    if (current.task && getTerminals().selected[currentId] !== current.task.id) selectTask(current.task.id)
-  }, [current.task?.id, currentId])
+    if (current.session && getTerminals().selected[currentId] !== current.session.id) selectSession(current.session.id)
+  }, [current.session?.id, currentId])
   // A workspace switched to starts from its own default folder, not one picked the last time it was on screen
   useEffect(() => setPickedFolder(currentId, null), [currentId])
   useEffect(() => onShellCommand('closedSessions', () => dialogs.update({ sessions: 'closed' })), [])
@@ -469,7 +436,6 @@ function Root(): React.JSX.Element | null {
         <SessionsDialog
           sessions={current.sessions}
           history={current.history}
-          tasks={current.tasks}
           repos={host.repos}
           mode={switcher}
           onClose={() => dialogs.update({ sessions: null })}
@@ -485,20 +451,13 @@ function Root(): React.JSX.Element | null {
 defineActions([
   { id: 'panel.terminal', label: 'Toggle the terminal panel', section: 'Terminal', keys: key('KeyJ', { meta: true }) },
   { id: 'terminal.sessions', label: 'Find and switch sessions', section: 'Terminal', keys: key('KeyJ', { meta: true, shift: true }) },
-  { id: 'terminal.goToFolder', label: 'Go to folder: its group, or a new one there', section: 'Terminal', keys: key('KeyO', { meta: true }) },
-  { id: 'terminal.newGroup', label: 'New group with a shell in the current folder', section: 'Terminal', keys: key('KeyT', { meta: true, shift: true }) },
-  { id: 'terminal.previousGroup', label: 'Previous group', section: 'Terminal', keys: key('ArrowUp', { meta: true, ctrl: true }) },
-  { id: 'terminal.nextGroup', label: 'Next group', section: 'Terminal', keys: key('ArrowDown', { meta: true, ctrl: true }) },
-  { id: 'terminal.newTab', label: 'New shell tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true }) },
-  { id: 'terminal.newTabAlt', label: 'New shell tab, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
-  { id: 'terminal.newClaudeTab', label: 'New Claude tab in the group', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
-  { id: 'terminal.newChat', label: 'New chat in the group, with the agent last picked in one', section: 'Terminal', keys: key('KeyC', { meta: true, alt: true }) },
-  { id: 'terminal.splitRight', label: 'Split the active pane right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
-  { id: 'terminal.splitDown', label: 'Split the active pane down with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true, shift: true }) },
-  { id: 'terminal.paneLeft', label: 'Focus the pane to the left', section: 'Terminal', keys: key('ArrowLeft', { meta: true, alt: true }) },
-  { id: 'terminal.paneRight', label: 'Focus the pane to the right', section: 'Terminal', keys: key('ArrowRight', { meta: true, alt: true }) },
-  { id: 'terminal.paneUp', label: 'Focus the pane above', section: 'Terminal', keys: key('ArrowUp', { meta: true, alt: true }) },
-  { id: 'terminal.paneDown', label: 'Focus the pane below', section: 'Terminal', keys: key('ArrowDown', { meta: true, alt: true }) },
+  { id: 'terminal.goToFolder', label: 'Go to folder: a session there, or a new shell in it', section: 'Terminal', keys: key('KeyO', { meta: true }) },
+  { id: 'terminal.previousSession', label: 'Previous session', section: 'Terminal', keys: key('ArrowUp', { meta: true, ctrl: true }) },
+  { id: 'terminal.nextSession', label: 'Next session', section: 'Terminal', keys: key('ArrowDown', { meta: true, ctrl: true }) },
+  { id: 'terminal.newTab', label: 'New shell session', section: 'Terminal', keys: key('KeyT', { meta: true }) },
+  { id: 'terminal.newTabAlt', label: 'New shell session, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
+  { id: 'terminal.newClaudeTab', label: 'New Claude session', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
+  { id: 'terminal.newChat', label: 'New chat, with the agent last picked in one', section: 'Terminal', keys: key('KeyC', { meta: true, alt: true }) },
   {
     id: 'terminal.reopenClosed',
     label: 'Reopen the last closed session, resuming its agent conversation',
@@ -506,26 +465,9 @@ defineActions([
     section: 'Terminal',
     keys: key('KeyZ', { meta: true, alt: true })
   },
-  { id: 'terminal.zoomPane', label: 'Maximize the focused pane, or restore it', section: 'Terminal', keys: key('Enter', { meta: true, alt: true }) },
   { id: 'terminal.inspector', label: 'Inspector with files, alias of ⌘⌥B', section: 'Terminal', page: TAB_ID, keys: key('KeyP', { meta: true }) },
-  { id: 'terminal.renameGroup', label: 'Rename the group on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('F2') },
-  {
-    id: 'terminal.deleteGroup',
-    label: 'Delete the group on screen, from anywhere on the page',
-    section: 'Terminal',
-    page: TAB_ID,
-    keys: key('Backspace', { meta: true, shift: true })
-  },
-  { id: 'terminal.renameInList', label: 'Rename the group in place, also double-click (group list)', section: 'Terminal', page: TAB_ID, keys: key('KeyE') },
-  { id: 'terminal.deleteInList', label: 'Delete the group, its sessions go to History (group list)', section: 'Terminal', page: TAB_ID, keys: key('Backspace', { meta: true }) }
+  { id: 'terminal.rename', label: 'Rename the session on screen, from anywhere on the page', section: 'Terminal', page: TAB_ID, keys: key('F2') }
 ])
-
-const PANE_SIDES: Record<string, 'left' | 'right' | 'top' | 'bottom'> = {
-  'terminal.paneLeft': 'left',
-  'terminal.paneRight': 'right',
-  'terminal.paneUp': 'top',
-  'terminal.paneDown': 'bottom'
-}
 
 function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
   const open = dialogs.get()
@@ -538,12 +480,11 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
   const terminal = isTerminalFocused()
   // Keys that work from anywhere in the app
   const anywhere: Record<string, () => void> = {
-    'terminal.previousGroup': () => stepTask(host, -1),
-    'terminal.nextGroup': () => stepTask(host, 1),
-    'terminal.newGroup': () => startTask(host),
-    'terminal.newTab': () => newTab(host, 'shell'),
-    'terminal.newTabAlt': () => newTab(host, 'shell'),
-    'terminal.newClaudeTab': () => newTab(host, 'claude'),
+    'terminal.previousSession': () => stepSession(host, -1),
+    'terminal.nextSession': () => stepSession(host, 1),
+    'terminal.newTab': () => newSession(host, 'shell'),
+    'terminal.newTabAlt': () => newSession(host, 'shell'),
+    'terminal.newClaudeTab': () => newSession(host, 'claude'),
     'terminal.newChat': () => newChat(host),
     'terminal.reopenClosed': () => reopenClosed(host),
     'terminal.goToFolder': () => openFolderPicker(host)
@@ -553,73 +494,34 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     anywhere[anywhereId]()
     return true
   }
-  // Pane and tab digits only apply inside the terminals, elsewhere the app's digits work; digits match the physical key, so ⌥ producing ¡™£ doesn't matter
-  const paneDigit = digitPressed(event, 'alt')
-  if (paneDigit && terminal) {
-    focusPaneAt(paneDigit)
-    return true
-  }
-  const tabDigit = digitPressed(event, 'meta')
-  if (tabDigit && terminal) {
-    const tabs = scope.task?.tabs ?? []
-    // 9 is the last tab, like browsers
-    const tab = tabDigit === 9 ? tabs.at(-1) : tabs[tabDigit - 1]
-    if (scope.task && tab) {
-      setActiveTab(scope.task.id, tab.id)
+  // Session digits only apply inside the terminals, elsewhere the app's digits work; digits match the physical key, so ⌥ producing ¡™£ doesn't matter
+  const digit = digitPressed(event, 'alt')
+  if (digit && terminal) {
+    // 9 is the last session, like browsers
+    const session = digit === 9 ? scope.sessions.at(-1) : scope.sessions[digit - 1]
+    if (session) {
+      selectSession(session.id)
       focusShown()
     }
-    return true
-  }
-  const split = actionForEvent(event, ['terminal.splitRight', 'terminal.splitDown'])
-  if (split && (onPage || host.isPanelVisible(TAB_ID))) {
-    void splitPane(split === 'terminal.splitDown' ? 'bottom' : 'right', terminalCwd(host))
-    return true
-  }
-  // Moving between panes and zooming one only make sense with a terminal focused
-  const pane = terminal ? actionForEvent(event, ['terminal.paneLeft', 'terminal.paneRight', 'terminal.paneUp', 'terminal.paneDown', 'terminal.zoomPane']) : undefined
-  if (pane === 'terminal.zoomPane') {
-    toggleZoom()
-    return true
-  }
-  if (pane) {
-    focusNeighbor(PANE_SIDES[pane])
     return true
   }
   if (onPage && matchesAction(event, 'terminal.inspector')) {
     togglePanel('inspector', TAB_ID)
     return true
   }
-  const task = scope.task
-  // Anywhere on the page, even in a terminal: the group on screen can be renamed or deleted
-  const inField = isTyping(event) && !terminal
-  if (onPage && task && !inField && matchesAction(event, 'terminal.renameGroup')) {
-    showPanel('list', TAB_ID)
-    startRename(task.id)
-    return true
-  }
-  if (onPage && task && !inField && matchesAction(event, 'terminal.deleteGroup')) {
-    deleteTask(task.id)
-    return true
-  }
-  // The task list's own keys
-  if (!onPage || !task || getShell().zone !== 'list' || isTyping(event)) return false
-  if (matchesAction(event, 'terminal.renameInList')) {
-    startRename(task.id)
-    return true
-  }
-  if (matchesAction(event, 'terminal.deleteInList')) {
-    deleteTask(task.id)
+  // Anywhere on the page, even in a terminal: the session on screen can be renamed
+  if (onPage && scope.session && !(isTyping(event) && !terminal) && matchesAction(event, 'terminal.rename')) {
+    startRename(scope.session.id)
     return true
   }
   return false
 }
 
-/** Keys the plugin owns that aren't single actions: the digit rows and the pane close that rides the app's ⌘W */
+/** Keys the plugin owns that aren't single actions: the digit row and the close that rides the app's ⌘W */
 const SHORTCUTS: ShortcutInfo[] = (
   [
-    ['⌘1-9', 'Tab of the group, 9 is the last (in a terminal)', undefined],
-    ['⌥1-9', 'Focus the nth pane (in a terminal)', undefined],
-    ['⌘W', 'Close the focused pane to History; the last pane closes its tab', undefined]
+    ['⌥1-9', 'Nth session of the workspace, 9 is the last (in a terminal)', undefined],
+    ['⌘W', 'Close the session on screen to History', undefined]
   ] satisfies [string, string, string | undefined][]
 ).map(([keys, label, page]) => ({ keys, label, section: 'Terminal', page }))
 
@@ -638,7 +540,7 @@ const plugin: RendererPlugin = {
   onKeyDown,
   onCloseShortcut: () => {
     if (!isTerminalFocused()) return false
-    closeActivePane()
+    closeActiveSession()
     return true
   },
   commands: (host) => [
@@ -650,16 +552,15 @@ const plugin: RendererPlugin = {
       shortcut: actionKeys('terminal.sessions') || undefined,
       run: () => dialogs.update({ sessions: 'all' })
     },
-    { id: 'task:new', group: 'Actions', label: 'New group', icon: 'plus', shortcut: actionKeys('terminal.newGroup') || undefined, run: () => startTask(host) },
     { id: 'terminal:folder', group: 'Actions', label: 'Go to folder', icon: 'folder', shortcut: actionKeys('terminal.goToFolder') || undefined, run: () => openFolderPicker(host) },
     ...getAgents().map((agent) => ({
       id: `session:${agent.id}`,
       group: 'Actions',
-      label: `New ${agent.label} tab`,
-      detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
+      label: `New ${agent.label} session`,
+      detail: worktreeLabel(host.repos, scope.session?.worktreePath ?? terminalCwd(host)),
       icon: 'terminal' as const,
       shortcut: actionKeys(NEW_TAB_ACTIONS[agent.id] ?? '') || undefined,
-      run: () => newTab(host, agent.id)
+      run: () => newSession(host, agent.id)
     })),
     ...(host.service('chat') && chatAgent()
       ? [
@@ -667,7 +568,7 @@ const plugin: RendererPlugin = {
             id: 'chat:new',
             group: 'Actions',
             label: 'New chat',
-            detail: scope.task ? taskLabel(scope.task, host.repos) : (host.selectedWorktreeLabel ?? '~ home'),
+            detail: worktreeLabel(host.repos, scope.session?.worktreePath ?? terminalCwd(host)),
             icon: 'comment' as const,
             shortcut: actionKeys('terminal.newChat') || undefined,
             run: () => newChat(host)
@@ -675,25 +576,14 @@ const plugin: RendererPlugin = {
         ]
       : []),
     // @ in the palette searches these
-    ...scope.tasks.map((task) => ({
-      id: `task:${task.id}`,
+    ...scope.sessions.map((session) => ({
+      id: `session-open:${session.id}`,
       group: 'Sessions',
-      label: taskLabel(task, host.repos),
-      detail: 'Group',
-      icon: 'list' as const,
-      run: () => (switchTask(host, task), showTerminals(host), focusShown())
-    })),
-    ...scope.sessions.map((session) => {
-      const task = taskOf(scope.tasks, session.id)
-      return {
-        id: `session-open:${session.id}`,
-        group: 'Sessions',
-        label: session.title,
-        detail: task ? taskLabel(task, host.repos) : worktreeLabel(host.repos, session.worktreePath),
-        icon: session.view === 'chat' ? ('comment' as const) : ('terminal' as const),
-        run: () => reveal(host, session.id)
-      }
-    })
+      label: session.title,
+      detail: worktreeLabel(host.repos, session.worktreePath),
+      icon: session.view === 'chat' ? ('comment' as const) : ('terminal' as const),
+      run: () => reveal(host, session.id)
+    }))
   ],
   shortcuts: SHORTCUTS,
   services: {
@@ -705,7 +595,7 @@ const plugin: RendererPlugin = {
       whenReady,
       sendText,
       runCommand: (cwd, command) => createSession(cwd, 'shell', command),
-      active: () => activePane()?.id ?? null,
+      active: () => activeSession()?.id ?? null,
       reveal: (id) => {
         revealSession(id)
         setTimeout(() => focusSession(id), 50)

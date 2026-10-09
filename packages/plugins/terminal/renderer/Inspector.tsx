@@ -1,7 +1,7 @@
 import { Icon } from '@treeix/app/Icon'
 import { IconButton } from '@treeix/app/ui'
 import { createBridge, useHost } from '@treeix/sdk'
-import { activePane } from './terminals'
+import { activeSession } from './terminals'
 
 const bridge = createBridge('terminal')
 
@@ -12,7 +12,7 @@ function ExplorerHeader(): React.JSX.Element {
   const host = useHost()
   const label = host.browsedFolder ? folderLabel(host.browsedFolder, window.api.home) : (host.selectedWorktreeLabel ?? '~')
   const showTerminalFolder = async (): Promise<void> => {
-    const session = activePane()
+    const session = activeSession()
     const cwd = session ? await bridge.invoke<string | null>('cwd', session.id) : null
     if (cwd) host.setBrowsedFolder(cwd)
     else host.flash('No running terminal to take the folder from')

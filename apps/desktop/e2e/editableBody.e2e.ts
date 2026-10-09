@@ -12,7 +12,7 @@ test.beforeAll(async () => {
     (state) => {
       for (const [key, value] of Object.entries(state)) localStorage.setItem(key, JSON.stringify(value))
     },
-    { ...confluenceState(), settings: { plugins: { jira: true, confluence: true } }, 'app.place@all': { appTab: 'confluence', selected: repo, viewer: null }, 'app.overlay': false }
+    { ...confluenceState(), settings: { plugins: { jira: true, confluence: true } }, 'app.place@all': { appTab: 'confluence', selected: repo, viewer: null } }
   )
   await page.reload()
 })

@@ -1,7 +1,6 @@
-import { useSyncExternalStore } from 'react'
 import { getSettings } from './settings'
 
-/** Something an agent did while the user looked elsewhere; `open` shows what it is about, in `workspaceId` when set. The AI Hub's button lights up while any is unread */
+/** Something an agent did while the user looked elsewhere; `open` shows what it is about, in `workspaceId` when set. The dock badge counts the unread ones */
 export type AppNotification = {
   id: string
   title: string
@@ -16,20 +15,12 @@ export type AppNotification = {
 // ponytail: kept in memory per window, so a reload or a second window starts empty; persist if that bites
 const MAX_NOTIFICATIONS = 100
 let notifications: AppNotification[] = []
-const listeners = new Set<() => void>()
 let switchWorkspace: (id: string) => void = () => undefined
 
 function commit(next: AppNotification[]): void {
   notifications = next
   window.api.setBadge(next.filter((entry) => !entry.read).length)
-  listeners.forEach((listener) => listener())
 }
-
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-export const useNotifications = (): AppNotification[] => useSyncExternalStore(subscribe, () => notifications)
 
 /** The app's workspace switch, which notifications in another workspace go through before they open */
 export const setWorkspaceSwitcher = (switcher: (id: string) => void): void => {
@@ -45,12 +36,12 @@ function openNotification(id: string): void {
   entry.open?.()
 }
 
-export const markAllRead = (): void => {
+const markAllRead = (): void => {
   if (notifications.some((entry) => !entry.read)) commit(notifications.map((entry) => ({ ...entry, read: true })))
 }
 
-/** Switches to the workspace, for what lives in one, like a session in another workspace */
-export const goToWorkspace = (id: string): void => switchWorkspace(id)
+// What needs the user is in the sidebar once the app is in front, so the badge only counts news from while it wasn't
+window.addEventListener('focus', markAllRead)
 
 /**
  * Records it as unread, and shows a system notification too while the window is in the background,

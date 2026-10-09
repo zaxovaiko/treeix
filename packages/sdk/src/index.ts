@@ -37,11 +37,22 @@ export type TabContribution = {
   Badge?: ComponentType
   /** Dock panels whose toggles show in the title bar while this tab is active */
   panels?: string[]
-  /**
-   * Opens over the panes instead of in a pane, from a button at the centre of the title bar, like
-   * the AI Hub. `Face` is the button's content and `Peek` the card shown while the pointer rests on it; `close` hides the card
-   */
-  overlay?: { Face: ComponentType; Peek: ComponentType<{ close: () => void }> }
+  /** Left out of the title bar: the page is only reached from the sidebar or `setActiveTab` */
+  hidden?: boolean
+}
+
+/**
+ * A section of the app's left sidebar, below Workspaces: the AI Hub's agents, workflows and history.
+ * Sections draw their own rows and pick what main shows, usually by sending the host to their page.
+ */
+export type SidebarSection = {
+  id: string
+  label: string
+  /** Lower comes first; Workspaces is 0 */
+  order: number
+  render: ComponentType
+  /** Buttons in the section header, e.g. a + that creates one */
+  Actions?: ComponentType
 }
 
 /** A tab opened on demand, like one pull request or one plan; closing it returns to `parent` */
@@ -167,6 +178,8 @@ export type ChatService = {
 export type RendererPlugin = {
   tabs?: TabContribution[]
   panels?: PanelContribution[]
+  /** Sections of the app's left sidebar, below Workspaces */
+  sidebar?: SidebarSection[]
   /** Always mounted while enabled: background work, dialogs, global listeners */
   Root?: ComponentType
   /** Title bar items left of the command palette button, lower order first; `end` ones go after Settings, at the window's right edge */

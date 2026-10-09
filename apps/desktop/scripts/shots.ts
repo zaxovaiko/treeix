@@ -109,8 +109,6 @@ const session = (id: string, kind: string, title: string, worktreePath: string, 
   agentSessionId: kind === 'claude' ? '0d1b6a58-96f4-4a0e-9d64-2f7c1c4c1f01' : null
 })
 
-const tab = (id: string, layout: string[][], focus: string): Json => ({ id, layout, focus })
-
 function baseState(): Record<string, unknown> {
   return {
     settings: {
@@ -153,7 +151,7 @@ function baseState(): Record<string, unknown> {
   }
 }
 
-/** Sessions and task groups, seeded only for the terminal shot so the diff shots keep an empty dock */
+/** Sessions, seeded only for the terminal shot so the diff shots keep an empty dock */
 function terminalState(): Record<string, unknown> {
   return {
     'terminals.saved': {
@@ -163,18 +161,10 @@ function terminalState(): Record<string, unknown> {
         session('s-codex', 'codex', 'Session timeout', timeout, 51),
         session('s-api', 'shell', 'orbit-api', `${home}/code/orbit-api`, 96)
       ],
-      layout: []
-    },
-    'terminals.tasks': {
-      tasks: [
-        { id: 't-1', name: 'Billing invoices', workspaceId: 'all', worktreePath: invoices, tabs: [tab('tab-1', [['s-claude'], ['s-shell']], 's-claude')], activeTab: 'tab-1' },
-        { id: 't-2', name: 'Session timeout', workspaceId: 'all', worktreePath: timeout, tabs: [tab('tab-2', [['s-codex']], 's-codex')], activeTab: 'tab-2' },
-        { id: 't-3', name: 'Rate limiter', workspaceId: 'all', worktreePath: `${home}/code/orbit-api`, tabs: [tab('tab-3', [['s-api']], 's-api')], activeTab: 'tab-3' }
-      ],
-      selected: { all: 't-1' }
+      selected: { all: 's-claude' }
     },
     'terminals.history': [
-      { ...session('s-old-1', 'claude', 'Invoice totals', invoices, 220), endedAt: Date.now() - 3 * 3_600_000, taskId: 't-1' },
+      { ...session('s-old-1', 'claude', 'Invoice totals', invoices, 220), endedAt: Date.now() - 3 * 3_600_000 },
       { ...session('s-old-2', 'codex', 'Portal return path', invoices, 400), endedAt: Date.now() - 6 * 3_600_000 }
     ]
   }
@@ -480,9 +470,9 @@ async function main(): Promise<void> {
           await seed({
             ...baseState(),
             settings: { ...object(baseState().settings), plugins: { ...object(object(baseState().settings).plugins), hub: true } },
+            'app.place@all': { appTab: 'hub', selected: invoices, viewer: null },
             'hub.selected': 'workflow:ship'
           })
-          await evaluate(`document.querySelector('[data-overlay-button]')?.click()`)
           await until(`!!document.body.textContent?.includes('Ship a ticket')`)
           // React Flow selects on mousedown, so a click() on the card would leave the inspector empty
           const [x, y] = (await evaluate(

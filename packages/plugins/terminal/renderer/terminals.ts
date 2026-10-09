@@ -8,8 +8,6 @@ import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
 import { agentState, agentStatus } from './agentStatus'
 import { findIssueLinks, findRowFileLinks, findWebLinks } from './fileLinks'
-import { type DropEdge, neighborPane, type PaneLayout, remapPanes } from './paneLayout'
-import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, removeSession, shownPanes, type Task, taskOf, taskPanes, tasksFromSessions, tabPanes } from './tasks'
 import { getCurrentWorkspaceId, getWorkspaces, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
@@ -24,7 +22,7 @@ import {
   type SessionMeta,
   type SessionView
 } from './sessionMeta'
-import { isJson, isString, list, object, stringValues } from '@treeix/shared/json'
+import { isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
 import { notify as notifyCenter } from '@treeix/app/notifications'
 
@@ -143,26 +141,23 @@ function userInput(id: string, data: string): void {
   else if (hooked === 'input') hookStatus.set(id, 'working')
 }
 
-/** Into the notification center, unless it is the pane the user is looking at; opening it shows the session */
+/** Into the notification center, unless it is the session the user is looking at; opening it shows the session */
 function notifyAgent(id: string, what: string): void {
   const session = findSession(id)
-  // Not for the pane the user is looking at; on another page it is out of sight even while active
-  if (!session || (document.hasFocus() && activePane()?.id === id && document.querySelector(`[data-session-id="${id}"]`)?.checkVisibility())) return
+  // Not for the session the user is looking at; on another page it is out of sight even while active
+  if (!session || (document.hasFocus() && activeSession()?.id === id && document.querySelector(`[data-session-id="${id}"]`)?.checkVisibility())) return
   notifyCenter({ title: `${agentOr(session.kind).label} ${what}`, body: session.title, workspaceId: session.workspaceId, open: () => sessionRevealer?.(id) })
 }
 
 const ACTIVE_WINDOW_MS = 2000
 
-/** A closed session, kept so it can be started again; agent sessions resume their conversation, in their task when it still exists */
+/** A closed session, kept so it can be started again; agent sessions resume their conversation */
 export type { ClosedSession }
 
 type State = {
   sessions: Session[]
-  tasks: Task[]
-  /** Task shown in each workspace, by workspace id */
+  /** Session shown in each workspace, by workspace id */
   selected: Record<string, string>
-  /** Pane filling its tab, like iTerm's maximize */
-  zoomed: string | null
   /** Newest first */
   history: ClosedSession[]
 }
@@ -212,7 +207,7 @@ function loadHistory(): ClosedSession[] {
   return Array.isArray(parsed) ? parsed.map(parseClosedSession).filter((entry) => entry !== null) : []
 }
 
-let state: State = { sessions: [], tasks: [], selected: {}, zoomed: null, history: loadHistory() }
+let state: State = { sessions: [], selected: {}, history: loadHistory() }
 const listeners = new Set<() => void>()
 /** Output of sessions not opened yet; sessions that never open (killed, another window's) must not grow it forever */
 const pendingOutput = new Map<string, string>()
@@ -353,85 +348,27 @@ setInterval(() => {
   if (next.some((session, index) => session !== state.sessions[index])) update({ sessions: next })
 }, 1000)
 
-const setTasks = (tasks: Task[], selected = state.selected): void => update({ tasks, selected })
-const mapTask = (id: string, change: (task: Task) => Task): Task[] => state.tasks.map((task) => (task.id === id ? change(task) : task))
+/** The session shown in the current workspace */
+export const currentSession = (): Session | undefined => findSession(state.selected[getCurrentWorkspaceId()] ?? '')
 
-/** The task shown in the current workspace */
-export const currentTask = (): Task | undefined => state.tasks.find((task) => task.id === state.selected[getCurrentWorkspaceId()])
-
-export const selectTask = (id: string): void => {
-  if (state.selected[getCurrentWorkspaceId()] !== id) update({ selected: { ...state.selected, [getCurrentWorkspaceId()]: id } })
-}
-
-/** Creates a task in the current workspace and shows it */
-export function createTask(name: string, worktreePath: string): string {
-  const task = newTask({ name, worktreePath, workspaceId: getCurrentWorkspaceId() })
-  setTasks([...state.tasks, task], { ...state.selected, [task.workspaceId]: task.id })
-  return task.id
+/** Puts the session on screen in its own workspace */
+export function selectSession(id: string): void {
+  const session = findSession(id)
+  if (!session || state.selected[session.workspaceId] === id) return
+  update({ selected: { ...state.selected, [session.workspaceId]: id } })
 }
 
 /** An empty name hands naming back to the program */
 export const renameSession = (id: string, title: string): void =>
   update({ sessions: state.sessions.map((session) => (session.id === id ? { ...session, title: title || session.title, renamed: title !== '' } : session)) })
 
-export const renameTask = (id: string, name: string): void => setTasks(mapTask(id, (task) => ({ ...task, name })))
-
-/** Ends the task's sessions, which stay in the history, and forgets the task; asks first when processes are running, since shells and dev servers can't be resumed */
-export function deleteTask(id: string): void {
-  const task = state.tasks.find((candidate) => candidate.id === id)
-  if (!task) return
-  const panes = taskPanes(task)
-  const running = state.sessions.filter((session) => panes.includes(session.id) && session.status !== 'exited' && session.status !== 'dormant').length
-  if (running > 0 && !window.confirm(`Delete the group and end its ${running} running ${running === 1 ? 'process' : 'processes'}?`)) return
-  panes.forEach(killSession)
-  setTasks(state.tasks.filter((candidate) => candidate.id !== id))
-}
-
-export const setActiveTab = (taskId: string, tabId: string): void => setTasks(mapTask(taskId, (task) => ({ ...task, activeTab: tabId })))
-
-/** Remembers the pane last focused in its tab, so coming back to the tab lands there */
-export function setTabFocus(sessionId: string): void {
-  const task = taskOf(state.tasks, sessionId)
-  const tab = task?.tabs.find((candidate) => tabPanes(candidate).includes(sessionId))
-  if (!task || !tab || tab.focus === sessionId) return
-  setTasks(mapTask(task.id, (current) => ({ ...current, tabs: current.tabs.map((candidate) => (candidate === tab ? { ...tab, focus: sessionId } : candidate)) })))
-}
-
-/** Shows the session's task and tab; a session in no tab opens as a new tab of the shown task */
+/** Shows the session on screen, waking it if it was dormant */
 export function revealSession(id: string): void {
-  const task = taskOf(state.tasks, id)
-  const tab = task?.tabs.find((candidate) => tabPanes(candidate).includes(id))
   void wakeSession(id)
-  if (!task || !tab) return placeSession(id, currentTask()?.id)
-  setTasks(
-    mapTask(task.id, (current) => ({ ...current, activeTab: tab.id, tabs: current.tabs.map((candidate) => (candidate === tab ? { ...tab, focus: id } : candidate)) })),
-    { ...state.selected, [getCurrentWorkspaceId()]: task.id }
-  )
+  selectSession(id)
 }
 
-/**
- * Opens a session as a new tab: in `taskId`, else in the shown task when it is on the same folder, else in another
- * task of the workspace on that folder, else in a new task for the folder. `select` shows that task.
- */
-function placeSession(id: string, taskId?: string, select = true): void {
-  const session = findSession(id)
-  if (!session) return
-  const shown = state.tasks.find((task) => task.id === state.selected[session.workspaceId])
-  const existing =
-    state.tasks.find((task) => task.id === taskId) ??
-    (shown?.worktreePath === session.worktreePath ? shown : state.tasks.find((task) => task.workspaceId === session.workspaceId && task.worktreePath === session.worktreePath))
-  const task = existing ?? newTask({ workspaceId: session.workspaceId, worktreePath: session.worktreePath })
-  const tasks = existing ? state.tasks : [...state.tasks, task]
-  setTasks(
-    tasks.map((candidate) => (candidate.id === task.id ? addTab(candidate, id) : candidate)),
-    select ? { ...state.selected, [task.workspaceId]: task.id } : state.selected
-  )
-}
-
-/** Drops sessions, a pane or a whole tab's, onto an edge of another pane */
-export const placePane = (ids: string[], targetId: string, edge: DropEdge): void => setTasks(placeBeside(state.tasks, ids, targetId, edge))
-
-/** Before its pane is fitted, xterm must match the pty: zsh pads its prompt marker to the pty width, and at xterm's default 80 columns that padding wraps and leaves a blank line above the prompt */
+/** Before it is fitted, xterm must match the pty: zsh pads its prompt marker to the pty width, and at xterm's default 80 columns that padding wraps and leaves a blank line above the prompt */
 const SPAWN_SIZE = { cols: 100, rows: 30 }
 
 /** `dormant` makes the terminal without a process behind it; `wakeSession` starts one */
@@ -504,7 +441,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     bridge.send('write', id, data)
     userInput(id, data)
   })
-  // ⌘ combos are app shortcuts (split, zoom, close); xterm would otherwise send keys like ⇧⌘↵ to the shell and swallow the event
+  // ⌘ combos are app shortcuts; xterm would otherwise send keys like ⇧⌘↵ to the shell and swallow the event
   terminal.attachCustomKeyEventHandler((event) => {
     // xterm sends a plain Enter for Shift+Enter, which submits in Claude Code; Esc+Enter (Option+Enter) inserts a newline there and in zsh
     if (event.key === 'Enter' && event.shiftKey && !event.metaKey && !event.altKey && !event.ctrlKey) {
@@ -522,7 +459,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     }
     // ⌃- and ⌃⇧- are the app's Go Back and Go Forward, ⌃Tab and ⌃⇧Tab its next and previous tab, not terminal input
     if (event.ctrlKey && (event.code === 'Minus' || event.code === 'Tab')) return false
-    // ⌥ digits pick a pane; the tab and workspace digits are set in Settings
+    // ⌥ digits pick a session; the page and workspace digits are set in Settings
     const { tabs, workspaces } = getSettings().digitShortcuts
     const digitShortcut = (['alt', tabs, workspaces] as const).some((modifier) => digitPressed(event, modifier) !== null)
     return !event.metaKey && !digitShortcut
@@ -600,24 +537,24 @@ function openChat(id: string, meta: SessionMeta): void {
   update({ sessions: [...state.sessions, session] })
 }
 
-/** A chat with the agent as a new tab, resuming the agent's conversation `resume` when given */
-function startChat(worktreePath: string, kind: SessionKind, taskId?: string, resume: string | null = null): string {
+/** A chat with the agent, resuming the agent's conversation `resume` when given */
+function startChat(worktreePath: string, kind: SessionKind, resume: string | null = null): string {
   const id = crypto.randomUUID()
   openChat(id, { ...newMeta(worktreePath, kind, 'chat'), agentSessionId: resume })
-  placeSession(id, taskId)
+  selectSession(id)
   void wakeSession(id)
   return id
 }
 
 /**
- * `promptArgument` is an already shell-quoted first prompt for agent terminals; the session opens as a new tab of `taskId`,
- * or of the task for its folder. A chat for an agent that can't chat opens as a terminal; an agent with only a chat opens as one.
+ * `promptArgument` is an already shell-quoted first prompt for agent terminals; the session goes on screen in its
+ * workspace. A chat for an agent that can't chat opens as a terminal; an agent with only a chat opens as one.
  */
-export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string, taskId?: string, view: SessionView = 'terminal'): Promise<string> {
+export async function createSession(worktreePath: string, kind: SessionKind, promptArgument?: string, view: SessionView = 'terminal'): Promise<string> {
   const agent = getAgent(kind)
-  if ((view === 'chat' || (agent && isChatOnly(agent))) && canChat(kind)) return startChat(worktreePath, kind, taskId)
+  if ((view === 'chat' || (agent && isChatOnly(agent))) && canChat(kind)) return startChat(worktreePath, kind)
   const id = await startSession(worktreePath, kind, promptArgument)
-  placeSession(id, taskId)
+  selectSession(id)
   return id
 }
 
@@ -628,23 +565,19 @@ function resumeCommand(meta: SessionMeta): string | undefined {
 }
 
 const SAVED_KEY = 'terminals.saved'
-/** `layout` is from before tasks, read once to move those sessions into tasks */
-type Saved = { sessions: (SessionMeta & { id: string })[]; layout: PaneLayout }
-const TASKS_KEY = 'terminals.tasks'
+type Saved = { sessions: (SessionMeta & { id: string })[]; selected: Record<string, string> }
 
-function loadTasks(): { tasks: Task[]; selected: Record<string, string> } | null {
-  const parsed = readStored(TASKS_KEY)
-  return isJson(parsed) ? { tasks: parseTasks(parsed.tasks), selected: stringValues(parsed.selected) } : null
-}
+// Groups are gone; the key only takes up room in old installs
+localStorage.removeItem('terminals.tasks')
 
 function loadSaved(): Saved {
-  const { sessions, layout } = object(readStored(SAVED_KEY))
+  const { sessions, selected } = object(readStored(SAVED_KEY))
   return {
     sessions: list(sessions).flatMap((session) => {
       const meta = parseMeta(session)
       return meta && typeof session.id === 'string' ? [{ ...meta, id: session.id }] : []
     }),
-    layout: list(layout, (column): column is string[] => Array.isArray(column) && column.every(isString))
+    selected: stringValues(selected)
   }
 }
 
@@ -691,7 +624,7 @@ const waking = new Map<string, Promise<void>>()
 
 /**
  * Starts a dormant session under its own id, resuming its agent conversation; resolves once the process runs or the
- * chat connected. A chat waits while the chat plugin is still loading; its pane wakes it once the plugin is there.
+ * chat connected. A chat waits while the chat plugin is still loading; its view wakes it once the plugin is there.
  */
 export function wakeSession(id: string): Promise<void> {
   const session = findSession(id)
@@ -772,12 +705,11 @@ export function syncChats(): void {
 let restored = false
 
 /**
- * After a reload the processes are still running, so reattach. After a relaunch only the panes on screen start again,
- * resuming agent conversations; the rest stay dormant until shown, and stay dormant through reloads.
+ * After a reload the processes are still running, so reattach. After a relaunch only the session on screen starts again,
+ * resuming its agent conversation; the rest stay dormant until shown, and stay dormant through reloads.
  */
 async function restoreSessions(): Promise<void> {
   const saved = loadSaved()
-  const savedTasks = loadTasks()
   const live = await bridge.invoke<LiveTerminal[]>('list')
   for (const terminal of live) {
     const spawned = parseMetaText(terminal.meta)
@@ -787,11 +719,11 @@ async function restoreSessions(): Promise<void> {
     await openSession(terminal.id, meta, terminal.output, terminal.exitCode, { cols: terminal.cols, rows: terminal.rows })
     if (meta.kind === 'codex' && !meta.agentSessionId) void learnCodexConversation(terminal.id)
   }
-  const eager = live.length === 0 && savedTasks ? shownPanes(savedTasks.tasks, savedTasks.selected, getCurrentWorkspaceId()) : []
+  const eager = live.length === 0 ? [saved.selected[getCurrentWorkspaceId()] ?? ''] : []
   for (const { id, ...savedMeta } of saved.sessions) {
     if (findSession(id)) continue
     const meta = openable(savedMeta)
-    // Chats connect once shown, from their pane
+    // Chats connect once shown, from their view
     if (meta.view === 'chat') {
       openChat(id, meta)
       continue
@@ -800,21 +732,12 @@ async function restoreSessions(): Promise<void> {
     if (!dormant) await spawnSession(meta, resumeCommand(meta), id)
     await openSession(id, meta, '', null, SPAWN_SIZE, dormant)
   }
-  const rename = (id: string): string | undefined => (findSession(id) ? id : undefined)
-  const tasks = savedTasks
-    ? remapTasks(savedTasks.tasks, rename)
-    : tasksFromSessions(
-        state.sessions.filter((session) => !taskOf(state.tasks, session.id)),
-        remapPanes(saved.layout, rename).flat()
-      )
-  const selected = savedTasks?.selected ?? Object.fromEntries([...tasks].reverse().map((task) => [task.workspaceId, task.id]))
-  setTasks([...tasks, ...state.tasks], { ...selected, ...state.selected })
-  placeOrphans()
+  // A workspace whose shown session is gone falls back to one it still has
+  const shown = Object.entries(saved.selected).filter(([, id]) => findSession(id))
+  const fallbacks = state.sessions.map((session): [string, string] => [session.workspaceId, session.id])
+  update({ selected: { ...Object.fromEntries(fallbacks), ...Object.fromEntries(shown), ...state.selected } })
   restored = true
 }
-
-/** Sessions in no tab open as tabs of the task for their folder, so every session stays reachable */
-const placeOrphans = (): void => state.sessions.filter((session) => !taskOf(state.tasks, session.id)).forEach((session) => placeSession(session.id, undefined, false))
 
 // Most updates (statuses, titles) change nothing saved, and localStorage writes are synchronous
 const written = new Map<string, string>()
@@ -828,17 +751,12 @@ subscribe(() => {
   if (!restored) return
   // A chat that lost its agent keeps its tab: it resumes with Retry or on the next launch
   const sessions = state.sessions.filter((session) => session.view === 'chat' || session.status !== 'exited').map((session) => ({ id: session.id, ...metaOf(session) }))
-  const saved: Saved = { sessions, layout: [] }
+  const saved: Saved = { sessions, selected: state.selected }
   store(SAVED_KEY, JSON.stringify(saved))
-  store(TASKS_KEY, JSON.stringify({ tasks: state.tasks, selected: state.selected }))
 })
 
 void restoreSessions().catch(() => {
-  // The processes are out of reach, but the tasks stay
-  const saved = loadTasks()
-  if (saved) setTasks([...remapTasks(saved.tasks, () => undefined), ...state.tasks], { ...saved.selected, ...state.selected })
-  // Sessions reattached before the failure
-  placeOrphans()
+  // The processes are out of reach; the sessions reattached before the failure stay
   restored = true
 })
 
@@ -964,7 +882,7 @@ function endTerminal(session: TerminalSession): void {
   session.terminal.dispose()
 }
 
-/** Ends the process and moves the session to the history; its group goes too when this was its last session */
+/** Ends the process and moves the session to the history, showing another of its workspace in its place */
 export function killSession(id: string): void {
   const session = findSession(id)
   if (!session) return
@@ -974,27 +892,18 @@ export function killSession(id: string): void {
     chat?.stop(id)
     chat?.forget(id)
   } else endTerminal(session)
-  const taskId = taskOf(state.tasks, id)?.id
-  const tasks = removeSession(state.tasks, id).filter((task) => task.id !== taskId || task.tabs.length > 0)
-  update({ sessions: state.sessions.filter((candidate) => candidate.id !== id), tasks, zoomed: state.zoomed === id ? null : state.zoomed })
-  setHistory([{ id, ...metaOf(session), taskId, endedAt: Date.now() }, ...state.history])
-}
-
-/** Closes every pane of a tab */
-export function closeTab(taskId: string, tabId: string): void {
-  state.tasks
-    .find((task) => task.id === taskId)
-    ?.tabs.find((tab) => tab.id === tabId)
-    ?.layout.flat()
-    .forEach(killSession)
+  const sessions = state.sessions.filter((candidate) => candidate.id !== id)
+  const next = state.selected[session.workspaceId] === id ? sessions.find((candidate) => candidate.workspaceId === session.workspaceId) : undefined
+  update({ sessions, selected: next ? { ...state.selected, [session.workspaceId]: next.id } : state.selected })
+  setHistory([{ id, ...metaOf(session), endedAt: Date.now() }, ...state.history])
 }
 
 export const forgetClosedSession = (id: string): void => setHistory(state.history.filter((entry) => entry.id !== id))
 export const clearClosedSessions = (ids: string[]): void => setHistory(state.history.filter((entry) => !ids.includes(entry.id)))
 
-/** Starts a closed session again in its folder, resuming the agent conversation, as a new tab of its task, and shows it */
+/** Starts a closed session again in its folder, resuming the agent conversation, and shows it */
 export async function restoreClosedSession(entry: ClosedSession): Promise<string> {
-  const { id: _closedId, endedAt: _endedAt, taskId, ...closed } = entry
+  const { id: _closedId, endedAt: _endedAt, ...closed } = entry
   const meta = openable(closed)
   let id: string
   if (meta.view === 'chat') {
@@ -1005,7 +914,7 @@ export async function restoreClosedSession(entry: ClosedSession): Promise<string
     id = await spawnSession(meta, resumeCommand(meta))
     await openSession(id, meta, '', null)
   }
-  placeSession(id, taskId)
+  selectSession(id)
   forgetClosedSession(entry.id)
   return id
 }
@@ -1063,65 +972,29 @@ export async function pasteClipboard(id: string): Promise<void> {
   if (session) session.terminal.paste(await navigator.clipboard.readText())
 }
 
-const shownTab = () => {
-  const task = currentTask()
-  return task && activeTabOf(task)
-}
-
-/** The pane holding keyboard focus, else the one last focused in the shown tab */
-export function activePane(): Session | undefined {
+/** The session holding keyboard focus, else the one on screen */
+export function activeSession(): Session | undefined {
   const focused = document.activeElement?.closest<HTMLElement>('[data-session-id]')?.dataset.sessionId
-  return findSession(focused ?? '') ?? findSession(shownTab()?.focus ?? '')
+  return findSession(focused ?? '') ?? currentSession()
 }
 
-/** Keyboard focus to the shown tab's pane, else to the start buttons of an empty task */
+/** Keyboard focus to the session on screen, else to the start buttons of an empty workspace */
 export function focusShown(): void {
   setTimeout(() => {
-    const id = shownTab()?.focus
-    const session = findSession(id ?? '')
-    if (id && session && (session.view === 'chat' || session.opened)) focusSession(id)
+    const session = currentSession()
+    if (session && (session.view === 'chat' || session.opened)) focusSession(session.id)
     else document.querySelector<HTMLElement>('[data-terminal-empty] [data-zone-focus]')?.focus()
   }, 50)
 }
 
-/** Focuses the nth pane, in reading order, of the terminals holding keyboard focus */
-export function focusPaneAt(position: number): void {
-  const pane = document.activeElement?.closest('[data-terminal-panes]')?.querySelectorAll<HTMLElement>('[data-session-id]')[position - 1]
-  if (pane?.dataset.sessionId) focusSession(pane.dataset.sessionId)
-}
-
 export const isTerminalFocused = (): boolean => document.activeElement?.closest('[data-session-id]') != null
 
-/** New shell beside the active pane, in its folder, like iTerm's ⌘D and ⇧⌘D; with no pane, a new tab of the shown task */
-export async function splitPane(edge: DropEdge, fallbackCwd: string): Promise<void> {
-  const anchor = activePane()
-  const task = currentTask()
-  const id = await startSession(anchor?.worktreePath ?? task?.worktreePath ?? fallbackCwd, 'shell')
-  if (anchor && taskOf(state.tasks, anchor.id)) setTasks(placeBeside(state.tasks, [id], anchor.id, edge))
-  else placeSession(id, task?.id)
-  setTimeout(() => focusSession(id))
-}
-
-/** Ends the session; it stays in the history, so an agent conversation can be resumed. Focus goes to the pane that takes its place */
-export function closeActivePane(): void {
-  const session = activePane()
+/** Ends the session on screen; it stays in the history, so an agent conversation can be resumed */
+export function closeActiveSession(): void {
+  const session = activeSession()
   if (!session) return
   killSession(session.id)
   focusShown()
-}
-
-export function focusNeighbor(direction: DropEdge): void {
-  const session = activePane()
-  const tab = session && taskOf(state.tasks, session.id)?.tabs.find((candidate) => tabPanes(candidate).includes(session.id))
-  const next = session && tab && neighborPane(tab.layout, session.id, direction)
-  if (next) focusSession(next)
-}
-
-export function toggleZoom(): void {
-  const session = activePane()
-  if (!session) return
-  update({ zoomed: state.zoomed === session.id ? null : session.id })
-  setTimeout(() => focusSession(session.id))
 }
 
 export const selectAllTerminal = (id: string): void => findTerminal(id)?.terminal.selectAll()
@@ -1135,7 +1008,7 @@ export function otherView(session: Session): SessionView | null {
   return session.agentSessionId && getAgent(session.kind)?.chat ? 'chat' : null
 }
 
-/** Ends the session and opens the same conversation in the other view, in the same tab slot; only one view runs at a time */
+/** Ends the session and opens the same conversation in the other view; only one view runs at a time */
 export async function switchView(id: string): Promise<void> {
   const session = findSession(id)
   const chat = findService('chat')
@@ -1155,8 +1028,7 @@ export async function switchView(id: string): Promise<void> {
   }
   update({
     sessions: state.sessions.filter((candidate) => candidate.id !== id),
-    tasks: remapTasks(state.tasks, (pane) => (pane === id ? next : pane)),
-    zoomed: state.zoomed === id ? next : state.zoomed
+    selected: state.selected[session.workspaceId] === id ? { ...state.selected, [session.workspaceId]: next } : state.selected
   })
   void wakeSession(next)
   setTimeout(() => focusSession(next))

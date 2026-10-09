@@ -10,18 +10,18 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => launched.close())
 
-test('⌘⇧H opens a shell in ~ in zen, outside the workspace, and takes you back', async () => {
+test('⌘⇧H opens a shell in ~, outside the workspace, and takes you back', async () => {
   const { page, repo } = launched
   const terminalTab = page.locator('[data-page-tab="terminal"]')
-  const switcher = page.locator('[data-workspace-switcher]')
-  await expect(switcher).toBeVisible()
+  const sidebar = page.locator('[data-app-sidebar]')
+  await expect(sidebar).toBeVisible()
 
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 
   await page.keyboard.press('Meta+Shift+H')
-  // Zen hides the title bar with the workspaces and the page tabs, leaving the terminal alone
-  await expect(switcher).toHaveCount(0)
-  await expect(terminalTab).toHaveCount(0)
+  // Home is a workspace like any other: the shell opens on the Terminal page, with the sidebar in place
+  await expect(sidebar.locator('[data-workspace="home"]')).toHaveAttribute('aria-current', 'true')
+  await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   const terminal = page.locator('.xterm').first()
   await expect(terminal).toBeVisible({ timeout: 15_000 })
   await terminal.click()
@@ -31,6 +31,6 @@ test('⌘⇧H opens a shell in ~ in zen, outside the workspace, and takes you ba
   await expect.poll(() => readFile(join(home, 'here.txt'), 'utf8').catch(() => ''), { timeout: 15_000 }).toBe(`${home}\n`)
 
   await page.keyboard.press('Meta+Shift+H')
-  await expect(switcher).toBeVisible()
+  await expect(sidebar).toBeVisible()
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 })

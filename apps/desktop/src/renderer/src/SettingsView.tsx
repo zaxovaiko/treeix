@@ -295,6 +295,7 @@ function toggle(
     | 'editorMinimap'
     | 'editorWordWrap'
     | 'sidebarBranches'
+    | 'islandUi'
     | 'hotkeyHideOnBlur'
     | 'hotkeyWindow'
     | 'menuBarIcon'
@@ -450,6 +451,13 @@ const SETTINGS: SettingSpec[] = [
       ['left', 'Left'],
       ['right', 'Right']
     ])
+  },
+  {
+    section: 'General',
+    card: 'Layout',
+    label: 'Island UI',
+    description: 'The sidebar floats over the page as a rounded island, Figma style, instead of sitting in a column beside it. Hidden, it folds to a pill.',
+    Control: toggle('islandUi', 'Island UI')
   },
   {
     section: 'General',
@@ -1408,7 +1416,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
     }
     onReveal = take
     if (pendingReveal) take()
-    else focusZone('list')
+    else focusZone('inspector')
     return () => {
       onReveal = null
     }
@@ -1425,18 +1433,18 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
     })
   }, [reveal])
 
-  const latest = useRef({ onClose, list: panels.list })
-  latest.current = { onClose, list: panels.list }
+  const latest = useRef({ onClose, nav: panels.inspector })
+  latest.current = { onClose, nav: panels.inspector }
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const { zone, leader } = getShell()
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || leader || isTyping(event) || (zone !== 'list' && zone !== 'main')) return
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || leader || isTyping(event) || (zone !== 'inspector' && zone !== 'main')) return
       // Keys from a drawer, dialog or menu over the page are theirs
       const origin = event.target instanceof Element && event.target !== document.body ? event.target : null
       if (origin && ![searchRef.current, mainRef.current].some((element) => element?.closest('[data-zone]')?.contains(origin))) return
-      // Esc in main goes back to the list through the shell; from the list, or main without one, it leaves Settings
+      // Esc in main goes back to the nav through the shell; from the nav, or main without one, it leaves Settings
       if (event.key === 'Escape') {
-        if (zone === 'list' || !latest.current.list) latest.current.onClose()
+        if (zone === 'inspector' || !latest.current.nav) latest.current.onClose()
         return
       }
       if (event.key === '/') {
@@ -1471,8 +1479,8 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
   return (
     <PageLayout
       id="settings"
-      listWidth={220}
-      list={
+      inspectorWidth={220}
+      inspector={
         <>
           <div className="flex h-9 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Settings</div>
           <div className="shrink-0 border-b border-border p-2">
@@ -1523,8 +1531,8 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
       main={
         <>
           <header className="flex h-9 shrink-0 items-center gap-3 border-b border-border px-3">
-            <ListToggle page="settings" />
-            <span className="min-w-0 truncate text-xs font-medium">{needle ? `Results for “${needle}”` : (nav[sectionIndex]?.label ?? page)}</span>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium">{needle ? `Results for “${needle}”` : (nav[sectionIndex]?.label ?? page)}</span>
+            <ListToggle page="settings" panel="inspector" />
           </header>
           <div
             ref={mainRef}

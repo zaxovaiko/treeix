@@ -2,7 +2,7 @@ import { createStore, type HostApi } from '@treeix/sdk'
 import { readStored } from '@treeix/app/storage'
 import { isString, list, stringValues } from '@treeix/shared/json'
 
-/** The folder picked on the Terminal page, per workspace; new groups and tabs start there instead of the app's default */
+/** The folder picked on the Terminal page, per workspace; new sessions start there instead of the app's default */
 const KEY = 'terminal.folders'
 const RECENT_KEY = 'terminal.recentFolders'
 const RECENT_LIMIT = 5

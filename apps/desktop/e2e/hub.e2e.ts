@@ -17,11 +17,8 @@ const fake = {
   chat: { adapter: 'acp', command: `"${process.execPath}" "${join(__dirname, 'fakeAcpAgent.mjs')}"` }
 }
 
-/** Shows the AI Hub over the panes; its button clicked while it is open would close it */
-async function showHub(page: Page): Promise<void> {
-  const button = page.locator('[data-overlay-button]')
-  if ((await button.getAttribute('aria-pressed')) !== 'true') await button.click()
-}
+/** The hub's rows live in the sidebar's sections, which pick what its page shows */
+const section = (page: Page, id: 'agents' | 'workflows' | 'history'): ReturnType<Page['locator']> => page.locator(`[data-sidebar-section="hub.${id}"]`)
 
 /** An OpenAI-compatible API that thinks, then answers with what it was sent */
 const sse = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`
@@ -68,8 +65,7 @@ test.afterAll(async () => {
 
 test('an agent made in the AI Hub chats as itself and joins the new-tab menu', async () => {
   const { page } = launched
-  await showHub(page)
-  await page.getByRole('button', { name: 'Create an agent' }).click()
+  await page.getByRole('button', { name: 'New agent' }).click()
 
   await page.getByPlaceholder('Reviewer').fill('Scout')
   // Esc closes an open dropdown, not the editor around it
@@ -91,7 +87,7 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
   await page.keyboard.press('Enter')
   await expect(page.getByText('Here is a picture')).toBeVisible()
   // The chat joins the history, which keeps it until removed
-  const chatRow = page.locator('[data-list-row]', { hasText: 'Show me' })
+  const chatRow = section(page, 'history').locator('button', { hasText: 'Show me' })
   await chatRow.hover()
   await page.getByRole('button', { name: 'Remove from history' }).click()
   await expect(chatRow).toBeHidden()
@@ -101,11 +97,11 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
   await page.keyboard.press('Escape')
 
   await page.getByRole('button', { name: 'Run command' }).click()
-  await page.getByPlaceholder(/^Search commands/).fill('New Scout tab')
+  await page.getByPlaceholder(/^Search commands/).fill('New Scout session')
   await page.keyboard.press('Enter')
   await expect(page.getByText('Chat with Scout')).toBeVisible({ timeout: 20_000 })
 
-  await showHub(page)
+  await section(page, 'agents').getByRole('button', { name: 'Scout' }).click()
   page.once('dialog', (dialog) => void dialog.accept())
   await page.getByRole('button', { name: 'Delete agent' }).click()
   await expect(page.getByRole('button', { name: 'Create an agent' })).toBeVisible()
@@ -114,8 +110,7 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
 test('an agent on an OpenAI-compatible API lists its models and chats with its instructions', async () => {
   const { page } = launched
   const baseUrl = await startApi()
-  await showHub(page)
-  await page.getByRole('button', { name: 'Create an agent' }).click()
+  await page.getByRole('button', { name: 'New agent' }).click()
 
   await page.getByPlaceholder('Reviewer').fill('Local')
   await choose(page, 'Runtime', 'Other OpenAI')
@@ -136,7 +131,6 @@ test('an agent on an OpenAI-compatible API lists its models and chats with its i
 
 test('asking an agent from the palette records a run with its thinking and answer', async () => {
   const { page } = launched
-  await showHub(page)
   await page.getByRole('button', { name: 'New agent' }).click()
   await page.getByPlaceholder('Reviewer').fill('Courier')
   await choose(page, 'Runtime', 'Fake')
@@ -160,7 +154,7 @@ test('asking an agent from the palette records a run with its thinking and answe
     .toEqual([true, true])
   await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 740))
 
-  const runRow = page.locator('[data-list-row]', { hasText: 'Where to?' })
+  const runRow = section(page, 'history').locator('button', { hasText: 'Where to?' })
   await runRow.hover()
   await page.getByRole('button', { name: 'Remove the run' }).click()
   await expect(runRow).toBeHidden()
@@ -169,9 +163,8 @@ test('asking an agent from the palette records a run with its thinking and answe
 test('a workflow built on the canvas runs its agent, shows each step done and undoes edits', async () => {
   const { page } = launched
   const steps = page.locator('.react-flow__node')
-  // Room for the canvas between the islands, which float over it
+  // Room for the canvas beside the sidebar
   await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
-  await showHub(page)
   await page.getByRole('button', { name: 'New workflow' }).click()
   await page.getByRole('textbox', { name: 'Workflow name' }).fill('Relay')
 
@@ -191,6 +184,8 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await expect(steps).toHaveCount(4)
   await expect(page.getByText('Connect a step to it')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Relay' })).toBeVisible()
+  // The inspector island floats over the right of the canvas, where the unconnected step landed
+  await page.getByRole('button', { name: 'Hide the inspector' }).click()
   await steps.filter({ hasText: 'Merge' }).click()
   await page.keyboard.press('Backspace')
   await expect(steps).toHaveCount(3)
@@ -199,8 +194,9 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await expect(steps).toHaveCount(4)
   await page.keyboard.press('ControlOrMeta+Shift+z')
   await expect(steps).toHaveCount(3)
+  await page.getByRole('button', { name: 'Show the inspector' }).click()
 
-  await page.locator('[data-list-row]', { hasText: 'Relay' }).hover()
+  await section(page, 'workflows').locator('button', { hasText: 'Relay' }).hover()
   await page.getByRole('button', { name: 'Run Relay' }).click()
   await page.getByPlaceholder(/^The input/).fill('Go')
   await page.keyboard.press('Enter')
@@ -215,51 +211,27 @@ test('a workflow built on the canvas runs its agent, shows each step done and un
   await expect(page.getByText('Run Relay…')).toBeVisible()
 })
 
-test('an approval step holds the run, lighting the hub button, until approved', async () => {
+test('an approval step holds the run until approved', async () => {
   const { page } = launched
   const steps = page.locator('.react-flow__node')
-  const needsYou = page.locator('[data-overlay-button] [data-hub-attention][aria-label="An agent needs you"]')
   // The first Esc clears the last test's query, the next closes the palette
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
   await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
-  await showHub(page)
   await page.getByRole('button', { name: 'New workflow' }).click()
   await page.getByRole('textbox', { name: 'Workflow name' }).fill('Gate')
   await steps.filter({ hasText: 'Input' }).click()
   await page.getByRole('button', { name: 'Approval', exact: true }).click()
   await expect(page.locator('.react-flow__edge')).toHaveCount(2)
 
-  await page.locator('[data-list-row]', { hasText: 'Gate' }).hover()
+  await section(page, 'workflows').locator('button', { hasText: 'Gate' }).hover()
   await page.getByRole('button', { name: 'Run Gate' }).click()
   await page.getByPlaceholder(/^The input/).fill('v1')
   await page.keyboard.press('Enter')
   await expect(steps.filter({ hasText: 'Approval' }).getByTitle('Needs you')).toBeVisible({ timeout: 20_000 })
-  await expect(needsYou).toBeVisible()
 
   await page.getByRole('button', { name: /^Last run/ }).click()
   await expect(page.getByText('Go on with v1?')).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByText(/^Done · /)).toBeVisible()
-  await expect(needsYou).toBeHidden()
-})
-
-test('the AI Hub list hides from its header and comes back with ⌘B', async () => {
-  const { page } = launched
-  await showHub(page)
-  const heading = page.locator('[data-overlay] [data-zone="list"]').getByText('Agents', { exact: true })
-  await expect(heading).toBeVisible()
-  await page.getByRole('button', { name: /^Hide the list/ }).click()
-  await expect(heading).toBeHidden()
-  await page.keyboard.press('Meta+b')
-  await expect(heading).toBeVisible()
-})
-
-test('a first launch opens the AI Hub', async () => {
-  const fresh = await launch({ 'README.md': 'alpha' }, undefined, true)
-  try {
-    await expect(fresh.page.getByRole('button', { name: 'Create an agent' })).toBeVisible()
-  } finally {
-    await fresh.close()
-  }
 })

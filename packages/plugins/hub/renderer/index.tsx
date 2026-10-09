@@ -5,11 +5,28 @@ import { subscribeSettings } from '@treeix/app/settings'
 import { notify } from '@treeix/app/notifications'
 import { type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
-import { HubFace, HubPeek } from './Peek'
-import { asAgent, asking, followAgents, followChats, followRuns, followWorkflows, hubAgents, hubApi, hubRuns, hubSelection, hubWorkflows, onOpenRun, TAB_ID } from './store'
+import { AgentsSection, HistorySection, NewAgentButton, NewWorkflowButton, WorkflowsSection } from './Sections'
+import {
+  asAgent,
+  asking,
+  followAgents,
+  followChats,
+  followRuns,
+  followWorkflows,
+  hubAgents,
+  hubApi,
+  hubEditing,
+  hubRuns,
+  hubSelection,
+  hubWorkflows,
+  onOpenRun,
+  TAB_ID
+} from './store'
 
-// The page pulls in the editor and the chat view, so it loads when first opened
+// The page pulls in the chat view and the canvas, so it loads when first opened
 const HubPage = lazy(() => import('./HubPage').then((module) => ({ default: module.HubPage })))
+// The editor only loads once an agent is being created or edited
+const HubEditor = lazy(() => import('./HubPage').then((module) => ({ default: module.HubEditor })))
 
 function Tab(): React.JSX.Element {
   return (
@@ -75,13 +92,23 @@ function useRunNotifications(): void {
 
 function Root(): React.JSX.Element {
   const chat = useHost().service('chat')
+  const editing = hubEditing.use()
   useEffect(followAgents, [])
   useEffect(() => (chat ? followChats(chat) : undefined), [chat])
   useEffect(followWorkflows, [])
   useEffect(followRuns, [])
   useRuntimes()
   useRunNotifications()
-  return <AskDialog />
+  return (
+    <>
+      <AskDialog />
+      {editing && (
+        <Suspense fallback={null}>
+          <HubEditor />
+        </Suspense>
+      )}
+    </>
+  )
 }
 
 const plugin: RendererPlugin = {
@@ -92,8 +119,14 @@ const plugin: RendererPlugin = {
       icon: 'sparkles',
       order: 30,
       render: Tab,
-      overlay: { Face: HubFace, Peek: HubPeek }
+      // The sidebar's sections pick what the page shows, so it needs no tab of its own
+      hidden: true
     }
+  ],
+  sidebar: [
+    { id: 'hub.agents', label: 'Agents', order: 1, render: AgentsSection, Actions: NewAgentButton },
+    { id: 'hub.workflows', label: 'Workflows', order: 2, render: WorkflowsSection, Actions: NewWorkflowButton },
+    { id: 'hub.history', label: 'History', order: 3, render: HistorySection }
   ],
   Root,
   commands: () => [

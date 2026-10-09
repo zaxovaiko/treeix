@@ -28,7 +28,6 @@ import {
   type PanelName,
   runShellCommand,
   type SessionKind,
-  type TabContribution,
   togglePanel,
   toggleZen,
   updateShell,
@@ -39,7 +38,6 @@ import {
   zoneBack
 } from '@treeix/sdk'
 import { getAgents, isAgent } from './agents'
-import { onColor } from './themes'
 import { activityOf } from './sessionUi'
 import { keptPages, visitedIn } from './keepAlive'
 import { CleanupDialog } from './CleanupDialog'
@@ -69,7 +67,8 @@ import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
 import { SendButton, SUBMIT_AFTER_PASTE } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
 import { isPageId, showSettingsPage } from './settingsNav'
-import { WorkspaceDialog, WorkspaceSwitcher } from './WorkspaceSwitcher'
+import { WorkspaceDialog } from './WorkspaceSwitcher'
+import { AppSidebar } from './AppSidebar'
 import {
   addRepoToWorkspace,
   ALL_PROJECTS,
@@ -116,10 +115,6 @@ import { isJson, isString, list, object } from '../../shared/json'
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
 /** Where a workspace opens when it has no saved place; the effect below falls back to Worktrees when the terminal plugin is off */
 const DEFAULT_TAB = 'terminal'
-/** A first launch, before any workspace saved where it was left, opens the AI Hub */
-const isFirstRun = typeof localStorage !== 'undefined' && !Object.keys(localStorage).some((key) => key.startsWith('app.place@'))
-// Stored at once, so the hub stays open past a reload that comes before anything else is saved
-if (isFirstRun) localStorage.setItem('app.overlay', 'true')
 /** Page tabs dragged in the title bar carry their id */
 const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
 /** Pages shown beside the main one, so three at most on screen */
@@ -172,7 +167,6 @@ function readBrowsedFolders(): Record<string, string> {
 type Place = {
   workspaceId: string
   appTab: string
-  overlay: boolean
   selected: string | null
   viewer: { path: string; line: number | null } | null
   filePath: string | null
@@ -180,7 +174,6 @@ type Place = {
 const samePlace = (a: Place, b: Place): boolean =>
   a.workspaceId === b.workspaceId &&
   a.appTab === b.appTab &&
-  a.overlay === b.overlay &&
   a.selected === b.selected &&
   a.filePath === b.filePath &&
   a.viewer?.path === b.viewer?.path &&
@@ -325,17 +318,9 @@ function App(): React.JSX.Element {
   const [splitWidth, setSplitWidth] = usePersisted<number>('app.splitWidth', 560)
   /** The split pane that has the keyboard, so only that pane's header reads as active; null while the main one has it */
   const [splitFocus, setSplitFocus] = useState<string | null>(null)
-  /** The plugin page that opens over everything rather than in a pane, the AI Hub; first launch opens it, later ones open as left */
-  const [overlayOpen, setOverlayOpen] = usePersisted<boolean>('app.overlay', false)
-  // Mounted on first open and kept, so it opens instantly and keeps its state
-  const [overlaySeen, setOverlaySeen] = useState(false)
-  if (overlayOpen && !overlaySeen) setOverlaySeen(true)
-  // Any way to another page (Settings, a file, a plugin, the palette) brings the panes back from under the overlay
-  const [overlayOver, setOverlayOver] = useState(appTab)
-  if (overlayOver !== appTab) {
-    setOverlayOver(appTab)
-    if (overlayOpen) setOverlayOpen(false)
-  }
+  /** The left sidebar: workspaces with their sessions, and the sections plugins contribute */
+  const [sidebarOpen, setSidebarOpen] = usePersisted<boolean>('app.sidebar', true)
+  const [sidebarWidth, setSidebarWidth] = usePersisted<number>('app.sidebarWidth', 240)
   // Reopen where the app was left: tab, worktree and file
   useEffect(() => {
     const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
@@ -353,7 +338,9 @@ function App(): React.JSX.Element {
   const { loaded: plugins, ready: pluginsReady } = usePlugins()
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
   /** The title bar row: Worktrees sits among the plugin tabs, all in `order` until dragged elsewhere, each with the icon picked in Settings */
-  const defaultTabs = [WORKTREES_TAB, ...pluginTabs].sort((a, b) => a.order - b.order).map((tab) => ({ ...tab, icon: settings.tabIcons[tab.id] ?? tab.icon }))
+  const defaultTabs = [WORKTREES_TAB, ...pluginTabs.filter((tab) => !tab.hidden)]
+    .sort((a, b) => a.order - b.order)
+    .map((tab) => ({ ...tab, icon: settings.tabIcons[tab.id] ?? tab.icon }))
   /** Plugins' title bar items, the `end` ones after Settings until dragged */
   const pluginBarItems = plugins
     .flatMap(({ manifest, plugin }) => (plugin.titleBar ?? []).map((item, index) => ({ key: `${manifest.id}:${index}`, ...item })))
@@ -373,17 +360,15 @@ function App(): React.JSX.Element {
     ]
   )
   const tabs = defaultTabs.toSorted((a, b) => barOrder.indexOf(a.id) - barOrder.indexOf(b.id))
-  const overlayTab = pluginTabs.find((tab) => tab.overlay)
-  /** The tabs that open in a pane, in the title bar strip */
-  const paneTabs = tabs.filter((tab) => tab.id !== overlayTab?.id)
   const [draggingTab, setDraggingTab] = useState(false)
   /** Where a dragged title bar item would land: before this item, or at the end when null */
   const [tabDrop, setTabDrop] = useState<{ beforeId: string | null } | null>(null)
   // Settings and document tabs stay single; a split page whose plugin was turned off just closes
-  const splitPages = shell.zen ? [] : splitTabs.flatMap((id) => (id === appTab ? [] : paneTabs.filter((tab) => tab.id === id)))
+  const splitPages = shell.zen ? [] : splitTabs.flatMap((id) => (id === appTab ? [] : tabs.filter((tab) => tab.id === id)))
   const splitIds = splitPages.map((tab) => tab.id)
   const focusedSplit = splitIds.find((id) => id === splitFocus) ?? null
-  const mainPage = pageHidden ? undefined : paneTabs.find((tab) => tab.id === appTab)
+  // A hidden page is only reached from the sidebar, so it isn't in `tabs` but still fills main
+  const mainPage = pageHidden ? undefined : (tabs.find((tab) => tab.id === appTab) ?? pluginTabs.find((tab) => tab.id === appTab))
   const mainOnScreen = !!mainPage
   /** Beside the pages on screen; with three up the rightmost makes room */
   const openBeside = (id: string): void => {
@@ -398,16 +383,16 @@ function App(): React.JSX.Element {
     setSplitTabs(splitIds.slice(1))
   }
   const pageTabMenu = (event: React.MouseEvent, tab: { id: string }): void => {
-    const onScreen = splitIds.includes(tab.id) || (tab.id === appTab && mainOnScreen)
+    const onScreen = (id: string): boolean => splitIds.includes(id) || (id === appTab && mainOnScreen)
     openMenu(event, [
-      onScreen && splitIds.length
+      { label: 'Show alone', enabled: tab.id !== appTab || splitIds.length > 0, run: () => (goPage(tab.id), setSplitTabs([])) },
+      onScreen(tab.id) && splitIds.length
         ? { label: 'Take out of split', run: () => closePage(tab.id) }
-        : {
-            label: 'Open beside',
-            enabled: !onScreen,
-            run: () => openBeside(tab.id)
-          },
-      { label: 'Close', enabled: onScreen, run: () => closePage(tab.id) }
+        : { label: 'Open beside', enabled: !onScreen(tab.id), run: () => openBeside(tab.id) },
+      { label: 'Close', enabled: onScreen(tab.id), run: () => closePage(tab.id) },
+      null,
+      // Splitting the window with any other page, without going through its own tab
+      ...tabs.filter((other) => other.id !== tab.id && !onScreen(other.id)).map((other) => ({ label: `Split with ${other.label}`, run: () => openBeside(other.id) }))
     ])
   }
   const pluginPanels = plugins.flatMap(({ plugin }) => plugin.panels ?? [])
@@ -535,6 +520,9 @@ function App(): React.JSX.Element {
     loadWorktree(selected)
   }, [selected])
 
+  // Island UI is a setting, and the page layouts float their panels by it
+  useEffect(() => updateShell({ islandUi: settings.islandUi }), [settings.islandUi])
+
   // ⌃- / ⌃⇧- walk back and forward through places visited, like VS Code's Go Back
   useEffect(() => {
     const cancelLeader = (): void => void (getShell().leader && updateShell({ leader: false }))
@@ -547,8 +535,8 @@ function App(): React.JSX.Element {
   const restoringUntil = useRef(0)
   useEffect(() => {
     if (Date.now() < restoringUntil.current) return
-    setPlaces((history) => recordPlace(history, { workspaceId, appTab, overlay: overlayOpen, selected, viewer, filePath }, samePlace))
-  }, [workspaceId, appTab, overlayOpen, selected, viewer, filePath])
+    setPlaces((history) => recordPlace(history, { workspaceId, appTab, selected, viewer, filePath }, samePlace))
+  }, [workspaceId, appTab, selected, viewer, filePath])
 
   const goToPlace = (delta: -1 | 1): void => {
     const step = stepPlace(places, delta)
@@ -559,8 +547,6 @@ function App(): React.JSX.Element {
     // The workspace first, so the tab, worktree and file below win over the ones it remembers
     switchWorkspace(place.workspaceId)
     setAppTab(place.appTab)
-    setOverlayOver(place.appTab)
-    setOverlayOpen(place.overlay)
     if (place.selected !== selected) {
       pendingViewer.current = place.viewer
       pendingFilePath.current = place.filePath
@@ -652,8 +638,6 @@ function App(): React.JSX.Element {
 
   /** Shows a page with the keyboard in it: its list, or the terminal on the Terminal page */
   const goPage = (tab: string): void => {
-    if (tab === overlayTab?.id) return setOverlayOpen(true)
-    setOverlayOpen(false)
     // A page in a split trades places with the active one
     setHiddenTab(null)
     if (splitIds.includes(tab)) setSplitTabs(mainOnScreen ? splitIds.map((id) => (id === tab ? appTab : id)) : splitIds.filter((id) => id !== tab))
@@ -664,15 +648,13 @@ function App(): React.JSX.Element {
 
   /** A plugin's way to a page: like goPage, but the keyboard stays where the plugin puts it */
   const showTab = (tab: string): void => {
-    if (tab === overlayTab?.id) return setOverlayOpen(true)
-    setOverlayOpen(false)
     setHiddenTab(null)
     setAppTab(tab)
   }
 
   /** ⌃Tab order: the page tabs, then the open documents, wrapping around */
   const stepTab = (step: number): void => {
-    const order = [...paneTabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
+    const order = [...tabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
     const index = order.indexOf(appTab)
     goPage(order[(Math.max(index, 0) + (index === -1 && step < 0 ? 0 : step) + order.length) % order.length])
   }
@@ -700,23 +682,6 @@ function App(): React.JSX.Element {
 
   useEffect(() => setWorkspaceSwitcher(switchWorkspace))
 
-  const overlayRef = useRef<HTMLDivElement>(null)
-  // Opening moves the keyboard into the overlay; Esc, outside a field, closes it and the keyboard goes back to the page
-  useEffect(() => {
-    slide(overlayRef.current, overlayOpen)
-    if (!overlayOpen) {
-      requestAnimationFrame(() => document.activeElement === document.body && focusZone('main'))
-      return
-    }
-    overlayRef.current?.focus()
-    focusZone('list')
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && !event.defaultPrevented && !isTyping(event)) setOverlayOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [overlayOpen])
-
   /** Each workspace remembers its selected worktree and open tabs */
   const switchWorkspace = (id: string): void => {
     if (id === workspaceId) return
@@ -735,14 +700,9 @@ function App(): React.JSX.Element {
     setSelected(nextSelected)
     setDocTabs(view?.docTabs ?? [])
     setAppTab(id === HOME.id ? 'terminal' : (view?.appTab ?? DEFAULT_TAB))
-    // Home is a terminal in zen; leaving it gives back the zen it found
-    if (id === HOME.id) zenBeforeHome.current = getShell().zen
-    if (id === HOME.id || workspaceId === HOME.id) updateShell({ zen: id === HOME.id || zenBeforeHome.current })
     setCurrentWorkspace(id)
     if (id === HOME.id && !allSessions.some((session) => session.workspaceId === HOME.id)) void findService('sessions')?.start(window.api.home, 'shell')
   }
-  const zenBeforeHome = useRef(false)
-
   /** Into Home, or back to the workspace it was entered from */
   const toggleHome = (): void =>
     switchWorkspace(workspaceId === HOME.id ? (recentIds.find((id) => id !== HOME.id && workspaceOf(workspaces, id)) ?? workspaces[0]?.id ?? ALL_PROJECTS) : HOME.id)
@@ -1235,7 +1195,7 @@ function App(): React.JSX.Element {
       const tabModifier = settings.digitShortcuts.tabs
       const heldByFocus = isTerminalFocused() ? tabModifier === 'alt' || tabModifier === 'meta' : typing && tabModifier === 'alt'
       if (tabDigit && !heldByFocus) {
-        const digitTabs = [...paneTabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
+        const digitTabs = [...tabs.map((tab) => tab.id), ...docTabs.map((tab) => tab.key)]
         // 9 goes to the last tab, like browsers
         const tab = tabDigit === 9 ? digitTabs.at(-1) : digitTabs[tabDigit - 1]
         if (!tab) return
@@ -1543,18 +1503,18 @@ function App(): React.JSX.Element {
 
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
+  const showSidebar = sidebarOpen && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
-    const page = overlayOpen && overlayTab ? overlayTab.id : activePage
-    if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(page, panel)) return flash(`${overlayOpen && overlayTab ? overlayTab.label : appTabLabel} has no ${panel}`)
-    // In the overlay the keys work its page, not the one under it
-    togglePanel(panel, page)
+    if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
+    togglePanel(panel, activePage)
   }
   useModifierHints()
   useShellKeys({
     enabled: !paletteOpen && !searchOpen,
     onLeader,
     onTogglePanel: toggleShellPanel,
+    onToggleSidebar: () => setSidebarOpen(!sidebarOpen),
     onSheet: () => setSheetOpen(!sheetOpen)
   })
 
@@ -1596,10 +1556,9 @@ function App(): React.JSX.Element {
       setBrowsedFolder: (path) => latest.current.setBrowsedFolder(path),
       defaultCwd,
       diffStyle,
-      // Under the overlay the page is off screen, so a plugin's "show my page" still has to lift it
-      activeTab: overlayOpen && overlayTab ? overlayTab.id : appTab,
+      activeTab: appTab,
       activePage,
-      keyboardPage: overlayOpen && overlayTab ? overlayTab.id : (focusedSplit ?? appTab),
+      keyboardPage: focusedSplit ?? appTab,
       setActiveTab: (tab) => latest.current.showTab(tab),
       openTab: (tab) => latest.current.openTab(tab),
       closeTab: (key) => latest.current.closeTab(key),
@@ -1644,7 +1603,6 @@ function App(): React.JSX.Element {
       appTab,
       activePage,
       focusedSplit,
-      overlayOpen,
       comments,
       patches,
       worktreeFiles,
@@ -1667,8 +1625,8 @@ function App(): React.JSX.Element {
     window.addEventListener('click', onClick, true)
     return () => window.removeEventListener('click', onClick, true)
   }, [])
-  // A split page, and the overlay, see themselves as the active page, so their layouts keep their own panels and widths
-  const ownPages = [...splitIds, overlayTab?.id ?? '']
+  // A split page sees itself as the active page, so its layout keeps its own panels and widths
+  const ownPages = splitIds
   const ownKey = ownPages.join()
   const ownHosts = useMemo(() => new Map(ownPages.map((id): [string, HostApi] => [id, { ...host, activeTab: id, activePage: id }])), [host, ownKey])
   const keptTabs = keptPages(pluginTabs, visitedTabs, appTab, ownPages)
@@ -1725,7 +1683,7 @@ function App(): React.JSX.Element {
         run: () => goPage(tab.id)
       }
     }),
-    ...paneTabs
+    ...tabs
       .filter((tab) => tab.id !== appTab && !splitIds.includes(tab.id))
       .map((tab): Command => ({
         id: `split:${tab.id}`,
@@ -1925,13 +1883,12 @@ function App(): React.JSX.Element {
     const slot = isMain ? 0 : splitIds.indexOf(tab.id) + 1
     const open = slot > 0 || isMain
     const split = open && splitIds.length > 0
-    // A click opens the page beside the ones on screen, or takes it out of the split; ⇧-click shows it alone
+    // A click shows the page alone; ⇧-click opens it beside the ones on screen, or takes it out of the split
     const click = (event: React.MouseEvent): void => {
-      if (event.shiftKey) {
-        if (!isMain || overlayOpen) goPage(tab.id)
+      if (!event.shiftKey) {
+        if (!isMain) goPage(tab.id)
         setSplitTabs([])
-      } else if (overlayOpen) goPage(tab.id)
-      else if (split) closePage(tab.id)
+      } else if (split) closePage(tab.id)
       else if (!open) openBeside(tab.id)
     }
     const compact = settings.compactTabs
@@ -1958,7 +1915,7 @@ function App(): React.JSX.Element {
         // The name, which the compact tab no longer shows
         aria-label={tab.label}
         aria-current={open ? 'page' : undefined}
-        title={`${keys ? `${tab.label} (${keys})` : tab.label} · ${split ? 'click to take it out of the split, ⇧-click to show it alone' : 'click to open beside, ⇧-click to show it alone'}`}
+        title={`${keys ? `${tab.label} (${keys})` : tab.label} · ${split ? 'click to show it alone, ⇧-click to take it out of the split' : 'click to show it alone, ⇧-click to open beside'}`}
         {...barItemDrag(tab.id)}
         onClick={click}
         onContextMenu={(event) => pageTabMenu(event, tab)}
@@ -1987,7 +1944,7 @@ function App(): React.JSX.Element {
     </button>
   )
   /** A pane's header in a split; its × sits at the end the tabs' × does */
-  const paneHeader = (page: (typeof paneTabs)[number], focused: boolean, isMain: boolean): React.ReactNode => {
+  const paneHeader = (page: (typeof tabs)[number], focused: boolean, isMain: boolean): React.ReactNode => {
     const close = (
       <IconButton label="Close" onClick={() => closePage(page.id)}>
         <Icon name="close" className="size-3.5" />
@@ -2276,6 +2233,7 @@ function App(): React.JSX.Element {
     <div data-page-tab="settings" aria-current="page" aria-label="Settings" title="Settings" className={tabClass(true)}>
       {settings.tabCloseSide === 'left' && closeButton('Close settings', closeSettings)}
       <Icon name="settings" className="size-3.5" />
+      {!settings.compactTabs && 'Settings'}
       {settings.tabCloseSide === 'right' && closeButton('Close settings', closeSettings)}
     </div>
   )
@@ -2315,13 +2273,13 @@ function App(): React.JSX.Element {
       </button>
     </>
   )
-  // The workspace and the overlay's button share one segment at the centre of the title bar; tabs drop around it
-  // They are the app's two modes: the overlay fills the window and the workspace's bar items step aside
+  // The sidebar carries its own toggle; the title bar only holds the way back while it is hidden
   const centerSegment = (
-    <div data-bar-item={SEARCH_ITEM} className="flex h-7 shrink-0 items-center rounded-lg bg-muted p-0.5 ring-1 ring-border [-webkit-app-region:no-drag]">
-      <WorkspaceSwitcher repos={repos} onSwitch={switchWorkspace} onEdit={setEditingWorkspace} onReturn={overlayOpen ? () => setOverlayOpen(false) : undefined} />
-      {overlayTab?.overlay && (
-        <OverlayButton label={overlayTab.label} overlay={overlayTab.overlay} open={overlayOpen} onToggle={() => (overlayOpen ? setOverlayOpen(false) : goPage(overlayTab.id))} />
+    <div data-bar-item={SEARCH_ITEM} className="flex h-7 shrink-0 items-center [-webkit-app-region:no-drag]">
+      {!sidebarOpen && (
+        <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarOpen(true)}>
+          <Icon name="panel" className="size-3.5 text-muted-foreground" />
+        </IconButton>
       )}
     </div>
   )
@@ -2358,24 +2316,22 @@ function App(): React.JSX.Element {
           ]
         : []
     })
-  /** One title bar item; in the overlay the workspace's arrows, tabs and panel toggles step aside */
+  /** One title bar item */
   const barItem = (id: string): React.ReactNode => {
     if (isSpace(id)) return <span data-bar-item={id} className="h-full min-w-2 flex-1" />
     if (id === NAV_ITEM)
       return barButton(
         id,
-        overlayOpen ? null : ( // The overlay carries its own list toggle in its header, so the bar shows nothing here
-          <>
-            <IconButton label={`Back (${actionKeys('app.back')})`} disabled={!stepPlace(places, -1)} onClick={() => goToPlace(-1)}>
-              <Icon name="arrowLeft" className="size-3.5" />
-            </IconButton>
-            <IconButton label={`Forward (${actionKeys('app.forward')})`} disabled={!stepPlace(places, 1)} onClick={() => goToPlace(1)}>
-              <Icon name="arrowRight" className="size-3.5" />
-            </IconButton>
-          </>
-        )
+        <>
+          <IconButton label={`Back (${actionKeys('app.back')})`} disabled={!stepPlace(places, -1)} onClick={() => goToPlace(-1)}>
+            <Icon name="arrowLeft" className="size-3.5" />
+          </IconButton>
+          <IconButton label={`Forward (${actionKeys('app.forward')})`} disabled={!stepPlace(places, 1)} onClick={() => goToPlace(1)}>
+            <Icon name="arrowRight" className="size-3.5" />
+          </IconButton>
+        </>
       )
-    if (id === PANELS_ITEM) return !overlayOpen && panelToggles.length > 0 && barButton(id, panelToggles)
+    if (id === PANELS_ITEM) return panelToggles.length > 0 && barButton(id, panelToggles)
     if (id === COMMENTS_ITEM)
       return (
         (comments.length > 0 || drawerOpen) &&
@@ -2406,9 +2362,10 @@ function App(): React.JSX.Element {
         appTab === 'settings' ? (
           settingsTab
         ) : (
-          <IconButton label={`Settings (${actionKeys('app.settings')} or G S)`} onClick={() => openSettings()}>
-            <Icon name="settings" />
-          </IconButton>
+          <button title={`Settings (${actionKeys('app.settings')} or G S)`} onClick={() => openSettings()} className={tabClass(false)}>
+            <Icon name="settings" className="size-3.5" />
+            {!settings.compactTabs && 'Settings'}
+          </button>
         )
       )
     const item = pluginBarItems.find((candidate) => pluginBarItem(candidate.key) === id)
@@ -2419,8 +2376,8 @@ function App(): React.JSX.Element {
           <item.render />
         </ErrorBoundary>
       )
-    const tab = paneTabs.find((candidate) => candidate.id === id)
-    return !overlayOpen && tab && pageTab(tab)
+    const tab = tabs.find((candidate) => candidate.id === id)
+    return tab && pageTab(tab)
   }
   /** Title bar items in order, with the drop mark of a dragged one */
   const barItems = (ids: string[]): React.ReactNode =>
@@ -2428,7 +2385,7 @@ function App(): React.JSX.Element {
       <Fragment key={id}>
         {tabDrop?.beforeId === id && tabDropMark}
         {/* Open documents follow the tabs before the first space */}
-        {id === SPACE_ITEMS[0] && !overlayOpen && openDocs}
+        {id === SPACE_ITEMS[0] && openDocs}
         {barItem(id)}
       </Fragment>
     ))
@@ -2441,8 +2398,6 @@ function App(): React.JSX.Element {
           {showTitle && (
             <div
               {...tabDropProps}
-              // The open tab, and everything else the bar paints in the accent, take the workspace's own colour
-              style={workspace ? ({ '--color-primary': workspace.color, '--color-primary-foreground': onColor(workspace.color) } as React.CSSProperties) : undefined}
               className={`flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
             >
               {/* Equal sides keep the centre segment in the middle of the window */}
@@ -2463,8 +2418,20 @@ function App(): React.JSX.Element {
           {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights; in zen the terminal's tab strip is that */}
           {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
           <div className="relative flex min-h-0 flex-1">
+            {showSidebar && (
+              <AppSidebar
+                repos={repos}
+                island={settings.islandUi}
+                width={sidebarWidth}
+                onResize={setSidebarWidth}
+                onSwitch={switchWorkspace}
+                onEdit={setEditingWorkspace}
+                onHide={() => setSidebarOpen(false)}
+              />
+            )}
             <div
-              inert={overlayOpen}
+              // An island floats over the pages, so they keep clear of it themselves
+              style={showSidebar && settings.islandUi ? { paddingLeft: sidebarWidth + 16 } : undefined}
               className="flex min-h-0 min-w-0 flex-1"
               onFocusCapture={(event) =>
                 setSplitFocus(event.target instanceof Element ? (event.target.closest('[data-split-pane]')?.getAttribute('data-split-pane') ?? null) : null)
@@ -2514,27 +2481,6 @@ function App(): React.JSX.Element {
                 )
               })}
             </div>
-            {/* Over the panes; the pages underneath keep their state */}
-            {overlayTab && overlaySeen && (
-              <HostContext.Provider value={ownHosts.get(overlayTab.id) ?? host}>
-                <div
-                  ref={overlayRef}
-                  tabIndex={-1}
-                  data-overlay={overlayTab.id}
-                  data-split-pane={overlayTab.id}
-                  inert={!overlayOpen}
-                  className={`absolute inset-0 z-40 flex flex-col bg-background ${overlayOpen ? '' : 'invisible opacity-0'}`}
-                >
-                  <div key={workspaceId} className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <ErrorBoundary label={overlayTab.label} resetKey={`${workspaceId}:${overlayTab.id}`}>
-                      <Suspense fallback={<div className="flex-1" />}>
-                        <overlayTab.render />
-                      </Suspense>
-                    </ErrorBoundary>
-                  </div>
-                </div>
-              </HostContext.Provider>
-            )}
           </div>
           <WhichKey
             pages={[...tabs, { id: 'settings', label: 'Settings', icon: 'settings' as const }].flatMap((tab) => {
@@ -2678,67 +2624,6 @@ function App(): React.JSX.Element {
 }
 
 export default App
-
-/** CSS motion is off app-wide, so the title bar's overlay and its card drop in and out with the Web Animations API */
-function slide(element: HTMLElement | null, show = true): void {
-  if (!element || matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const shown = { opacity: 1, transform: 'none', visibility: 'visible' }
-  const hidden = { opacity: 0, transform: 'translateY(-6px)', visibility: 'visible' }
-  element.animate(show ? [hidden, shown] : [shown, hidden], { duration: show ? 180 : 120, easing: 'cubic-bezier(0.2, 0, 0, 1)' })
-}
-
-/** A small outlined action that shows its shortcut */
-/** The overlay page's title bar button; resting the pointer on it shows its card, with a grace period to travel into it */
-function OverlayButton({
-  label,
-  overlay,
-  open,
-  onToggle
-}: {
-  label: string
-  overlay: NonNullable<TabContribution['overlay']>
-  open: boolean
-  onToggle: () => void
-}): React.JSX.Element {
-  const [peek, setPeek] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const later = (show: boolean, ms: number): void => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => setPeek(show), ms)
-  }
-  useEffect(() => () => clearTimeout(timer.current), [])
-  const close = (): void => {
-    clearTimeout(timer.current)
-    setPeek(false)
-  }
-  const shown = peek && !open
-  return (
-    <div className="relative" onPointerEnter={() => later(true, 140)} onPointerLeave={() => later(false, 220)}>
-      <button
-        data-overlay-button
-        aria-label={label}
-        aria-pressed={open}
-        title={`${label} · click to open, rest the pointer to peek`}
-        onClick={() => {
-          close()
-          onToggle()
-        }}
-        className={`flex h-6 items-center gap-1.5 rounded-md px-2 text-xs ${open ? 'bg-background text-foreground ring-1 ring-border ring-inset' : shown ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
-      >
-        <overlay.Face />
-      </button>
-      {shown && (
-        <div
-          data-overlay-peek
-          ref={slide}
-          className="absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 rounded-2xl bg-popover text-xs text-popover-foreground ring-1 ring-foreground/8"
-        >
-          <overlay.Peek close={close} />
-        </div>
-      )}
-    </div>
-  )
-}
 
 function HintButton({ title, icon, label, hint, onClick }: { title: string; icon?: IconName; label: string; hint: string; onClick: () => void }): React.JSX.Element {
   return (

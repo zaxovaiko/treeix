@@ -4,8 +4,6 @@ import { Icon } from '@treeix/app/Icon'
 import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { timeAgo } from '@treeix/app/time'
 import { Keys } from '@treeix/sdk'
-import { type Task, taskOf } from './tasks'
-import { taskLabel } from './taskUi'
 import { type ClosedSession, forgetClosedSession, killSession, searchTranscripts, type Session, sessionUsage, transcriptRef } from './terminals'
 import type { SessionUsage } from '../shared/types'
 
@@ -34,7 +32,6 @@ type Row = { group: (typeof GROUPS)[number][0]; label: string; detail: string; s
 export function SessionsDialog({
   sessions,
   history,
-  tasks,
   repos,
   mode,
   onPick,
@@ -44,7 +41,6 @@ export function SessionsDialog({
   sessions: Session[]
   /** Newest first */
   history: ClosedSession[]
-  tasks: Task[]
   repos: Repo[] | null
   mode: 'all' | 'closed'
   onPick: (session: Session) => void
@@ -55,23 +51,20 @@ export function SessionsDialog({
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
 
-  const where = (item: { worktreePath: string }, task: Task | undefined): string => (task ? taskLabel(task, repos) : worktreeLabel(repos, item.worktreePath))
+  const where = (item: { worktreePath: string }): string => worktreeLabel(repos, item.worktreePath)
   const live: Row[] =
     mode === 'closed'
       ? []
       : sessions.map((session) => ({
           group: session.status === 'exited' || session.status === 'dormant' ? 'idle' : session.status,
           label: session.title,
-          detail: where(session, taskOf(tasks, session.id)),
+          detail: where(session),
           session
         }))
   const closed: Row[] = history.map((entry) => ({
     group: 'closed',
     label: entry.title,
-    detail: `${where(
-      entry,
-      tasks.find((task) => task.id === entry.taskId)
-    )} · ${timeAgo(new Date(entry.endedAt).toISOString())}`,
+    detail: `${where(entry)} · ${timeAgo(new Date(entry.endedAt).toISOString())}`,
     entry
   }))
   const needle = query.trim().toLowerCase()

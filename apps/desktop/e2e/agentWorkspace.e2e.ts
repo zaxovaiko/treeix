@@ -25,10 +25,7 @@ type ClaudeMcp = { mcpServers: Record<string, { url: string; headers: Record<str
 test("an agent's browser tab opens in its session's workspace, not the one on screen", async () => {
   const { page, repo } = launched
   const envFile = join(dirname(repo), 'claude-mcp.json')
-  await page
-    .getByRole('button', { name: 'Terminal', exact: true })
-    .first()
-    .click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
   await page.getByRole('button', { name: 'Shell' }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
@@ -38,7 +35,6 @@ test("an agent's browser tab opens in its session's workspace, not the one on sc
   const sessionWorkspace = server.headers['x-treeix-workspace']
   expect(sessionWorkspace).toBeTruthy()
 
-  await page.locator('[data-workspace-switcher]').click()
   await page.getByRole('button', { name: 'New workspace' }).click()
   await page.getByPlaceholder('Select projects or type a name').fill('Other')
   await page.getByRole('button', { name: 'Create workspace' }).click()

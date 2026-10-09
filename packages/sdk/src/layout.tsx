@@ -33,6 +33,8 @@ export type ShellState = StoredPanels & {
   leader: boolean
   /** Settings is recording a shortcut; the shell's own chords stand aside so the keys get recorded */
   recording: boolean
+  /** Island UI: panels float over the page as rounded cards instead of sitting in columns */
+  islandUi: boolean
 }
 
 const PANELS_KEY = 'shell.panels'
@@ -56,7 +58,7 @@ function loadPanels(): StoredPanels {
   }
 }
 
-let state: ShellState = { ...loadPanels(), zone: 'main', zen: false, leader: false, recording: false }
+let state: ShellState = { ...loadPanels(), zone: 'main', zen: false, leader: false, recording: false, islandUi: false }
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener)
@@ -350,19 +352,37 @@ export function PageLayout({
         </Zone>
       </div>
     )
+  // Island UI floats both side panels over the page, so main runs the full width and only pads itself clear of them
+  const floating = shell.islandUi
   return (
-    <div ref={ref} className="flex min-h-0 min-w-0 flex-1">
+    <div ref={ref} className={`flex min-h-0 min-w-0 flex-1 ${floating ? 'relative' : ''}`}>
       {showList && (
-        <Zone id="list" style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }} className="border-r border-border bg-sidebar">
+        <Zone
+          id="list"
+          style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }}
+          className={floating ? `absolute top-2 bottom-2 left-2 z-20 overflow-hidden ${ISLAND}` : 'border-r border-border bg-sidebar'}
+        >
           {list}
           {resizable && <ResizeHandle onResize={(next) => setPagePanels(page, { listWidth: next })} />}
         </Zone>
       )}
-      <Zone id="main" style={{ minWidth: Math.min(MAIN_MIN, width) }} className="flex-1 bg-background">
+      <Zone
+        id="main"
+        style={{
+          minWidth: Math.min(MAIN_MIN, width),
+          paddingLeft: floating && showList ? listSize + 16 : undefined,
+          paddingRight: floating && showInspector ? inspectorSize + 16 : undefined
+        }}
+        className="flex-1 bg-background"
+      >
         {claimDock && host ? host.withDock(main) : main}
       </Zone>
       {showInspector && (
-        <Zone id="inspector" style={{ width: inspectorSize, minWidth: Math.min(SIDE_MIN, inspectorSize) }} className="border-l border-border bg-card">
+        <Zone
+          id="inspector"
+          style={{ width: inspectorSize, minWidth: Math.min(SIDE_MIN, inspectorSize) }}
+          className={floating ? `absolute top-2 right-2 bottom-2 z-20 overflow-hidden ${ISLAND}` : 'border-l border-border bg-card'}
+        >
           {inspector}
           {resizable && <ResizeHandle edge="left" onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />}
         </Zone>
@@ -477,16 +497,16 @@ export function Keys({ combo, on = false, hint = false }: { combo: string; on?: 
   )
 }
 
-/** Hides or shows the page's list; sits at the left of the main header in both states so a hidden list comes back with one click */
-export function ListToggle({ page }: { page?: string }): React.JSX.Element {
+/** Hides or shows one of the page's side panels; sits in the main header in both states so a hidden panel comes back with one click */
+export function ListToggle({ page, panel = 'list' }: { page?: string; panel?: 'list' | 'inspector' }): React.JSX.Element {
   const panels = usePanels(page)
-  const keys = actionKeys('panel.list')
-  const label = `${panels.list ? 'Hide' : 'Show'} list${keys ? ` (${keys})` : ''}`
+  const keys = actionKeys(panel === 'list' ? 'panel.list' : 'panel.inspector')
+  const label = `${panels[panel] ? 'Hide' : 'Show'} ${panel}${keys ? ` (${keys})` : ''}`
   return (
     <button
       title={label}
       aria-label={label}
-      onClick={() => panels.toggle('list')}
+      onClick={() => panels.toggle(panel)}
       className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
     >
       <Icon name="panel" className="size-3.5" />

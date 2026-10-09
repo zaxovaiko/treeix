@@ -43,6 +43,7 @@ type ShellKeys = {
   /** The key pressed after the leader */
   onLeader: (event: KeyboardEvent) => void
   onTogglePanel: (panel: 'list' | 'inspector' | 'title') => void
+  onToggleSidebar: () => void
   onSheet: () => void
 }
 
@@ -51,6 +52,7 @@ const shellActions = (latest: React.RefObject<ShellKeys>): Record<string, () => 
   'panel.list': () => latest.current.onTogglePanel('list'),
   'panel.inspector': () => latest.current.onTogglePanel('inspector'),
   'panel.title': () => latest.current.onTogglePanel('title'),
+  'app.sidebar': () => latest.current.onToggleSidebar(),
   'shell.zen': toggleZen,
   'app.shortcuts': () => latest.current.onSheet()
 })

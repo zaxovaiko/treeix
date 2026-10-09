@@ -33,6 +33,8 @@ export type Settings = {
   bottomPanel: 'content' | 'full'
   /** Title bar tabs show only their icon; panes and the tooltip carry the name */
   compactTabs: boolean
+  /** The sidebar floats over the page as a rounded island, Figma style, instead of being a column beside it */
+  islandUi: boolean
   /** Which end of an open title bar tab holds its close button */
   tabCloseSide: 'left' | 'right'
   /** Page tabs moved to the right of the title bar or reordered by dragging */
@@ -247,6 +249,7 @@ const DEFAULTS: Settings = {
   uiFont: '',
   editorFont: '',
   terminalFont: '',
+  islandUi: false,
   digitShortcuts: { tabs: 'off', workspaces: 'altMeta' },
   keymap: {},
   navigationKeys: { definition: key('F12'), typeDefinition: null, implementation: key('F12', { meta: true }), references: key('F12', { shift: true }) }
@@ -309,6 +312,7 @@ function load(): Settings {
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
       bottomPanel: candidate.bottomPanel === 'full' ? 'full' : 'content',
       compactTabs: flag('compactTabs'),
+      islandUi: candidate.islandUi === true,
       tabCloseSide: candidate.tabCloseSide === 'left' ? 'left' : 'right',
       titleBarTabs: parseBarLayout(candidate.titleBarTabs),
       tabIcons: parseTabIcons(candidate.tabIcons),

@@ -6,7 +6,7 @@ export type BarLayout = string[]
 /** The one page tab the app brings itself; plugins bring the rest */
 export const WORKTREES_TAB = { id: 'worktrees', label: 'Worktrees', icon: 'branch', order: 30 } as const
 
-/** Items every title bar has, the search one now being the workspace and AI Hub segment; plugin tab ids never contain a colon, so these can't clash with one */
+/** Items every title bar has, the search one now being the sidebar's toggle; plugin tab ids never contain a colon, so these can't clash with one */
 export const SEARCH_ITEM = 'bar:search'
 export const SPACE_ITEMS = ['bar:space-left', 'bar:space-right'] as const
 const FIXED_ITEMS: string[] = [SPACE_ITEMS[0], SEARCH_ITEM, SPACE_ITEMS[1]]

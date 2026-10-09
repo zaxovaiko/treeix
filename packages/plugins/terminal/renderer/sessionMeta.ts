@@ -28,7 +28,7 @@ export function parseMeta(value: unknown): SessionMeta | null {
   return { ...(value as SessionMeta), view: candidate.view === 'chat' ? 'chat' : 'terminal' }
 }
 
-export type ClosedSession = SessionMeta & { id: string; endedAt: number; taskId?: string }
+export type ClosedSession = SessionMeta & { id: string; endedAt: number }
 
 /** History entries archived by older versions stayed hidden, so they are dropped */
 export function parseClosedSession(value: unknown): ClosedSession | null {
