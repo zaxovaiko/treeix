@@ -896,12 +896,12 @@ function drawWithGpu(session: TerminalSession): void {
       // Released while the addon loaded
       if (gpu.get(session.id) !== loading) return
       const webgl = new WebglAddon()
-      const release = { dispose: () => webgl.dispose() }
+      // Disposing one renderer frees pages of the atlas the others still draw from, which came out as wrong glyphs
+      const release = { dispose: () => (webgl.dispose(), redrawGlyphs()) }
       webgl.onContextLoss(() => {
         dropGpu(session.id)
         // The DOM renderer only paints rows that change, so a full-screen TUI like Codex stayed blank until reload
         session.terminal.refresh(0, session.terminal.rows - 1)
-        redrawGlyphs()
       })
       session.terminal.loadAddon(webgl)
       gpu.set(session.id, release)

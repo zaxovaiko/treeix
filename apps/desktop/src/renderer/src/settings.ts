@@ -241,7 +241,8 @@ const DEFAULTS: Settings = {
   editorFontSize: 13,
   terminalFontSize: 12,
   terminalFontWeight: 'auto',
-  terminalContrast: 4.5,
+  // Off by default: every text/background pair it adjusts is its own entry in the GPU glyph atlas, which a colourful agent TUI fills until drawing stalls
+  terminalContrast: 1,
   terminalScrollback: 5000,
   uiFont: '',
   editorFont: '',

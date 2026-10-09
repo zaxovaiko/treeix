@@ -580,14 +580,14 @@ const SETTINGS: SettingSpec[] = [
     section: 'Terminal',
     card: 'Font',
     label: 'Minimum contrast',
-    description: 'Darkens or lightens text colors that are too close to the background, like VS Code. 4.5 is the WCAG AA ratio.',
+    description: 'Darkens or lightens text colors that are too close to the background, like VS Code. 4.5 is the WCAG AA ratio. Anything but Off slows a busy terminal down.',
     Control: function TerminalContrast() {
       const { terminalContrast } = useSettings()
       return (
         <Segmented
           value={`${terminalContrast}`}
           options={TERMINAL_CONTRASTS.map((ratio): [string, string] => [`${ratio}`, ratio === 1 ? 'Off' : `${ratio}`])}
-          onChange={(next) => updateSettings({ terminalContrast: TERMINAL_CONTRASTS.find((ratio) => `${ratio}` === next) ?? 4.5 })}
+          onChange={(next) => updateSettings({ terminalContrast: TERMINAL_CONTRASTS.find((ratio) => `${ratio}` === next) ?? 1 })}
         />
       )
     }
