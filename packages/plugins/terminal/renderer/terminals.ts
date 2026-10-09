@@ -13,7 +13,17 @@ import { activeTabOf, addTab, newTask, parseTasks, placeBeside, remapTasks, remo
 import { getCurrentWorkspaceId, getWorkspaces, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
-import { type ClosedSession, isDefaultChatTitle, isTerminalReply, NEW_CHAT_TITLE, parseClosedSession, parseMeta, type SessionMeta, type SessionView } from './sessionMeta'
+import {
+  type ClosedSession,
+  isDefaultChatTitle,
+  isTerminalReply,
+  NEW_CHAT_TITLE,
+  parseClosedSession,
+  parseMeta,
+  sessionFolder,
+  type SessionMeta,
+  type SessionView
+} from './sessionMeta'
 import { isJson, isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
 import { notify as notifyCenter } from '@treeix/app/notifications'
@@ -542,7 +552,8 @@ const metaOf = ({ worktreePath, kind, title, renamed, startedAt, workspaceId, ag
   view
 })
 
-function newMeta(worktreePath: string, kind: SessionKind, view: SessionView): SessionMeta {
+function newMeta(requested: string, kind: SessionKind, view: SessionView): SessionMeta {
+  const worktreePath = sessionFolder(requested)
   const same = state.sessions.filter((session) => session.worktreePath === worktreePath && session.kind === kind && session.view === view).length
   const agent = agentOr(kind)
   const title = view === 'chat' ? NEW_CHAT_TITLE : agent.label

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { BUILTIN_AGENTS } from '@treeix/app/agents'
-import { isDefaultChatTitle, isTerminalReply, newTabEntries, parseClosedSession, parseMeta } from './sessionMeta'
+import { isDefaultChatTitle, isTerminalReply, newTabEntries, parseClosedSession, parseMeta, sessionFolder } from './sessionMeta'
 
 const saved = { worktreePath: '/repo', kind: 'claude', title: 'Claude', startedAt: 1, workspaceId: 'w', agentSessionId: 'abc' }
 
@@ -49,4 +49,11 @@ test('isTerminalReply tells what xterm answers on its own from keys the user pre
 test('newTabEntries opens an agent without a terminal command as a chat', () => {
   const persona = { id: 'hub.a', label: 'A', mark: 'A', color: '#000', command: null, agent: true, chat: { adapter: 'acp', command: 'a' } }
   expect(newTabEntries([persona], undefined)).toEqual([{ agent: 'hub.a', view: 'chat', label: 'A' }])
+})
+
+test('sessionFolder sends a session aimed at the worktree folder to the repository above', () => {
+  expect(sessionFolder('/repo/.claude/worktrees')).toBe('/repo')
+  expect(sessionFolder('/repo/.claude/worktrees/')).toBe('/repo')
+  expect(sessionFolder('/repo/.claude/worktrees/feat+x')).toBe('/repo/.claude/worktrees/feat+x')
+  expect(sessionFolder('/repo')).toBe('/repo')
 })
