@@ -236,7 +236,8 @@ let portsTimer: ReturnType<typeof setInterval> | null = null
 export const getPorts = (): SessionPort[] => ports
 
 const samePorts = (a: SessionPort[], b: SessionPort[]): boolean =>
-  a.length === b.length && a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port && port.cwd === b[index].cwd)
+  a.length === b.length &&
+  a.every((port, index) => port.sessionId === b[index].sessionId && port.port === b[index].port && port.cwd === b[index].cwd && port.command === b[index].command)
 
 function setPorts(next: SessionPort[]): void {
   if (samePorts(ports, next)) return
@@ -259,9 +260,10 @@ async function pollPorts(): Promise<void> {
   polling = true
   outputSincePoll = false
   lastPoll = Date.now()
-  const found = await bridge.invoke<{ sessionId: string; port: number; cwd: string | null }[]>('ports').catch(() => null)
+  const found = await bridge.invoke<{ sessionId: string; port: number; cwd: string | null; command: string | null }[]>('ports').catch(() => null)
   polling = false
-  if (found && portsTimer) setPorts(found.map(({ sessionId, port, cwd }) => ({ sessionId, port, cwd, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
+  if (found && portsTimer)
+    setPorts(found.map(({ sessionId, port, cwd, command }) => ({ sessionId, port, cwd, command, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
 }
 
 /** Asks main for listening ports only while some session has a running process */
@@ -721,10 +723,11 @@ function connectChat(session: ChatSession): Promise<void> | null {
   if (!chat || !agent?.chat) return null
   followChats(chat)
   const { id } = session
+  const options = { agent: agent.id, ...agent.chat, cwd: session.worktreePath, resume: session.agentSessionId, workspaceId: session.workspaceId }
   connecting.add(id)
   patchSession(id, { status: 'running' })
   return chat
-    .start(id, { agent: agent.id, ...agent.chat, cwd: session.worktreePath, resume: session.agentSessionId, workspaceId: session.workspaceId })
+    .start(id, options)
     .then(
       (agentSessionId) => {
         // Closed while connecting

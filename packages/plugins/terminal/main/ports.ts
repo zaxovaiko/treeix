@@ -1,5 +1,5 @@
-export type SessionPortEntry = { sessionId: string; port: number; pid: number }
-export type Listener = { pid: number; port: number }
+export type SessionPortEntry = { sessionId: string; port: number; pid: number; command: string | null }
+export type Listener = { pid: number; port: number; command?: string | null }
 
 /** `ps -A -o pid=,ppid=`: each pid's parent */
 export function parseParents(ps: string): Map<number, number> {
@@ -11,14 +11,19 @@ export function parseParents(ps: string): Map<number, number> {
   return parents
 }
 
-/** `lsof -Fpn`: `p<pid>` starts a process, `n<address>:<port>` names each socket (`*:5173`, `127.0.0.1:3000`, `[::1]:8080`) */
+/** `lsof -Fpcn`: `p<pid>` starts a process, `c<name>` is what runs it, `n<address>:<port>` names each socket (`*:5173`, `127.0.0.1:3000`, `[::1]:8080`) */
 export function parseListeners(lsof: string): Listener[] {
   const listeners: Listener[] = []
   let pid: number | null = null
+  let command: string | null = null
   for (const line of lsof.split('\n')) {
-    if (line.startsWith('p')) pid = Number(line.slice(1)) || null
+    if (line.startsWith('p')) {
+      pid = Number(line.slice(1)) || null
+      command = null
+    }
+    if (line.startsWith('c')) command = line.slice(1) || null
     const port = line.startsWith('n') ? /:(\d+)$/.exec(line)?.[1] : undefined
-    if (pid !== null && port) listeners.push({ pid, port: Number(port) })
+    if (pid !== null && port) listeners.push({ pid, port: Number(port), command })
   }
   return listeners
 }
@@ -28,7 +33,7 @@ export function attributePorts(shells: Map<string, number>, parents: Map<number,
   const sessionOf = new Map([...shells].map(([sessionId, pid]) => [pid, sessionId]))
   const seen = new Set<string>()
   const found: SessionPortEntry[] = []
-  for (const { pid, port } of listeners) {
+  for (const { pid, port, command } of listeners) {
     const visited = new Set<number>()
     let current: number | undefined = pid
     while (current !== undefined && current > 1 && !sessionOf.has(current) && !visited.has(current)) {
@@ -38,7 +43,7 @@ export function attributePorts(shells: Map<string, number>, parents: Map<number,
     const sessionId = current === undefined ? undefined : sessionOf.get(current)
     if (!sessionId || seen.has(`${sessionId}:${port}`)) continue
     seen.add(`${sessionId}:${port}`)
-    found.push({ sessionId, port, pid })
+    found.push({ sessionId, port, pid, command: command ?? null })
   }
   return found
 }

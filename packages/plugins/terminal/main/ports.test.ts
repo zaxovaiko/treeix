@@ -11,16 +11,19 @@ const PS = `    1     0
 `
 
 const LSOF = `p502
+cnode
 f12
 n*:5173
 f13
 n[::1]:5173
 p700
+cbun
 f20
 n127.0.0.1:3000
 f21
 n[::1]:8080
 p900
+cpython3
 f5
 n*:7000
 `
@@ -34,11 +37,11 @@ test('reads pid and parent pairs from ps', () => {
 
 test('reads listening ports per pid from lsof, whatever the address form', () => {
   expect(parseListeners(LSOF)).toEqual([
-    { pid: 502, port: 5173 },
-    { pid: 502, port: 5173 },
-    { pid: 700, port: 3000 },
-    { pid: 700, port: 8080 },
-    { pid: 900, port: 7000 }
+    { pid: 502, port: 5173, command: 'node' },
+    { pid: 502, port: 5173, command: 'node' },
+    { pid: 700, port: 3000, command: 'bun' },
+    { pid: 700, port: 8080, command: 'bun' },
+    { pid: 900, port: 7000, command: 'python3' }
   ])
 })
 
@@ -52,9 +55,9 @@ test('gives a port to the session whose shell is an ancestor or the process itse
     ['b', 700]
   ])
   expect(attributePorts(shells, parseParents(PS), parseListeners(LSOF))).toEqual([
-    { sessionId: 'a', port: 5173, pid: 502 },
-    { sessionId: 'b', port: 3000, pid: 700 },
-    { sessionId: 'b', port: 8080, pid: 700 }
+    { sessionId: 'a', port: 5173, pid: 502, command: 'node' },
+    { sessionId: 'b', port: 3000, pid: 700, command: 'bun' },
+    { sessionId: 'b', port: 8080, pid: 700, command: 'bun' }
   ])
 })
 
@@ -68,7 +71,7 @@ test('drops ports outside every session and survives a parent cycle', () => {
 
 test('the shell itself listening counts, a pid ps no longer lists does not', () => {
   const shells = new Map([['a', 500]])
-  expect(attributePorts(shells, parseParents(PS), [{ pid: 500, port: 9000 }])).toEqual([{ sessionId: 'a', port: 9000, pid: 500 }])
+  expect(attributePorts(shells, parseParents(PS), [{ pid: 500, port: 9000 }])).toEqual([{ sessionId: 'a', port: 9000, pid: 500, command: null }])
   expect(attributePorts(shells, parseParents(PS), [{ pid: 4242, port: 9001 }])).toEqual([])
 })
 

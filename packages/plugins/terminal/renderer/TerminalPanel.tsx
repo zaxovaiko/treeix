@@ -485,6 +485,7 @@ const DEFAULT = 'default:'
 function FolderPicker({ label, current, groups, onGo }: { label: string; current: string; groups: Task[]; onGo: (path: string) => void }): React.JSX.Element {
   const host = useHost()
   const open = useFolderPickerOpen()
+  const [query, setQuery] = useState('')
   const inScope = (host.repos ?? []).filter((repo) => !host.scopeRepoPaths || host.scopeRepoPaths.includes(repo.path))
   const home = window.api.home
   const option =
@@ -508,7 +509,14 @@ function FolderPicker({ label, current, groups, onGo }: { label: string; current
         .map((worktree) => option(baseName(repo.path), branchLabel(worktree))(worktree.path))
     )
   ]
-  const action = (id: string, text: string): PickerOption => ({ id, label: text, section: '', render: <span className="truncate text-muted-foreground">{text}</span> })
+  const action = (id: string, text: string, match = text): PickerOption => ({
+    id,
+    label: `${text} ${match}`,
+    section: '',
+    render: <span className="truncate text-muted-foreground">{text}</span>
+  })
+  // A typed absolute or ~ path is an option of its own, so folders outside the lists are reachable
+  const typedPath = query.startsWith('~/') ? `${home}${query.slice(1)}` : query.startsWith('/') ? query : null
   const picked = pickedFolder(host.workspaceId)
   // Rotated so ⏎ right after opening goes to the next group, and the shown one comes last
   const shownAt = groups.findIndex((group) => `${GROUP}${group.id}` === current)
@@ -521,6 +529,7 @@ function FolderPicker({ label, current, groups, onGo }: { label: string; current
     ...recent.map((path) => option('Recent')(path)),
     ...projectOptions,
     ...(unseen(home) ? [option('Home')(home)] : []),
+    ...(typedPath ? [action(typedPath, `Go to ${typedPath}`, query)] : []),
     action(CHOOSE, 'Choose folder…'),
     ...(picked ? [action(DEFAULT, `Back to the default, ${worktreeLabel(host.repos, host.defaultCwd)}`)] : [])
   ]
@@ -546,6 +555,7 @@ function FolderPicker({ label, current, groups, onGo }: { label: string; current
       placeholder="Go to group or folder"
       open={open}
       onOpenChange={setFolderPickerOpen}
+      onQuery={setQuery}
       onPick={pick}
       width="w-96"
     />
@@ -649,16 +659,6 @@ function TabStrip({
       <span className="min-w-2 flex-1" />
       {lone && <DiagramsButton session={lone} />}
       {plans && lone?.view === 'terminal' && (lone.kind === 'claude' || lone.planName) && <plans.PlanButton startedAt={lone.startedAt} name={lone.planName} />}
-      {page && (
-        <button
-          title={`${panels.inspector ? 'Hide' : 'Show'} inspector (⌘⌥B)`}
-          aria-label="Toggle inspector"
-          onClick={() => panels.toggle('inspector')}
-          className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}
-        >
-          <Icon name="panel" className="size-3.5 -scale-x-100" />
-        </button>
-      )}
       {side && onMove && (
         <button
           title={`Docked ${side}; click to move`}
@@ -699,7 +699,8 @@ function EmptyTask({ task, label, cwd, history, repos }: { task: Task | null; la
       <p className="max-w-full truncate text-[13px] text-muted-foreground">
         No terminals in <span className="text-foreground">{label}</span>
       </p>
-      <div className="flex flex-wrap justify-center gap-2">
+      {/* Capped, so many profiles wrap into a block instead of one ribbon across the window */}
+      <div className="flex max-w-md flex-wrap justify-center gap-2">
         {entries.map(({ agent: kind, label: kindLabel, view }, index) => (
           <button
             key={`${view}:${kind}`}

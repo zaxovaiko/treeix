@@ -120,7 +120,7 @@ export async function listeningPorts(): Promise<(SessionPortEntry & { cwd: strin
   for (const [id, entry] of sessions) if (entry.pty) shells.set(id, entry.pty.pid)
   if (!shells.size) return []
   try {
-    const [ps, lsof] = await Promise.all([run('/bin/ps', ['-A', '-o', 'pid=,ppid=']), run('/usr/sbin/lsof', ['-w', '-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'])])
+    const [ps, lsof] = await Promise.all([run('/bin/ps', ['-A', '-o', 'pid=,ppid=']), run('/usr/sbin/lsof', ['-w', '-nP', '-iTCP', '-sTCP:LISTEN', '-Fpcn'])])
     const found = attributePorts(shells, parseParents(ps), parseListeners(lsof))
     if (!found.length) return []
     const pids = [...new Set(found.map((entry) => entry.pid))].join(',')

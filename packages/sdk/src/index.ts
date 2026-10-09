@@ -83,7 +83,7 @@ export type SessionKind = string
  * `input`: an agent asks a question or for permission; `done`: an agent finished its turn and it has not been on screen since;
  * `dormant`: restored after a relaunch but not started yet; it starts once shown, revealed or sent text
  */
-export type SessionStatus = 'running' | 'input' | 'done' | 'idle' | 'exited' | 'dormant'
+export type SessionStatus = 'running' | 'watching' | 'input' | 'done' | 'idle' | 'exited' | 'dormant'
 
 /** What the app knows about a terminal or agent session, without the terminal itself */
 export type SessionSummary = {
@@ -101,7 +101,7 @@ export type SessionSummary = {
 
 /** A TCP port a session's process listens on, e.g. a dev server */
 /** `cwd` is the folder the listening process runs in, which tells apart servers of one session */
-export type SessionPort = { sessionId: string; port: number; url: string; cwd: string | null }
+export type SessionPort = { sessionId: string; port: number; url: string; cwd: string | null; command: string | null }
 
 /** Agent and terminal sessions, provided by the terminal plugin */
 export type SessionsService = {

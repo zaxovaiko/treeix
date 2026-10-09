@@ -7,6 +7,7 @@ import type { SessionKind, SessionStatus, SessionSummary } from '@treeix/sdk'
 const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
   input: { label: 'needs you', color: '#fbbf24' },
   running: { label: 'working', color: '#34d399' },
+  watching: { label: 'watching what it left running', color: '#2dd4bf' },
   done: { label: 'finished, not seen yet', color: '#60a5fa' },
   idle: { label: 'idle', color: '#737373' },
   exited: { label: 'exited', color: '#f87171' },

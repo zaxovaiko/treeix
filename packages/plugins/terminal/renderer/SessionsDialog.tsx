@@ -23,6 +23,7 @@ const GROUPS = [
   ['input', 'Needs you'],
   ['done', 'Finished, not seen yet'],
   ['running', 'Working'],
+  ['watching', 'Watching a shell or monitor'],
   ['idle', 'Idle'],
   ['closed', 'Recently closed']
 ] as const
@@ -137,7 +138,7 @@ export function SessionsDialog({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/45 pt-[11vh]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="flex max-h-[72vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover shadow-2xl shadow-black/60">
+      <div className="flex max-h-[72vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover">
         <label className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4 text-muted-foreground">
           <Icon name="search" className="size-4 shrink-0" />
           <input
