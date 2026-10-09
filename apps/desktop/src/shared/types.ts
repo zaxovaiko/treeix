@@ -105,6 +105,8 @@ export type HotkeyOptions = {
   hideOnBlur: boolean
   /** No normal window: it always stays the borderless drop-down, only shown and hidden */
   only: boolean
+  /** Treeix in the macOS menu bar even without the hotkey window */
+  menuBar: boolean
 }
 
 export type ContextMenuItem = { type: 'separator' } | { type?: 'item'; id: string; label: string; enabled?: boolean; accelerator?: string; checked?: boolean }

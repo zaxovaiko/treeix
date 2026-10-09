@@ -35,7 +35,7 @@ function UsageSettings(): React.JSX.Element {
         </Row>
       </Card>
       <Card title="Menu bar">
-        <Row label="Next to the icon" description="Claude, then Codex. The icon is in the macOS menu bar while the hotkey window is on; its menu lists every number.">
+        <Row label="Next to the icon" description="Claude, then Codex. Turn the menu bar icon on under General; its menu lists every number.">
           <Choices options={MENU_BAR_OPTIONS} value={menuBarLabel} onPick={setMenuBarLabel} />
         </Row>
       </Card>

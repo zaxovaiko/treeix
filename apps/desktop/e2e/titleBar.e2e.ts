@@ -27,12 +27,12 @@ test('ctrl+tab cycles the tabs and inactive tabs can show only their icon', asyn
   await expect(tab('Terminal')).not.toContainText('Terminal')
 })
 
-test('a workspace takes any hex colour or shade and its own avatar text', async () => {
+test('a workspace takes any hex colour or shade and an icon', async () => {
   const { page } = launched
   await page.locator('[data-workspace-switcher]').click()
   await page.getByRole('button', { name: 'New workspace' }).click()
   await page.getByPlaceholder('Select projects or type a name').fill('Blog')
-  await page.getByLabel('Avatar text').fill('B!')
+  await page.getByRole('button', { name: 'Icon coffee' }).click()
   const hex = page.getByLabel('Colour hex')
   await hex.fill('#123456')
   await hex.press('Enter')
@@ -40,8 +40,8 @@ test('a workspace takes any hex colour or shade and its own avatar text', async 
   await page.getByRole('button', { name: 'Shade #091a2b' }).click()
   await page.getByRole('button', { name: 'Create workspace' }).click()
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('workspaces') ?? '[]'))
-  expect(saved).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Blog', color: '#091a2b', avatarText: 'B!' })]))
-  await expect(page.locator('[data-workspace-switcher]')).toContainText('B!')
+  expect(saved).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Blog', color: '#091a2b', icon: 'coffee' })]))
+  await expect(page.locator('[data-workspace-switcher] [data-icon="coffee"]')).toBeVisible()
 })
 
 test('the AI Hub fills the window without the workspace bar, and the workspace chip goes back', async () => {

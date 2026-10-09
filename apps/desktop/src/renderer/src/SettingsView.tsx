@@ -43,7 +43,7 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
   useEffect(() => {
     if (!recording) return
     // The current global hotkey would fire instead of being recorded
-    window.api.configureHotkey({ shortcut: null, hideOnBlur: false, only: hotkeyOptions().only })
+    window.api.configureHotkey({ ...hotkeyOptions(), shortcut: null, hideOnBlur: false })
     updateShell({ recording: true })
     const capture = (event: KeyboardEvent): void => {
       event.preventDefault()
@@ -94,12 +94,12 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
 }
 
 function GlobalShortcut(): React.JSX.Element {
-  const { hotkey, hotkeyHideOnBlur } = useSettings()
+  const { hotkey, hotkeyHideOnBlur, hotkeyWindow, menuBarIcon } = useSettings()
   const [error, setError] = useState<string | null>(null)
   // main.tsx registers every change too; this call is only for the error to show here
   useEffect(() => {
     window.api.configureHotkey(hotkeyOptions()).then(setError)
-  }, [hotkey, hotkeyHideOnBlur])
+  }, [hotkey, hotkeyHideOnBlur, hotkeyWindow, menuBarIcon])
   return (
     <div className="flex shrink-0 flex-col items-end gap-1.5">
       <ShortcutRecorder value={hotkey} onChange={(next) => updateSettings({ hotkey: next })} />
@@ -291,7 +291,16 @@ function segmented<K extends 'diffStyle' | 'sections' | 'bottomPanel' | 'editorL
 }
 
 function toggle(
-  key: 'editorMinimap' | 'editorWordWrap' | 'sidebarBranches' | 'hotkeyHideOnBlur' | 'claudeSkipPermissions' | 'codexSkipPermissions' | 'agentNotifications',
+  key:
+    | 'editorMinimap'
+    | 'editorWordWrap'
+    | 'sidebarBranches'
+    | 'hotkeyHideOnBlur'
+    | 'hotkeyWindow'
+    | 'menuBarIcon'
+    | 'claudeSkipPermissions'
+    | 'codexSkipPermissions'
+    | 'agentNotifications',
   label: string
 ): ComponentType {
   return function SettingSwitch() {
@@ -456,6 +465,21 @@ const SETTINGS: SettingSpec[] = [
     description:
       'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. With a shortcut recorded there is no normal window: Treeix stays the drop-down and only shows or hides. Clear it to get the normal window back. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing.',
     Control: GlobalShortcut
+  },
+  {
+    section: 'General',
+    card: 'Hotkey window',
+    label: 'Hotkey window',
+    description: 'The shortcut drops Treeix in as a borderless full-screen window and Treeix leaves the Dock and ⌘Tab. Off, the shortcut just shows and hides the normal window.',
+    Control: toggle('hotkeyWindow', 'Hotkey window')
+  },
+  {
+    section: 'General',
+    card: 'Hotkey window',
+    label: 'Show in the menu bar',
+    description:
+      'A Treeix icon in the macOS menu bar that opens the app and shows your usage limits. Always on while the hotkey window is enabled, since there is no Dock icon then.',
+    Control: toggle('menuBarIcon', 'Show in the menu bar')
   },
   {
     section: 'General',
@@ -883,7 +907,7 @@ function TabIconRow({ tab }: { tab: { id: string; label: string; icon: IconName 
           onKeyDown={menu.onKeyDown}
           role="menu"
           aria-label={`${tab.label} icon`}
-          className="grid max-h-72 grid-cols-8 gap-0.5 overflow-y-auto rounded-lg border border-input bg-popover p-1.5 shadow-xl"
+          className="grid max-h-72 grid-cols-8 gap-0.5 overflow-y-auto rounded-lg border border-input bg-popover p-1.5"
         >
           {ICON_NAMES.map((name) => (
             <button

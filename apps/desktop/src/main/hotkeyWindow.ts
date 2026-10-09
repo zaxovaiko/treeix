@@ -87,10 +87,21 @@ export function toggleHotkeyWindow(window: BrowserWindow, focused = window.isFoc
 /** Registers the global shortcut; returns an error message when it cannot be used */
 export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): string | null {
   hideOnBlur = options.hideOnBlur
+  // Hotkey-only leaves ⌘Tab and the Dock, so the shortcut is the one way in; otherwise it is a regular app again
+  if (process.platform === 'darwin') app.setActivationPolicy(options.only || HEADLESS ? 'accessory' : 'regular')
+  // The menu bar icon is the way back when the app is not in the Dock, and can be asked for on its own
+  const menuBar = (): void =>
+    showMenuBar(
+      options.menuBar || options.only
+        ? () => {
+            if (options.only) return toggleHotkeyWindow(window)
+            window.show()
+            window.focus()
+          }
+        : null
+    )
   if (options.only !== only) {
     only = options.only
-    // Hotkey-only leaves ⌘Tab and the Dock, so the shortcut is the one way in; otherwise it is a regular app again
-    if (process.platform === 'darwin') app.setActivationPolicy(only || HEADLESS ? 'accessory' : 'regular')
     if (only && !summoned) summon(window)
     else if (!only && summoned) restore(window)
     if (!only && !HEADLESS) {
@@ -113,11 +124,15 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
   }
   const shortcut = options.shortcut && isShortcut(options.shortcut) ? options.shortcut : null
   const key = shortcut ? JSON.stringify(shortcut) : null
-  if (registered === key) return null
+  if (registered === key) {
+    menuBar()
+    return null
+  }
   unregister()
   if (!shortcut || !key) {
     // Turning the feature off while the window is summoned gives the normal window back
     if (summoned && !only) restore(window)
+    menuBar()
     return null
   }
 
@@ -133,7 +148,7 @@ export function configureHotkey(window: BrowserWindow, options: HotkeyOptions): 
     if (!globalShortcut.register(accelerator, () => toggleHotkeyWindow(window))) return 'This shortcut is already taken by another app or macOS'
   }
   registered = key
-  showMenuBar(() => summon(window))
+  menuBar()
   return null
 }
 

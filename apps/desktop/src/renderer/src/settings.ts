@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { setKeymapOverrides } from '../../shared/keymap'
 import { isShortcut, type Shortcut } from '../../shared/shortcut'
-import type { NavigationKind } from '../../shared/types'
+import type { HotkeyOptions, NavigationKind } from '../../shared/types'
 import type { Agent } from './agents'
 import { codeTheme, DEFAULT_THEME, resolveTheme, subscribeThemes, type Theme } from './themes'
 import { type BarLayout, parseBarLayout } from './titleBarTabs'
@@ -56,7 +56,11 @@ export type Settings = {
   borderStrength: BorderStrength
   /** Recorded global shortcut for the drop-down hotkey window, null turns it off */
   hotkey: Shortcut | null
+  /** The recorded shortcut drops Treeix in as the borderless window; off, it only shows and hides the normal one */
+  hotkeyWindow: boolean
   hotkeyHideOnBlur: boolean
+  /** Treeix and its usage numbers in the macOS menu bar, hotkey window or not */
+  menuBarIcon: boolean
   /** In-app code navigation keys; macOS sends F-keys only with fn unless standard function keys are on, so they can be re-recorded */
   navigationKeys: Record<NavigationKind, Shortcut | null>
   /** Modifier held with 1-9 to jump to a terminal pane, a title bar tab or a workspace; tabs are off by default since the G leader goes to pages */
@@ -231,7 +235,9 @@ const DEFAULTS: Settings = {
   opacity: 100,
   borderStrength: 100,
   hotkey: null,
+  hotkeyWindow: true,
   hotkeyHideOnBlur: true,
+  menuBarIcon: false,
   editorFontSize: 13,
   terminalFontSize: 12,
   terminalFontWeight: 'auto',
@@ -288,7 +294,8 @@ function load(): Settings {
     const stored = readStored(KEY)
     if (!isJson(stored)) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
+    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyWindow' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean =>
+      typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key]
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
@@ -314,7 +321,9 @@ function load(): Settings {
       opacity: clampOpacity(candidate.opacity),
       borderStrength: BORDER_STRENGTHS.find((strength) => strength === candidate.borderStrength) ?? DEFAULTS.borderStrength,
       hotkey: parseHotkey(candidate),
+      hotkeyWindow: flag('hotkeyWindow'),
       hotkeyHideOnBlur: flag('hotkeyHideOnBlur'),
+      menuBarIcon: candidate.menuBarIcon === true,
       navigationKeys: parseNavigationKeys(candidate.navigationKeys),
       digitShortcuts: parseDigitShortcuts(candidate.digitShortcuts),
       keymap: parseKeymap(candidate.keymap),
@@ -339,10 +348,10 @@ const listeners = new Set<() => void>()
 
 export const getSettings = (): Settings => settings
 
-/** A recorded shortcut makes Treeix the hotkey window only; clearing it brings the normal window back */
-export function hotkeyOptions(): { shortcut: Shortcut | null; hideOnBlur: boolean; only: boolean } {
-  const { hotkey, hotkeyHideOnBlur } = settings
-  return { shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkey !== null }
+/** A recorded shortcut makes Treeix the hotkey window only, unless that is switched off; clearing it brings the normal window back */
+export function hotkeyOptions(): HotkeyOptions {
+  const { hotkey, hotkeyHideOnBlur, hotkeyWindow, menuBarIcon } = settings
+  return { shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkey !== null && hotkeyWindow, menuBar: menuBarIcon }
 }
 
 export function updateSettings(patch: Partial<Settings>): void {
