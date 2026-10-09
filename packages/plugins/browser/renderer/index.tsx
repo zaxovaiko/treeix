@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { type Command, createBridge, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
+import { type Command, createBridge, createStore, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { BrowserView, runBrowserAction } from './BrowserView'
 import { DesignPopover } from './DesignPopover'
@@ -39,11 +39,23 @@ const SHORTCUTS: ShortcutInfo[] = (
   ] satisfies [string, string][]
 ).map(([keys, label]) => ({ keys, label, section: 'Browser' }))
 
+/** Pages opened while the browser was out of sight, so its tab can say so */
+const unseen = createStore(0)
+
 /** Opens a page and brings the browser forward: the panel when it's on screen, else the tab */
 function openUrl(url: string, id?: string): void {
   updateBrowser((state) => openTab(state, url, id))
   showBrowser()
 }
+
+/** An agent's page: it opens where the user left the browser rather than pulling them out of what they were doing */
+function openUrlQuietly(url: string, id?: string): void {
+  updateBrowser((state) => openTab(state, url, id))
+  if (showsBrowser()) return
+  unseen.set(unseen.get() + 1)
+}
+
+const showsBrowser = (): boolean => !!host && (host.activeTab === TAB_ID || host.isPanelVisible(TAB_ID))
 
 const showBrowser = (): void => {
   if (host && !host.isPanelVisible(TAB_ID)) host.setActiveTab(TAB_ID)
@@ -173,13 +185,17 @@ function Root(): React.JSX.Element {
   host = current
   // Before paint, so a workspace never flashes the previous one's tabs
   useLayoutEffect(() => setBrowserWorkspace(current.workspaceId), [current.workspaceId])
+  // Looking at the browser is reading the pages an agent opened there
+  useEffect(() => {
+    if (showsBrowser()) unseen.set(0)
+  })
   // Agents open, show and close tabs by the id main gives them, through Treeix's MCP server; an agent's tab opens in its session's workspace
   useEffect(
     () =>
       bridge.on('open', (url, id, workspaceId) => {
         if (typeof url !== 'string') return
         if (typeof id === 'string' && typeof workspaceId === 'string' && workspaceId !== host?.workspaceId) openTabIn(workspaceId, url, id)
-        else openUrl(url, typeof id === 'string' ? id : undefined)
+        else openUrlQuietly(url, typeof id === 'string' ? id : undefined)
       }),
     []
   )
@@ -245,12 +261,16 @@ function Root(): React.JSX.Element {
   )
 }
 
-/** The workspace's open pages, on the page tab like the terminal's session count */
+/** The workspace's open pages, on the page tab like the terminal's session count; a dot for pages an agent opened out of sight */
 function TabsCount(): React.JSX.Element | null {
   const count = useBrowser().tabs.filter((tab) => tab.url !== 'about:blank').length
+  const fresh = unseen.use()
   if (!count) return null
   return (
-    <span title={`${count} open page${count === 1 ? '' : 's'}`} className="text-muted-foreground tabular-nums">
+    <span
+      title={fresh ? `${fresh} page${fresh === 1 ? '' : 's'} an agent opened` : `${count} open page${count === 1 ? '' : 's'}`}
+      className={`tabular-nums ${fresh ? 'text-amber-400' : 'text-muted-foreground'}`}
+    >
       {count}
     </span>
   )
