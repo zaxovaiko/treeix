@@ -189,6 +189,8 @@ export function usePanels(page?: string): {
   title: boolean
   zen: boolean
   toggle: (panel: PanelName) => void
+  /** The panel's island carries its toggle (Island UI, panel shown), so a header button for it would be a second one */
+  inIsland: (panel: PanelName) => boolean
   toggleZen: () => void
 } {
   const activePage = useActivePage()
@@ -202,6 +204,7 @@ export function usePanels(page?: string): {
     title: visible(shell.title),
     zen: shell.zen,
     toggle: (panel) => togglePanel(panel, key),
+    inIsland: (panel) => shell.islandUi && visible(prefs[panel]),
     toggleZen
   }
 }
@@ -511,7 +514,7 @@ export function Keys({ combo, on = false, hint = false }: { combo: string; on?: 
 export function ListToggle({ page, panel = 'list', island = false }: { page?: string; panel?: 'list' | 'inspector'; island?: boolean }): React.JSX.Element | null {
   const panels = usePanels(page)
   // Island UI keeps the toggle on the island itself while it is shown; the page header only carries the way back
-  if (useShell().islandUi && panels[panel] && !island) return null
+  if (panels.inIsland(panel) && !island) return null
   const keys = actionKeys(panel === 'list' ? 'panel.list' : 'panel.inspector')
   const label = `${panels[panel] ? 'Hide' : 'Show'} ${panel}${keys ? ` (${keys})` : ''}`
   return (

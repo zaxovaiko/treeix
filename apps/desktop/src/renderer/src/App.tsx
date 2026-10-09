@@ -1999,9 +1999,11 @@ function App(): React.JSX.Element {
   const worktreeMain = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card px-1.5">
-        <IconButton label={`Toggle list (${actionKeys('panel.list')})`} active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
-          <Icon name="panel" />
-        </IconButton>
+        {!worktreePanels.inIsland('list') && (
+          <IconButton label={`Toggle list (${actionKeys('panel.list')})`} active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
+            <Icon name="panel" />
+          </IconButton>
+        )}
         <div className="flex min-w-0 flex-1 items-center gap-2" title={worktree?.path}>
           {worktree && (
             <>
@@ -2018,9 +2020,11 @@ function App(): React.JSX.Element {
         <IconButton label={`Toggle changed files (${actionKeys('wt.changedFiles')})`} active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           <Icon name="list" />
         </IconButton>
-        <IconButton label={`Toggle inspector (${actionKeys('panel.inspector')})`} active={worktreePanels.inspector} onClick={() => worktreePanels.toggle('inspector')}>
-          <Icon name="panel" className="size-3.5 -scale-x-100" />
-        </IconButton>
+        {!worktreePanels.inIsland('inspector') && (
+          <IconButton label={`Toggle inspector (${actionKeys('panel.inspector')})`} active={worktreePanels.inspector} onClick={() => worktreePanels.toggle('inspector')}>
+            <Icon name="panel" className="size-3.5 -scale-x-100" />
+          </IconButton>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -2273,16 +2277,15 @@ function App(): React.JSX.Element {
       </button>
     </>
   )
-  // The sidebar carries its own toggle; the title bar only holds the way back while it is hidden
-  const centerSegment = (
-    <div data-bar-item={SEARCH_ITEM} className="flex h-7 shrink-0 items-center [-webkit-app-region:no-drag]">
-      {!sidebarOpen && (
-        <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarOpen(true)}>
-          <Icon name="panel" className="size-3.5 text-muted-foreground" />
-        </IconButton>
-      )}
-    </div>
+  // The sidebar carries its own toggle; the title bar only holds the way back while it is hidden, beside the traffic lights where the sidebar was
+  const sidebarReveal = !sidebarOpen && (
+    <span className="flex shrink-0 items-center pr-1 [-webkit-app-region:no-drag]">
+      <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarOpen(true)}>
+        <Icon name="panel" className="size-3.5 text-muted-foreground" />
+      </IconButton>
+    </span>
   )
+  const centerSegment = <div data-bar-item={SEARCH_ITEM} className="h-7 shrink-0" />
   /** A title bar button or group that drags to another place in the row */
   const barButton = (id: string, content: React.ReactNode): React.ReactNode => (
     <span {...barItemDrag(id)} className="flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]">
@@ -2404,6 +2407,7 @@ function App(): React.JSX.Element {
               <div className="flex min-w-0 flex-1 basis-0 items-center">
                 {/* Room for the traffic lights */}
                 {!chromeless && <span className="w-[80px] shrink-0" />}
+                {sidebarReveal}
                 <div className="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">{barItems(barOrder.slice(0, searchAt))}</div>
               </div>
               {tabDrop?.beforeId === SEARCH_ITEM && tabDropMark}

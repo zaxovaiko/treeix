@@ -422,7 +422,7 @@ function SessionBar({
           <Icon name="close" className="size-3" />
         </button>
       )}
-      {page && (
+      {page && !panels.inIsland('inspector') && (
         <button
           title={`${panels.inspector ? 'Hide' : 'Show'} inspector${actionKeys('panel.inspector') ? ` (${actionKeys('panel.inspector')})` : ''}`}
           aria-label="Toggle inspector"

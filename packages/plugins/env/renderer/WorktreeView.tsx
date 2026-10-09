@@ -235,9 +235,11 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
         <ToggleButton label={raw ? 'Show variables' : 'Raw files'} on={raw} onClick={() => setRaw(!raw)}>
           <Icon name="code" className="size-3.5" />
         </ToggleButton>
-        <ToggleButton label={`${panels.inspector ? 'Hide' : 'Show'} inspector (i)`} on={panels.inspector} onClick={() => panels.toggle('inspector')}>
-          <Icon name="panel" className="size-3.5 -scale-x-100" />
-        </ToggleButton>
+        {!panels.inIsland('inspector') && (
+          <ToggleButton label={`${panels.inspector ? 'Hide' : 'Show'} inspector (i)`} on={panels.inspector} onClick={() => panels.toggle('inspector')}>
+            <Icon name="panel" className="size-3.5 -scale-x-100" />
+          </ToggleButton>
+        )}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto pb-16">
         {raw ? (
