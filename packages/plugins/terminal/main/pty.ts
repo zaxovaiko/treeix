@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 import type { WebContents } from 'electron'
 import { type IPty, spawn } from 'node-pty'
-import type { AgentHookStatus, LiveTerminal, TerminalOptions } from '../shared/types'
+import { type AgentHookStatus, type LiveTerminal, sessionFolder, type TerminalOptions } from '../shared/types'
 import { withoutAgentVariables } from '@treeix/host/env'
 import { coalesceOutput } from './coalesce'
 import { attributePorts, parseCwds, parseListeners, parseParents, type SessionPortEntry } from './ports'
@@ -44,7 +44,9 @@ export function existingFolder(path: string): string {
 
 export function createTerminal(owner: WebContents, { cwd, command, cols, rows, meta, id: requested }: TerminalOptions, extraEnv: Record<string, string> = {}): string {
   const id = requested && !sessions.has(requested) ? requested : randomUUID()
-  const folder = existingFolder(cwd)
+  // Every path into a session ends here: restored ones and saved group folders carry the old `.claude/worktrees` too
+  const wanted = sessionFolder(cwd)
+  const folder = existingFolder(wanted)
   // Login shell so GUI launches still get the user's PATH (claude, codex, bun...)
   const pty = spawn(process.env.SHELL ?? '/bin/zsh', ['-l'], {
     name: 'xterm-256color',
@@ -63,7 +65,7 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
       PROMPT_EOL_MARK: ''
     }
   })
-  const moved = folder === cwd ? '' : `\x1b[33m${cwd} no longer exists, so this session opened in ${folder}\x1b[0m\r\n`
+  const moved = folder === wanted ? '' : `\x1b[33m${wanted} no longer exists, so this session opened in ${folder}\x1b[0m\r\n`
   const entry: Entry = { pty, owner, meta, chunks: moved ? [moved] : [], size: moved.length, exitCode: null, bracketedPaste: false }
   sessions.set(id, entry)
   if (moved) output.push(id, moved)

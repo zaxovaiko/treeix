@@ -1,6 +1,8 @@
 import type { SessionKind } from '@treeix/sdk'
 import { type Agent, isChatOnly } from '@treeix/app/agents'
 
+export { sessionFolder } from '../shared/types'
+
 export type SessionView = 'terminal' | 'chat'
 
 /** What survives a reload or relaunch; the process itself does not survive quitting */
@@ -53,6 +55,3 @@ export const newTabEntries = (agents: Agent[], chat: Agent | undefined): NewTabE
 
 /** What xterm sends on its own, not the user: focus in and out, cursor position and device reports, color replies */
 export const isTerminalReply = (data: string): boolean => /^\x1b(?:\[[?>]?[\d;]*[IORcnt]|\][^\x07\x1b]*(?:\x07|\x1b\\))$/.test(data)
-
-/** `.claude/worktrees` holds the checkouts, it is not one: a session aimed at it starts in the repository above */
-export const sessionFolder = (path: string): string => path.replace(/\/\.claude\/worktrees\/?$/, '') || path

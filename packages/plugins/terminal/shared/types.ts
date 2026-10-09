@@ -22,3 +22,6 @@ export type TranscriptRef = { sessionId: string; kind: string; agentSessionId: s
 
 /** Tokens a conversation used: `input` is fresh input including cache writes, `cached` is input read from the cache; `costUsd` is Claude's own figure, when it reported one this run */
 export type SessionUsage = { input: number; output: number; cached: number; costUsd?: number }
+
+/** `.claude/worktrees` holds the checkouts, it is not one: a session aimed at it starts in the repository above */
+export const sessionFolder = (path: string): string => path.replace(/\/\.claude\/worktrees\/?$/, '') || path
