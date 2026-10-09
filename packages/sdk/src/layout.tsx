@@ -362,6 +362,11 @@ export function PageLayout({
           style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }}
           className={floating ? `absolute top-2 bottom-2 left-2 z-20 overflow-hidden ${ISLAND}` : 'border-r border-border bg-sidebar'}
         >
+          {floating && (
+            <div className="absolute top-1.5 right-1.5 z-30">
+              <ListToggle page={page} island />
+            </div>
+          )}
           {list}
           {resizable && <ResizeHandle onResize={(next) => setPagePanels(page, { listWidth: next })} />}
         </Zone>
@@ -383,6 +388,11 @@ export function PageLayout({
           style={{ width: inspectorSize, minWidth: Math.min(SIDE_MIN, inspectorSize) }}
           className={floating ? `absolute top-2 right-2 bottom-2 z-20 overflow-hidden ${ISLAND}` : 'border-l border-border bg-card'}
         >
+          {floating && (
+            <div className="absolute top-1.5 right-1.5 z-30">
+              <ListToggle page={page} panel="inspector" island />
+            </div>
+          )}
           {inspector}
           {resizable && <ResizeHandle edge="left" onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />}
         </Zone>
@@ -498,8 +508,10 @@ export function Keys({ combo, on = false, hint = false }: { combo: string; on?: 
 }
 
 /** Hides or shows one of the page's side panels; sits in the main header in both states so a hidden panel comes back with one click */
-export function ListToggle({ page, panel = 'list' }: { page?: string; panel?: 'list' | 'inspector' }): React.JSX.Element {
+export function ListToggle({ page, panel = 'list', island = false }: { page?: string; panel?: 'list' | 'inspector'; island?: boolean }): React.JSX.Element | null {
   const panels = usePanels(page)
+  // Island UI keeps the toggle on the island itself while it is shown; the page header only carries the way back
+  if (useShell().islandUi && panels[panel] && !island) return null
   const keys = actionKeys(panel === 'list' ? 'panel.list' : 'panel.inspector')
   const label = `${panels[panel] ? 'Hide' : 'Show'} ${panel}${keys ? ` (${keys})` : ''}`
   return (
