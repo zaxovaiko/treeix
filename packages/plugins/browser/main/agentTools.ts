@@ -386,7 +386,12 @@ export function browserTools(context: MainContext): McpTool[] {
             Object.entries(list)
               .map(([name, value]) => `  ${name}: ${value}`)
               .join('\n')
-          const body = await responseBody(guest, request.id)
+          // The body exists only once loading finishes, which can trail the status by a moment
+          let body = await responseBody(guest, request.id)
+          for (let waited = 0; body === null && waited < 2000 && guestLog(guest).network.find((entry) => entry.id === request.id)?.durationMs === null; waited += 100) {
+            await pause(100)
+            body = await responseBody(guest, request.id)
+          }
           return clip(
             [
               `${request.method} ${request.url}`,
