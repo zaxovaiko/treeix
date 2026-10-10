@@ -6,7 +6,8 @@ const SEARCH: Record<SearchEngine, string> = {
   bing: 'https://www.bing.com/search?q='
 }
 
-const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?([/?#]|$)/i
+// Dev servers: localhost and its subdomains, IPv4 addresses (LAN devices, Docker) and IPv6 loopback, all plain http
+const LOCAL_HOST = /^(([\w-]+\.)*localhost|\d{1,3}(\.\d{1,3}){3}|\[::1\])(:\d+)?([/?#]|$)/i
 
 export const searchUrl = (engine: SearchEngine): string => SEARCH[engine]
 
@@ -14,8 +15,9 @@ export const searchUrl = (engine: SearchEngine): string => SEARCH[engine]
 export function toUrl(input: string, engine: SearchEngine): string {
   const text = input.trim()
   if (!text) return 'about:blank'
-  if (/^[a-z][\w+.-]*:\/\//i.test(text) || /^(about|data|file):/i.test(text)) return text
+  // Like Chrome: a space means words to search, even after a scheme
+  if ((/^[a-z][\w+.-]*:\/\//i.test(text) && !/\s/.test(text)) || /^(about|data|file):/i.test(text)) return text
   if (LOCAL_HOST.test(text)) return `http://${text}`
-  if (!/\s/.test(text) && /^[^/?#\s]+\.[a-z]{2,}(:\d+)?([/?#]|$)/i.test(text)) return `https://${text}`
+  if (!/\s/.test(text) && /^[^/?#\s@]+\.\p{L}{2,}(:\d+)?([/?#]|$)/iu.test(text)) return `https://${text}`
   return SEARCH[engine] + encodeURIComponent(text)
 }

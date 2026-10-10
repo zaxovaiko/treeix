@@ -85,7 +85,7 @@ export function SuggestionRow({ item, active, onOpen, onHover }: { item: Suggest
   )
 }
 
-export const sectionLabel = 'px-2 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
+export const sectionLabel = 'px-2 pt-2 pb-1 text-[11px] font-semibold text-foreground'
 
 /** The address bar's dropdown; `highlighted` indexes the rows across sections */
 export function Suggestions({

@@ -154,7 +154,12 @@ export function BrowserSettings(): React.JSX.Element {
             description={`A one-off copy of your sign-ins, so sites open signed in. macOS will ask for access to the browser's key. Click Allow, not Always Allow. Last import: ${importLabel(info)}`}
           >
             <div className="flex items-center gap-2">
-              <select value={chosen} onChange={(event) => setChosen(event.target.value)} className="h-7 rounded-md border border-border bg-background px-2 text-xs">
+              <select
+                aria-label="Browser to import from"
+                value={chosen}
+                onChange={(event) => setChosen(event.target.value)}
+                className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+              >
                 {profiles.length === 0 && <option value="">No browsers found</option>}
                 {profiles.map((profile) => (
                   <option key={profile.key} value={profile.key}>

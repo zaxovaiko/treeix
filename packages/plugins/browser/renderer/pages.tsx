@@ -51,6 +51,15 @@ export function onPageMessage(listener: (tabId: string, channel: string, args: u
   return () => messageListeners.delete(listener)
 }
 
+/** Clips the layer to the slot's nearest rounded box, an island's corners included, since a webview ignores its ancestors' overflow and radius */
+function roundedClip(box: DOMRect): string | undefined {
+  let frame = winner?.parentElement ?? null
+  while (frame && getComputedStyle(frame).borderTopLeftRadius === '0px') frame = frame.parentElement
+  if (!frame) return undefined
+  const edge = frame.getBoundingClientRect()
+  return `inset(${edge.top - box.top}px ${box.right - edge.right}px ${box.bottom - edge.bottom}px ${edge.left - box.left}px round ${getComputedStyle(frame).borderRadius})`
+}
+
 const sameRect = (a: DOMRect | null, b: DOMRect | null): boolean => a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
 
 /** Every open page, laid over the shown slot; pages never move in the DOM, so switching tab and panel doesn't reload them */
@@ -91,7 +100,19 @@ export function PageLayer({ children }: { children?: React.ReactNode }): React.J
   }, [hasSlot])
   const box = lastBox.current
   return (
-    <div data-browser style={{ position: 'fixed', left: box.x, top: box.y, width: box.width, height: box.height, visibility: onScreen ? 'visible' : 'hidden', zIndex: 10 }}>
+    <div
+      data-browser
+      style={{
+        position: 'fixed',
+        left: box.x,
+        top: box.y,
+        width: box.width,
+        height: box.height,
+        visibility: onScreen ? 'visible' : 'hidden',
+        zIndex: 10,
+        clipPath: onScreen ? roundedClip(box) : undefined
+      }}
+    >
       {tabs.map((tab) => (
         <Page key={tab.id} tab={tab} active={tab.id === activeId} />
       ))}

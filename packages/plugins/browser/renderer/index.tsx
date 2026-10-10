@@ -27,15 +27,15 @@ const isConsoleKey = (event: KeyboardEvent): boolean => event.code === 'KeyJ' &&
 /** Chrome's keys, while the browser has focus */
 const SHORTCUTS: ShortcutInfo[] = (
   [
-    ['⌘L', 'Address bar'],
-    ['⌘T', 'New tab'],
-    ['⌘W', 'Close tab'],
-    ['⌘⇧T', 'Reopen closed tab'],
-    ['⌘[ ⌘]', 'Back, forward'],
-    ['⌘R', 'Reload'],
-    ['⌥⌘I', 'Developer tools'],
-    ['⌘⇧C', 'Design mode, comment on an element'],
-    ['⌘J', 'Console, network and performance']
+    ['⌘ L', 'Address bar'],
+    ['⌘ T', 'New tab'],
+    ['⌘ W', 'Close tab'],
+    ['⇧⌘ T', 'Reopen closed tab'],
+    ['⌘ [ ]', 'Back, forward'],
+    ['⌘ R', 'Reload'],
+    ['⌥⌘ I', 'Developer tools'],
+    ['⇧⌘ C', 'Design mode, comment on an element'],
+    ['⌘ J', 'Console, network and performance']
   ] satisfies [string, string][]
 ).map(([keys, label]) => ({ keys, label, section: 'Browser' }))
 

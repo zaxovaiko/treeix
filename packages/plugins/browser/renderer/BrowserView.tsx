@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import { openMenu } from '@treeix/app/contextMenu'
-import { createBridge, useHost } from '@treeix/sdk'
+import { createBridge, useHost, PANE_HEADER } from '@treeix/sdk'
 import { usePersisted } from '@treeix/app/ui'
 import { toUrl } from './address'
 import { getDesign, pageOf, setDesign, useDesign, useSlot } from './pages'
@@ -256,6 +256,8 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   const { ref, shown, elsewhere } = useSlot()
   const input = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<string | null>(null)
+  /** The address as it was when the field took focus; a redirect meanwhile must not swap the selected text under the typing */
+  const [focusedUrl, setFocusedUrl] = useState<string | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
   const sections = useSuggestions(draft ?? '')
@@ -280,18 +282,19 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
   }, [shown])
   const [stripSlot, setStripSlot] = useState<HTMLDivElement | null>(null)
   const [stripSide, setStripSide] = usePersisted<StripSide>('browser.stripSide', 'bottom')
-  const address = draft ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))
+  const liveAddress = tab?.url === 'about:blank' ? '' : (tab?.url ?? '')
+  const address = draft ?? focusedUrl ?? liveAddress
   const problem = httpProblem(tab?.status ?? null)
   const failure = tab?.error ? loadError(tab.error.code, tab.error.url) : null
   return (
     <div data-browser className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <div className="flex h-8 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-1">
+      <div className={`${PANE_HEADER} gap-0.5 overflow-x-auto px-1.5`}>
         <TabStrip />
         <button aria-label="New tab" title="New tab (⌘T)" className={toolButton} onClick={() => runBrowserAction('newTab')}>
           <Icon name="plus" className="size-3.5" />
         </button>
       </div>
-      <div className="relative flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+      <div className="relative flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
         {tab?.loading && <span className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 animate-pulse bg-primary" />}
         <button aria-label="Back" title="Back (⌘[)" className={toolButton} disabled={!tab?.canGoBack} onClick={() => runBrowserAction('back')}>
           <Icon name="arrowLeft" className="size-3.5" />
@@ -299,10 +302,16 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         <button aria-label="Forward" title="Forward (⌘])" className={toolButton} disabled={!tab?.canGoForward} onClick={() => runBrowserAction('forward')}>
           <Icon name="arrowRight" className="size-3.5" />
         </button>
-        <button aria-label="Reload" title="Reload (⌘R)" className={toolButton} onClick={() => runBrowserAction('reload')}>
-          <Icon name={tab?.loading ? 'loader' : 'refresh'} className={`size-3.5 ${tab?.loading ? 'animate-spin' : ''}`} />
+        {/* Like every browser: while a page loads, the same button stops it */}
+        <button
+          aria-label={tab?.loading ? 'Stop' : 'Reload'}
+          title={tab?.loading ? 'Stop loading' : 'Reload (⌘R)'}
+          className={toolButton}
+          onClick={() => (tab?.loading ? pageOf(tab.id)?.stop() : runBrowserAction('reload'))}
+        >
+          <Icon name={tab?.loading ? 'close' : 'refresh'} className="size-3.5" />
         </button>
-        <div className="relative flex h-6 min-w-0 flex-1 items-center rounded-md border border-border bg-muted/40 focus-within:border-primary">
+        <div className="relative flex h-6 min-w-32 flex-1 items-center rounded-md border border-border bg-muted/40 focus-within:border-primary">
           <input
             ref={input}
             value={address}
@@ -313,12 +322,14 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
               setHighlighted(-1)
             }}
             onFocus={(event) => {
+              setFocusedUrl(liveAddress)
               event.target.select()
               setSuggesting(true)
               setHighlighted(-1)
             }}
             onBlur={() => {
               setDraft(null)
+              setFocusedUrl(null)
               setSuggesting(false)
             }}
             onKeyDown={(event) => {
@@ -369,7 +380,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
           </button>
         )}
         {place === 'panel' && host.renderSendButton(host.selectedWorktree ?? host.defaultCwd, 'pill')}
-        {place === 'tab' && <div ref={setStripSlot} className="flex shrink-0 items-center gap-0.5 border-l border-border pl-1" />}
+        {place === 'tab' && <div ref={setStripSlot} className="flex min-w-0 items-center gap-0.5 border-l border-border pl-1" />}
       </div>
       <div className={`flex min-h-0 flex-1 ${{ bottom: 'flex-col', left: 'flex-row-reverse', right: 'flex-row' }[stripSide]}`}>
         <div ref={ref} className="relative min-h-0 min-w-0 flex-1">
