@@ -28,6 +28,8 @@ const root = resolve(appDir, '../..')
 const home = realpathSync(process.env.DEMO_HOME ?? '/tmp/treeix-demo')
 const outDir = process.env.SHOTS_OUT ?? join(root, 'marketing/shots')
 const port = Number(process.env.SHOTS_PORT ?? 9333)
+/** The billing page the browser scene opens; move it off 3000 when a dev server holds that port */
+const WEB_PORT = Number(process.env.SHOTS_WEB_PORT ?? 3000)
 const endpoint = `http://127.0.0.1:${port}`
 const argv = process.argv.slice(2)
 /** Opens the app on one scene and leaves it running, to check how a frame looks before shooting it */
@@ -250,7 +252,7 @@ async function main(): Promise<void> {
     await ignoreEnvFixtures(repo)
   }
   const devServer =
-    only.length && !only.includes('browser') ? null : Bun.serve({ port: 3000, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
+    only.length && !only.includes('browser') ? null : Bun.serve({ port: WEB_PORT, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
   const child = Bun.spawn([await electronBinary(), appDir, `--remote-debugging-port=${port}`], {
     cwd: appDir,
     // macOS resolves appData from the real user, not HOME, so without this the demo run reads and writes your own data
@@ -428,7 +430,7 @@ async function main(): Promise<void> {
       {
         name: 'browser',
         run: async () => {
-          await seed({ ...page('browser'), 'browser.tabs': { urls: ['http://localhost:3000/billing'], names: [null], active: 0 } })
+          await seed({ ...page('browser'), 'browser.tabs': { urls: [`http://localhost:${WEB_PORT}/billing`], names: [null], active: 0 } })
           await until(`!!document.querySelector('webview')`)
           await settle(2500)
         }
@@ -509,7 +511,7 @@ async function main(): Promise<void> {
         run: async () => {
           await seed(baseState())
           await evaluate(`document.querySelector('[title^="Settings"]')?.click()`)
-          await until(`!!document.getElementById('settings')`)
+          await until(`!!document.body.innerText.includes('Appearance')`)
           await clickText('button', 'Appearance')
           await settle(600)
         }
