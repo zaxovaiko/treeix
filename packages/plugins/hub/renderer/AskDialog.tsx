@@ -29,17 +29,24 @@ function PromptForm({
   title: string
   placeholder: string
   optional?: boolean
-  onSend: (text: string) => void
+  onSend: (text: string) => Promise<void>
   onClose: () => void
 }): React.JSX.Element {
   const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEscape(onClose)
-  const ready = optional || message.trim() !== ''
+  const ready = (optional || message.trim() !== '') && !sending
 
+  // Stays open until the run starts, so a failure keeps what was typed
   const send = (): void => {
     if (!ready) return
-    onClose()
-    onSend(message)
+    setSending(true)
+    setError(null)
+    onSend(message).then(onClose, (reason: unknown) => {
+      setSending(false)
+      setError(errorMessage(reason))
+    })
   }
 
   return (
@@ -49,7 +56,10 @@ function PromptForm({
         autoFocus
         rows={4}
         value={message}
-        onChange={(event) => setMessage(event.target.value)}
+        onChange={(event) => {
+          setMessage(event.target.value)
+          setError(null)
+        }}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
           event.preventDefault()
@@ -59,11 +69,11 @@ function PromptForm({
         className="resize-none rounded-md bg-background px-2.5 py-2 text-sm ring-1 ring-border outline-none focus:ring-primary"
       />
       <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
-        <span className="mr-auto">↵ {optional ? 'run' : 'ask'} · ⇧↵ new line</span>
+        {error ? <span className="mr-auto text-red-400 select-text">{error}</span> : <span className="mr-auto">↵ {optional ? 'run' : 'ask'} · ⇧↵ new line</span>}
         <button onClick={onClose} className="h-7 rounded-md px-3 text-foreground hover:bg-accent">
           Cancel
         </button>
-        <button onClick={send} disabled={!ready} className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:opacity-50">
+        <button onClick={send} disabled={!ready} className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
           {optional ? 'Run' : 'Ask'}
         </button>
       </div>
@@ -79,15 +89,12 @@ export function AskDialog(): React.JSX.Element | null {
   const workflows = hubWorkflows.use()
   if (!request) return null
   const close = (): void => asking.set(null)
-  const follow = (started: Promise<string>): void =>
-    void started.then(
-      (runId) => {
-        if (!request.openRun) return
-        hubSelection.set(`run:${runId}`)
-        host.setActiveTab(TAB_ID)
-      },
-      (reason: unknown) => host.flash(errorMessage(reason))
-    )
+  const follow = (started: Promise<string>): Promise<void> =>
+    started.then((runId) => {
+      if (!request.openRun) return
+      hubSelection.set(`run:${runId}`)
+      host.setActiveTab(TAB_ID)
+    })
 
   const agent = agents.find((candidate) => request.target === `agent:${candidate.id}`)
   if (agent)

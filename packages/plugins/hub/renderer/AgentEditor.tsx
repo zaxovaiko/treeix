@@ -155,12 +155,11 @@ export function Schedules({ schedules, onChange, workflow = false }: { schedules
             {!workflow && (
               <label className={`${LABEL} w-24`}>
                 Timeout, min
-                <input
-                  type="number"
+                <WholeNumber
                   min={1}
                   max={MAX_TIMEOUT_MIN}
                   value={schedule.timeoutMin ?? ASK_TIMEOUT_MIN}
-                  onChange={(event) => patch(schedule.id, { timeoutMin: Math.min(MAX_TIMEOUT_MIN, Math.max(1, Math.round(Number(event.target.value)) || 1)) })}
+                  onChange={(timeoutMin) => patch(schedule.id, { timeoutMin })}
                   className={FIELD}
                 />
               </label>
@@ -270,6 +269,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         hubApi.save({
           ...draft,
           name,
+          folder: draft.folder?.trim() || null,
           icon: glyphOf(draft),
           mode: isApi ? null : draft.mode,
           directories: directories
@@ -459,7 +459,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
           Folder
           <input
             value={draft.folder ?? ''}
-            onChange={(event) => patch({ folder: event.target.value.trim() || null })}
+            onChange={(event) => patch({ folder: event.target.value || null })}
             placeholder="The selected worktree"
             className={`${FIELD} font-mono`}
           />
@@ -495,10 +495,49 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         <button onClick={onClose} className="h-7 rounded-md px-3 text-xs text-muted-foreground hover:bg-accent">
           Cancel
         </button>
-        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-50">
+        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
           {agent ? 'Save' : 'Create'}
         </button>
       </div>
     </Dialog>
+  )
+}
+
+/** A whole number field that can be cleared and retyped: in-range values apply as typed, anything else settles in range on blur */
+export function WholeNumber({
+  value,
+  min,
+  max,
+  onChange,
+  className
+}: {
+  value: number
+  min: number
+  max: number
+  onChange: (value: number) => void
+  className: string
+}): React.JSX.Element {
+  const [text, setText] = useState(String(value))
+  useEffect(() => setText(String(value)), [value])
+  const parsed = (raw: string): number | null => (raw.trim() === '' || !Number.isFinite(Number(raw)) ? null : Math.round(Number(raw)))
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={text}
+      onChange={(event) => {
+        setText(event.target.value)
+        const typed = parsed(event.target.value)
+        if (typed !== null && typed >= min && typed <= max && typed !== value) onChange(typed)
+      }}
+      onBlur={() => {
+        const typed = parsed(text)
+        const settled = typed === null ? value : Math.min(max, Math.max(min, typed))
+        setText(String(settled))
+        if (settled !== value) onChange(settled)
+      }}
+      className={className}
+    />
   )
 }

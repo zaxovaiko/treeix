@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { useHost } from '@treeix/sdk'
+import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton } from '@treeix/app/ui'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { shownRun, StatusIcon } from './RunView'
-import { asking, type HubChat, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, isStale, setConversation, TAB_ID } from './store'
+import { asking, deleteAgent, type HubChat, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, isStale, setConversation, TAB_ID } from './store'
 
+/** One leading column for avatars and icons, so every label in the sidebar starts on the same line */
+const LEAD = 'flex w-[26px] shrink-0 justify-center'
 const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent'
 
 /** A run started by a command schedule is titled `jira:BF-7 BF-7 Fix it` or `notion:<id>`: the source becomes an icon, the key is not repeated */
@@ -44,6 +47,13 @@ function useOpen(): (row: string) => void {
   }
 }
 
+/** The selected row, but only while the hub shows it: the sidebar highlights what is on screen, never a page left behind */
+function useShownRow(): string | null {
+  const host = useHost()
+  const selection = hubSelection.use()
+  return host.activeTab === TAB_ID ? selection : null
+}
+
 export function NewAgentButton(): React.JSX.Element {
   return (
     <IconButton label="New agent" onClick={() => hubEditing.set('new')}>
@@ -53,14 +63,30 @@ export function NewAgentButton(): React.JSX.Element {
 }
 
 export function AgentsSection(): React.JSX.Element {
+  const host = useHost()
   const agents = hubAgents.use()
-  const selection = hubSelection.use()
+  const selection = useShownRow()
   const open = useOpen()
   return (
     <>
       {agents.map((agent) => (
-        <button key={agent.id} onClick={() => open(`agent:${agent.id}`)} className={`${ROW} h-8 ${selection === `agent:${agent.id}` ? 'bg-accent' : ''}`}>
-          <AgentAvatar agent={agent} size={20} />
+        <button
+          key={agent.id}
+          onClick={() => open(`agent:${agent.id}`)}
+          onContextMenu={(event) =>
+            openMenu(event, [
+              { label: 'Chat', run: () => open(`agent:${agent.id}`) },
+              { label: 'Ask…', run: () => asking.set({ target: `agent:${agent.id}`, openRun: true }) },
+              { label: 'Edit…', run: () => hubEditing.set(agent) },
+              null,
+              { label: 'Delete…', run: () => deleteAgent(host, agent) }
+            ])
+          }
+          className={`${ROW} h-8 ${selection === `agent:${agent.id}` ? 'bg-accent' : ''}`}
+        >
+          <span className={LEAD}>
+            <AgentAvatar agent={agent} size={20} />
+          </span>
           <span className="min-w-0 flex-1 truncate">{agent.name}</span>
         </button>
       ))}
@@ -90,7 +116,7 @@ export function NewWorkflowButton(): React.JSX.Element {
 export function WorkflowsSection(): React.JSX.Element {
   const host = useHost()
   const workflows = hubWorkflows.use()
-  const selection = hubSelection.use()
+  const selection = useShownRow()
   const open = useOpen()
   const remove = (workflow: Workflow): void =>
     void (window.confirm(`Delete ${workflow.name}?`) && hubApi.removeWorkflow(workflow.id).catch((reason: unknown) => host.flash(errorMessage(reason))))
@@ -98,8 +124,21 @@ export function WorkflowsSection(): React.JSX.Element {
     <>
       {workflows.map((workflow) => (
         <div key={workflow.id} className="group relative">
-          <button onClick={() => open(`workflow:${workflow.id}`)} className={`${ROW} h-8 ${selection === `workflow:${workflow.id}` ? 'bg-accent' : ''}`}>
-            <Icon name="layers" className="size-3.5 shrink-0 text-muted-foreground" />
+          <button
+            onClick={() => open(`workflow:${workflow.id}`)}
+            onContextMenu={(event) =>
+              openMenu(event, [
+                { label: 'Open', run: () => open(`workflow:${workflow.id}`) },
+                { label: 'Run…', run: () => asking.set({ target: `workflow:${workflow.id}`, openRun: false }) },
+                null,
+                { label: 'Delete…', run: () => remove(workflow) }
+              ])
+            }
+            className={`${ROW} h-8 ${selection === `workflow:${workflow.id}` ? 'bg-accent' : ''}`}
+          >
+            <span className={LEAD}>
+              <Icon name="layers" className="size-3.5 text-muted-foreground" />
+            </span>
             <span className="min-w-0 flex-1 truncate">{workflow.name}</span>
           </button>
           <span className="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex">
@@ -121,7 +160,7 @@ export function HistorySection(): React.JSX.Element {
   const host = useHost()
   const agents = hubAgents.use()
   const { conversations, chats: allChats } = hubSettings.use()
-  const selection = hubSelection.use()
+  const selection = useShownRow()
   const open = useOpen()
   const [olderOpen, setOlderOpen] = useState({ chats: false, runs: false })
   const allRuns = hubRuns.use()
@@ -140,9 +179,15 @@ export function HistorySection(): React.JSX.Element {
   }
 
   /** A history row with a × on hover; faded inside the Older group */
-  const historyRow = (row: string, removeLabel: string, onRemove: (() => void) | null, at: number, older: boolean, children: React.ReactNode): React.JSX.Element => (
+  const historyRow = (row: string, title: string, removeLabel: string, onRemove: (() => void) | null, at: number, older: boolean, children: React.ReactNode): React.JSX.Element => (
     <div key={row} className={`group relative ${older ? 'opacity-50 hover:opacity-100' : ''}`}>
-      <button onClick={() => open(row)} className={`${ROW} h-8 ${row === selection ? 'bg-accent' : ''}`}>
+      <button
+        onClick={() => open(row)}
+        onContextMenu={(event) => onRemove && openMenu(event, [{ label: removeLabel, run: onRemove }])}
+        title={title}
+        data-tip-side="right"
+        className={`${ROW} h-8 ${row === selection ? 'bg-accent' : ''}`}
+      >
         {children}
         <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">{timeAgo(new Date(at).toISOString())}</span>
       </button>
@@ -178,12 +223,13 @@ export function HistorySection(): React.JSX.Element {
           index === freshChats.length && olderToggle('chats', olderChats.length),
           historyRow(
             `chat:${entry.sessionId}`,
+            entry.title,
             'Remove from history',
             () => removeChat(entry),
             entry.updatedAt,
             index >= freshChats.length,
             <>
-              {agent && <AgentAvatar agent={agent} size={16} />}
+              <span className={LEAD}>{agent && <AgentAvatar agent={agent} size={16} />}</span>
               <span className="min-w-0 flex-1 truncate">{entry.title}</span>
             </>
           )
@@ -194,12 +240,15 @@ export function HistorySection(): React.JSX.Element {
         index === freshRuns.length && olderToggle('runs', olderRuns.length),
         historyRow(
           `run:${run.id}`,
+          run.title.replace(/^(jira|notion):/, ''),
           'Remove the run',
           run.endedAt === null ? null : () => void hubApi.removeRun(run.id).catch((reason: unknown) => host.flash(errorMessage(reason))),
           run.startedAt,
           index >= freshRuns.length,
           <>
-            <StatusIcon status={shownRun(run)} />
+            <span className={LEAD}>
+              <StatusIcon status={shownRun(run)} />
+            </span>
             {runTitle(run.title)}
           </>
         )

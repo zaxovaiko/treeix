@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ISLAND, useHost } from '@treeix/sdk'
+import { ISLAND, useHost, PANE_HEADER } from '@treeix/sdk'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
@@ -70,7 +70,9 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   const state = node ? run.nodes[node.id] : null
   const nodeEvents = useMemo(() => events.filter((entry) => entry.node === node?.id), [events, node?.id])
   const agentOf = (step: WorkflowNode | undefined) => (step?.kind === 'agent' ? agents.find((agent) => agent.id === step.agent) : undefined)
-  const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agentOf(step)?.name ?? 'Deleted agent') : KIND_LABEL[step.kind])
+  // Two steps of one agent tell apart by the subagent the second borrows
+  const labelOf = (step: WorkflowNode): string =>
+    step.kind === 'agent' ? [agentOf(step)?.name ?? 'Deleted agent', step.subagent?.split('/').pop()?.replace(/\.md$/, '')].filter(Boolean).join(' · ') : KIND_LABEL[step.kind]
   const lead = agentOf(steps.find((step) => step.kind === 'agent'))
   const logged = nodeEvents.some((entry) => entry.event.type === 'error')
   const retryable =
@@ -85,7 +87,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
     setConversation(stepAgent.id, state.sessionId)
     hubSelection.set(`agent:${stepAgent.id}`)
   }
-  const retry = (id: string): void => void hubApi.retry(run.id, id).catch((error: unknown) => host.flash(errorMessage(error)))
+  const report = (action: Promise<unknown>): void => void action.catch((error: unknown) => host.flash(errorMessage(error)))
 
   const scroller = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -109,7 +111,8 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
+      {/* The steps island floats over the header's right end, so the header ends before it */}
+      <header className={`${PANE_HEADER} gap-2.5 pl-3 ${sidebar && openSteps ? 'pr-60' : 'pr-1.5'}`}>
         {lead ? <AgentAvatar agent={lead} size={28} mood={runMood(run)} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{run.title}</div>
@@ -122,6 +125,11 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           <button onClick={() => hubApi.cancelRun(run.id)} className="h-7 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
             Cancel
           </button>
+        )}
+        {sidebar && !openSteps && (
+          <IconButton label="Show the steps" onClick={() => setOpenSteps(true)}>
+            <Icon name="panel" className="size-3.5" />
+          </IconButton>
         )}
       </header>
       <div
@@ -175,7 +183,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
             </button>
           )}
           {retryable && (
-            <button onClick={() => retry(node.id)} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
+            <button onClick={() => report(hubApi.retry(run.id, node.id))} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
               Retry from this step
             </button>
           )}
@@ -187,17 +195,10 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
         </div>
       </div>
       {/* An ask is one agent and its output; the step list earns its own island in workflows */}
-      {sidebar && !openSteps && (
-        <div className={`absolute top-2 right-2 z-20 flex p-1 ${ISLAND}`}>
-          <IconButton label="Show the steps" onClick={() => setOpenSteps(true)}>
-            <Icon name="panel" className="size-3.5" />
-          </IconButton>
-        </div>
-      )}
       {sidebar && openSteps && (
         <aside className={`absolute top-2 right-2 bottom-2 z-20 flex w-56 flex-col ${ISLAND}`}>
-          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-            <span className="flex-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Steps</span>
+          <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3`}>
+            <span className="flex-1 text-[11px] font-semibold text-foreground">Steps</span>
             <IconButton label="Hide the steps" onClick={() => setOpenSteps(false)}>
               <Icon name="panel" className="size-3.5" />
             </IconButton>

@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { useHost } from '@treeix/sdk'
+import { useHost, PANE_HEADER } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { EmptyState, errorMessage, IconButton } from '@treeix/app/ui'
+import { EmptyState, IconButton } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { RunView } from './RunView'
-import { asking, chatIdOf, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel, setConversation, TAB_ID } from './store'
+import { asking, chatIdOf, deleteAgent, hubAgents, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel, setConversation, TAB_ID } from './store'
 
 // The canvas library is big and only workflows need it
 const WorkflowView = lazy(() => import('./WorkflowView').then((module) => ({ default: module.WorkflowView })))
@@ -51,7 +51,7 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border pr-1.5 pl-3">
+      <header className={`${PANE_HEADER} gap-2.5 pr-1.5 pl-3`}>
         <AgentAvatar agent={agent} size={28} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{agent.name}</div>
@@ -96,16 +96,6 @@ export function HubPage(): React.JSX.Element {
   const workflow = workflows.find((candidate) => `workflow:${candidate.id}` === selection) ?? null
   const run = runs.find((candidate) => `run:${candidate.id}` === selection) ?? null
 
-  const remove = (target: HubAgent): void => {
-    if (!window.confirm(`Delete ${target.name}?`)) return
-    const service = host.service('chat')
-    service?.stop(chatIdOf(target))
-    service?.forget(chatIdOf(target))
-    setConversation(target.id, null)
-    hubSettings.update({ chats: hubSettings.get().chats.filter((entry) => entry.agentId !== target.id) })
-    hubApi.remove(target.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
-  }
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {run ? (
@@ -120,7 +110,7 @@ export function HubPage(): React.JSX.Element {
           agent={agent}
           conversation={chat?.sessionId ?? conversations[agent.id] ?? null}
           onEdit={() => hubEditing.set(agent)}
-          onDelete={() => remove(agent)}
+          onDelete={() => deleteAgent(host, agent)}
         />
       ) : (
         <EmptyState fill icon="star" title="Your own agents: a name, a look and instructions on top of Claude, Codex or any chat agent">

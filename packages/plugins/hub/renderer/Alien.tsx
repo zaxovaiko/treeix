@@ -67,7 +67,7 @@ export function Alien({ character, mood, size }: { character: Character; mood: M
       data-mood={mood}
       style={{ width: size, height: size }}
       // The renders leave room for the hop, so the figure is drawn a bit larger than its box
-      className={`relative shrink-0 scale-130 ${mood === 'failed' ? 'grayscale' : ''}`}
+      className={`relative block shrink-0 scale-130 ${mood === 'failed' ? 'grayscale' : ''}`}
       onPointerEnter={() => {
         const reaction = react(character, HOVER)
         setPoke((current) => current ?? reaction)

@@ -1,4 +1,5 @@
-import { type ChatOption, type ChatService, type ChatSpec, createBridge, createStore, definePluginSettings } from '@treeix/sdk'
+import { type ChatOption, type ChatService, type ChatSpec, createBridge, createStore, definePluginSettings, type HostApi } from '@treeix/sdk'
+import { errorMessage } from '@treeix/app/ui'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
 import { alienStill, characterOf } from './Alien'
@@ -153,6 +154,17 @@ export function followChats(chat: ChatService): () => void {
 }
 
 export const chatIdOf = (agent: HubAgent): string => `hub:${agent.id}`
+
+/** After a confirm: stops its chat, drops its conversations and removes it */
+export function deleteAgent(host: HostApi, target: HubAgent): void {
+  if (!window.confirm(`Delete ${target.name}?`)) return
+  const service = host.service('chat')
+  service?.stop(chatIdOf(target))
+  service?.forget(chatIdOf(target))
+  setConversation(target.id, null)
+  hubSettings.update({ chats: hubSettings.get().chats.filter((entry) => entry.agentId !== target.id) })
+  hubApi.remove(target.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
+}
 
 /** The conversation the agent's chat picks up when it next opens; null starts a new one */
 export const setConversation = (agentId: string, sessionId: string | null): void => {

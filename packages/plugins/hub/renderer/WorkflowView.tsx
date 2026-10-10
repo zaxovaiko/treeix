@@ -15,7 +15,7 @@ import {
   ReactFlow,
   useReactFlow
 } from '@xyflow/react'
-import { ISLAND, usePanels, useHost, Zone } from '@treeix/sdk'
+import { ISLAND, usePanels, useHost, Zone, PANE_HEADER } from '@treeix/sdk'
 import { actionKeys } from '@treeix/shared/keymap'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
@@ -24,7 +24,8 @@ import { Picker, Select } from '@treeix/app/Picker'
 import type { Subagent } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
-import { AgentAvatar, Schedules } from './AgentEditor'
+import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
+import { MAX_TIMEOUT_MIN } from '../shared/types'
 import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
 import { asking, hubAgents, hubApi, hubRunStep, hubRuns, hubSelection } from './store'
 
@@ -270,7 +271,9 @@ function Inspector({
             Folder
             <input
               value={step.folder ?? ''}
-              onChange={(event) => onChange({ ...step, folder: event.target.value.trim() || null })}
+              // Trimmed on blur, not per key, so a path with spaces can be typed
+              onChange={(event) => onChange({ ...step, folder: event.target.value || null })}
+              onBlur={(event) => onChange({ ...step, folder: event.target.value.trim() || null })}
               placeholder="The agent's own"
               className={`${FIELD} h-8 font-mono text-xs`}
             />
@@ -278,24 +281,11 @@ function Inspector({
           <div className="flex gap-2">
             <label className={`${LABEL} flex-1`}>
               Retries
-              <input
-                type="number"
-                min={0}
-                max={5}
-                value={step.retries}
-                onChange={(event) => onChange({ ...step, retries: Math.max(0, Number(event.target.value) || 0) })}
-                className={`${FIELD} h-8`}
-              />
+              <WholeNumber min={0} max={5} value={step.retries} onChange={(retries) => onChange({ ...step, retries })} className={`${FIELD} h-8`} />
             </label>
             <label className={`${LABEL} flex-1`}>
               Timeout, min
-              <input
-                type="number"
-                min={1}
-                value={step.timeoutMin}
-                onChange={(event) => onChange({ ...step, timeoutMin: Math.max(1, Number(event.target.value) || 1) })}
-                className={`${FIELD} h-8`}
-              />
+              <WholeNumber min={1} max={MAX_TIMEOUT_MIN} value={step.timeoutMin} onChange={(timeoutMin) => onChange({ ...step, timeoutMin })} className={`${FIELD} h-8`} />
             </label>
           </div>
           <div className={LABEL}>
@@ -379,11 +369,12 @@ function Toolbar({ onAdd, onUndo, onTidy, room }: { onAdd: (kind: (typeof STEP_K
   const flow = useReactFlow()
   return (
     // Centred between the islands, not under them; inline, as React Flow's own panel margin would win
-    <Panel position="bottom-center" style={{ marginLeft: `calc((var(--island-left) - ${room}px) / 2)` }} className={`flex items-center gap-0.5 p-1 ${ISLAND}`}>
+    <Panel position="bottom-center" style={{ marginLeft: -room / 2 }} className={`flex items-center gap-0.5 p-1 ${ISLAND}`}>
       {STEP_KINDS.map((kind) => (
-        <button key={kind} onClick={() => onAdd(kind)} className={TOOL}>
+        // A narrow canvas keeps the icons, the names move to the tooltip
+        <button key={kind} title={KIND_LABEL[kind]} onClick={() => onAdd(kind)} className={TOOL}>
           <Icon name={KIND_ICON[kind]} className="size-3.5" />
-          {KIND_LABEL[kind]}
+          <span className="@max-5xl:sr-only">{KIND_LABEL[kind]}</span>
         </button>
       ))}
       <span className="mx-1 h-5 w-px bg-border" />
@@ -393,7 +384,7 @@ function Toolbar({ onAdd, onUndo, onTidy, room }: { onAdd: (kind: (typeof STEP_K
       <IconButton label="Tidy layout" onClick={onTidy}>
         <Icon name="wand" className="size-3.5" />
       </IconButton>
-      <IconButton label="Fit view" onClick={() => void flow.fitView(FIT)}>
+      <IconButton label="Fit view" onClick={() => void flow.fitView(fit(room))}>
         <Icon name="focus" className="size-3.5" />
       </IconButton>
     </Panel>
@@ -401,7 +392,8 @@ function Toolbar({ onAdd, onUndo, onTidy, room }: { onAdd: (kind: (typeof STEP_K
 }
 
 // Clear of the list and inspector islands
-const FIT = { maxZoom: 1, minZoom: 0.5, padding: { left: '300px', right: '300px', top: '40px', bottom: '80px' } } as const
+/** Fits the steps into the canvas left clear of `room`, the inspector floating on the right */
+const fit = (room: number) => ({ maxZoom: 1, minZoom: 0.3, padding: { left: '40px', right: `${room + 40}px`, top: '40px', bottom: '80px' } }) as const
 
 /** The workflow on a canvas: steps to add, connect and fill in, saved as you go, with the last run's state on each */
 export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.Element {
@@ -552,12 +544,13 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
   }
   const panels = usePanels('hub')
   const [inspectorWidth, setInspectorWidth] = usePersisted<number>('hub.inspector.width', 288)
+  const room = panels.inspector ? inspectorWidth + 8 : 0
   const runButton = (
     <button
       onClick={run}
       disabled={problems.length > 0}
       title={problems.map((problem) => problem.message).join('\n') || undefined}
-      className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-50"
+      className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
     >
       <Icon name="play" className="size-3.5" />
       Run
@@ -570,7 +563,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
   )
 
   return (
-    <div ref={root} tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 outline-none">
+    <div ref={root} tabIndex={-1} className="@container relative flex min-h-0 min-w-0 flex-1 outline-none">
       <CanvasContext value={canvas}>
         <ReactFlow
           nodes={nodes}
@@ -591,18 +584,20 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
           isValidConnection={connectable}
           deleteKeyCode={['Backspace', 'Delete']}
           fitView
-          fitViewOptions={FIT}
+          fitViewOptions={fit(room)}
+          minZoom={0.3}
+          proOptions={{ hideAttribution: true }}
           style={THEME}
         >
           <Background gap={20} />
-          <Toolbar onAdd={add} onUndo={undo} onTidy={prettify} room={panels.inspector ? inspectorWidth + 8 : 0} />
+          <Toolbar onAdd={add} onUndo={undo} onTidy={prettify} room={room} />
         </ReactFlow>
       </CanvasContext>
       {panels.inspector ? (
         // The workflow's name and Run on top, the selected step below
         <Zone id="inspector" style={{ width: inspectorWidth }} className={`absolute top-2 right-2 bottom-2 z-20 ${ISLAND}`}>
           <ResizeHandle edge="left" onResize={setInspectorWidth} />
-          <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3">
+          <div className={`${PANE_HEADER} gap-1 pr-1.5 pl-3`}>
             <input
               aria-label="Workflow name"
               value={name}
