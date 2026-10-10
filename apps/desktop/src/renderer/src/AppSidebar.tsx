@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { ISLAND, type SessionSummary, type SidebarSection, useHost } from '@treeix/sdk'
 import type { Repo } from '../../shared/types'
 import { ActivityMark, NEWS } from './activity'
@@ -8,7 +8,7 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { Icon } from './Icon'
 import { usePlugins, useSessions } from './plugins'
 import { activityOf, KindBadge, StatusDot } from './sessionUi'
-import { digitLabel } from './settings'
+import { digitLabel, toggleIn } from './settings'
 import { IconButton, ResizeHandle } from './ui'
 import { Badge } from './WorkspaceSwitcher'
 import { ALL_PROJECTS, commonFolder, deleteWorkspace, HOME, inWorkspace, moveWorkspace, useWorkspaces, type Workspace } from './workspaces'
@@ -96,7 +96,10 @@ function Workspaces({
   const { workspaces, currentId } = useWorkspaces()
   const sessions = useSessions()
   const [drop, setDrop] = useState<{ id: string; edge: 'top' | 'bottom' } | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
+  // Several workspaces can be open at once; switching to one opens it
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([currentId]))
+  useEffect(() => setExpanded((previous) => (previous.has(currentId) ? previous : new Set([...previous, currentId]))), [currentId])
+  const toggle = (id: string): void => setExpanded((previous) => toggleIn(previous, id))
 
   const newSession = (workspace: Workspace, kind: string): void => {
     const service = host.service('sessions')
@@ -135,7 +138,7 @@ function Workspaces({
   /** One workspace: its row, and the sessions it holds while it is the one on screen */
   const row = (workspace: Workspace, keys: string, extra?: Partial<React.ComponentProps<'button'>>): React.JSX.Element => {
     const current = workspace.id === currentId
-    const open = current && !collapsed
+    const open = expanded.has(workspace.id)
     const own = sessions.filter((session) => inWorkspace(session, workspace.id === ALL_PROJECTS ? undefined : workspace, repos, workspaces))
     const activity = activityOf(own)
     const dropEdge = drop?.id === workspace.id ? drop.edge : null
@@ -146,18 +149,27 @@ function Workspaces({
           title={`${workspace.id === HOME.id ? 'Shells in your home folder, outside every workspace' : workspace.id === ALL_PROJECTS ? 'Every project, across workspaces' : `${workspace.name}\n${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'No projects yet'}`}${keys ? ` (${keys})` : ''}`}
           data-tip-side="right"
           aria-current={current || undefined}
-          onClick={() => (current ? setCollapsed(!collapsed) : onSwitch(workspace.id))}
+          onClick={() => (current ? toggle(workspace.id) : onSwitch(workspace.id))}
           {...extra}
           className={`${ROW} h-8 pl-0.5 ${current ? 'font-medium text-foreground' : ''}`}
         >
           {dropEdge && <span className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-px' : '-bottom-px'}`} />}
-          <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
+          {/* The chevron folds without switching, so other workspaces' sessions can stay in view */}
+          <span
+            onClick={(event) => {
+              event.stopPropagation()
+              toggle(workspace.id)
+            }}
+            className="-m-1 flex shrink-0 p-1"
+          >
+            <Icon name="chevron" className={`size-3 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
+          </span>
           <Badge workspace={workspace} className="size-5 rounded-md text-[9px]" />
           <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
           {/* The sessions show their own marks while the group is open; the plus takes this spot on hover */}
           <span className="flex shrink-0 items-center gap-1.5 pr-1 group-hover:invisible">
             {!open && NEWS.includes(activity) && <ActivityMark activity={activity} className="size-2" />}
-            {!current && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
+            {!open && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
           </span>
           <span className="absolute right-0.5 hidden group-hover:flex">
             <IconButton label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} onClick={() => newSession(workspace, 'shell')}>
