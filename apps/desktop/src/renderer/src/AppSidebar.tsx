@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { ISLAND, type SessionSummary, type SidebarSection, useHost } from '@treeix/sdk'
 import type { Repo } from '../../shared/types'
 import { ActivityMark, NEWS } from './activity'
+import { getAgents, isChatOnly } from './agents'
 import { openMenu } from './contextMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Icon } from './Icon'
@@ -97,12 +98,12 @@ function Workspaces({
   const [drop, setDrop] = useState<{ id: string; edge: 'top' | 'bottom' } | null>(null)
   const [collapsed, setCollapsed] = useState(false)
 
-  const newShell = (workspace: Workspace): void => {
+  const newSession = (workspace: Workspace, kind: string): void => {
     const service = host.service('sessions')
     if (!service) return host.flash('Sessions need the Terminal plugin')
     if (workspace.id !== currentId) onSwitch(workspace.id)
     host.setActiveTab(TERMINAL_TAB)
-    void service.start(workspaceFolder(workspace), 'shell').then((id) => service.reveal(id))
+    void service.start(workspaceFolder(workspace), kind).then((id) => service.reveal(id))
   }
 
   const dragProps = (workspace: Workspace, index: number): React.HTMLAttributes<HTMLButtonElement> & { draggable: true } => ({
@@ -159,7 +160,7 @@ function Workspaces({
             {!current && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
           </span>
           <span className="absolute right-0.5 hidden group-hover:flex">
-            <IconButton label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} onClick={() => newShell(workspace)}>
+            <IconButton label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} onClick={() => newSession(workspace, 'shell')}>
               <Icon name="plus" className="size-3.5" />
             </IconButton>
           </span>
@@ -185,7 +186,10 @@ function Workspaces({
           ...dragProps(workspace, index),
           onContextMenu: (event) =>
             openMenu(event, [
-              { label: 'New shell here', run: () => newShell(workspace) },
+              { label: 'New shell here', run: () => newSession(workspace, 'shell') },
+              ...getAgents()
+                .filter((agent) => agent.agent && !isChatOnly(agent))
+                .map((agent) => ({ label: `New ${agent.label} here`, run: () => newSession(workspace, agent.id) })),
               { label: 'Edit workspace…', run: () => onEdit(workspace) },
               null,
               {
