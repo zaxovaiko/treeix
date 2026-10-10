@@ -1,6 +1,7 @@
 import { actionForEvent, matchesAction } from '@treeix/shared/keymap'
 import { useEffect, useMemo, useState } from 'react'
-import { isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels } from '@treeix/sdk'
+import { isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels, PANE_HEADER } from '@treeix/sdk'
+import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { EmptyState, IconButton, usePersisted } from '@treeix/app/ui'
@@ -10,7 +11,7 @@ import { KindIcon, ToggleButton, VarName } from './parts'
 import { SaveReview } from './SaveReview'
 import { editKey, envApi, envs, openRequest, pending, rescan, scanning, type ScopedWorktree, scopedWorktrees, TAB_ID } from './store'
 import { VariableMain } from './VariableView'
-import { FreshMain, Inspector, type RowState, type Target, WorktreeMain, worktreeRows } from './WorktreeView'
+import { FreshMain, Inspector, matches, type RowState, type Target, WorktreeMain, worktreeRows } from './WorktreeView'
 
 type Entry = { kind: 'worktree'; target: ScopedWorktree } | { kind: 'variable'; name: string }
 
@@ -112,7 +113,8 @@ export function EnvPage(): React.JSX.Element {
   const nav = useListNav({ count: entries.length, index: cursor, onSelect: (next) => pick(entries[next]) })
 
   const shownTarget: Target | null = target?.env ? { ...target, env: target.env } : null
-  const { rows } = shownTarget ? worktreeRows(shownTarget, edits) : { rows: [] }
+  const { rows: allRows } = shownTarget ? worktreeRows(shownTarget, edits) : { rows: [] }
+  const rows = allRows.filter((row) => matches(row, lower))
   const selectedRow = rows.find((row) => shownTarget && editKey(shownTarget.env.path, row.file, row.name) === selected) ?? rows[0] ?? null
   const selectedKey = selectedRow && shownTarget ? editKey(shownTarget.env.path, selectedRow.file, selectedRow.name) : selected
   const fresh = shownTarget && shownTarget.env.files.length === 0 && !dismissed.has(shownTarget.env.path)
@@ -150,7 +152,8 @@ export function EnvPage(): React.JSX.Element {
   let position = -1
   const list = (
     <>
-      <div className="flex h-9 shrink-0 items-center justify-end gap-1 border-b border-border pr-1 pl-3">
+      <div className={`${PANE_HEADER} gap-1 pr-1.5 pl-3`}>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground">Env files</span>
         <ToggleButton label="By worktree" on={mode === 'worktree'} onClick={() => setMode('worktree')}>
           <Icon name="list" className="size-3.5" />
         </ToggleButton>
@@ -187,6 +190,7 @@ export function EnvPage(): React.JSX.Element {
                   key={variable}
                   {...nav.rowProps(++position)}
                   onClick={() => pick({ kind: 'variable', name: variable })}
+                  onContextMenu={(event) => openMenu(event, [{ label: 'Copy name', run: () => copyText(variable) }])}
                   className={`${ROW} ${variable === name ? 'bg-accent' : ''}`}
                 >
                   <KindIcon kind={kind} />
@@ -209,7 +213,7 @@ export function EnvPage(): React.JSX.Element {
                 <div key={repoPath}>
                   <div className="mx-1.5 mt-2 flex h-6 items-center gap-1.5 pl-1.5">
                     <Icon name="chevron" className="size-3 rotate-90 text-muted-foreground/65" />
-                    <span className="truncate text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{baseName(repoPath)}</span>
+                    <span className="truncate text-[11px] font-semibold text-foreground">{baseName(repoPath)}</span>
                     {packages > 1 && (
                       <span title={`Monorepo: env files in ${packages} packages`} className="text-muted-foreground/50">
                         <Icon name="layers" className="size-3" />
@@ -223,6 +227,7 @@ export function EnvPage(): React.JSX.Element {
                         key={entry.worktree.path}
                         {...nav.rowProps(++position)}
                         onClick={() => pick({ kind: 'worktree', target: entry })}
+                        onContextMenu={(event) => openMenu(event, [{ label: 'Copy path', run: () => copyText(entry.worktree.path) }])}
                         className={`${ROW} ${active ? 'bg-accent' : ''}`}
                       >
                         <Icon name={entry.isMain ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
@@ -246,7 +251,9 @@ export function EnvPage(): React.JSX.Element {
   )
 
   const main =
-    mode === 'variable' ? (
+    mode === 'variable' && entries.length === 0 && !index.get(name)?.length ? (
+      <div className="flex-1" />
+    ) : mode === 'variable' ? (
       <VariableMain name={name} places={index.get(name) ?? []} scoped={scoped} state={rowState} />
     ) : !target ? (
       <EmptyState fill icon="braces" title="No repositories in this workspace" />

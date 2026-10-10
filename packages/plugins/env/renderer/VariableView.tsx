@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ListToggle, useHost } from '@treeix/sdk'
+import { ListToggle, useHost, PANE_HEADER } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
@@ -36,7 +36,7 @@ export function VariableMain({ name, places, scoped, state }: { name: string; pl
   }
   return (
     <>
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-[12px]">
+      <header className={`${PANE_HEADER} gap-2 px-1.5 text-[12px]`}>
         <ListToggle />
         <KindIcon kind={kind} className="size-3.5" />
         <span className="font-mono text-[12.5px]">
@@ -97,6 +97,7 @@ export function VariableMain({ name, places, scoped, state }: { name: string; pl
                 </span>
                 <span className="min-w-0 flex-1">
                   <ValueInput
+                    label={`${name} in ${owner ? branchLabel(owner.worktree) : baseName(place.worktreePath)}`}
                     value={edit?.value ?? place.value ?? ''}
                     dirty={edit !== undefined}
                     masked={secret && !state.revealed.has(key)}

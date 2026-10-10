@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ListToggle, useHost, useListNav, usePanels } from '@treeix/sdk'
-import { copyText } from '@treeix/app/contextMenu'
+import { ListToggle, useHost, useListNav, PANE_HEADER } from '@treeix/sdk'
+import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { EmptyState, errorMessage, IconButton, TextPrompt } from '@treeix/app/ui'
@@ -40,11 +40,10 @@ export function worktreeRows(target: Target, edits: ReadonlyMap<string, EnvEdit>
   return { rows, added }
 }
 
-const matches = (row: Row, query: string): boolean => !query || row.name.toLowerCase().includes(query) || (row.value ?? '').toLowerCase().includes(query)
+export const matches = (row: Row, query: string): boolean => !query || row.name.toLowerCase().includes(query) || (row.value ?? '').toLowerCase().includes(query)
 
 export function WorktreeMain({ target, query, state }: { target: Target; query: string; state: RowState }): React.JSX.Element {
   const host = useHost()
-  const panels = usePanels()
   const edits = pending.use()
   const [kindFilter, setKindFilter] = useState<Kind | null>(null)
   const [compare, setCompare] = useState(true)
@@ -106,15 +105,25 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
           data-env-row={key}
           {...nav.rowProps(visible.indexOf(entry))}
           onClick={() => state.onSelect(key)}
+          onContextMenu={(event) =>
+            !(event.target instanceof HTMLInputElement) &&
+            openMenu(event, [
+              { label: 'Copy name', run: () => copyText(entry.name) },
+              !missing && { label: 'Copy value', run: () => copyText(edit?.value ?? entry.value ?? '') },
+              null,
+              { label: entry.kind === 'exposed' ? 'Ask agent to fix' : 'Comment to agent', run: comment }
+            ])
+          }
           title={`${entry.file}${entry.line ? `:${entry.line}` : ''}`}
           className={`group mx-2 flex h-8 items-center gap-2 rounded-md px-2.5 ${key === state.selected ? 'bg-accent' : 'hover:bg-accent'}`}
         >
           <KindIcon kind={entry.kind} />
-          <span className={`w-[230px] min-w-0 shrink-0 truncate font-mono text-[11.5px] ${missing ? 'text-foreground/50' : 'text-foreground/90'}`}>
+          <span className={`w-[230px] max-w-[45%] min-w-0 shrink-0 truncate font-mono text-[11.5px] ${missing ? 'text-foreground/50' : 'text-foreground/90'}`}>
             <VarName name={entry.name} kind={entry.kind} />
           </span>
           <span className="min-w-0 flex-1">
             <ValueInput
+              label={entry.name}
               value={edit?.value ?? entry.value ?? ''}
               dirty={edit !== undefined}
               masked={secret && !state.revealed.has(key)}
@@ -203,18 +212,20 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
   const selectedFile = rows.find((entry) => editKey(env.path, entry.file, entry.name) === state.selected)?.file ?? paths[0]
   return (
     <>
-      <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-1.5 text-[12px]">
+      <header className={`${PANE_HEADER} gap-1.5 px-1.5 text-[12px]`}>
         <ListToggle />
-        <Icon name={isMain ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
-        <span className="font-mono text-[12.5px]">{branchLabel(target.worktree)}</span>
-        <span className="text-muted-foreground">{baseName(target.repo.path)}</span>
-        {multi ? (
-          <span className="text-[11px] text-muted-foreground/60">{paths.length} files</span>
-        ) : (
-          <span className="font-mono text-[11px] text-muted-foreground/70">{paths[0]}</span>
-        )}
-        <span className="flex-1" />
-        <span className="flex items-center rounded-md ring-1 ring-border">
+        <Icon name={isMain ? 'folder' : 'branch'} className="size-3.5 shrink-0 text-muted-foreground" />
+        {/* A narrow pane trims the names, never wraps them or pushes the controls out */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+          <span className="truncate font-mono text-[12.5px]">{branchLabel(target.worktree)}</span>
+          <span className="truncate text-muted-foreground">{baseName(target.repo.path)}</span>
+          {multi ? (
+            <span className="truncate text-[11px] text-muted-foreground/60">{paths.length} files</span>
+          ) : (
+            <span className="truncate font-mono text-[11px] text-muted-foreground/70">{paths[0]}</span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center rounded-md ring-1 ring-border">
           {KIND_ORDER.filter((kind) => counts.get(kind)).map((kind) => (
             <button
               key={kind}
@@ -235,13 +246,9 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
         <ToggleButton label={raw ? 'Show variables' : 'Raw files'} on={raw} onClick={() => setRaw(!raw)}>
           <Icon name="code" className="size-3.5" />
         </ToggleButton>
-        {!panels.inIsland('inspector') && (
-          <ToggleButton label={`${panels.inspector ? 'Hide' : 'Show'} inspector (i)`} on={panels.inspector} onClick={() => panels.toggle('inspector')}>
-            <Icon name="panel" className="size-3.5 -scale-x-100" />
-          </ToggleButton>
-        )}
+        <ListToggle panel="inspector" />
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-16">
+      <div className="min-h-0 flex-1 overflow-y-auto pt-1.5 pb-16">
         {raw ? (
           paths.map((path) => <RawFile key={path} worktreePath={env.path} path={path} version={env} />)
         ) : (
@@ -263,10 +270,15 @@ export function WorktreeMain({ target, query, state }: { target: Target; query: 
           confirmLabel="Add"
           onClose={() => setAdding(false)}
           onSubmit={async (text) => {
-            const [name, ...value] = text.split('=')
-            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name.trim())) throw new Error('Write it as NAME=value')
-            setPending({ worktreePath: env.path, file: selectedFile, name: name.trim(), value: value.join('=') }, null)
-            state.onSelect(editKey(env.path, selectedFile, name.trim()))
+            const [rawName, ...value] = text.split('=')
+            const name = rawName.trim()
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error('Write it as NAME=value')
+            const key = editKey(env.path, selectedFile, name)
+            if (pending.get().has(key) || rows.some((row) => row.file === selectedFile && row.name === name && row.value !== null))
+              throw new Error(`${name} is already in ${selectedFile}, edit it in the list`)
+            // Set even when empty: `NAME=` is a variable too, which setPending would drop as no change
+            pending.set(new Map(pending.get()).set(key, { worktreePath: env.path, file: selectedFile, name, value: value.join('=').trim() }))
+            state.onSelect(key)
           }}
         />
       )}
@@ -299,7 +311,7 @@ export function FreshMain({ target, onDismiss }: { target: ScopedWorktree; onDis
   const [busy, setBusy] = useState(false)
   const repoName = baseName(target.repo.path)
   const header = (
-    <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-[12px]">
+    <header className={`${PANE_HEADER} gap-2 px-1.5 text-[12px]`}>
       <ListToggle />
       <Icon name={target.isMain ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
       <span className="font-mono text-[12.5px]">{branchLabel(target.worktree)}</span>
@@ -378,7 +390,11 @@ export function FreshMain({ target, onDismiss }: { target: ScopedWorktree; onDis
             <button onClick={onDismiss} className="h-7 rounded-md px-3 text-muted-foreground hover:text-foreground">
               Not now
             </button>
-            <button onClick={run} disabled={busy || chosen.size === 0} className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:opacity-40">
+            <button
+              onClick={run}
+              disabled={busy || chosen.size === 0}
+              className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+            >
               {verb} {chosen.size} file{chosen.size === 1 ? '' : 's'}
             </button>
           </div>
@@ -414,7 +430,7 @@ export function Inspector({
       current = false
     }
   }, [worktreePath, row?.name])
-  if (!row) return <EmptyState fill title="Pick a variable" />
+  if (!row) return <div className="flex-1" />
   const { kind, reason, name } = row
   const secret = isSecretKind(kind)
   const folder = folderOf(row.file)
@@ -438,10 +454,10 @@ export function Inspector({
     if (!owner) return baseName(place.worktreePath)
     return owner.isMain ? baseName(owner.repo.path) : (branchLabel(owner.worktree).split('/').pop() ?? '')
   }
-  const heading = (title: string): React.JSX.Element => <div className="mt-5 mb-1 text-[10.5px] font-medium tracking-wide text-muted-foreground/70 uppercase">{title}</div>
+  const heading = (title: string): React.JSX.Element => <div className="mt-5 mb-1 text-[11px] font-semibold text-foreground">{title}</div>
   return (
     <>
-      <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-border pr-1 pl-3">
+      <div className={`${PANE_HEADER} gap-0.5 pr-1.5 pl-3`}>
         <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">
           <VarName name={name} kind={kind} />
         </span>
@@ -451,13 +467,14 @@ export function Inspector({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 text-xs">
         <div className="mt-3 flex items-start gap-1.5 text-[11.5px] leading-4">
-          <KindIcon kind={kind} className="mt-0.5 size-3" />
+          {KIND[kind].icon && <KindIcon kind={kind} className="mt-0.5 size-3" />}
           <span>
             <span className={KIND[kind].text}>{KIND[kind].label}</span>
             <span className="text-muted-foreground">, because {reason}.</span>
           </span>
         </div>
-        <div className="mt-1.5 flex gap-2 text-[11px] text-muted-foreground">
+        {/* Hangs under the reason's text, past its kind icon */}
+        <div className={`mt-1.5 flex gap-2 text-[11px] text-muted-foreground ${KIND[kind].icon ? 'pl-4.5' : ''}`}>
           <span>Wrong?</span>
           {kind !== 'secret' && (
             <button className="text-foreground/80 hover:underline" title={`Writes # @secret above it in ${folder}/.env.example`} onClick={() => mark('secret')}>

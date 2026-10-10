@@ -31,7 +31,7 @@ export function VarName({ name, kind }: { name: string; kind: Kind }): React.JSX
   return (
     <>
       <span className={kind === 'exposed' ? 'text-red-400' : 'text-sky-400'}>{prefix}</span>
-      <span className={kind === 'exposed' ? 'text-red-200' : ''}>{name.slice(prefix.length)}</span>
+      <span>{name.slice(prefix.length)}</span>
     </>
   )
 }
@@ -48,12 +48,14 @@ export function Pill({ tone, title, children }: { tone: keyof typeof PILL; title
 
 /** A value edited in place: amber once it differs from the file, masked while secret and not revealed */
 export function ValueInput({
+  label,
   value,
   dirty,
   masked,
   placeholder,
   onChange
 }: {
+  label: string
   value: string
   dirty: boolean
   masked: boolean
@@ -63,6 +65,7 @@ export function ValueInput({
   return (
     <input
       type={masked ? 'password' : 'text'}
+      aria-label={label}
       value={value}
       placeholder={placeholder}
       spellCheck={false}

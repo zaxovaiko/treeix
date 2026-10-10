@@ -45,7 +45,7 @@ export function classify(name: string, value = '', { frameworks = [], annotation
   if (client) return { kind: 'public', reason: `${client[0]} is inlined into the browser bundle by ${client[1]} (from package.json)` }
   if (secretValue) return { kind: 'secret', reason: `the value is a ${secretValue[1]}` }
   if (secretName) return { kind: 'secret', reason: 'the name says secret' }
-  return { kind: 'config', reason: 'no secret name or value format' }
+  return { kind: 'config', reason: 'nothing in its name or value looks secret' }
 }
 
 export const isSecretKind = (kind: Kind): boolean => kind === 'secret' || kind === 'exposed'

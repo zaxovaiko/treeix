@@ -102,7 +102,11 @@ export function SaveReview({ scoped, onClose }: { scoped: ScopedWorktree[]; onCl
           <button onClick={onClose} className="h-7 rounded-md px-3 text-muted-foreground hover:text-foreground">
             Cancel
           </button>
-          <button onClick={save} disabled={busy || edits.length === 0} className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:opacity-40">
+          <button
+            onClick={save}
+            disabled={busy || edits.length === 0}
+            className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+          >
             {busy ? 'Saving...' : `Save ${plural(fileCount, 'file')}`}
           </button>
         </div>
