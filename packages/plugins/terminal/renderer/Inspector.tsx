@@ -1,6 +1,6 @@
 import { Icon } from '@treeix/app/Icon'
 import { IconButton } from '@treeix/app/ui'
-import { createBridge, useHost } from '@treeix/sdk'
+import { createBridge, PANE_HEADER, useHost } from '@treeix/sdk'
 import { activeSession } from './terminals'
 
 const bridge = createBridge('terminal')
@@ -22,8 +22,8 @@ function ExplorerHeader(): React.JSX.Element {
     if (folder) host.setBrowsedFolder(folder)
   }
   return (
-    <div className="flex h-8 shrink-0 items-center gap-0.5 pr-1.5 pl-3">
-      <span className="shrink-0 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Files</span>
+    <div className={`${PANE_HEADER} gap-0.5 pr-1.5 pl-3`}>
+      <span className="shrink-0 text-[11px] font-semibold text-foreground">Files</span>
       <span title={host.explorerRoot} className="min-w-0 flex-1 truncate pl-1.5 text-[11px] text-muted-foreground">
         {label}
       </span>

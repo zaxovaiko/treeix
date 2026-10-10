@@ -130,8 +130,11 @@ export function SessionsDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/45 pt-[11vh]" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="flex max-h-[72vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover">
+    <div
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/50 pt-[12vh] backdrop-blur-[2px]"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div className="flex max-h-[70vh] w-[660px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-input bg-popover">
         <label className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4 text-muted-foreground">
           <Icon name="search" className="size-4 shrink-0" />
           <input
@@ -141,16 +144,16 @@ export function SessionsDialog({
             onKeyDown={onKeyDown}
             placeholder={mode === 'closed' ? 'Reopen a closed session, or search its conversation' : 'Find a session by title, group or conversation'}
             spellCheck={false}
-            className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+            className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
           />
-          <Keys combo="esc" hint />
+          <Keys combo="esc" />
         </label>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {rows.length === 0 && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{needle ? 'No matching sessions' : 'No sessions'}</p>}
           {rows.map((row, index) => (
             <div key={row.session?.id ?? row.entry?.id}>
               {row.group !== rows[index - 1]?.group && (
-                <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{GROUPS.find(([group]) => group === row.group)?.[1]}</div>
+                <div className="px-2.5 pt-2 pb-1 text-[11px] font-semibold text-foreground">{GROUPS.find(([group]) => group === row.group)?.[1]}</div>
               )}
               <div
                 data-active={index === current ? '' : undefined}

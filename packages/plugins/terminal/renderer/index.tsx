@@ -13,7 +13,8 @@ import {
   type SessionSummary,
   type ShortcutInfo,
   togglePanel,
-  useHost
+  useHost,
+  PANE_HEADER
 } from '@treeix/sdk'
 import { chatAgent, getAgents } from '@treeix/app/agents'
 import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
@@ -38,6 +39,7 @@ import {
   closeActiveSession,
   createSession,
   focusSession,
+  isRestored,
   focusShown,
   getPorts,
   getTerminals,
@@ -45,6 +47,7 @@ import {
   restoreClosedSession,
   revealSession,
   selectSession,
+  splitSession,
   type Session,
   type SessionView,
   sendText,
@@ -121,7 +124,7 @@ function sessionSummaries(): SessionSummary[] {
   return summaries.list
 }
 
-type Scope = { sessions: Session[]; session: Session | null; history: ClosedSession[] }
+type Scope = { sessions: Session[]; session: Session | null; panes: Session[][]; history: ClosedSession[] }
 
 /** Sessions and closed sessions of the current workspace, and the session on screen */
 function useScope(): Scope {
@@ -131,11 +134,19 @@ function useScope(): Scope {
   const state = useTerminals()
   const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
   const sessions = state.sessions.filter(include)
-  return { sessions, session: sessions.find((candidate) => candidate.id === state.selected[currentId]) ?? sessions[0] ?? null, history: state.history.filter(include) }
+  const session = sessions.find((candidate) => candidate.id === state.selected[currentId]) ?? sessions[0] ?? null
+  // The split the shown session is in, else the session alone
+  const layout = session && state.splits[session.workspaceId]
+  const panes = layout?.flat().includes(session.id)
+    ? layout.map((column) => column.flatMap((id) => sessions.filter((candidate) => candidate.id === id))).filter((column) => column.length > 0)
+    : session
+      ? [[session]]
+      : []
+  return { sessions, session, panes, history: state.history.filter(include) }
 }
 
 /** The latest scope, for keys handled outside React; kept by Root, which is always mounted */
-let scope: Scope = { sessions: [], session: null, history: [] }
+let scope: Scope = { sessions: [], session: null, panes: [], history: [] }
 
 const WaitingDot = ({ className }: { className: string }): React.JSX.Element | null => {
   const waiting = useScope().sessions.filter((session) => session.status === 'input').length
@@ -144,7 +155,7 @@ const WaitingDot = ({ className }: { className: string }): React.JSX.Element | n
 
 function TerminalPage(): React.JSX.Element {
   const host = useHost()
-  const { session, history } = useScope()
+  const { session, panes, history } = useScope()
   const { previews, fileTabs, previewMaximized } = view.use()
   const { currentId } = useWorkspaces()
   const preview = previews[currentId] ?? null
@@ -169,6 +180,7 @@ function TerminalPage(): React.JSX.Element {
           <div style={{ flex: preview ? 1 - previewShare : 1 }} className={`min-w-6 flex-col ${preview && previewMaximized ? 'hidden' : 'flex'}`}>
             <WorkspaceTerminals
               session={session}
+              panes={panes}
               label={worktreeLabel(host.repos, cwd)}
               cwd={cwd}
               history={history}
@@ -184,7 +196,7 @@ function TerminalPage(): React.JSX.Element {
             >
               {!previewMaximized && <ResizeHandle edge="left" onResize={(width) => row.current && setPreviewShare(Math.min(1, width / row.current.clientWidth))} />}
               <MarkdownFoldScope>
-                <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+                <div className={`${PANE_HEADER} gap-1 px-1.5`}>
                   <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
                     {openTabs.map((tab) => {
                       const name = tab.path.split('/').pop() ?? tab.path
@@ -313,7 +325,7 @@ function useFileLinks(): void {
 function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
   const host = useHost()
   const cwd = useTerminalCwd(host)
-  const { session, sessions, history } = useScope()
+  const { session, panes, sessions, history } = useScope()
   // The panel closes itself once the last session exits; opened empty by hand (⌘J) it stays
   const hadSessions = useRef(sessions.length > 0)
   useEffect(() => {
@@ -326,6 +338,7 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
   return (
     <WorkspaceTerminals
       session={session}
+      panes={panes}
       label={worktreeLabel(host.repos, cwd)}
       cwd={cwd}
       history={history}
@@ -422,7 +435,7 @@ function Root(): React.JSX.Element | null {
   useEffect(syncChats, [chat])
   // Keys and new sessions act on the session on screen, so the store knows which that is
   useEffect(() => {
-    if (current.session && getTerminals().selected[currentId] !== current.session.id) selectSession(current.session.id)
+    if (isRestored() && current.session && getTerminals().selected[currentId] !== current.session.id) selectSession(current.session.id)
   }, [current.session?.id, currentId])
   // A workspace switched to starts from its own default folder, not one picked the last time it was on screen
   useEffect(() => setPickedFolder(currentId, null), [currentId])
@@ -458,6 +471,10 @@ defineActions([
   { id: 'terminal.newTabAlt', label: 'New shell session, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
   { id: 'terminal.newClaudeTab', label: 'New Claude session', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
   { id: 'terminal.newChat', label: 'New chat, with the agent last picked in one', section: 'Terminal', keys: key('KeyC', { meta: true, alt: true }) },
+  { id: 'terminal.splitRight', label: 'Split right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
+  { id: 'terminal.splitDown', label: 'Split down with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true, shift: true }) },
+  { id: 'terminal.previousPane', label: 'Previous split pane', section: 'Terminal', keys: key('BracketLeft', { meta: true }) },
+  { id: 'terminal.nextPane', label: 'Next split pane', section: 'Terminal', keys: key('BracketRight', { meta: true }) },
   {
     id: 'terminal.reopenClosed',
     label: 'Reopen the last closed session, resuming its agent conversation',
@@ -494,6 +511,20 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     anywhere[anywhereId]()
     return true
   }
+  // On the Terminal page or in a docked terminal, like iTerm's ⌘D and ⇧⌘D
+  const split = (onPage || terminal) && scope.session ? actionForEvent(event, ['terminal.splitRight', 'terminal.splitDown']) : null
+  if (split && scope.session) {
+    void splitSession(scope.session.id, split === 'terminal.splitRight' ? 'right' : 'bottom', host.flash)
+    return true
+  }
+  // Between split panes in reading order, like iTerm's ⌘[ and ⌘]
+  const panes = scope.panes.flat()
+  const pane = (onPage || terminal) && panes.length > 1 ? actionForEvent(event, ['terminal.previousPane', 'terminal.nextPane']) : null
+  if (pane) {
+    const index = panes.findIndex((candidate) => candidate.id === scope.session?.id)
+    focusSession(panes[(index + (pane === 'terminal.nextPane' ? 1 : -1) + panes.length) % panes.length].id)
+    return true
+  }
   // Session digits only apply inside the terminals, elsewhere the app's digits work; digits match the physical key, so ⌥ producing ¡™£ doesn't matter
   const digit = digitPressed(event, 'alt')
   if (digit && terminal) {
@@ -520,8 +551,8 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
 /** Keys the plugin owns that aren't single actions: the digit row and the close that rides the app's ⌘W */
 const SHORTCUTS: ShortcutInfo[] = (
   [
-    ['⌥1-9', 'Nth session of the workspace, 9 is the last (in a terminal)', undefined],
-    ['⌘W', 'Close the session on screen to History', undefined]
+    ['⌥ 1-9', 'Nth session of the workspace, 9 is the last (in a terminal)', undefined],
+    ['⌘ W', 'Close the session on screen to History', undefined]
   ] satisfies [string, string, string | undefined][]
 ).map(([keys, label, page]) => ({ keys, label, section: 'Terminal', page }))
 

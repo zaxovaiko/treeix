@@ -10,8 +10,8 @@ import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
-import { useHost, usePanels } from '@treeix/sdk'
-import { errorMessage, useChromeless } from '@treeix/app/ui'
+import { PANE_HEADER, useHost, usePanels } from '@treeix/sdk'
+import { errorMessage, ResizeGrip, useChromeless } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { droppedPaths } from './fileLinks'
@@ -35,12 +35,15 @@ import {
   restoreClosedSession,
   selectAllTerminal,
   sessionDiagrams,
+  splitSession,
   switchView,
   terminalSelection,
   transcriptRef,
   type Session,
   type SessionKind,
   type SessionView as SessionViewKind,
+  setPaneGrow,
+  useTerminals,
   wakeSession
 } from './terminals'
 
@@ -156,6 +159,9 @@ export const sessionEntries = (session: Session, flash: (message: string) => voi
   otherView(session) === 'terminal' && { label: 'Open in terminal', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
   { label: 'Rename…', run: () => startRename(session.id) },
   null,
+  { label: 'Split right', accelerator: acceleratorOf('terminal.splitRight'), run: () => void splitSession(session.id, 'right', flash) },
+  { label: 'Split down', accelerator: acceleratorOf('terminal.splitDown'), run: () => void splitSession(session.id, 'bottom', flash) },
+  null,
   { label: 'Copy working directory', run: () => copyText(session.worktreePath) },
   { label: 'Reveal in Finder', run: () => window.api.revealInFinder(session.worktreePath) },
   null,
@@ -216,7 +222,8 @@ function SessionView({ session }: { session: Session }): React.JSX.Element {
       ) : (
         <div
           ref={hostRef}
-          className="min-h-0 flex-1"
+          // Text keeps off the pane's edge, as an editor's does
+          className="min-h-0 flex-1 pt-1 pl-2"
           onContextMenu={(event) =>
             openMenu(event, [
               { label: 'Copy', enabled: terminalSelection(session.id) !== '', accelerator: 'CmdOrCtrl+C', run: () => copyText(terminalSelection(session.id)) },
@@ -369,9 +376,7 @@ function SessionBar({
   const plans = useService('plans')
   const planName = session?.view === 'terminal' ? session.planName : null
   return (
-    <div
-      className={`@container flex h-9 shrink-0 items-center gap-1 border-b border-border bg-card px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}
-    >
+    <div className={`@container ${PANE_HEADER} gap-1 px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
           {onGoToFolder && <FolderPicker label={label} current={session?.worktreePath ?? cwd} onGo={onGoToFolder} />}
@@ -418,7 +423,15 @@ function SessionBar({
         <Icon name="plus" className="size-3.5" />
       </button>
       {session && (
-        <button title="Close to History (⌘W)" aria-label="Close session" onClick={() => killSession(session.id)} className={stripButton}>
+        <button
+          title="Close to History (⌘W)"
+          aria-label="Close session"
+          onClick={() => {
+            killSession(session.id)
+            focusShown()
+          }}
+          className={stripButton}
+        >
           <Icon name="close" className="size-3" />
         </button>
       )}
@@ -454,9 +467,54 @@ function SessionBar({
           onClick={onHide}
           className={stripButton}
         >
-          <Icon name="close" className="size-3.5" />
+          {/* Points to the edge it folds into; a cross here would read as the session's close beside it */}
+          <Icon name="chevron" className={`size-3.5 ${side === 'bottom' ? 'rotate-90' : side === 'left' ? 'rotate-180' : ''}`} />
         </button>
       )}
+    </div>
+  )
+}
+
+const PANE_MIN = 120
+
+/** The line between two split panes, on the edge of the later one; dragging it shares their space anew */
+function PaneDivider({
+  across,
+  before,
+  after,
+  grow,
+  onGrow
+}: {
+  /** Between stacked rows rather than columns */
+  across: boolean
+  before: string
+  after: string
+  grow: Record<string, number>
+  onGrow: (grow: Record<string, number>) => void
+}): React.JSX.Element {
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    const handle = event.currentTarget
+    const second = handle.parentElement
+    const first = second?.previousElementSibling
+    if (!second || !first) return
+    const size = (element: Element): number => (across ? element.getBoundingClientRect().height : element.getBoundingClientRect().width)
+    const [firstSize, total] = [size(first), size(first) + size(second)]
+    const weight = (grow[before] ?? 1) + (grow[after] ?? 1)
+    const start = across ? event.clientY : event.clientX
+    handle.setPointerCapture(event.pointerId)
+    handle.onpointermove = (move) => {
+      const next = Math.max(PANE_MIN, Math.min(total - PANE_MIN, firstSize + (across ? move.clientY : move.clientX) - start))
+      onGrow({ ...grow, [before]: (weight * next) / total, [after]: (weight * (total - next)) / total })
+    }
+    handle.onpointerup = () => {
+      handle.onpointermove = null
+    }
+  }
+  return (
+    <div onPointerDown={startDrag} className={`group absolute z-10 ${across ? 'inset-x-0 -top-1.5 h-3 cursor-row-resize' : 'inset-y-0 -left-1.5 w-3 cursor-col-resize'}`}>
+      <span className={`pointer-events-none absolute bg-border ${across ? 'inset-x-0 top-1.5 h-px' : 'inset-y-0 left-1.5 w-px'}`} />
+      <ResizeGrip across={across} />
     </div>
   )
 }
@@ -491,7 +549,7 @@ function EmptySessions({ label, cwd, history, repos }: { label: string; cwd: str
       </p>
       {history.length > 0 && (
         <div className="w-full max-w-md text-left">
-          <p className="px-1.5 pb-1 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">Recently closed</p>
+          <p className="px-1.5 pb-1 text-[11px] font-semibold text-foreground">Recently closed</p>
           <ClosedSessions entries={history.slice(0, 8)} repos={repos} />
         </div>
       )}
@@ -502,6 +560,7 @@ function EmptySessions({ label, cwd, history, repos }: { label: string; cwd: str
 /** The session the workspace has on screen, under its toolbar */
 export function WorkspaceTerminals({
   session,
+  panes,
   label,
   cwd,
   history,
@@ -514,6 +573,8 @@ export function WorkspaceTerminals({
 }: {
   /** The session on screen, picked in the sidebar */
   session: Session | null
+  /** The sessions on screen, as columns of stacked panes: the shown session alone, or the split it is in */
+  panes: Session[][]
   /** The workspace's name for the empty state */
   label: string
   /** Where sessions start */
@@ -532,10 +593,30 @@ export function WorkspaceTerminals({
   onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
   useSettings()
+  const grow = useTerminals().paneGrow
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <SessionBar session={session} label={label} cwd={cwd} repos={repos} page={page} onHide={onHide} side={side} onMove={onMove} onGoToFolder={onGoToFolder} />
-      {session ? <SessionView key={session.id} session={session} /> : <EmptySessions label={label} cwd={cwd} history={history} repos={repos} />}
+      {session ? (
+        <div data-terminal-panes className="flex min-h-0 min-w-0 flex-1">
+          {panes.map((column, index) => (
+            <div key={column[0].id} style={{ flexGrow: grow[`column:${column[0].id}`] ?? 1 }} className="relative flex min-w-0 basis-0 flex-col">
+              {index > 0 && <PaneDivider across={false} before={`column:${panes[index - 1][0].id}`} after={`column:${column[0].id}`} grow={grow} onGrow={setPaneGrow} />}
+              {column.map((pane, row) => (
+                <div key={pane.id} style={{ flexGrow: grow[pane.id] ?? 1 }} className="relative flex min-h-0 basis-0">
+                  {row > 0 && <PaneDivider across before={column[row - 1].id} after={pane.id} grow={grow} onGrow={setPaneGrow} />}
+                  {/* Like iTerm, the panes without the keys dim a little, so the one typed into stands out; the divider keeps its tone */}
+                  <div className={`flex min-h-0 min-w-0 flex-1 ${pane.id !== session.id ? 'opacity-60' : ''}`}>
+                    <SessionView session={pane} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptySessions label={label} cwd={cwd} history={history} repos={repos} />
+      )}
     </div>
   )
 }

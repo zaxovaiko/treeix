@@ -24,6 +24,7 @@ import {
 } from './sessionMeta'
 import { isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
+import { type PaneLayout, placePane, removePane, type SplitEdge } from './paneLayout'
 import { notify as notifyCenter } from '@treeix/app/notifications'
 
 export { type SessionKind, type SessionView }
@@ -158,8 +159,20 @@ type State = {
   sessions: Session[]
   /** Session shown in each workspace, by workspace id */
   selected: Record<string, string>
+  /** Sessions split on screen beside the shown one, by workspace id; absent while one session fills the page */
+  splits: Record<string, PaneLayout>
+  /** How much room each split column and stacked pane takes, by pane id (a column's is its first pane's, prefixed); even when absent */
+  paneGrow: Record<string, number>
   /** Newest first */
   history: ClosedSession[]
+}
+
+/** The workspace's split without `id`, or no split once a single pane is left */
+export const setPaneGrow = (paneGrow: Record<string, number>): void => update({ paneGrow })
+
+function splitsWithout(workspaceId: string, id: string): Record<string, PaneLayout> {
+  const layout = removePane(state.splits[workspaceId] ?? [], id)
+  return Object.fromEntries([...Object.entries(state.splits).filter(([key]) => key !== workspaceId), ...(layout.flat().length > 1 ? [[workspaceId, layout]] : [])])
 }
 
 /** Opens a path ⌘-clicked in a session; set by the plugin, which knows where files show */
@@ -207,7 +220,7 @@ function loadHistory(): ClosedSession[] {
   return Array.isArray(parsed) ? parsed.map(parseClosedSession).filter((entry) => entry !== null) : []
 }
 
-let state: State = { sessions: [], selected: {}, history: loadHistory() }
+let state: State = { sessions: [], selected: {}, splits: {}, paneGrow: {}, history: loadHistory() }
 const listeners = new Set<() => void>()
 /** Output of sessions not opened yet; sessions that never open (killed, another window's) must not grow it forever */
 const pendingOutput = new Map<string, string>()
@@ -303,6 +316,15 @@ bridge.on('data', (id, data) => {
 
 bridge.on('exit', (id, exitCode) => {
   if (typeof id !== 'string' || typeof exitCode !== 'number') return
+  const session = findSession(id)
+  // A shell left with `exit` closes, like Terminal and iTerm; a failure or an agent stays readable
+  if (session?.view === 'terminal' && !isAgent(session.kind) && exitCode === 0) {
+    const focused = activeSession()?.id === id
+    killSession(id)
+    if (focused) focusShown()
+    return
+  }
+  if (session?.view === 'terminal') session.terminal.write(`\r\n\x1b[2m[Exited with code ${exitCode}]\x1b[0m\r\n\x1b[?25l`)
   update({
     sessions: state.sessions.map((session) => (session.id === id && session.view === 'terminal' ? { ...session, status: 'exited', exitCode } : session))
   })
@@ -355,7 +377,31 @@ export const currentSession = (): Session | undefined => findSession(state.selec
 export function selectSession(id: string): void {
   const session = findSession(id)
   if (!session || state.selected[session.workspaceId] === id) return
-  update({ selected: { ...state.selected, [session.workspaceId]: id } })
+  // A pane of the split just takes the keys; any other session shows alone
+  const inSplit = state.splits[session.workspaceId]?.flat().includes(id)
+  update({
+    selected: { ...state.selected, [session.workspaceId]: id },
+    splits: inSplit ? state.splits : Object.fromEntries(Object.entries(state.splits).filter(([key]) => key !== session.workspaceId))
+  })
+}
+
+const SPLIT_MIN = { width: 240, height: 120 }
+
+/** New shell beside the session, in its folder, like iTerm's ⌘D and ⇧⌘D */
+export async function splitSession(anchorId: string, edge: SplitEdge, flash: (message: string) => void): Promise<void> {
+  const anchor = findSession(anchorId)
+  if (!anchor) return
+  // Halves narrower than a short command line, or a few rows tall, are no use; the pane on screen decides
+  const box = [...document.querySelectorAll(`[data-session-id="${anchorId}"]`)].map((pane) => pane.getBoundingClientRect()).find((rect) => rect.width > 0)
+  if (box && (edge === 'right' ? box.width / 2 < SPLIT_MIN.width : box.height / 2 < SPLIT_MIN.height)) return flash(`No room to split ${edge === 'right' ? 'right' : 'down'}`)
+  const id = await startSession(anchor.worktreePath, 'shell')
+  const workspaceId = findSession(id)?.workspaceId
+  // A session listed in this workspace but started in another can't share its split
+  if (workspaceId !== anchor.workspaceId) return revealSession(id)
+  const layout = state.splits[workspaceId]?.flat().includes(anchorId) ? state.splits[workspaceId] : [[anchorId]]
+  update({ splits: { ...state.splits, [workspaceId]: placePane(layout, id, anchorId, edge) } })
+  // Focusing the new pane selects it, once the focus has moved, so the sidebar reads the new one
+  setTimeout(() => focusSession(id))
 }
 
 /** An empty name hands naming back to the program */
@@ -498,7 +544,12 @@ function newMeta(requested: string, kind: SessionKind, view: SessionView): Sessi
   const title = view === 'chat' ? NEW_CHAT_TITLE : agent.label
   // Chats learn their conversation id from the agent once connected
   const agentSessionId = view === 'terminal' && agent.sessionIdFlag ? crypto.randomUUID() : null
-  return { worktreePath, kind, title: `${title}${same ? ` ${same + 1}` : ''}`, startedAt: Date.now(), workspaceId: getCurrentWorkspaceId(), agentSessionId, view }
+  // Counting alone repeats a name once one closes, so a number still in use is skipped
+  const taken = new Set(state.sessions.map((session) => session.title))
+  const numbered = (index: number): string => (index ? `${title} ${index + 1}` : title)
+  let index = same
+  while (taken.has(numbered(index))) index++
+  return { worktreePath, kind, title: numbered(index), startedAt: Date.now(), workspaceId: getCurrentWorkspaceId(), agentSessionId, view }
 }
 
 /** Starts a session without showing it anywhere yet */
@@ -565,19 +616,21 @@ function resumeCommand(meta: SessionMeta): string | undefined {
 }
 
 const SAVED_KEY = 'terminals.saved'
-type Saved = { sessions: (SessionMeta & { id: string })[]; selected: Record<string, string> }
+type Saved = { sessions: (SessionMeta & { id: string })[]; selected: Record<string, string>; splits: Record<string, PaneLayout>; paneGrow: Record<string, number> }
 
 // Groups are gone; the key only takes up room in old installs
 localStorage.removeItem('terminals.tasks')
 
 function loadSaved(): Saved {
-  const { sessions, selected } = object(readStored(SAVED_KEY))
+  const { sessions, selected, splits, paneGrow } = object(readStored(SAVED_KEY))
   return {
     sessions: list(sessions).flatMap((session) => {
       const meta = parseMeta(session)
       return meta && typeof session.id === 'string' ? [{ ...meta, id: session.id }] : []
     }),
-    selected: stringValues(selected)
+    selected: stringValues(selected),
+    splits: Object.fromEntries(Object.entries(object(splits)).map(([workspaceId, columns]) => [workspaceId, list(columns, Array.isArray).map((column) => list(column, isString))])),
+    paneGrow: Object.fromEntries(Object.entries(object(paneGrow)).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0))
   }
 }
 
@@ -703,6 +756,8 @@ export function syncChats(): void {
 }
 
 let restored = false
+/** False while the saved sessions reattach, so nothing picks a session on screen before the saved pick is back */
+export const isRestored = (): boolean => restored
 
 /**
  * After a reload the processes are still running, so reattach. After a relaunch only the session on screen starts again,
@@ -735,7 +790,16 @@ async function restoreSessions(): Promise<void> {
   // A workspace whose shown session is gone falls back to one it still has
   const shown = Object.entries(saved.selected).filter(([, id]) => findSession(id))
   const fallbacks = state.sessions.map((session): [string, string] => [session.workspaceId, session.id])
-  update({ selected: { ...Object.fromEntries(fallbacks), ...Object.fromEntries(shown), ...state.selected } })
+  // Splits keep the panes that came back; one left is no split
+  const splits = Object.entries(saved.splits).map(([workspaceId, layout]): [string, PaneLayout] => [
+    workspaceId,
+    layout.map((column) => column.filter((id) => findSession(id))).filter((column) => column.length > 0)
+  ])
+  update({
+    selected: { ...Object.fromEntries(fallbacks), ...Object.fromEntries(shown), ...state.selected },
+    splits: { ...Object.fromEntries(splits.filter(([, layout]) => layout.flat().length > 1)), ...state.splits },
+    paneGrow: { ...saved.paneGrow, ...state.paneGrow }
+  })
   restored = true
 }
 
@@ -751,7 +815,10 @@ subscribe(() => {
   if (!restored) return
   // A chat that lost its agent keeps its tab: it resumes with Retry or on the next launch
   const sessions = state.sessions.filter((session) => session.view === 'chat' || session.status !== 'exited').map((session) => ({ id: session.id, ...metaOf(session) }))
-  const saved: Saved = { sessions, selected: state.selected }
+  // Sizes of panes no longer split are dropped
+  const split = new Set(Object.values(state.splits).flat(2))
+  const paneGrow = Object.fromEntries(Object.entries(state.paneGrow).filter(([key]) => split.has(key.replace(/^column:/, ''))))
+  const saved: Saved = { sessions, selected: state.selected, splits: state.splits, paneGrow }
   store(SAVED_KEY, JSON.stringify(saved))
 })
 
@@ -865,6 +932,8 @@ export function focusSession(id: string): void {
   const session = findSession(id)
   if (session?.view === 'chat') document.querySelector<HTMLElement>(`[data-session-id="${id}"] textarea`)?.focus()
   else session?.terminal.focus()
+  // In a split the focused pane is the shown session, so the toolbar and the sidebar follow the keys; after the focus, which activeSession reads first
+  selectSession(id)
 }
 
 const setHistory = (history: ClosedSession[]): void => {
@@ -893,8 +962,13 @@ export function killSession(id: string): void {
     chat?.forget(id)
   } else endTerminal(session)
   const sessions = state.sessions.filter((candidate) => candidate.id !== id)
-  const next = state.selected[session.workspaceId] === id ? sessions.find((candidate) => candidate.workspaceId === session.workspaceId) : undefined
-  update({ sessions, selected: next ? { ...state.selected, [session.workspaceId]: next.id } : state.selected })
+  // A pane of a split hands the page to the panes left beside it
+  const splits = splitsWithout(session.workspaceId, id)
+  // The pane before it takes over, as the one beside or above it in reading order
+  const panes = state.splits[session.workspaceId]?.flat() ?? []
+  const pane = panes[panes.indexOf(id) - 1] ?? panes[panes.indexOf(id) + 1]
+  const next = state.selected[session.workspaceId] === id ? (pane ?? sessions.find((candidate) => candidate.workspaceId === session.workspaceId)?.id) : undefined
+  update({ sessions, splits, selected: next ? { ...state.selected, [session.workspaceId]: next } : state.selected })
   setHistory([{ id, ...metaOf(session), endedAt: Date.now() }, ...state.history])
 }
 
@@ -1028,7 +1102,11 @@ export async function switchView(id: string): Promise<void> {
   }
   update({
     sessions: state.sessions.filter((candidate) => candidate.id !== id),
-    selected: state.selected[session.workspaceId] === id ? { ...state.selected, [session.workspaceId]: next } : state.selected
+    selected: state.selected[session.workspaceId] === id ? { ...state.selected, [session.workspaceId]: next } : state.selected,
+    splits: {
+      ...state.splits,
+      ...(state.splits[session.workspaceId] && { [session.workspaceId]: state.splits[session.workspaceId].map((column) => column.map((pane) => (pane === id ? next : pane))) })
+    }
   })
   void wakeSession(next)
   setTimeout(() => focusSession(next))
