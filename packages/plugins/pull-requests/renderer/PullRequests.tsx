@@ -60,13 +60,36 @@ import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from 
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
-import { EmptyState, errorMessage, FoldAllButton, IconButton, Popup, readStored, ResizeHandle, TextPrompt, useCopied, usePersisted } from '@treeix/app/ui'
+import { EmptyState, errorMessage, FoldAllButton, IconButton, Notice, Popup, readStored, ResizeHandle, TextPrompt, useCopied, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
-import { type Command, focusZone, getShell, type IconName, isTyping, Kbd, ListToggle, PageLayout, togglePanel, useHost, useListNav, usePanels, useZone } from '@treeix/sdk'
+import {
+  type Command,
+  focusZone,
+  getShell,
+  type IconName,
+  isTyping,
+  Kbd,
+  ListToggle,
+  PageLayout,
+  togglePanel,
+  useHost,
+  useListNav,
+  usePanels,
+  useZone,
+  PANE_HEADER
+} from '@treeix/sdk'
 import { isJson, isString, list as jsonList, parseJson } from '@treeix/shared/json'
 
 // ponytail: keeps the most recently loaded details, which carry every patch; raise if reopening older PRs refetches too often
 const MAX_CACHED_DETAILS = 30
+// The sort button sits in a narrow row, so it names the order briefly and keeps the full name in its tooltip
+const SORT_SHORT: Record<PullRequestSort, string> = {
+  updated: 'Updated',
+  oldest: 'Oldest',
+  fewestFiles: 'Fewest files',
+  fewestChanges: 'Smallest',
+  mostComments: 'Most comments'
+}
 /** With when it was loaded and for which update, so coming back to a tab soon after shows it without fetching again */
 const detailCache = new Map<string, { detail: PullRequestDetail; at: number; updatedAt: string }>()
 /** Conflict checks by pull request and update, so switching back and forth doesn't fetch again */
@@ -155,14 +178,27 @@ export type DetailProps = {
   onAddPipelineFailure: (pr: PullRequest) => void
 }
 
-function Segment<T extends string>({ value, options, onChange }: { value: T; options: [T, React.ReactNode][]; onChange: (value: T) => void }): React.JSX.Element {
+/** `fill` spreads the options over the whole row; an option's third entry is its tooltip, for icon-only labels */
+function Segment<T extends string>({
+  value,
+  options,
+  onChange,
+  fill = false
+}: {
+  value: T
+  options: [T, React.ReactNode, string?][]
+  onChange: (value: T) => void
+  fill?: boolean
+}): React.JSX.Element {
   return (
-    <div className="flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5 ring-1 ring-border">
-      {options.map(([option, label]) => (
+    <div className={`flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5 ring-1 ring-border ${fill ? 'w-full' : ''}`}>
+      {options.map(([option, label, title]) => (
         <button
           key={option}
+          title={title}
+          aria-pressed={option === value}
           onClick={() => onChange(option)}
-          className={`flex h-5 items-center gap-1 rounded px-2 text-[11px] whitespace-nowrap ${option === value ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`flex h-5 items-center justify-center gap-1 rounded px-2 text-[11px] whitespace-nowrap ${fill ? 'flex-1' : ''} ${option === value ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
         >
           {label}
         </button>
@@ -171,7 +207,7 @@ function Segment<T extends string>({ value, options, onChange }: { value: T; opt
   )
 }
 
-const SECTION_LABEL = 'flex h-7 w-full shrink-0 items-center gap-1.5 px-3 text-left text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase'
+const SECTION_LABEL = 'flex h-7 w-full shrink-0 items-center gap-1.5 px-3 text-left text-[11px] font-semibold text-foreground'
 
 /** A section heading; with `onToggle` it folds its section */
 const SectionLabel = ({ children, open, onToggle }: { children: React.ReactNode; open?: boolean; onToggle?: () => void }): React.JSX.Element =>
@@ -304,7 +340,7 @@ export function PullRequestsView({
             { label: `Filter by ${baseName(pr.repoPath)}`, run: () => addFilter({ kind: 'repo', value: pr.repoPath }) }
           ])
         }}
-        className={`mx-1.5 flex cursor-default flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent ${settled ? 'opacity-60' : ''}`}
+        className={`mx-1.5 flex cursor-default flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent ${settled ? 'opacity-75' : ''}`}
       >
         <div className="flex min-w-0 items-center gap-2">
           <ProviderMark provider={pr.provider} className="size-3.5" />
@@ -341,7 +377,8 @@ export function PullRequestsView({
   let rowIndex = 0
   const list = (
     <>
-      <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
+      <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3`}>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground">Pull requests</span>
         {foldable.length > 1 && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
         <IconButton label={loading ? 'Refreshing' : 'Refresh'} onClick={refresh}>
           <Icon name={loading ? 'loader' : 'refresh'} className="size-3.5" />
@@ -351,51 +388,50 @@ export function PullRequestsView({
         <div data-pr-search className="flex min-w-0">
           <FilterSearch pullRequests={byProvider} filters={filters} onChange={setFilters} />
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Segment
-            value={status}
-            onChange={setStatus}
-            options={(['open', 'merged', 'closed'] as const).map((value) => [
-              value,
-              <>
-                {STATE_STYLE[value].label}
-                <span className="text-muted-foreground tabular-nums">{inScope.filter((pr) => pr.state === value).length}</span>
-              </>
-            ])}
-          />
-          <span className="flex-1" />
+        <Segment
+          fill
+          value={status}
+          onChange={setStatus}
+          options={(['open', 'merged', 'closed'] as const).map((value) => [
+            value,
+            <>
+              {STATE_STYLE[value].label}
+              <span className="text-muted-foreground tabular-nums">{inScope.filter((pr) => pr.state === value).length}</span>
+            </>
+          ])}
+        />
+        <div className="flex min-w-0 items-center gap-1">
           <button
-            title="Sort (⇧S)"
+            title={`Sort: ${PULL_REQUEST_SORTS[sort]} (⇧S)`}
             onClick={() => setSortOpen(true)}
-            className={`flex h-6 min-w-0 items-center gap-1 rounded-md px-1.5 text-[11px] hover:bg-accent hover:text-foreground ${sort === 'updated' ? 'text-muted-foreground' : 'text-foreground'}`}
+            className={`-ml-1 flex h-6 min-w-0 items-center gap-1 rounded-md px-1.5 text-[11px] hover:bg-accent hover:text-foreground ${sort === 'updated' ? 'text-muted-foreground' : 'text-foreground'}`}
           >
             <Icon name="sort" className="size-3 shrink-0" />
-            <span className="truncate">{PULL_REQUEST_SORTS[sort]}</span>
+            <span className="truncate">{SORT_SHORT[sort]}</span>
             <Kbd hint>⇧S</Kbd>
           </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="flex-1" />
           {mixedProviders && (
             <Segment
               value={provider}
               onChange={setProvider}
               options={(['all', 'github', 'gitlab'] as const).map((value) => [
                 value,
-                <>
-                  {value !== 'all' && <ProviderMark provider={value} className="size-3" />}
-                  {{ all: 'All', github: 'GitHub', gitlab: 'GitLab' }[value]}
-                </>
+                value === 'all' ? 'All' : <ProviderMark key={value} provider={value} className="size-3" />,
+                { all: 'All providers', github: 'GitHub only', gitlab: 'GitLab only' }[value]
               ])}
             />
           )}
           <button
             title="Yours, asked of you, or reviewed by you (GitHub only)"
+            aria-pressed={involved}
             onClick={() => setInvolved(!involved)}
-            className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] whitespace-nowrap ring-1 ${
-              involved ? 'bg-foreground/10 text-foreground ring-border' : 'text-muted-foreground ring-border hover:text-foreground'
+            className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] whitespace-nowrap ${
+              involved ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
           >
-            Involves me
+            <Icon name="user" className="size-3" />
+            Mine
             <Kbd hint>f</Kbd>
           </button>
         </div>
@@ -420,7 +456,7 @@ export function PullRequestsView({
             {group.label && (
               <SectionLabel open={!folded.has(group.id)} onToggle={() => toggleGroup(group.id)}>
                 {group.label}
-                <span className="font-normal text-muted-foreground/60 tabular-nums">{group.pullRequests.length}</span>
+                <span className="font-normal text-muted-foreground tabular-nums">{group.pullRequests.length}</span>
               </SectionLabel>
             )}
             {!(group.label && folded.has(group.id)) && group.pullRequests.map((pr) => row(pr, rowIndex++))}
@@ -432,11 +468,7 @@ export function PullRequestsView({
 
   return (
     <>
-      {selected ? (
-        <PullRequestDetailView pr={selected} list={list} {...detailProps} />
-      ) : (
-        <PageLayout list={list} main={<EmptyState fill icon="pullRequest" title={data ? 'No pull request selected' : 'Loading...'} />} />
-      )}
+      {selected ? <PullRequestDetailView pr={selected} list={list} {...detailProps} /> : <PageLayout list={list} main={<div className="flex-1" />} />}
       {sortOpen && (
         <Picker
           onClose={() => setSortOpen(false)}
@@ -846,7 +878,7 @@ function ThreadCard({
                     <button
                       disabled={!editing.body.trim() || editing.body.trim() === comment.body}
                       onClick={() => onSaveEdit(comment, editing.body.trim())}
-                      className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40"
+                      className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
                     >
                       Save
                     </button>
@@ -1682,7 +1714,7 @@ export function PullRequestDetailView({
 
   const header = (
     <div className="shrink-0 border-b border-border">
-      <div className="flex h-9 min-w-0 items-center gap-2 border-b border-border bg-card px-1.5 text-xs text-muted-foreground">
+      <div className={`${PANE_HEADER} min-w-0 gap-2 px-1.5 text-xs text-muted-foreground`}>
         {list !== undefined && <ListToggle page={pageId} />}
         <ProviderMark provider={pr.provider} className="size-3.5" />
         <span title={pr.repoPath} className="min-w-0 truncate">
@@ -1693,20 +1725,18 @@ export function PullRequestDetailView({
         <ReviewMark review={pr.review} />
         <ConflictMark pr={pr} />
         <span className="flex-1" />
-        <button
-          onClick={() => panels.toggle('inspector')}
-          title={`${panels.inspector ? 'Hide' : 'Show'} details and ${agentComments} agent comment${agentComments === 1 ? '' : 's'} (⌘⌥B)`}
-          className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent hover:text-foreground ${panels.inspector ? 'bg-foreground/10 text-foreground' : ''}`}
-        >
-          <Icon name="panel" className="size-3.5 -scale-x-100" />
-          {agentComments > 0 && (
-            <span className="flex items-center gap-1 text-foreground tabular-nums">
-              <Icon name="comment" className="size-3" />
-              {agentComments}
-            </span>
-          )}
-          <Kbd hint>⌘⌥B</Kbd>
-        </button>
+        <ListToggle
+          page={pageId}
+          panel="inspector"
+          badge={
+            agentComments > 0 && (
+              <span className="flex items-center gap-1 text-foreground tabular-nums">
+                <Icon name="comment" className="size-3" />
+                {agentComments}
+              </span>
+            )
+          }
+        />
       </div>
       <div className="px-5 pt-3">
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
@@ -1897,8 +1927,8 @@ export function PullRequestDetailView({
 
   const files = detail && (
     <div className="flex min-h-0 flex-1">
-      <nav style={{ width: filesWidth }} className="relative flex shrink-0 flex-col border-r border-border bg-card">
-        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3 text-[11px] text-muted-foreground">
+      <nav style={{ width: filesWidth }} className="relative flex shrink-0 flex-col border-r border-border">
+        <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3 text-[11px] text-muted-foreground`}>
           {since && (
             <button
               title={sinceOnly ? 'Show every file' : 'Only the files that changed since your last visit'}
@@ -1980,12 +2010,9 @@ export function PullRequestDetailView({
           {renderSend && !(panels.inspector && renderComments) && <div className="absolute right-4 bottom-4 z-30">{renderSend(pr)}</div>}
           {header}
           {error && (
-            <p className="mx-5 mt-3 flex items-start gap-2 rounded-md bg-red-400/10 px-3 py-2 text-xs break-words text-red-400 select-text">
-              <span className="min-w-0 flex-1">{error}</span>
-              <button onClick={() => setError(null)} title="Dismiss" className="shrink-0 text-red-400/70 hover:text-red-400">
-                <Icon name="close" className="size-3" />
-              </button>
-            </p>
+            <Notice className="mx-5 mt-3" onDismiss={() => setError(null)}>
+              {error}
+            </Notice>
           )}
           {!detail && !error && <EmptyState fill title="Loading..." />}
           <ErrorBoundary label={view === 'files' ? 'Files changed' : 'Conversation'} resetKey={`${pr.url}:${view}`}>
@@ -1998,17 +2025,25 @@ export function PullRequestDetailView({
 
   const inspector = (
     <div className="flex min-h-0 flex-1 flex-col">
+      <div className={`${PANE_HEADER} pr-1.5 pl-3`}>
+        <span className="truncate text-[11px] font-semibold text-foreground">Details</span>
+      </div>
       <div className="max-h-[60%] shrink-0 overflow-y-auto pb-2">
-        <SectionLabel>Reviewers</SectionLabel>
-        {(detail?.reviewers ?? []).map((reviewer) => (
-          <ReviewerRow key={reviewer.login} reviewer={reviewer} pr={pr} onRequested={load} onError={setError} />
-        ))}
-        {detail && detail.reviewers.length === 0 && <p className="px-3 text-xs text-muted-foreground">No reviewers</p>}
-        <SectionLabel>Assignees</SectionLabel>
-        {assignees.map((person) => (
-          <AssigneeRow key={person.login} person={person} onRemove={() => setAssigned(person, false)} />
-        ))}
-        {detail && assignees.length === 0 && <p className="px-3 text-xs text-muted-foreground">No one assigned</p>}
+        {/* Until the details load there is nothing true to say about people, so the sections wait */}
+        {detail && (
+          <>
+            <SectionLabel>Reviewers</SectionLabel>
+            {detail.reviewers.map((reviewer) => (
+              <ReviewerRow key={reviewer.login} reviewer={reviewer} pr={pr} onRequested={load} onError={setError} />
+            ))}
+            {detail.reviewers.length === 0 && <p className="px-3 text-xs text-muted-foreground">No reviewers</p>}
+            <SectionLabel>Assignees</SectionLabel>
+            {assignees.map((person) => (
+              <AssigneeRow key={person.login} person={person} onRemove={() => setAssigned(person, false)} />
+            ))}
+            {assignees.length === 0 && <p className="px-3 text-xs text-muted-foreground">No one assigned</p>}
+          </>
+        )}
         <SectionLabel>Actions</SectionLabel>
         <div className="px-1.5">
           <ActionRow icon="branch" label={local ? 'Open worktree' : `Create worktree for ${pr.sourceBranch}`} keys="w" onClick={worktree} />

@@ -1,6 +1,8 @@
+import type { IpcMainInvokeEvent } from 'electron'
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { MergeMethod, PullRequest, PullRequestComment, Reaction, ReviewThread, ReviewVerdict } from '../shared/types'
 import {
+  cli,
   failedJobLogs,
   filesChangedBetween,
   assignableUsers,
@@ -34,7 +36,12 @@ const plugin: MainPlugin = {
       releases: { url: 'https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest', field: 'tag_name' }
     }
   ],
-  activate: (context) => {
+  activate: (rawContext) => {
+    // A CLI that fails reaches the notice as its own first line, not Node's "Command failed: <the whole command>"
+    const context = {
+      handle: <Args extends unknown[]>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => unknown) =>
+        rawContext.handle<Args>(channel, (event, ...args) => cli(async () => handler(event, ...args)))
+    }
     context.handle('list', (_, repoPaths: string[]) => listPullRequests(repoPaths))
     context.handle('at', (_, url: string, repoPaths: string[]) => pullRequestAt(String(url), repoPaths))
     context.handle('detail', (_, pullRequest: PullRequest) => pullRequestDetail(pullRequest))

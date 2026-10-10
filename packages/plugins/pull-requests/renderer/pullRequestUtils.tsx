@@ -10,7 +10,7 @@ export const prLabel = (pr: PullRequest): string => `${pr.provider === 'github' 
 
 export const STATE_STYLE: Record<PullRequestState | 'draft', { label: string; className: string }> = {
   open: { label: 'Open', className: 'bg-emerald-400/12 text-emerald-400' },
-  draft: { label: 'Draft', className: 'bg-foreground/8 text-muted-foreground' },
+  draft: { label: 'Draft', className: 'bg-foreground/8 text-foreground/75' },
   merged: { label: 'Merged', className: 'bg-violet-400/14 text-violet-400' },
   closed: { label: 'Closed', className: 'bg-red-400/12 text-red-400' }
 }
@@ -102,8 +102,8 @@ export const REVIEW_MARKS: Record<Exclude<ReviewStatus['state'], 'unreviewed'>, 
   requested: { label: 'Review requested', className: 'bg-amber-400/15 text-amber-400' },
   approved: { label: 'Approved', className: 'bg-emerald-400/12 text-emerald-400', icon: 'check' },
   changes: { label: 'Changes requested', className: 'bg-red-400/12 text-red-400', icon: 'alert' },
-  commented: { label: 'Commented', className: 'bg-foreground/5 text-muted-foreground', icon: 'comment' },
-  yours: { label: 'Yours', className: 'bg-foreground/5 text-muted-foreground' }
+  commented: { label: 'Commented', className: 'bg-foreground/8 text-foreground/75', icon: 'comment' },
+  yours: { label: 'Yours', className: 'bg-foreground/8 text-foreground/75' }
 }
 
 /** Your review state, or a new-commits pill when the author pushed after your review, plus another reviewer's request for changes */

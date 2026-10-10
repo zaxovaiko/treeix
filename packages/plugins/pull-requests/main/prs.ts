@@ -34,7 +34,7 @@ const numberOrNull = (value: unknown): number | null => (typeof value === 'numbe
 
 function failureMessage(reason: unknown): string {
   const stderr = isJson(reason) ? text(reason.stderr).trim() : ''
-  return (stderr || String(reason)).split('\n')[0]
+  return (stderr || (reason instanceof Error ? reason.message : String(reason))).split('\n')[0]
 }
 
 async function run(command: string, args: string[], cwd: string): Promise<string> {
@@ -75,7 +75,7 @@ async function requireRemote(repoPath: string): Promise<Remote> {
 }
 
 /** Rethrows a CLI failure as its first line */
-async function cli<T>(action: () => Promise<T>): Promise<T> {
+export async function cli<T>(action: () => Promise<T>): Promise<T> {
   try {
     return await action()
   } catch (reason) {

@@ -1,3 +1,4 @@
+import { PANE_HEADER } from '@treeix/sdk'
 import { File, Virtualizer } from '@pierre/diffs/react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -51,7 +52,7 @@ export function FullFileView({ path, subtitle, load, onClose }: { path: string; 
         onClick={(event) => event.stopPropagation()}
         className="flex h-[84vh] w-[1100px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-popover backdrop-blur-2xl"
       >
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs">
+        <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3 text-xs`}>
           <FileIcon path={path} />
           <span className="min-w-0 truncate font-mono text-foreground select-text">{path}</span>
           <span className="shrink-0 text-muted-foreground">{subtitle}</span>

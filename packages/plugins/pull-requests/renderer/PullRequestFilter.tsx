@@ -68,13 +68,5 @@ export function FilterSearch({
   filters: PullRequestFilter[]
   onChange: (filters: PullRequestFilter[]) => void
 }): React.JSX.Element {
-  return (
-    <GenericFilterSearch
-      items={pullRequests}
-      groups={GROUPS}
-      tokens={filters}
-      onChange={onChange}
-      placeholder="Search, or filter by person, repository, review, comments, branch"
-    />
-  )
+  return <GenericFilterSearch items={pullRequests} groups={GROUPS} tokens={filters} onChange={onChange} placeholder="Search or filter pull requests" />
 }
