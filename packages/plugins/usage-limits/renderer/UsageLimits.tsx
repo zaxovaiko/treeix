@@ -77,8 +77,9 @@ function AgentLabel({ limits, label }: { limits: AgentLimits; label: UsageLabel 
   if (label === 'reset') {
     return (
       <>
-        <span className={muted}>5h</span> <Percent window={fiveHour} /> <span className={muted}>· {untilLabel(fiveHour?.resetsAt ?? null)}</span>
-        <span className={`ml-1.5 ${muted}`}>wk</span> <Percent window={weekly} /> <span className={muted}>· {untilLabel(weekly?.resetsAt ?? null)}</span>
+        {/* A narrow title bar keeps the percents and leaves the reset times to the tooltip */}
+        <span className={muted}>5h</span> <Percent window={fiveHour} /> <span className={`${muted} @max-xl:hidden`}>· {untilLabel(fiveHour?.resetsAt ?? null)}</span>
+        <span className={`ml-1.5 ${muted}`}>wk</span> <Percent window={weekly} /> <span className={`${muted} @max-xl:hidden`}>· {untilLabel(weekly?.resetsAt ?? null)}</span>
       </>
     )
   }
@@ -92,7 +93,7 @@ function AgentLabel({ limits, label }: { limits: AgentLimits; label: UsageLabel 
 function describe(name: string, limits: AgentLimits): string {
   const line = (title: string, window: LimitWindow | null): string =>
     window
-      ? `${name} ${title}: ${window.usedPercent}% used${window.resetsAt ? `, resets in ${untilLabel(window.resetsAt)} (${new Date(window.resetsAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })})` : ''}`
+      ? `${name} ${title}: ${window.usedPercent}% used${window.resetsAt ? `, resets in ${untilLabel(window.resetsAt)} (${new Date(window.resetsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })})` : ''}`
       : `${name} ${title}: unknown`
   const updated = limits.updatedAt ? `Updated ${untilLabel(Date.now() + (Date.now() - limits.updatedAt))} ago` : ''
   return [line('5-hour', limits.fiveHour), line('weekly', limits.weekly), updated].filter(Boolean).join('\n')
@@ -131,7 +132,7 @@ export function UsageLimits(): React.JSX.Element | null {
     <button
       onClick={() => onOpenSettings('plugin:usage-limits')}
       title={`${agents.map(([, name, agentLimits]) => describe(name, agentLimits)).join('\n\n')}\n\nClick to change this label`}
-      className="flex h-6 shrink-0 items-center gap-3 rounded-md px-2 text-[11.5px] hover:bg-accent [-webkit-app-region:no-drag]"
+      className="flex h-6 shrink-0 items-center gap-3 rounded-md px-2 text-[11.5px] @max-md:hidden hover:bg-accent [-webkit-app-region:no-drag]"
     >
       {agents.map(([kind, , agentLimits]) => (
         <span key={kind} className="flex items-center gap-1.5 whitespace-nowrap">

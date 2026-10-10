@@ -18,6 +18,9 @@ const readImage = (file: File): Promise<ChatImage> =>
     reader.readAsDataURL(file)
   })
 
+/** Values that read as nothing on their own, so the button names the option too: "Fast mode: Off" */
+const BARE_VALUE = /^(on|off|default|none|auto)$/i
+
 type PendingSwitch = { option: ChatOption; value: string; tokens: number | null }
 
 /** A session option (mode, model) as a button opening the app's menu; j/k or arrows move, ⏎ picks, esc closes */
@@ -26,6 +29,7 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
   const anchor = useRef<HTMLDivElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   const current = option.values.find((value) => value.value === option.currentValue)
+  const shown = current?.name ?? option.currentValue
   const close = (): void => {
     setOpen(false)
     anchor.current?.querySelector('button')?.focus()
@@ -53,7 +57,7 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
         onClick={() => (open ? close() : setOpen(true))}
         className="flex h-6 max-w-40 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        <span className="truncate">{current?.name ?? option.currentValue}</span>
+        <span className="truncate">{BARE_VALUE.test(shown) ? `${option.name}: ${shown}` : shown}</span>
         <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground/65" />
       </button>
       {open && (
@@ -64,6 +68,7 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
           onKeyDown={onKey}
           className="max-h-72 w-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground"
         >
+          <div className="px-2 pt-1 pb-1.5 text-[11px] text-muted-foreground">{option.name}</div>
           {option.values.map((value) => (
             <button
               key={value.value}
@@ -335,7 +340,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         </div>
       )}
       <div
-        className="relative rounded-lg border border-input/60 bg-background focus-within:border-foreground/50"
+        className="relative rounded-lg border border-input bg-background focus-within:border-primary"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           if (event.dataTransfer.files.length === 0) return
@@ -435,7 +440,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
             <button
               onClick={submit}
               disabled={(!chat.connected && !chat.error) || (!draft.trim() && images.length === 0)}
-              className="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-40"
+              className="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
             >
               {chat.connected || chat.error ? 'Send' : 'Connecting…'}
             </button>

@@ -3,7 +3,7 @@ import { useHost } from '@treeix/sdk'
 import { agentOr } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { useSettings } from '@treeix/app/settings'
-import { baseName } from '@treeix/app/Sidebar'
+import { worktreeLabel } from '@treeix/app/sessionUi'
 import { firstAllow, firstReject, formatElapsed, useElapsed } from './Blocks'
 import { Composer } from './ChatComposer'
 import { pendingOf, TurnBlocks } from './Transcript'
@@ -33,6 +33,7 @@ function Activity({ chat }: { chat: ChatState }): React.JSX.Element {
 
 /** Before the first message: starting the agent, why it failed to start, or what the chat can do */
 function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cwd: string }): React.JSX.Element {
+  const host = useHost()
   const agent = agentOr(chat.options?.agent ?? '')
   if (chat.error && !chat.connected) {
     return (
@@ -68,7 +69,7 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
       )}
       <div className="text-base text-foreground">Chat with {agent.label}</div>
       <div className="font-mono text-xs" title={cwd}>
-        {baseName(cwd)}
+        {worktreeLabel(host.repos, cwd)}
       </div>
     </div>
   )
