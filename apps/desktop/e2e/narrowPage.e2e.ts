@@ -16,7 +16,7 @@ test('a page opened beside another in a narrow pane keeps its main zone and its 
   expect((await box('[data-zone="main"]')).width).toBeGreaterThanOrEqual(240)
   // The inspector does not fit beside the list, so it waits for a wider pane instead of crushing main
   await expect(pane.locator('[data-zone="inspector"]')).toHaveCount(0)
-  const toggle = await box('[aria-label^="Toggle inspector"]')
+  const toggle = await box('[aria-label^="Show inspector"], [aria-label^="Hide inspector"]')
   expect(toggle.x + toggle.width).toBeLessThanOrEqual(paneBox.x + paneBox.width)
   await close()
 })

@@ -382,6 +382,7 @@ export function SearchDialog({
   useEffect(() => {
     if (!query) {
       setResult({ matches: [], truncated: false })
+      setError(null)
       return setStatus('idle')
     }
     let cancelled = false
@@ -396,6 +397,7 @@ export function SearchDialog({
         },
         (reason: unknown) => {
           if (cancelled) return
+          setResult({ matches: [], truncated: false })
           setError(errorMessage(reason))
           setStatus('done')
         }
@@ -435,7 +437,8 @@ export function SearchDialog({
             ) : error ? (
               <span className="text-red-400">Invalid pattern</span>
             ) : (
-              query && `${result.matches.length}${result.truncated ? '+' : ''} results in ${fileCount} files`
+              result.matches.length > 0 &&
+              `${result.matches.length}${result.truncated ? '+' : ''} ${result.matches.length === 1 ? 'result' : 'results'} in ${fileCount} ${fileCount === 1 ? 'file' : 'files'}`
             )}
           </span>
           <Toggle label="Aa" title="Match case" on={caseSensitive} onChange={setCaseSensitive} />

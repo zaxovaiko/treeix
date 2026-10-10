@@ -1,4 +1,4 @@
-import { createContext, type CSSProperties, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { createContext, type CSSProperties, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useId, useState, useSyncExternalStore } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import { ResizeHandle } from '@treeix/app/ui'
 import { HostContext } from './index'
@@ -132,11 +132,15 @@ function moveFocusInto(element: HTMLElement): void {
 /** Makes `zone` the focused one and moves keyboard focus into it once it is on screen; main when the page has no such zone */
 export function focusZone(zone: ZoneId): void {
   if (state.zone !== zone) updateShell({ zone })
-  requestAnimationFrame(() => {
+  // A page just switched to lays its zones out a few frames later, a page shown for the first time later still
+  const until = performance.now() + 500
+  const attempt = (): void => {
     const element = zoneElement(zone)
     if (element) moveFocusInto(element)
-    else if (zone !== 'main') focusZone('main')
-  })
+    else if (performance.now() < until && state.zone === zone) requestAnimationFrame(attempt)
+    else if (zone !== 'main' && state.zone === zone) focusZone('main')
+  }
+  requestAnimationFrame(attempt)
 }
 
 /** F6 and ⇧F6: the next or previous zone on screen */
@@ -156,12 +160,22 @@ export function zoneBack(): boolean {
   return true
 }
 
+/** Pages whose layout squeezed out a panel that is switched on: toggling it floats it over main instead */
+const crowdedPages = new Map<string, { crowded: Record<SidePanel, boolean>; shown: Record<SidePanel, boolean>; float: (panel: SidePanel) => void }>()
+
 /** Shows or hides a panel. A panel shown gets focus, a focused one hidden hands focus to main, so the same key undoes it */
 export function togglePanel(panel: PanelName, page: string): void {
   if (state.zen) updateShell({ zen: false })
   let shown: boolean
   if (panel === 'list' || panel === 'inspector') {
     const view = pageViews.get(page) ?? page
+    const squeezed = crowdedPages.get(view)
+    if (squeezed?.crowded[panel]) {
+      squeezed.float(panel)
+      if (!squeezed.shown[panel]) focusZone(panel)
+      else if (state.zone === panel) focusZone('main')
+      return
+    }
     shown = !pagePanels(view)[panel]
     setPagePanels(view, { [panel]: shown })
   } else {
@@ -197,14 +211,18 @@ export function usePanels(page?: string): {
   const shell = useShell()
   const key = page ?? activePage
   const prefs = shell.pages[key] ?? { ...DEFAULT_PAGE, ...pageDefaults.get(key) }
+  const crowding = useContext(Crowded)
+  const layout = crowding?.page === key ? crowding : null
   const visible = (on: boolean): boolean => on && !shell.zen
+  // A panel squeezed out by a narrow page reads as hidden, and its toggle floats it rather than flipping the setting
+  const shown = (panel: PanelName): boolean => (panel !== 'title' && layout?.crowded[panel] ? layout.shown[panel] : visible(prefs[panel]))
   return {
-    list: visible(prefs.list),
-    inspector: visible(prefs.inspector),
+    list: shown('list'),
+    inspector: shown('inspector'),
     title: visible(shell.title),
     zen: shell.zen,
     toggle: (panel) => togglePanel(panel, key),
-    inIsland: (panel) => shell.islandUi && visible(prefs[panel]),
+    inIsland: (panel) => shell.islandUi && shown(panel),
     toggleZen
   }
 }
@@ -244,8 +262,10 @@ export function Zone({ id, className = '', style, children }: { id: ZoneId; clas
   )
 }
 
+/** The top row of every pane: one height and rule everywhere, so the rules line up across panes side by side */
+export const PANE_HEADER = 'flex h-9 shrink-0 items-center border-b border-border'
 /** A panel floating over the page, as the AI Hub's list and inspector do */
-export const ISLAND = 'rounded-xl border border-border bg-popover'
+export const ISLAND = 'rounded-xl border border-border bg-background'
 
 /** In a narrow page, like one opened beside another, main keeps this much: side panels shrink to SIDE_MIN, then the inspector and then the list hide */
 const MAIN_MIN = 240
@@ -265,6 +285,17 @@ export const pageHasPanel = (page: string, panel: 'list' | 'inspector'): boolean
  * around its main zone and claims the slot, so the tab leaves out its own dock. Null inside a dock, so docks never nest
  */
 export const DockSlot = createContext<(() => () => void) | null>(null)
+
+type SidePanel = 'list' | 'inspector'
+/** Counts the toggles a page draws for a hidden panel, so the layout adds its own only where the page drew none */
+const PanelToggles = createContext<((panel: SidePanel) => () => void) | null>(null)
+/** Panels switched on but squeezed out by a narrow page; their toggle floats them over main instead */
+const Crowded = createContext<{
+  page: string
+  crowded: Record<SidePanel, boolean>
+  shown: Record<SidePanel, boolean>
+  float: (panel: SidePanel) => void
+} | null>(null)
 
 export function PageLayout({
   id,
@@ -320,8 +351,54 @@ export function PageLayout({
     if (ref.current) observer.observe(ref.current)
     return () => observer.disconnect()
   }, [])
-  const showList = list !== undefined && prefs.list && !shell.zen && width >= MAIN_MIN + SIDE_MIN
-  const showInspector = inspector !== undefined && prefs.inspector && !shell.zen && width >= MAIN_MIN + SIDE_MIN * (showList ? 2 : 1)
+  // Island UI floats the panels at their full size, so they only show while main keeps its minimum beside them
+  const room = (size: number): number => (shell.islandUi ? size + 16 : SIDE_MIN)
+  const wantList = list !== undefined && prefs.list && !shell.zen
+  const wantInspector = inspector !== undefined && prefs.inspector && !shell.zen
+  const listFits = width >= MAIN_MIN + room(listSize)
+  const inspectorFits = width >= MAIN_MIN + room(inspectorSize) + (wantList && listFits ? room(listSize) : 0)
+  // A panel asked for while it does not fit floats over main, until it is hidden again or the page grows to fit it
+  const [floated, setFloated] = useState<SidePanel | null>(null)
+  const showList = wantList && (listFits || floated === 'list')
+  const showInspector = wantInspector && (inspectorFits || floated === 'inspector')
+  const crowding = {
+    page,
+    crowded: { list: wantList && !listFits, inspector: wantInspector && !inspectorFits },
+    shown: { list: showList, inspector: showInspector },
+    float: (panel: SidePanel) => setFloated((current) => (current === panel ? null : panel))
+  }
+  if (floated && !crowding.crowded[floated]) setFloated(null)
+  // Like a drawer: a click in main or Esc back to it puts the floating panel away
+  const { zone } = useZone()
+  useEffect(() => (zone === 'main' ? setFloated(null) : undefined), [zone])
+  useLayoutEffect(() => {
+    crowdedPages.set(page, crowding)
+    return () => void crowdedPages.delete(page)
+  })
+  const overList = showList && !listFits
+  const overInspector = showInspector && !inspectorFits
+  const [pageToggles, setPageToggles] = useState({ list: 0, inspector: 0 })
+  const [countToggle] = useState(() => (panel: SidePanel) => {
+    setPageToggles((count) => ({ ...count, [panel]: count[panel] + 1 }))
+    return () => setPageToggles((count) => ({ ...count, [panel]: count[panel] - 1 }))
+  })
+  // A hidden panel with no toggle on the page, say behind an empty state, still needs a way back
+  const lost = (panel: SidePanel, part: ReactNode): boolean =>
+    part !== undefined && !shell.zen && pageToggles[panel] === 0 && (!prefs[panel] || (crowding.crowded[panel] && !crowding.shown[panel]))
+  const wayBack = (
+    <>
+      {lost('list', list) && (
+        <div className="absolute top-1.5 left-1.5 z-30">
+          <ListToggle page={page} island />
+        </div>
+      )}
+      {lost('inspector', inspector) && (
+        <div className="absolute top-1.5 right-1.5 z-30">
+          <ListToggle page={page} panel="inspector" island />
+        </div>
+      )}
+    </>
+  )
   const pill = useRef<HTMLButtonElement>(null)
   const [pillWidth, setPillWidth] = useState(0)
   useLayoutEffect(() => setPillWidth(pill.current?.offsetWidth ?? 0), [showList, islands])
@@ -337,7 +414,7 @@ export function PageLayout({
           list !== undefined && (
             <button
               ref={pill}
-              title={`Show the list (${actionKeys('panel.listAlt')})`}
+              title={`Show list (${actionKeys('panel.list')})`}
               onClick={() => togglePanel('list', page)}
               className={`absolute top-2 left-2 z-20 flex h-10 items-center gap-2 px-3 text-xs hover:bg-accent ${ISLAND}`}
             >
@@ -358,49 +435,64 @@ export function PageLayout({
   // Island UI floats both side panels over the page, so main runs the full width and only pads itself clear of them
   const floating = shell.islandUi
   return (
-    <div ref={ref} className={`flex min-h-0 min-w-0 flex-1 ${floating ? 'relative' : ''}`}>
-      {showList && (
-        <Zone
-          id="list"
-          style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }}
-          className={floating ? `absolute top-2 bottom-2 left-2 z-20 overflow-hidden ${ISLAND}` : 'border-r border-border bg-sidebar'}
-        >
-          {floating && (
-            <div className="absolute top-1.5 right-1.5 z-30">
-              <ListToggle page={page} island />
-            </div>
+    <PanelToggles.Provider value={countToggle}>
+      <Crowded.Provider value={crowding}>
+        <div ref={ref} className="relative flex min-h-0 min-w-0 flex-1">
+          {showList && (
+            <Zone
+              id="list"
+              style={{ width: listSize, minWidth: Math.min(SIDE_MIN, listSize) }}
+              className={floating || overList ? `absolute top-2 bottom-2 left-2 z-20 overflow-hidden ${ISLAND}` : 'border-r border-border bg-sidebar'}
+            >
+              {(floating || overList) && (
+                <div data-island-toggle className="absolute top-1.5 right-1.5 z-30">
+                  <ListToggle page={page} island />
+                </div>
+              )}
+              {list}
+              {resizable && <ResizeHandle onResize={(next) => setPagePanels(page, { listWidth: next })} />}
+            </Zone>
           )}
-          {list}
-          {resizable && <ResizeHandle onResize={(next) => setPagePanels(page, { listWidth: next })} />}
-        </Zone>
-      )}
-      <Zone
-        id="main"
-        style={{
-          minWidth: Math.min(MAIN_MIN, width),
-          paddingLeft: floating && showList ? listSize + 16 : undefined,
-          paddingRight: floating && showInspector ? inspectorSize + 16 : undefined
-        }}
-        className="flex-1 bg-background"
-      >
-        {claimDock && host ? host.withDock(main) : main}
-      </Zone>
-      {showInspector && (
-        <Zone
-          id="inspector"
-          style={{ width: inspectorSize, minWidth: Math.min(SIDE_MIN, inspectorSize) }}
-          className={floating ? `absolute top-2 right-2 bottom-2 z-20 overflow-hidden ${ISLAND}` : 'border-l border-border bg-card'}
-        >
-          {floating && (
-            <div className="absolute top-1.5 right-1.5 z-30">
-              <ListToggle page={page} panel="inspector" island />
-            </div>
+          <Zone
+            id="main"
+            style={{
+              minWidth: Math.min(MAIN_MIN, width),
+              paddingLeft: floating ? (showList && !overList ? listSize + 16 : 8) : undefined,
+              paddingRight: floating ? (showInspector && !overInspector ? inspectorSize + 16 : 8) : undefined
+            }}
+            className={`relative flex-1 ${floating ? 'py-2' : 'bg-background'}`}
+          >
+            {floating ? (
+              // Main is an island of its own, so its header and content end on the same rounded edge as the panels beside it
+              <div className={`relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${ISLAND}`}>
+                {claimDock && host ? host.withDock(main) : main}
+                {wayBack}
+              </div>
+            ) : (
+              <>
+                {claimDock && host ? host.withDock(main) : main}
+                {wayBack}
+              </>
+            )}
+          </Zone>
+          {showInspector && (
+            <Zone
+              id="inspector"
+              style={{ width: inspectorSize, minWidth: Math.min(SIDE_MIN, inspectorSize) }}
+              className={floating || overInspector ? `absolute top-2 right-2 bottom-2 z-20 overflow-hidden ${ISLAND}` : 'border-l border-border bg-card'}
+            >
+              {(floating || overInspector) && (
+                <div data-island-toggle className="absolute top-1.5 right-1.5 z-30">
+                  <ListToggle page={page} panel="inspector" island />
+                </div>
+              )}
+              {inspector}
+              {resizable && <ResizeHandle edge="left" onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />}
+            </Zone>
           )}
-          {inspector}
-          {resizable && <ResizeHandle edge="left" onResize={(next) => setPagePanels(page, { inspectorWidth: next })} />}
-        </Zone>
-      )}
-    </div>
+        </div>
+      </Crowded.Provider>
+    </PanelToggles.Provider>
   )
 }
 
@@ -442,7 +534,7 @@ export function usePageKeys(page: string, onKey: (event: KeyboardEvent) => boole
 }
 
 /** Marks a list row, and the one under the cursor */
-export type ListRowProps = { 'data-list-row': ''; 'data-cursor'?: '' }
+export type ListRowProps = { 'data-list-row': string; 'data-cursor'?: '' }
 
 /**
  * Keyboard cursor for a list in a zone: j/k and arrows move it, Home/End (and ⇧G) jump, Enter opens the row, by default
@@ -460,6 +552,7 @@ export function useListNav(options: {
   const latest = useRef(options)
   latest.current = options
   const zone = options.zone ?? 'list'
+  const id = useId()
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const { count, index, onSelect, onOpen } = latest.current
@@ -467,6 +560,8 @@ export function useListNav(options: {
       // Keys from a dialog or anywhere outside the zone are not for this list
       const target = event.target instanceof Element ? event.target : null
       if (target && target !== document.body && !zoneElement(zone)?.contains(target)) return
+      // A page kept mounted off screen has a list in the same zone; only the one shown takes the keys
+      if (!zoneElement(zone)?.querySelector(`[data-list-row="${CSS.escape(id)}"]`)) return
       if (event.key === 'Enter') {
         // A row focused by a click is a button too, but ⏎ opens the cursor row; other buttons keep their own ⏎
         if (index < 0 || (target?.closest('button, a, [role="button"]') && !target.hasAttribute('data-list-row'))) return
@@ -485,7 +580,7 @@ export function useListNav(options: {
   useEffect(() => {
     zoneElement(zone)?.querySelector('[data-cursor]')?.scrollIntoView({ block: 'nearest' })
   }, [options.index])
-  return { rowProps: (row) => (row === options.index ? { 'data-list-row': '', 'data-cursor': '' } : { 'data-list-row': '' }) }
+  return { rowProps: (row) => (row === options.index ? { 'data-list-row': id, 'data-cursor': '' } : { 'data-list-row': id }) }
 }
 
 /** A keycap; `on` is the highlighted look used while the leader key waits; a `hint` one shows only while a modifier is held (see useModifierHints) */
@@ -511,10 +606,24 @@ export function Keys({ combo, on = false, hint = false }: { combo: string; on?: 
 }
 
 /** Hides or shows one of the page's side panels; sits in the main header in both states so a hidden panel comes back with one click */
-export function ListToggle({ page, panel = 'list', island = false }: { page?: string; panel?: 'list' | 'inspector'; island?: boolean }): React.JSX.Element | null {
+export function ListToggle({
+  page,
+  panel = 'list',
+  island = false,
+  badge
+}: {
+  page?: string
+  panel?: 'list' | 'inspector'
+  island?: boolean
+  /** Shown beside the icon in the header, e.g. a count of what the hidden panel holds */
+  badge?: React.ReactNode
+}): React.JSX.Element | null {
   const panels = usePanels(page)
   // Island UI keeps the toggle on the island itself while it is shown; the page header only carries the way back
-  if (panels.inIsland(panel) && !island) return null
+  const inHeader = !island && !panels.inIsland(panel)
+  const countToggle = useContext(PanelToggles)
+  useEffect(() => (inHeader ? countToggle?.(panel) : undefined), [inHeader, countToggle, panel])
+  if (!island && !inHeader) return null
   const keys = actionKeys(panel === 'list' ? 'panel.list' : 'panel.inspector')
   const label = `${panels[panel] ? 'Hide' : 'Show'} ${panel}${keys ? ` (${keys})` : ''}`
   return (
@@ -524,8 +633,10 @@ export function ListToggle({ page, panel = 'list', island = false }: { page?: st
       onClick={() => panels.toggle(panel)}
       className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
     >
-      <Icon name="panel" className="size-3.5" />
-      {keys && <Kbd hint>{keys}</Kbd>}
+      <Icon name="panel" className={panel === 'inspector' ? 'size-3.5 -scale-x-100' : 'size-3.5'} />
+      {!island && badge}
+      {/* The floating toggle has no room to grow, so its keys stay in the tooltip */}
+      {keys && !island && <Kbd hint>{keys}</Kbd>}
     </button>
   )
 }

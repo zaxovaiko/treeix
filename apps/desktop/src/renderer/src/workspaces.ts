@@ -237,3 +237,9 @@ export function commonFolder(paths: string[]): string {
   while (depth < first.length && rest.every((parts) => parts[depth] === first[depth])) depth++
   return first.slice(0, depth).join('/')
 }
+
+/** `#4f5ff0`, `4F5FF0` or `#f00` as `#4f5ff0`, else null */
+export function parseHex(text: string): string | null {
+  const digits = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim())?.[1].toLowerCase()
+  return digits ? `#${digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits}` : null
+}

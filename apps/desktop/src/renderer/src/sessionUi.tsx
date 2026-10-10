@@ -24,7 +24,10 @@ export function worktreeLabel(repos: Repo[] | null, worktreePath: string): strin
 export function KindBadge({ kind }: { kind: SessionKind }): React.JSX.Element {
   const { mark, color } = agentOr(kind)
   return (
-    <span style={{ color }} className="grid size-[18px] shrink-0 place-items-center rounded-[5px] bg-foreground/5 text-[11px]">
+    <span
+      style={{ color }}
+      className={`grid size-[18px] shrink-0 place-items-center overflow-hidden rounded-[5px] bg-foreground/5 whitespace-nowrap ${[...mark].length > 1 ? 'text-[8px] tracking-tight' : 'text-[11px]'}`}
+    >
       {mark}
     </span>
   )

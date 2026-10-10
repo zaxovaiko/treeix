@@ -24,6 +24,7 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
   }, [])
 
   const toggle = (path: string): void => setChecked(toggleIn(checked, path))
+  const discards = (candidates ?? []).filter(({ worktree }) => checked.has(worktree.path) && worktree.changedFiles > 0).length
 
   const remove = async (): Promise<void> => {
     const chosen = (candidates ?? []).filter(({ worktree }) => checked.has(worktree.path))
@@ -31,15 +32,17 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
     setBusy(true)
     setError(null)
     const removed: string[] = []
+    const failures: string[] = []
     for (const { worktree } of chosen) {
       try {
         await window.api.removeWorktree(worktree.path, worktree.changedFiles > 0)
         removed.push(worktree.path)
       } catch (reason) {
-        setError(`${branchLabel(worktree)}: ${errorMessage(reason)}`)
+        failures.push(`${branchLabel(worktree)}: ${errorMessage(reason)}`)
       }
     }
     setBusy(false)
+    setError(failures.join('\n') || null)
     onRemoved(removed)
     if (removed.length === chosen.length) onClose()
     else setCandidates((current) => current?.filter(({ worktree }) => !removed.includes(worktree.path)) ?? null)
@@ -82,16 +85,18 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
           </button>
         ))}
       </div>
-      {error && <p className="mt-3 text-xs break-words text-red-400 select-text">{error}</p>}
+      {error && <p className="mt-3 text-xs break-words whitespace-pre-line text-red-400 select-text">{error}</p>}
       <div className="mt-4 flex items-center justify-end gap-2">
-        <span className="mr-auto text-[11px] text-muted-foreground">Branches are kept</span>
+        <span className={`mr-auto text-[11px] ${discards ? 'text-amber-400' : 'text-muted-foreground'}`}>
+          {discards ? `Uncommitted changes in ${discards} ${discards === 1 ? 'worktree are' : 'worktrees are'} lost` : 'Branches are kept'}
+        </span>
         <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
         <button
           onClick={() => void remove()}
           disabled={checked.size === 0 || busy}
-          className="flex h-7 items-center gap-1.5 rounded-md bg-red-500/90 px-3 text-xs font-medium text-white disabled:opacity-40"
+          className="flex h-7 items-center gap-1.5 rounded-md bg-red-500/90 px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
         >
           {busy ? 'Removing…' : `Remove ${checked.size} ${checked.size === 1 ? 'worktree' : 'worktrees'}`}
           <Kbd hint>⌘⏎</Kbd>

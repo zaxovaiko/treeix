@@ -10,6 +10,7 @@ import {
   discardChanges,
   isDefinitionLine,
   listBranches,
+  listFiles,
   parseTrack,
   parseWorktreeList,
   readPdf,
@@ -118,6 +119,18 @@ test('searchText finds text across worktrees with case and whole word options', 
   const exact = await searchText([root], 'Grant', { caseSensitive: true, wholeWord: true, regex: false })
   expect(exact.matches).toHaveLength(0)
   await expect(searchText([root], '(', { caseSensitive: true, wholeWord: false, regex: true })).rejects.toThrow()
+})
+
+test('listFiles leaves out tracked files deleted from disk', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-files-'))
+  execFileSync('git', ['init', '-q', root])
+  writeFileSync(join(root, 'kept.ts'), '')
+  writeFileSync(join(root, 'moved.ts'), '')
+  execFileSync('git', ['-C', root, 'add', '.'])
+  rmSync(join(root, 'moved.ts'))
+  writeFileSync(join(root, 'new.ts'), '')
+  expect((await listFiles(root)).files).toEqual(['kept.ts', 'new.ts'])
+  rmSync(root, { recursive: true, force: true })
 })
 
 test('readPdf reads a file inside the worktree and refuses one outside it', async () => {

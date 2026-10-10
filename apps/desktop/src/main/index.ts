@@ -41,6 +41,9 @@ function createWindow(): void {
   const window = new BrowserWindow({
     width: 1400,
     height: 900,
+    // Below this the panes squeeze past their minimums and the title bar runs out of room
+    minWidth: 800,
+    minHeight: 500,
     show: false,
     title: 'Treeix',
     titleBarStyle: 'hiddenInset',

@@ -10,6 +10,9 @@ import { Dialog, errorMessage, Popup, usePersisted } from './ui'
 import { raceBranches } from './worktreePlans'
 
 /** Several agents race on the same prompt, each in a worktree of its own named after it */
+/** What `git check-ref-format` refuses, so the dialog says so while typing instead of after submit */
+const INVALID_REF = /^[-./]|[./]$|\.\.|\/\/|\/\.|@\{|\.lock(\/|$)|[\s~^:?*[\\\x00-\x1f\x7f]|^@$/
+
 export type NewBranchRequest = { repoPath: string; name: string; base: string; worktree: boolean; sessions: SessionKind[]; prompt: string }
 
 const localName = (branch: string): string => branch.replace(/^origin\//, '')
@@ -41,7 +44,11 @@ function BranchCombobox({
   const needle = value.trim().toLowerCase()
   const exact = branches.some((branch) => branch.name.toLowerCase() === needle)
   // Showing the full list once a branch is picked makes switching to another one easy
-  const suggestions = branches.filter((branch) => exact || !needle || branch.name.toLowerCase().includes(needle)).slice(0, MAX_SUGGESTIONS)
+  // The typed branch leads, so Enter keeps it instead of picking the most recent one
+  const suggestions = branches
+    .filter((branch) => exact || !needle || branch.name.toLowerCase().includes(needle))
+    .sort((a, b) => Number(b.name.toLowerCase() === needle) - Number(a.name.toLowerCase() === needle))
+    .slice(0, MAX_SUGGESTIONS)
 
   useEffect(() => listRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }), [active])
 
@@ -143,13 +150,16 @@ export function BranchDialog({
   }, [repo.path])
 
   const existing = branches?.find((branch) => localName(branch.name) === name.trim())
+  const invalid = !existing && INVALID_REF.test(name.trim())
   const baseValue = base.trim() || 'HEAD'
   const agents = useAgents()
   const sessions = sessionsAvailable ? chosen.split(',').filter((id) => agents.some((agent) => agent.id === id)) : []
+  // git can't check a branch out twice, so its worktree opens instead
+  const opens = worktree && sessions.length <= 1 && repo.worktrees.some((candidate) => candidate.branch === localName(name.trim()))
   const toggleAgent = (id: string): void => setChosen((sessions.includes(id) ? sessions.filter((candidate) => candidate !== id) : [...sessions, id]).join(','))
 
   const submit = (): void => {
-    if (!name.trim() || busy || (!worktree && existing)) return
+    if (!name.trim() || invalid || busy || (!worktree && existing)) return
     setBusy(true)
     setError(null)
     onSubmit({ repoPath: repo.path, name: localName(name.trim()), base: baseValue, worktree, sessions: worktree ? sessions : [], prompt: prompt.trim() })
@@ -179,9 +189,28 @@ export function BranchDialog({
       <label htmlFor="branch-name" className="mt-3 block text-xs text-muted-foreground">
         Branch
       </label>
-      <BranchCombobox id="branch-name" autoFocus value={name} onChange={setName} branches={branches ?? []} placeholder="feat/my-branch" onSubmit={submit} />
-      <p className="mt-1 h-4 text-[11px] text-muted-foreground">
-        {existing ? `Exists${existing.remote ? ' on origin' : ''}, will be checked out` : name.trim() ? 'New branch' : ''}
+      <BranchCombobox
+        id="branch-name"
+        autoFocus
+        value={name}
+        onChange={(value) => {
+          setName(value)
+          setError(null)
+        }}
+        branches={branches ?? []}
+        placeholder="feat/my-branch"
+        onSubmit={submit}
+      />
+      <p className={`mt-1 h-4 text-[11px] ${invalid ? 'text-red-400' : 'text-muted-foreground'}`}>
+        {opens
+          ? 'Has a worktree, it will open'
+          : existing
+            ? `Exists${existing.remote ? ' on origin' : ''}, will be checked out`
+            : invalid
+              ? 'Not a valid branch name'
+              : name.trim()
+                ? 'New branch'
+                : ''}
       </p>
 
       {!existing && (
@@ -189,7 +218,17 @@ export function BranchDialog({
           <label htmlFor="branch-base" className="mt-2 block text-xs text-muted-foreground">
             Start from
           </label>
-          <BranchCombobox id="branch-base" value={base} onChange={setBase} branches={branches ?? []} placeholder="dev" onSubmit={submit} />
+          <BranchCombobox
+            id="branch-base"
+            value={base}
+            onChange={(value) => {
+              setBase(value)
+              setError(null)
+            }}
+            branches={branches ?? []}
+            placeholder="dev"
+            onSubmit={submit}
+          />
         </>
       )}
 
@@ -253,10 +292,20 @@ export function BranchDialog({
         </button>
         <button
           onClick={submit}
-          disabled={!name.trim() || busy || (!worktree && Boolean(existing))}
-          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40"
+          disabled={!name.trim() || invalid || busy || (!worktree && Boolean(existing))}
+          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
         >
-          {busy ? 'Creating…' : worktree ? (sessions.length > 1 ? `Create ${sessions.length} worktrees` : 'Create worktree') : existing ? 'Branch exists' : 'Create branch'}
+          {busy
+            ? 'Creating…'
+            : opens
+              ? 'Open worktree'
+              : worktree
+                ? sessions.length > 1
+                  ? `Create ${sessions.length} worktrees`
+                  : 'Create worktree'
+                : existing
+                  ? 'Branch exists'
+                  : 'Create branch'}
           <Kbd hint>⌘⏎</Kbd>
         </button>
       </div>

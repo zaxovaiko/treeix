@@ -21,10 +21,12 @@ export function usePersisted<T extends string | number | boolean | null>(key: st
   return [value, persist]
 }
 
-/** A dragged panel keeps this much, and its handle stays this far inside the window, so it can always be grabbed again */
-const GRAB_PX = 24
+/** A dragged panel keeps this much, unless it is already drawn smaller */
+const PANEL_MIN = { across: 150, vertical: 100 }
+/** And leaves this much of the window beyond it for the content it sits beside */
+const CONTENT_MIN = { across: 240, vertical: 120 }
 
-/** Drags the panel it sits in, from the size it is drawn at, to any size that keeps the panel and its handle on screen */
+/** Drags the panel it sits in, from the size it is drawn at, to any size that keeps it usable and leaves the content beside it room */
 export function ResizeHandle({
   onResize,
   edge = 'right'
@@ -38,13 +40,15 @@ export function ResizeHandle({
     const panel = handle.parentElement?.getBoundingClientRect()
     if (!panel) return
     const size = vertical ? panel.height : panel.width
-    const room = { right: window.innerWidth - panel.left, left: panel.right, top: panel.bottom }[edge] - GRAB_PX
+    const axis = vertical ? 'vertical' : 'across'
+    const min = Math.min(size, PANEL_MIN[axis])
+    const max = Math.max(size, { right: window.innerWidth - panel.left, left: panel.right, top: panel.bottom }[edge] - CONTENT_MIN[axis])
     const start = vertical ? event.clientY : event.clientX
     const direction = edge === 'right' ? 1 : -1
     handle.setPointerCapture(event.pointerId)
     handle.onpointermove = (move) => {
       const delta = (vertical ? move.clientY : move.clientX) - start
-      onResize(Math.round(Math.max(GRAB_PX, Math.min(room, size + direction * delta))))
+      onResize(Math.round(Math.max(min, Math.min(max, size + direction * delta))))
     }
     handle.onpointerup = () => {
       handle.onpointermove = null
@@ -63,7 +67,7 @@ export function ResizeHandle({
 export function ResizeGrip({ across }: { across: boolean }): React.JSX.Element {
   return (
     <span
-      className={`pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border transition-colors group-hover:bg-foreground/40 group-active:bg-foreground/60 ${
+      className={`pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors group-hover:bg-foreground/40 group-active:bg-foreground/60 ${
         across ? 'h-1 w-8' : 'h-8 w-1'
       }`}
     />
@@ -184,9 +188,9 @@ export function FoldAllButton({
 export { errorMessage }
 
 const TOOLTIP_DELAY_MS = 350
-const SHORTCUT_SUFFIX = /^(.*?)\s*\(([⌘⇧⌥⌃][^)]*)\)$/
+const SHORTCUT_SUFFIX = /^(.*?)\s*\(([⌘⇧⌥⌃][^)]*)\)$/s
 
-type Tip = { text: string; shortcut: string | null; x: number; y: number; below: boolean }
+type Tip = { text: string; shortcut: string | null; x: number; y: number; side: 'below' | 'above' | 'right' }
 
 const EDGE_GAP = 8
 
@@ -305,55 +309,91 @@ export function Popup({
   )
 }
 
-/** Styled tooltips for every `title` in the app; the title moves to data-tip so the native one stays hidden */
+/** Text cut off with an ellipsis, within a few levels of the pointer: like Finder, hovering it shows the whole text */
+function clippedText(from: Element): Element | null {
+  for (let element: Element | null = from, depth = 0; element && depth < 3; element = element.parentElement, depth++) {
+    if (element.scrollWidth > element.clientWidth + 1 && getComputedStyle(element).textOverflow === 'ellipsis') return element
+  }
+  return null
+}
+
+/** Moves a title to data-tip so the native tooltip stays hidden; an icon button keeps it as its name for VoiceOver */
+function moveTitle(element: Element): void {
+  const title = element.getAttribute('title')
+  if (!title) return
+  element.setAttribute('data-tip', title)
+  element.removeAttribute('title')
+  const named = element.hasAttribute('aria-label') && !element.hasAttribute('data-tip-label')
+  if (named || element.textContent?.trim()) return
+  element.setAttribute('aria-label', title.match(SHORTCUT_SUFFIX)?.[1] ?? title)
+  element.setAttribute('data-tip-label', '')
+}
+
+/** Styled tooltips for every `title` in the app */
 export function Tooltips(): React.JSX.Element | null {
   const [tip, setTip] = useState<Tip | null>(null)
 
   useEffect(() => {
     let timer = 0
     let target: Element | null = null
+    // Like macOS, a clicked control keeps its tip hidden until the pointer leaves it
+    let clicked: Element | null = null
     const hide = (): void => {
       clearTimeout(timer)
       target = null
       setTip(null)
     }
     const onOver = (event: MouseEvent): void => {
-      const element = event.target instanceof Element ? event.target.closest('[title], [data-tip]') : null
+      const titled = event.target instanceof Element ? event.target.closest('[title], [data-tip]') : null
+      const element = titled ?? (event.target instanceof Element ? clippedText(event.target) : null)
       if (element === target) return
       hide()
-      if (!element) return
-      const title = element.getAttribute('title')
-      if (title) {
-        element.setAttribute('data-tip', title)
-        element.removeAttribute('title')
-      }
-      const text = element.getAttribute('data-tip')
+      if (element !== clicked) clicked = null
+      if (!element || element === clicked) return
+      moveTitle(element)
+      const text = titled ? element.getAttribute('data-tip') : element.textContent?.trim()
       if (!text) return
       target = element
       timer = window.setTimeout(() => {
         if (!element.isConnected) return
         const rect = element.getBoundingClientRect()
-        const below = rect.bottom + 48 < window.innerHeight
+        // A full-width list row opts into `data-tip-side="right"`, so the tip sits beside the list rather than over the next row
+        const side = element.getAttribute('data-tip-side') === 'right' ? 'right' : rect.bottom + 48 < window.innerHeight ? 'below' : 'above'
         const match = text.match(SHORTCUT_SUFFIX)
         setTip({
           text: match ? match[1] : text,
           shortcut: match?.[2] ?? null,
-          x: rect.left + rect.width / 2,
-          y: below ? rect.bottom + 6 : rect.top - 6,
-          below
+          x: side === 'right' ? rect.right + 6 : rect.left + rect.width / 2,
+          y: side === 'right' ? rect.top + rect.height / 2 : side === 'below' ? rect.bottom + 6 : rect.top - 6,
+          side
         })
       }, TOOLTIP_DELAY_MS)
     }
     document.addEventListener('mouseover', onOver)
-    document.addEventListener('mousedown', hide, true)
+    // A control whose title changes after it was moved (Preview -> Show source) gets the new tip and name right away
+    const retitled = new MutationObserver((records) => records.forEach(({ target }) => target instanceof Element && target.hasAttribute('data-tip') && moveTitle(target)))
+    retitled.observe(document.body, { subtree: true, attributeFilter: ['title'] })
+    const onDown = (): void => {
+      clicked = target
+      hide()
+    }
+    document.addEventListener('mousedown', onDown, true)
+    // A resize, a keypress or the pointer leaving the window can move or remove the target without a mouseover
     document.addEventListener('scroll', hide, true)
     window.addEventListener('blur', hide)
+    window.addEventListener('resize', hide)
+    document.addEventListener('keydown', hide, true)
+    document.documentElement.addEventListener('mouseleave', hide)
     return () => {
       clearTimeout(timer)
+      retitled.disconnect()
       document.removeEventListener('mouseover', onOver)
-      document.removeEventListener('mousedown', hide, true)
+      document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('scroll', hide, true)
       window.removeEventListener('blur', hide)
+      window.removeEventListener('resize', hide)
+      document.removeEventListener('keydown', hide, true)
+      document.documentElement.removeEventListener('mouseleave', hide)
     }
   }, [])
 
@@ -364,11 +404,29 @@ export function Tooltips(): React.JSX.Element | null {
       key={`${tip.x}:${tip.y}:${tip.text}`}
       ref={fitInWindow}
       role="tooltip"
-      style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
+      style={{ left: tip.x, top: tip.y, transform: { below: 'translate(-50%, 0)', above: 'translate(-50%, -100%)', right: 'translate(0, -50%)' }[tip.side] }}
       className="pointer-events-none fixed z-[100] flex w-max max-w-[min(24rem,calc(100vw-16px))] items-center gap-2 rounded-md border border-input bg-popover px-2 py-1 text-[11.5px] break-words whitespace-pre-line text-foreground"
     >
       <span>{tip.text}</span>
       {tip.shortcut && <kbd className="shrink-0 rounded bg-foreground/8 px-1 font-sans text-[10.5px] text-muted-foreground">{tip.shortcut}</kbd>}
+    </div>
+  )
+}
+
+/** An inline problem: an alert mark, the message in plain foreground, and an optional dismiss */
+export function Notice({ children, onDismiss, className = '' }: { children: React.ReactNode; onDismiss?: () => void; className?: string }): React.JSX.Element {
+  return (
+    <div
+      role="alert"
+      className={`flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-2 text-xs leading-4 break-words text-foreground select-text ${className}`}
+    >
+      <Icon name="alert" className="size-3.5 shrink-0 text-amber-500" />
+      <span className="min-w-0 flex-1">{children}</span>
+      {onDismiss && (
+        <button onClick={onDismiss} title="Dismiss" aria-label="Dismiss" className="-m-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground">
+          <Icon name="close" className="size-3" />
+        </button>
+      )}
     </div>
   )
 }
@@ -432,10 +490,13 @@ export function TextPrompt({
   placeholder,
   confirmLabel,
   initialValue = '',
+  selection,
   onSubmit,
   onClose
 }: {
   initialValue?: string
+  /** The part of initialValue selected on open; all of it by default */
+  selection?: [number, number]
   title: string
   description?: string
   placeholder?: string
@@ -463,8 +524,18 @@ export function TextPrompt({
       {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
       <input
         autoFocus
+        // Once, on open: refocusing the window later must not reselect what was typed since
+        ref={(input) => {
+          if (!input || 'selected' in input.dataset) return
+          input.dataset.selected = ''
+          if (selection) input.setSelectionRange(...selection)
+          else input.select()
+        }}
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => {
+          setValue(event.target.value)
+          setError(null)
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') submit()
           if (event.key === 'Escape') onClose()
@@ -477,8 +548,12 @@ export function TextPrompt({
         <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
-        <button onClick={submit} disabled={!value.trim() || busy} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
-          {busy ? 'Working...' : confirmLabel}
+        <button
+          onClick={submit}
+          disabled={!value.trim() || busy}
+          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+        >
+          {busy ? 'Working…' : confirmLabel}
         </button>
       </div>
     </Dialog>
@@ -487,8 +562,10 @@ export function TextPrompt({
 
 /** Initials of a display name ("Oleksandr Agniev" is OA) or the start of a login */
 const initialsOf = (name: string): string => {
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  return (words.length > 1 ? `${words[0][0]}${words.at(-1)?.[0] ?? ''}` : name.slice(0, 2)).toUpperCase()
+  // Letters and digits only, by code point, so an emoji in a display name never leaves half a character
+  const words = (name.match(/[\p{L}\p{N}]+/gu) ?? []).map((word) => [...word])
+  if (words.length === 0) return [...name.trim()].slice(0, 1).join('')
+  return (words.length > 1 ? `${words[0][0]}${words.at(-1)?.[0]}` : words[0].slice(0, 2).join('')).toUpperCase()
 }
 
 /** Profile picture, or initials when there is none or it fails to load */

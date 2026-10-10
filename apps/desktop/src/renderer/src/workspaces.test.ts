@@ -75,3 +75,9 @@ test('commonFolder finds the folder holding all projects', async () => {
   expect(commonFolder(['/a', '/b'])).toBe('')
   expect(commonFolder([])).toBe('')
 })
+
+test('typed colours', async () => {
+  const { parseHex } = await import('./workspaces')
+  expect(['#4F5FF0', '4f5ff0', ' #f00 ', 'F00'].map(parseHex)).toEqual(['#4f5ff0', '#4f5ff0', '#ff0000', '#ff0000'])
+  expect(['zzz', '#12345', '', '#ggg'].map(parseHex)).toEqual([null, null, null, null])
+})

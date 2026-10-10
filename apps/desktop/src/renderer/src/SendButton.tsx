@@ -135,7 +135,7 @@ export function SendButton({
   const divider = variant === 'pill' ? 'border-primary/30' : 'border-white/25'
 
   return (
-    <div ref={anchor} className={`relative flex items-center text-[11.5px] font-medium ${shell}`}>
+    <div ref={anchor} className={`relative flex min-w-0 items-center text-[11.5px] font-medium ${shell}`}>
       <button
         onClick={sendDefault}
         title={target ? `Paste into ${target.title}` : 'No agent session in this worktree, copies to clipboard'}

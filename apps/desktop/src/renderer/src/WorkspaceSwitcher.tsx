@@ -3,7 +3,19 @@ import type { Repo } from '../../shared/types'
 import { Icon } from './Icon'
 import { baseName } from './Sidebar'
 import { Dialog } from './ui'
-import { deleteWorkspace, HOME, initials, saveWorkspace, suggestWorkspaceName, useWorkspaces, type Workspace, shades, WORKSPACE_COLORS, WORKSPACE_ICONS } from './workspaces'
+import {
+  deleteWorkspace,
+  HOME,
+  initials,
+  parseHex,
+  saveWorkspace,
+  suggestWorkspaceName,
+  useWorkspaces,
+  type Workspace,
+  shades,
+  WORKSPACE_COLORS,
+  WORKSPACE_ICONS
+} from './workspaces'
 
 /** A workspace's square: its picture or initials on its colour, `~` for Home */
 export function Badge({ workspace, className }: { workspace: Workspace; className: string }): React.JSX.Element {
@@ -119,7 +131,7 @@ export function WorkspaceDialog({
           </label>
           <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
             Colour
-            <div className="flex h-8 items-center gap-1.5">
+            <div className="flex h-6 items-center gap-1.5">
               {[...WORKSPACE_COLORS, ...(WORKSPACE_COLORS.includes(shadeBase) ? [] : [shadeBase])].map((swatch) => (
                 <button
                   key={swatch}
@@ -133,13 +145,13 @@ export function WorkspaceDialog({
               ))}
               <label
                 title="Any colour or shade"
-                className="grid size-5 cursor-pointer place-items-center rounded-md text-muted-foreground ring-1 ring-border hover:text-foreground"
+                className="ml-auto grid size-5 cursor-pointer place-items-center rounded-md text-muted-foreground ring-1 ring-border hover:text-foreground"
               >
                 <Icon name="plus" className="size-3" />
                 <input type="color" aria-label="Custom colour" value={color} onChange={(event) => pickColor(event.target.value)} className="sr-only" />
               </label>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex h-6 items-center gap-1.5">
               {shades(shadeBase).map((shade) => (
                 <button
                   key={shade}
@@ -149,15 +161,19 @@ export function WorkspaceDialog({
                   className={`size-4 rounded ${color === shade ? 'ring-2 ring-foreground/60' : ''}`}
                 />
               ))}
+              <input
+                aria-label="Colour hex"
+                defaultValue={color}
+                key={color}
+                onBlur={(event) => {
+                  const typed = parseHex(event.target.value)
+                  event.target.value = typed ?? color
+                  if (typed) pickColor(typed)
+                }}
+                onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+                className="ml-auto h-6 w-20 rounded-md border border-input bg-muted px-1.5 font-mono text-[11px] text-foreground outline-none"
+              />
             </div>
-            <input
-              aria-label="Colour hex"
-              defaultValue={color}
-              key={color}
-              onBlur={(event) => /^#[0-9a-f]{6}$/i.test(event.target.value.trim()) && pickColor(event.target.value.trim().toLowerCase())}
-              onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
-              className="h-6 w-20 rounded-md border border-input bg-muted px-1.5 font-mono text-[11px] text-foreground outline-none"
-            />
           </div>
         </div>
 
@@ -296,7 +312,7 @@ export function WorkspaceDialog({
         <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
-        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
           {workspace ? 'Save' : 'Create workspace'}
         </button>
       </div>

@@ -15,7 +15,7 @@ export function useKeyExtras(): ShortcutInfo[] {
   const { loaded } = usePlugins()
   const { digitShortcuts } = useSettings()
   const digits = (target: 'tabs' | 'workspaces', label: string): ShortcutInfo[] =>
-    digitShortcuts[target] === 'off' ? [] : [{ keys: `${DIGIT_MODIFIERS[digitShortcuts[target]]}1-9`, label, section: 'Go to' }]
+    digitShortcuts[target] === 'off' ? [] : [{ keys: `${DIGIT_MODIFIERS[digitShortcuts[target]]} 1-9`, label, section: 'Go to' }]
   return [
     ...digits('tabs', 'Title bar page by position, 9 is the last'),
     ...digits('workspaces', 'Workspace by menu order'),
@@ -157,8 +157,8 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
     }
   }, [])
   return (
-    <div onClick={(event) => event.target === event.currentTarget && onClose()} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-      <div className="flex max-h-[86vh] w-[1040px] max-w-[94vw] flex-col rounded-xl border border-input bg-popover">
+    <div onClick={(event) => event.target === event.currentTarget && onClose()} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-[2px]">
+      <div className="flex max-h-[86vh] w-[1040px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-input bg-popover">
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
           <span className="text-[13px] font-medium">Keyboard</span>
           <span className="truncate text-xs text-muted-foreground">Chords with ⌘ work everywhere, single letters work outside text fields and the terminal.</span>
@@ -166,10 +166,10 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
           <Keys combo="?" />
           <Keys combo="esc" />
         </div>
-        <div className="min-h-0 flex-1 columns-3 gap-6 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 columns-3 gap-6 overflow-y-auto px-4 pt-4 pb-8 [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]">
           {sections.map(([section, shortcuts]) => (
             <div key={section} className="mb-4 break-inside-avoid">
-              <div className="mb-1 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{section}</div>
+              <div className="mb-1 text-[11px] font-semibold text-foreground">{section}</div>
               {shortcuts.map((shortcut) => (
                 <div key={`${shortcut.keys}:${shortcut.label}`} className="flex min-h-6 items-center gap-2 py-0.5 text-xs text-foreground/85">
                   <span className="flex-1">{shortcut.label}</span>

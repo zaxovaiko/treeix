@@ -58,7 +58,8 @@ function score(command: Command, words: string[]): Result | null {
     total += anywhere.score - (inLabel ? 0 : 6)
     inLabel?.marks.forEach((mark) => marks.add(mark))
   }
-  return { command, score: total - command.label.length * 0.02, marks }
+  // A setting often names the action it binds ("New worktree for the item"); on a tie the action itself comes first
+  return { command, score: total - command.label.length * 0.02 - (command.group === 'Settings' ? 1 : 0), marks }
 }
 
 export function paletteResults(commands: Command[], query: string, browseFiles = false): Result[] {

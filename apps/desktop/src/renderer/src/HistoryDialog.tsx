@@ -6,7 +6,7 @@ import { Icon } from './Icon'
 import { baseName } from './Sidebar'
 import { Dialog, EmptyState, errorMessage } from './ui'
 
-const timeLabel = (at: number): string => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+const timeLabel = (at: number): string => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 /** Local snapshots taken before autosave overwrote the file, diffed against what is on disk now */
 export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { worktreePath: string; path: string; onRestored: () => void; onClose: () => void }): React.JSX.Element {
@@ -32,19 +32,28 @@ export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { wor
 
   useEffect(() => {
     setSnapshot(null)
+    setError(null)
     if (selected) window.api.readHistory(worktreePath, path, selected).then(setSnapshot, (reason: unknown) => setError(errorMessage(reason)))
   }, [selected])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.defaultPrevented) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const ids = (entries ?? []).map((entry) => entry.id)
+        const index = ids.indexOf(selected ?? '') + (event.key === 'ArrowDown' ? 1 : -1)
+        if (ids[index]) setSelected(ids[index])
+        return
+      }
+      if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
       onClose()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  }, [onClose, entries, selected])
 
   const restore = (): void => {
     if (snapshot === null || !window.confirm(`Restore ${baseName(path)} to this version? The current version is kept in history.`)) return
@@ -65,7 +74,11 @@ export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { wor
         </span>
         <span className="flex-1" />
         {error && <span className="text-red-400">{error}</span>}
-        <button onClick={restore} disabled={snapshot === null} className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:opacity-40">
+        <button
+          onClick={restore}
+          disabled={snapshot === null || snapshot === current}
+          className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+        >
           Restore this version
         </button>
         <button onClick={onClose} aria-label="Close" className="grid size-7 place-items-center rounded-md hover:bg-accent">
@@ -80,6 +93,7 @@ export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { wor
           {entries?.map((entry) => (
             <button
               key={entry.id}
+              ref={(button) => void (entry.id === selected && button?.scrollIntoView({ block: 'nearest' }))}
               onClick={() => setSelected(entry.id)}
               className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[12.5px] ${
                 entry.id === selected ? 'bg-foreground/[.08] text-foreground' : 'text-foreground/75 hover:bg-accent'
@@ -92,7 +106,7 @@ export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { wor
         </div>
         <div className="min-w-0 flex-1 overflow-auto">
           {snapshot === null || current === null ? (
-            <EmptyState fill title={entries === null || selected ? 'Loading...' : 'Pick a version'} />
+            <EmptyState fill title={error ? 'Could not load this version' : entries?.length === 0 ? 'Nothing to compare yet' : 'Loading...'} />
           ) : snapshot === current ? (
             <EmptyState fill title="Same as the current file" />
           ) : (

@@ -24,6 +24,8 @@
     "import/no-self-import": "error",
     "import/default": "off",
 
+    "jsx-a11y/label-has-associated-control": ["error", { "controlComponents": ["WholeNumber"] }],
+
     "react/self-closing-comp": "error",
     "react/jsx-boolean-value": "error",
     "react/jsx-curly-brace-presence": "error",

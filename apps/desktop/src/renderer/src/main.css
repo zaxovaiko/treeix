@@ -9,6 +9,8 @@
   --color-card: #000000;
   --color-sidebar: #000000;
   --color-popover: #121212;
+  /* What Island UI floats its panels over: the page tone nudged toward the text, so the islands keep the page colour content paints in */
+  --color-canvas: color-mix(in srgb, var(--color-foreground) 5%, var(--color-background));
   --color-foreground: #f5f5f5;
   --color-muted-foreground: #848484;
   --color-border: rgb(255 255 255 / 6%);
@@ -179,6 +181,11 @@ body {
   input[type='radio'] {
     cursor: pointer;
   }
+
+  /* A squeezed field ends its placeholder or value in an ellipsis instead of cutting a word */
+  input {
+    text-overflow: ellipsis;
+  }
 }
 
 /* No focus outlines or rings anywhere, not even for the keyboard: the list cursor's tint shows where you are */
@@ -263,10 +270,22 @@ html:not([data-hints]) [data-key-hint] {
   .text-red-400 {
     color: oklch(50.5% 0.213 27.518);
   }
+  .text-red-300\/80 {
+    color: oklch(50.5% 0.213 27.518 / 80%);
+  }
+  .text-rose-300 {
+    color: oklch(51.4% 0.222 16.935);
+  }
   .text-amber-200,
+  .text-amber-300,
+  .text-amber-500,
   .text-amber-400 {
     color: oklch(55.5% 0.163 48.998);
   }
+  .text-amber-400\/80 {
+    color: oklch(55.5% 0.163 48.998 / 80%);
+  }
+  .text-emerald-300,
   .text-emerald-400 {
     color: oklch(50.8% 0.118 165.612);
   }
@@ -278,8 +297,13 @@ html:not([data-hints]) [data-key-hint] {
   .text-violet-400 {
     color: oklch(54.1% 0.281 293.009);
   }
+  .text-sky-300,
   .text-sky-400 {
     color: oklch(50% 0.134 242.749);
+  }
+  /* File type badges take their hue inline; on white the pale ones (JS, ENV) need it deeper */
+  .file-badge {
+    filter: brightness(0.72) saturate(1.2);
   }
 }
 
@@ -316,4 +340,12 @@ html[data-translucent] .code-editor .monaco-editor .margin {
   color: white;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* An island's own panel toggle floats over its top right corner, so the header beneath keeps clear of it */
+[data-island-toggle] + :not(.flex-col),
+[data-island-toggle] + .flex-col > :first-child:not(.flex-col),
+/* A header stack pads only its top row, so the dividers below it still reach the edge */
+[data-island-toggle] + .flex-col > .flex-col:first-child > :first-child {
+  padding-right: 2rem;
 }

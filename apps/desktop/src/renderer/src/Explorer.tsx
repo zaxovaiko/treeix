@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getShell, isPageKey, useListNav, type ZoneId } from '@treeix/sdk'
+import { getShell, isPageKey, useListNav, type ZoneId, PANE_HEADER } from '@treeix/sdk'
 import type { WorktreeFiles } from '../../shared/types'
 import { FileIcon, Icon } from './Icon'
 import { EmptyState, FoldAllButton, IconButton, usePersisted } from './ui'
@@ -47,6 +47,7 @@ export function Explorer({
   onFileMenu,
   onFolderMenu,
   onCreate,
+  onRename,
   onExpand,
   onParent,
   rootPath,
@@ -62,6 +63,8 @@ export function Explorer({
   /** Folder rows and the empty area below the tree (path '') */
   onFolderMenu?: (event: React.MouseEvent, path: string) => void
   onCreate?: (kind: 'file' | 'folder', folder: string) => void
+  /** F2 on a row, like VS Code */
+  onRename?: (path: string) => void
   /** For trees loaded a folder at a time: called when a folder opens */
   onExpand?: (path: string) => void
   /** Browses the folder above the root; shows a `..` row first, also ⌫ */
@@ -139,7 +142,7 @@ export function Explorer({
     else if (!emptyIgnored(row)) toggle(row.path)
   }
   const nav = useListNav({ zone, count: rows.length, index, onSelect: (next) => setCursorPath(rows[next].path), onOpen: (next) => activate(rows[next]) })
-  // h folds the folder, or steps up to the parent; l unfolds; z folds or unfolds all. Filter results are a flat list with no folders
+  // h folds the folder, or steps up to the parent; l unfolds; z folds or unfolds all; F2 renames. Filter results are a flat list with no folders
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -157,11 +160,13 @@ export function Explorer({
           ? foldAll
           : !row
             ? null
-            : event.key === 'h' || event.key === 'ArrowLeft'
-              ? () => (open ? toggle(row.path) : parent && setCursorPath(parent))
-              : (event.key === 'l' || event.key === 'ArrowRight') && row.dir && !open && !emptyIgnored(row)
-                ? () => toggle(row.path)
-                : null
+            : event.key === 'F2' && onRename
+              ? () => onRename(row.path)
+              : event.key === 'h' || event.key === 'ArrowLeft'
+                ? () => (open ? toggle(row.path) : parent && setCursorPath(parent))
+                : (event.key === 'l' || event.key === 'ArrowRight') && row.dir && !open && !emptyIgnored(row)
+                  ? () => toggle(row.path)
+                  : null
       if (!action) return
       event.preventDefault()
       action()
@@ -210,7 +215,7 @@ export function Explorer({
 
   return (
     <div ref={root} className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1 p-2">
+      <div className={`${PANE_HEADER} gap-1 px-1.5`}>
         <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
           <Icon name="search" className="size-3" />
           <input

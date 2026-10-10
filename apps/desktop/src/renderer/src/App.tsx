@@ -1,5 +1,5 @@
 import { type DiffLineAnnotation, PatchDiff } from '@pierre/diffs/react'
-import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   type Attachment,
   extractLines,
@@ -9,7 +9,7 @@ import {
   type PatchRow,
   patchRows,
   changeBlockStarts,
-  rangeLabel,
+  linesLabel,
   type ReviewComment
 } from '../../shared/comments'
 import {
@@ -23,6 +23,7 @@ import {
   isTyping,
   Kbd,
   KeyHintLabel,
+  ListToggle,
   PageLayout,
   pageHasPanel,
   type PanelName,
@@ -33,9 +34,11 @@ import {
   updateShell,
   useModifierHints,
   usePanels,
+  ISLAND,
   useShell,
   Zone,
-  zoneBack
+  zoneBack,
+  PANE_HEADER
 } from '@treeix/sdk'
 import { getAgents, isAgent } from './agents'
 import { activityOf } from './sessionUi'
@@ -119,6 +122,8 @@ const DEFAULT_TAB = 'terminal'
 const PAGE_TAB_MIME = 'application/x-treeix-page-tab'
 /** Pages shown beside the main one, so three at most on screen */
 const MAX_SPLITS = 2
+/** The app sidebar is a source list: wider than this only spreads its rows apart */
+const SIDEBAR_MAX = 480
 
 /** A browser comment's page, in the built-in browser when it's enabled */
 function openPage(url: string): void {
@@ -189,6 +194,11 @@ const NUMPAD_FONT_STEPS = new Map<string, -1 | 0 | 1>([
 ])
 
 // Dialogs and settings load on first use; plugin code loads with its plugin
+const NARROW_WINDOW = window.matchMedia('(max-width: 999px)')
+const subscribeNarrow = (onChange: () => void): (() => void) => {
+  NARROW_WINDOW.addEventListener('change', onChange)
+  return () => NARROW_WINDOW.removeEventListener('change', onChange)
+}
 const CommandPalette = lazy(() => import('./CommandPalette').then((module) => ({ default: module.CommandPalette })))
 const SettingsView = lazy(() => import('./SettingsView').then((module) => ({ default: module.SettingsView })))
 // Pulls shiki's shared highlighter for result lines
@@ -222,6 +232,7 @@ const sameFiles = (a: WorktreeFiles, b: WorktreeFiles): boolean => sameList(a.fi
 
 const loadComments = (): ReviewComment[] => list(readStored(COMMENTS_KEY), isReviewComment)
 
+const SPLIT_DIFF_MIN = 640
 const annotationSide = (range: LineRange): 'deletions' | 'additions' => range.endSide ?? range.side ?? 'additions'
 /** The one-line range of a patch row, on the side it shows */
 const rowRange = (row: PatchRow): LineRange =>
@@ -320,7 +331,19 @@ function App(): React.JSX.Element {
   const [splitFocus, setSplitFocus] = useState<string | null>(null)
   /** The left sidebar: workspaces with their sessions, and the sections plugins contribute */
   const [sidebarOpen, setSidebarOpen] = usePersisted<boolean>('app.sidebar', true)
-  const [sidebarWidth, setSidebarWidth] = usePersisted<number>('app.sidebarWidth', 240)
+  // Like a macOS split view, a narrow window folds the sidebar without forgetting it was open; opening it there lasts until it closes
+  const narrow = useSyncExternalStore(subscribeNarrow, () => NARROW_WINDOW.matches)
+  const [narrowPeek, setNarrowPeek] = useState(false)
+  useEffect(() => setNarrowPeek(false), [narrow])
+  const sidebarShown = sidebarOpen && (!narrow || narrowPeek)
+  const setSidebarShown = (show: boolean): void => {
+    if (narrow && (sidebarOpen || show)) {
+      setSidebarOpen(true)
+      setNarrowPeek(show)
+    } else setSidebarOpen(show)
+  }
+  const [savedSidebarWidth, setSidebarWidth] = usePersisted<number>('app.sidebarWidth', 240)
+  const sidebarWidth = Math.min(savedSidebarWidth, SIDEBAR_MAX)
   // Reopen where the app was left: tab, worktree and file
   useEffect(() => {
     const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
@@ -333,7 +356,8 @@ function App(): React.JSX.Element {
     if (appTab !== 'settings') tabBeforeSettings.current = appTab
     setAppTab('settings')
   }
-  const closeSettings = (): void => setAppTab(tabBeforeSettings.current)
+  // Back with the keyboard in that page, as a click on its tab would leave it
+  const closeSettings = (): void => goPage(tabBeforeSettings.current)
   const [docTabs, setDocTabs] = useState<DocumentTab[]>([])
   const { loaded: plugins, ready: pluginsReady } = usePlugins()
   const pluginTabs = plugins.flatMap(({ plugin }) => plugin.tabs ?? [])
@@ -520,8 +544,10 @@ function App(): React.JSX.Element {
     loadWorktree(selected)
   }, [selected])
 
-  // Island UI is a setting, and the page layouts float their panels by it
-  useEffect(() => updateShell({ islandUi: settings.islandUi }), [settings.islandUi])
+  // Island UI is a setting, and the page layouts float their panels by it; re-synced if the shell state is ever reset (a dev hot reload)
+  useEffect(() => {
+    if (shell.islandUi !== settings.islandUi) updateShell({ islandUi: settings.islandUi })
+  }, [settings.islandUi, shell.islandUi])
 
   // ⌃- / ⌃⇧- walk back and forward through places visited, like VS Code's Go Back
   useEffect(() => {
@@ -740,13 +766,15 @@ function App(): React.JSX.Element {
     description?: string
     placeholder?: string
     initialValue?: string
+    selection?: [number, number]
     confirmLabel: string
     onSubmit: (value: string) => Promise<void>
   } | null>(null)
 
   const createWorktree = async (repoPath: string, branch: string, base?: string, session: SessionKind | null = null, prompt = ''): Promise<void> => {
+    const opened = repos?.some((repo) => repo.worktrees.some((worktree) => worktree.branch === branch))
     const path = await window.api.addWorktree(repoPath, branch, base)
-    flash(`Created worktree ${branch}`)
+    flash(`${opened ? 'Opened' : 'Created'} worktree ${branch}`)
     rescan()
     openWorktree(path)
     if (session) startSession(session, path, prompt)
@@ -868,7 +896,13 @@ function App(): React.JSX.Element {
       placeholder: kind === 'file' ? 'name.ts' : 'folder',
       confirmLabel: `Create ${kind}`,
       onSubmit: async (name) => {
-        const path = folder ? `${folder}/${name}` : name
+        if (kind === 'file' && name.endsWith('/')) throw new Error("A file name can't end with /")
+        // Stray slashes and ./ segments would open a tab whose path the tree never shows
+        const clean = name
+          .split('/')
+          .filter((part) => part && part !== '.')
+          .join('/')
+        const path = folder && clean ? `${folder}/${clean}` : clean || name
         await window.api.createPath(worktreePath, kind === 'folder' ? `${path}/` : path)
         loadWorktree(worktreePath)
         if (kind === 'file') open(path)
@@ -880,12 +914,17 @@ function App(): React.JSX.Element {
       title: `Rename ${baseName(path)}`,
       description: 'Changing the folder part moves it.',
       initialValue: path,
+      // Like Finder: the name is selected, not the folders before it or the extension
+      selection: [path.lastIndexOf('/') + 1, path.lastIndexOf('.') > path.lastIndexOf('/') + 1 ? path.lastIndexOf('.') : path.length],
       confirmLabel: 'Rename',
       onSubmit: async (next) => {
+        if (next === path) return
         await window.api.renamePath(worktreePath, path, next)
         loadWorktree(worktreePath)
-        setEditorTabs((tabs) => tabs.map((tab) => (tab === path ? next : tab)))
-        if (viewer?.path === path) setViewer({ path: next, line: null })
+        // A renamed folder takes the files open inside it along
+        const moved = (tab: string): string => (tab === path ? next : tab.startsWith(`${path}/`) ? next + tab.slice(path.length) : tab)
+        setEditorTabs((tabs) => tabs.map(moved))
+        if (viewer) setViewer({ path: moved(viewer.path), line: viewer.path === path ? null : viewer.line })
       }
     })
 
@@ -908,7 +947,7 @@ function App(): React.JSX.Element {
     { label: 'New file…', run: () => askCreate(worktreePath, 'file', isFolder ? path : parentOf(path), open) },
     { label: 'New folder…', run: () => askCreate(worktreePath, 'folder', isFolder ? path : parentOf(path), open) },
     path !== '' && null,
-    path !== '' && { label: 'Rename…', run: () => askRename(worktreePath, path) },
+    path !== '' && { label: 'Rename…', accelerator: 'F2', run: () => askRename(worktreePath, path) },
     path !== '' && { label: 'Move to Trash…', run: () => trash(worktreePath, path) }
   ]
 
@@ -980,6 +1019,18 @@ function App(): React.JSX.Element {
   const diffRows = useMemo(() => (file ? patchRows(file.patch) : []), [file?.patch])
   const cursorRow: PatchRow | undefined = diffRows[lineCursor]
   const diffScroll = useRef<HTMLDivElement>(null)
+  // A split diff narrower than this leaves each side a sliver, so it reads as unified until there's room again
+  const [diffWidth, setDiffWidth] = useState(Infinity)
+  const diffObserver = useRef<ResizeObserver | null>(null)
+  // A callback ref, since the scroller remounts with the file, the preview and the viewer
+  const diffScrollRef = useCallback((node: HTMLDivElement | null) => {
+    diffScroll.current = node
+    diffObserver.current?.disconnect()
+    if (!node) return
+    diffObserver.current = new ResizeObserver(([entry]) => setDiffWidth(entry.contentRect.width))
+    diffObserver.current.observe(node)
+  }, [])
+  const shownDiffStyle = diffWidth < SPLIT_DIFF_MIN ? 'unified' : diffStyle
   useEffect(() => {
     setDraft(null)
     setLineCursor(-1)
@@ -1429,12 +1480,15 @@ function App(): React.JSX.Element {
     const info = panel ? panelInfo(panel) : undefined
     if (!panel || !info || shell.zen) return null
     const size = dock.layout.sizes[side]
-    const frame = { left: 'border-r', right: 'border-l', bottom: 'border-t' }[side]
+    // Island UI floats the dock too, kept one gutter clear of the page
+    const frame = shell.islandUi
+      ? `overflow-hidden ${ISLAND} ${{ left: 'my-2 ml-2', right: 'my-2 mr-2', bottom: 'mx-2 mb-2' }[side]}`
+      : `border-border bg-card ${{ left: 'border-r', right: 'border-l', bottom: 'border-t' }[side]}`
     const aside = (
       <aside
         data-dock-frame
         style={side === 'bottom' ? { height: size } : { width: size }}
-        className={`relative flex min-h-0 min-w-0 shrink-0 flex-col border-border bg-card ${frame} ${side === 'bottom' ? '' : 'flex-1'}`}
+        className={`relative flex min-h-0 min-w-0 shrink-0 flex-col ${frame} ${side === 'bottom' ? '' : 'flex-1'}`}
       >
         <ResizeHandle edge={RESIZE_EDGE[side]} onResize={(next) => dock.resize(side, next)} />
         <div className="min-h-0 flex-1">
@@ -1495,6 +1549,7 @@ function App(): React.JSX.Element {
         onFileMenu={(event, path) => explorerMenu(event, path, () => open(path))}
         onFolderMenu={(event, path) => folderMenu(event, path, open)}
         onCreate={(kind, folder) => selected && askCreate(selected, kind, folder, open)}
+        onRename={(path) => selected && askRename(selected, path)}
         onParent={browseParent}
       />
     ) : (
@@ -1503,7 +1558,36 @@ function App(): React.JSX.Element {
 
   const activePage = openDocTab?.parent ?? appTab
   const showTitle = shell.title && !shell.zen
-  const showSidebar = sidebarOpen && !shell.zen
+  // Tabs that no longer fit drop their names rather than run off the strip, and get them back once the named width fits again
+  const tabStrip = useRef<HTMLDivElement>(null)
+  const namedTabsWidth = useRef(0)
+  const [tightTabs, setTightTabs] = useState(false)
+  // Still too many even without names: the strip scrolls, and its fading edge says so
+  const [clippedTabs, setClippedTabs] = useState(false)
+  const compactTabs = settings.compactTabs || tightTabs
+  useLayoutEffect(() => {
+    const strip = tabStrip.current
+    if (!strip) return
+    const fit = (): void => {
+      // With names off by choice only the fade needs keeping
+      if (!settings.compactTabs && !tightTabs) {
+        namedTabsWidth.current = strip.scrollWidth
+        if (strip.scrollWidth > strip.clientWidth) setTightTabs(true)
+      } else if (!settings.compactTabs && strip.clientWidth >= namedTabsWidth.current) setTightTabs(false)
+      setClippedTabs(strip.scrollWidth > strip.clientWidth + strip.scrollLeft + 1)
+    }
+    fit()
+    const resize = new ResizeObserver(fit)
+    resize.observe(strip)
+    // A tab added or closed: measure again, named
+    const tabs = new MutationObserver(() => (tightTabs && !settings.compactTabs ? setTightTabs(false) : fit()))
+    tabs.observe(strip, { childList: true })
+    return () => {
+      resize.disconnect()
+      tabs.disconnect()
+    }
+  }, [tightTabs, settings.compactTabs, showTitle])
+  const showSidebar = sidebarShown && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
     if ((panel === 'list' || panel === 'inspector') && !pageHasPanel(activePage, panel)) return flash(`${appTabLabel} has no ${panel}`)
@@ -1514,7 +1598,7 @@ function App(): React.JSX.Element {
     enabled: !paletteOpen && !searchOpen,
     onLeader,
     onTogglePanel: toggleShellPanel,
-    onToggleSidebar: () => setSidebarOpen(!sidebarOpen),
+    onToggleSidebar: () => setSidebarShown(!sidebarShown),
     onSheet: () => setSheetOpen(!sheetOpen)
   })
 
@@ -1669,6 +1753,24 @@ function App(): React.JSX.Element {
   }
 
   const commands: Command[] = [
+    ...(selectedRepo
+      ? [
+          {
+            id: 'new-worktree',
+            group: 'Actions',
+            label: `New worktree in ${baseName(selectedRepo.path)}…`,
+            icon: 'plus' as const,
+            run: () => setBranchDialog({ repo: selectedRepo, worktree: true })
+          },
+          {
+            id: 'new-branch',
+            group: 'Actions',
+            label: `New branch in ${baseName(selectedRepo.path)}…`,
+            icon: 'branch' as const,
+            run: () => setBranchDialog({ repo: selectedRepo, worktree: false })
+          }
+        ]
+      : []),
     { id: 'cleanup', group: 'Actions', label: 'Clean up worktrees', icon: 'trash', run: () => setCleanupOpen(true) },
     { id: 'rescan', group: 'Actions', label: 'Rescan worktrees', icon: 'refresh', shortcut: actionKeys('wt.rescan') || undefined, run: rescan },
     { id: 'settings', group: 'Actions', label: 'Settings', icon: 'settings', shortcut: actionKeys('app.settings') || undefined, run: openSettings },
@@ -1886,12 +1988,13 @@ function App(): React.JSX.Element {
     // A click shows the page alone; ⇧-click opens it beside the ones on screen, or takes it out of the split
     const click = (event: React.MouseEvent): void => {
       if (!event.shiftKey) {
-        if (!isMain) goPage(tab.id)
+        // The shown page's tab too: the click took the keyboard, this hands it back to the page
+        goPage(tab.id)
         setSplitTabs([])
       } else if (split) closePage(tab.id)
       else if (!open) openBeside(tab.id)
     }
-    const compact = settings.compactTabs
+    const compact = compactTabs
     const digitKey = digitLabel('tabs', index + 1)
     const keys = [letter && `G ${letter}`, digitKey].filter(Boolean).join(', ')
     const close = open && (
@@ -1954,7 +2057,7 @@ function App(): React.JSX.Element {
     return (
       <div
         data-pane-header={page.id}
-        className={`relative flex h-8 shrink-0 items-center gap-1.5 border-b border-border bg-card text-xs ${left ? 'pr-1 pl-1' : 'pr-1 pl-2.5'} ${focused ? 'text-foreground' : 'text-muted-foreground'}`}
+        className={`relative flex h-8 shrink-0 items-center gap-1.5 border-b border-border text-xs ${left ? 'pr-1 pl-1' : 'pr-1 pl-2.5'} ${focused ? 'text-foreground' : 'text-muted-foreground'}`}
       >
         {focused && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary/70" />}
         {left && close}
@@ -1972,7 +2075,7 @@ function App(): React.JSX.Element {
 
   const tabClass = (active: boolean): string =>
     `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag] ${
-      active ? 'text-primary [&_.text-muted-foreground]:text-primary/70' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+      active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
     }`
   // Each project is searched once: in the selected worktree when it belongs to it, otherwise in its main checkout
   const searchPaths = (workspaceRepos ? reposInScope(workspaceRepos, scope) : []).map((repo) =>
@@ -1993,17 +2096,14 @@ function App(): React.JSX.Element {
       onFileMenu={(event, path) => explorerMenu(event, path, () => setViewer({ path, line: null }))}
       onFolderMenu={(event, path) => folderMenu(event, path, (next) => setViewer({ path: next, line: null }))}
       onCreate={(kind, folder) => askCreate(worktree.path, kind, folder, (next) => setViewer({ path: next, line: null }))}
+      onRename={(path) => askRename(worktree.path, path)}
     />
   ) : null
 
   const worktreeMain = (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card px-1.5">
-        {!worktreePanels.inIsland('list') && (
-          <IconButton label={`Toggle list (${actionKeys('panel.list')})`} active={worktreePanels.list} onClick={() => worktreePanels.toggle('list')}>
-            <Icon name="panel" />
-          </IconButton>
-        )}
+      <header className={`${PANE_HEADER} gap-2 overflow-hidden px-1.5`}>
+        <ListToggle page="worktrees" />
         <div className="flex min-w-0 flex-1 items-center gap-2" title={worktree?.path}>
           {worktree && (
             <>
@@ -2020,11 +2120,7 @@ function App(): React.JSX.Element {
         <IconButton label={`Toggle changed files (${actionKeys('wt.changedFiles')})`} active={filesOpen} onClick={() => setFilesOpen(!filesOpen)}>
           <Icon name="list" />
         </IconButton>
-        {!worktreePanels.inIsland('inspector') && (
-          <IconButton label={`Toggle inspector (${actionKeys('panel.inspector')})`} active={worktreePanels.inspector} onClick={() => worktreePanels.toggle('inspector')}>
-            <Icon name="panel" className="size-3.5 -scale-x-100" />
-          </IconButton>
-        )}
+        <ListToggle page="worktrees" panel="inspector" />
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -2033,16 +2129,18 @@ function App(): React.JSX.Element {
         {!worktree ? (
           <EmptyState fill icon="branch" title="Select a worktree to see its changes" />
         ) : (
-          <div className="flex min-w-0 flex-1">
+          <div className="@container flex min-w-0 flex-1">
             {filesOpen && (
-              <nav style={{ width: filesWidth }} className="relative shrink-0 border-r border-border bg-card">
-                <div className="h-full overflow-y-auto p-1.5">
-                  <div className="flex h-7 items-center gap-2 pl-2 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">
-                    <span>Changes</span>
-                    <span className="tabular-nums">{files.length}</span>
-                    <span className="flex-1" />
-                    {canFoldChanges && <FoldAllButton anyOpen={anyChangedFolderOpen} groups="folders" onClick={foldChanges} />}
-                  </div>
+              // Too narrow for both, the diff wins over the file column
+              <nav style={{ width: filesWidth }} className="relative flex shrink-0 flex-col border-r @max-md:hidden border-border">
+                {/* A header like the diff's beside it, so both rules line up */}
+                <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3.5 text-[11px] font-semibold text-foreground`}>
+                  <span>Changes</span>
+                  <span className="tabular-nums">{files.length}</span>
+                  <span className="flex-1" />
+                  {canFoldChanges && <FoldAllButton anyOpen={anyChangedFolderOpen} groups="folders" onClick={foldChanges} />}
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
                   {!patches && <Placeholder>Loading...</Placeholder>}
                   <ChangedFileList
                     patches={files}
@@ -2062,7 +2160,7 @@ function App(): React.JSX.Element {
                 <MarkdownFoldScope>
                   {viewer && (
                     <>
-                      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1.5">
+                      <div className={`${PANE_HEADER} gap-1 px-1.5`}>
                         <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
                           {editorTabs.map((tab) => (
                             <div
@@ -2125,7 +2223,7 @@ function App(): React.JSX.Element {
                   )}
                   {!viewer && file && (
                     <>
-                      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
+                      <div className={`${PANE_HEADER} gap-2 px-3`}>
                         <span className="min-w-0 shrink truncate font-mono text-[11.5px] text-foreground/85 select-text" title={file.path}>
                           {file.path}
                         </span>
@@ -2146,7 +2244,7 @@ function App(): React.JSX.Element {
                         </div>
                       ) : (
                         <div
-                          ref={diffScroll}
+                          ref={diffScrollRef}
                           className={`min-h-0 flex-1 overflow-auto ${drag.range ? 'select-none' : 'select-text'}`}
                           onPointerDown={drag.onPointerDown}
                           onContextMenu={diffSymbols.onContextMenu}
@@ -2161,11 +2259,13 @@ function App(): React.JSX.Element {
                             renderAnnotation={({ metadata }) => {
                               const comment = fileComments.find((candidate) => candidate.id === metadata.commentId)
                               if (comment) return <CommentCard comment={comment} onDelete={() => deleteComment(comment)} />
-                              return draft ? <CommentDraft label={`Agent comment on line ${rangeLabel(draft)}`} onSave={addComment} onCancel={() => setDraft(null)} /> : null
+                              return draft ? (
+                                <CommentDraft label={`Agent comment on ${linesLabel(draft).toLowerCase()}`} onSave={addComment} onCancel={() => setDraft(null)} />
+                              ) : null
                             }}
                             options={{
                               ...codeThemeOptions(),
-                              diffStyle,
+                              diffStyle: shownDiffStyle,
                               disableFileHeader: true,
                               enableLineSelection: true,
                               enableGutterUtility: true,
@@ -2237,7 +2337,7 @@ function App(): React.JSX.Element {
     <div data-page-tab="settings" aria-current="page" aria-label="Settings" title="Settings" className={tabClass(true)}>
       {settings.tabCloseSide === 'left' && closeButton('Close settings', closeSettings)}
       <Icon name="settings" className="size-3.5" />
-      {!settings.compactTabs && 'Settings'}
+      {!compactTabs && 'Settings'}
       {settings.tabCloseSide === 'right' && closeButton('Close settings', closeSettings)}
     </div>
   )
@@ -2278,9 +2378,9 @@ function App(): React.JSX.Element {
     </>
   )
   // The sidebar carries its own toggle; the title bar only holds the way back while it is hidden, beside the traffic lights where the sidebar was
-  const sidebarReveal = !sidebarOpen && (
+  const sidebarReveal = !sidebarShown && (
     <span className="flex shrink-0 items-center pr-1 [-webkit-app-region:no-drag]">
-      <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarOpen(true)}>
+      <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarShown(true)}>
         <Icon name="panel" className="size-3.5 text-muted-foreground" />
       </IconButton>
     </span>
@@ -2342,6 +2442,8 @@ function App(): React.JSX.Element {
           id,
           <button
             title={`Agent comments (${actionKeys('app.comments')})`}
+            aria-label={`Agent comments, ${comments.length}`}
+            aria-pressed={drawerOpen}
             onClick={() => setDrawerOpen(!drawerOpen)}
             className={`flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-foreground hover:bg-accent ${drawerOpen ? 'bg-foreground/8 ring-1 ring-border' : ''}`}
           >
@@ -2365,9 +2467,9 @@ function App(): React.JSX.Element {
         appTab === 'settings' ? (
           settingsTab
         ) : (
-          <button title={`Settings (${actionKeys('app.settings')} or G S)`} onClick={() => openSettings()} className={tabClass(false)}>
+          <button aria-label="Settings" title={`Settings (${actionKeys('app.settings')} or G S)`} onClick={() => openSettings()} className={tabClass(false)}>
             <Icon name="settings" className="size-3.5" />
-            {!settings.compactTabs && 'Settings'}
+            {!compactTabs && 'Settings'}
           </button>
         )
       )
@@ -2397,22 +2499,28 @@ function App(): React.JSX.Element {
   return (
     <HostContext.Provider value={host}>
       <CodeNavigationContext.Provider value={{ worktreePath: selected ?? '', exact: true, onNavigate: navigate }}>
-        <div className="flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased select-none">
+        <div className={`flex h-screen flex-col overflow-hidden ${settings.islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
           {showTitle && (
             <div
               {...tabDropProps}
-              className={`flex h-9 shrink-0 items-center gap-2 border-b border-border bg-card px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
+              className={`flex h-9 shrink-0 items-center gap-2 px-2 ${settings.islandUi ? '' : 'border-b border-border bg-card'} ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
             >
               {/* Equal sides keep the centre segment in the middle of the window */}
               <div className="flex min-w-0 flex-1 basis-0 items-center">
                 {/* Room for the traffic lights */}
                 {!chromeless && <span className="w-[80px] shrink-0" />}
                 {sidebarReveal}
-                <div className="flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">{barItems(barOrder.slice(0, searchAt))}</div>
+                <div
+                  ref={tabStrip}
+                  onScroll={(event) => setClippedTabs(event.currentTarget.scrollWidth > event.currentTarget.clientWidth + event.currentTarget.scrollLeft + 1)}
+                  className={`flex h-7 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] ${clippedTabs ? '[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]' : ''}`}
+                >
+                  {barItems(barOrder.slice(0, searchAt))}
+                </div>
               </div>
               {tabDrop?.beforeId === SEARCH_ITEM && tabDropMark}
               {centerSegment}
-              <div className="flex h-7 min-w-0 flex-1 basis-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+              <div className="@container flex h-7 min-w-0 flex-1 basis-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
                 {barItems(barOrder.slice(searchAt + 1))}
                 {tabDrop?.beforeId === null && tabDropMark}
               </div>
@@ -2420,22 +2528,25 @@ function App(): React.JSX.Element {
           )}
 
           {/* Without the title bar the window still needs somewhere to drag it by, and room for the traffic lights; in zen the terminal's tab strip is that */}
-          {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && <div className="h-7 shrink-0 border-b border-border bg-card [-webkit-app-region:drag]" />}
-          <div className="relative flex min-h-0 flex-1">
+          {!showTitle && !chromeless && !(shell.zen && appTab === 'terminal') && (
+            <div className={`h-7 shrink-0 [-webkit-app-region:drag] ${settings.islandUi ? '' : 'border-b border-border bg-card'}`} />
+          )}
+          {/* Islands sit just under the title bar, not a full gap below it */}
+          <div className={`relative flex min-h-0 flex-1 ${settings.islandUi && showTitle ? '-mt-1.5' : ''}`}>
             {showSidebar && (
               <AppSidebar
                 repos={repos}
                 island={settings.islandUi}
                 width={sidebarWidth}
-                onResize={setSidebarWidth}
+                onResize={(width) => setSidebarWidth(Math.min(width, SIDEBAR_MAX))}
                 onSwitch={switchWorkspace}
                 onEdit={setEditingWorkspace}
-                onHide={() => setSidebarOpen(false)}
+                onHide={() => setSidebarShown(false)}
               />
             )}
             <div
               // An island floats over the pages, so they keep clear of it themselves
-              style={showSidebar && settings.islandUi ? { paddingLeft: sidebarWidth + 16 } : undefined}
+              style={showSidebar && settings.islandUi ? { paddingLeft: sidebarWidth + 8 } : undefined}
               className="flex min-h-0 min-w-0 flex-1"
               onFocusCapture={(event) =>
                 setSplitFocus(event.target instanceof Element ? (event.target.closest('[data-split-pane]')?.getAttribute('data-split-pane') ?? null) : null)
@@ -2520,11 +2631,12 @@ function App(): React.JSX.Element {
               onClose={() => setDrawerOpen(false)}
             />
           )}
+          {/* Zen's way out sits in the empty drag strip above the page, clear of its content */}
           {shell.zen && (
             <button
               onClick={toggleZen}
               title={`Leave zen mode (${actionKeys('shell.zen')})`}
-              className="fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-popover px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+              className="fixed top-1 right-2 z-50 flex h-5 items-center gap-2 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
             >
               Zen <Kbd hint>{actionKeys('shell.zen')}</Kbd>
             </button>
@@ -2607,7 +2719,7 @@ function App(): React.JSX.Element {
                 header={
                   <span className="min-w-0 flex-1 truncate">
                     {peek.title} <span className="font-mono text-foreground">{peek.symbol}</span> · {peek.locations.length} in{' '}
-                    {new Set(peek.locations.map((location) => location.path)).size} files
+                    {((files) => `${files} ${files === 1 ? 'file' : 'files'}`)(new Set(peek.locations.map((location) => location.path)).size)}
                   </span>
                 }
                 locations={peek.locations}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { ISLAND, type SessionSummary, type SidebarSection, useHost } from '@treeix/sdk'
 import type { Repo } from '../../shared/types'
 import { ActivityMark, NEWS } from './activity'
@@ -14,7 +14,8 @@ import { ALL_PROJECTS, commonFolder, deleteWorkspace, HOME, inWorkspace, moveWor
 import { actionKeys } from '../../shared/keymap'
 
 const TERMINAL_TAB = 'terminal'
-const HEADING = 'text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'
+const noSubscription = (): (() => void) => () => undefined
+const HEADING = 'text-[11px] font-semibold text-foreground'
 const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md pr-1 text-left text-xs hover:text-foreground'
 const WORKSPACE_MIME = 'application/x-treeix-workspace'
 
@@ -47,11 +48,19 @@ function Sessions({ sessions }: { sessions: SessionSummary[] }): React.JSX.Eleme
     host.setActiveTab(TERMINAL_TAB)
     host.service('sessions')?.reveal(id)
   }
-  const active = host.service('sessions')?.active() ?? null
+  const service = host.service('sessions')
+  // Read on every terminal change, as moving between split panes changes no session
+  const active = useSyncExternalStore(service?.subscribe ?? noSubscription, () => service?.active() ?? null)
+  // Highlighted only while the terminal shows it, so one row in the sidebar marks what is on screen
+  const onScreen = host.activeTab === TERMINAL_TAB
   return (
     <>
       {sessions.map((session) => (
-        <button key={session.id} onClick={() => open(session.id)} className={`${ROW} h-7 pl-7 ${session.id === active ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+        <button
+          key={session.id}
+          onClick={() => open(session.id)}
+          className={`${ROW} h-7 pl-7 hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
+        >
           {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
           <span className="min-w-0 flex-1 truncate">{session.title}</span>
           <StatusDot session={session} />
@@ -123,7 +132,8 @@ function Workspaces({
       <div key={workspace.id}>
         <button
           data-workspace={workspace.id}
-          title={`${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'no projects'}${keys ? ` (${keys})` : ''}`}
+          title={`${workspace.id === HOME.id ? 'Shells in your home folder, outside every workspace' : workspace.id === ALL_PROJECTS ? 'Every project, across workspaces' : `${workspace.name}\n${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'No projects yet'}`}${keys ? ` (${keys})` : ''}`}
+          data-tip-side="right"
           aria-current={current || undefined}
           onClick={() => (current ? setCollapsed(!collapsed) : onSwitch(workspace.id))}
           {...extra}

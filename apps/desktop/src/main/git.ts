@@ -146,11 +146,14 @@ export async function diff(worktreePath: string): Promise<FilePatch[]> {
 const lines = (output: string): string[] => [...new Set(output.split('\n').filter(Boolean))].sort()
 
 export async function listFiles(worktreePath: string): Promise<WorktreeFiles> {
-  const [files, ignored] = await Promise.all([
+  const [files, ignored, deleted] = await Promise.all([
     git(worktreePath, ['ls-files', '--cached', '--others', '--exclude-standard']),
-    git(worktreePath, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory'])
+    git(worktreePath, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory']),
+    // Still in the index until staged, but gone from disk: trashed, moved or renamed
+    git(worktreePath, ['ls-files', '--deleted'])
   ])
-  return { files: lines(files), ignored: lines(ignored) }
+  const gone = new Set(lines(deleted))
+  return { files: lines(files).filter((file) => !gone.has(file)), ignored: lines(ignored) }
 }
 
 export async function readFile(worktreePath: string, filePath: string): Promise<string | null> {

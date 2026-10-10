@@ -35,3 +35,8 @@ test('a word typed out whole beats the same letters scattered across a longer la
   )
   expect(results[0].command.label).toBe('Close split (terminal)')
 })
+
+test('an action outranks a setting that describes it', () => {
+  const actions = [command('Settings', 'New worktree for the item', 'Keyboard / Tasks'), command('Actions', 'New worktree in orbit-web…')]
+  expect(paletteResults(actions, 'new worktree')[0].command.group).toBe('Actions')
+})

@@ -96,7 +96,14 @@ export function getAgents(): Agent[] {
           ? skippingPermissions(agent, CODEX, '--dangerously-bypass-approvals-and-sandbox')
           : agent
     const builtins = Object.values(BUILTIN_AGENTS).map((agent) => custom.find((entry) => entry.id === agent.id) ?? skipped(agent))
-    const own = [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))]
+    // A cleared field in Settings still needs something to show in menus and badges
+    const named = (agent: Agent): Agent => ({
+      ...agent,
+      label: agent.label.trim() || 'Unnamed agent',
+      mark: agent.mark.trim() || '●',
+      color: agent.color.trim() || 'var(--color-foreground)'
+    })
+    const own = [...builtins, ...custom.filter((entry) => !(entry.id in BUILTIN_AGENTS))].map(named)
     cache = { from: custom, plugins: pluginAgents, skip, list: [...own, ...pluginAgents.filter((agent) => !own.some((entry) => entry.id === agent.id))] }
   }
   return cache.list

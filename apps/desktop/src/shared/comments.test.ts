@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { commentsPrompt, extractFileLines, extractLines, formatComments, isReviewComment, rangeLabel, type ReviewComment, changeBlockStarts } from './comments'
+import { commentsPrompt, extractFileLines, extractLines, formatComments, isReviewComment, linesLabel, rangeLabel, type ReviewComment, changeBlockStarts } from './comments'
 
 const base = { worktreePath: '/repo', range: { start: 0, end: 0 }, code: '' }
 
@@ -55,6 +55,8 @@ test('extractLines', () => {
 test('rangeLabel', () => {
   expect(rangeLabel({ start: 4, end: 4 })).toBe('4')
   expect(rangeLabel({ start: 9, end: 4, side: 'deletions' })).toBe('4-9 (old)')
+  expect(linesLabel({ start: 4, end: 4 })).toBe('Line 4')
+  expect(linesLabel({ start: 20, end: 25 })).toBe('Lines 20-25')
 })
 
 test('formatComments sends the location and the note, never the stored code', () => {

@@ -1,5 +1,5 @@
 import { type ComponentType, useEffect, useRef, useState } from 'react'
-import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav } from '@treeix/sdk'
+import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav, PANE_HEADER } from '@treeix/sdk'
 import type { ToolStatus } from '../../shared/types'
 import { Icon, ICON_NAMES, type IconName } from './Icon'
 import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
@@ -28,7 +28,7 @@ import { type Agent, useAgents } from './agents'
 import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile, removeCustomTheme, type Theme } from './themes'
 import { EmptyState, Popup, useMenuKeys } from './ui'
 import { arrangeBar, WORKTREES_TAB } from './titleBarTabs'
-import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
+import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, SearchSection, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
 import { copyText } from './contextMenu'
@@ -74,13 +74,18 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
           if (recording) onChange(value)
           setRecording(!recording)
         }}
-        className={`flex h-8 min-w-36 items-center justify-center rounded-lg px-3 font-mono text-[13px] ring-1 ${
-          recording ? 'bg-foreground/[.08] text-foreground ring-input' : value ? 'text-foreground ring-border hover:bg-accent' : 'text-muted-foreground ring-border hover:bg-accent'
+        className={`flex h-8 min-w-36 items-center justify-center rounded-lg px-3 ring-1 ${
+          recording
+            ? 'bg-foreground/[.08] text-xs text-foreground ring-input'
+            : value
+              ? 'font-mono text-[13px] text-foreground ring-border hover:bg-accent'
+              : 'text-xs text-muted-foreground ring-border hover:bg-accent'
         }`}
       >
         {recording ? 'Press keys, esc cancels' : value ? shortcutLabel(value) : 'Record shortcut'}
       </button>
-      {value && !recording && (
+      {/* The slot stays when there is nothing to turn off, so set and unset fields line up */}
+      {value && !recording ? (
         <button
           title="Turn off"
           onClick={() => onChange(null)}
@@ -88,6 +93,8 @@ function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChang
         >
           <Icon name="close" className="size-3.5" />
         </button>
+      ) : (
+        <span className="size-8" />
       )}
     </div>
   )
@@ -228,7 +235,7 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
           }
         }}
         style={{ fontFamily: draft.trim() ? fontStack(draft, 'sans-serif') : undefined }}
-        className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
+        className="h-8 w-full rounded-md border border-input bg-muted px-2.5 pr-7 text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
       />
       {value && (
         <button
@@ -330,15 +337,16 @@ function Transparency(): React.JSX.Element {
     <div className="flex w-56 max-w-full shrink-0 items-center gap-3">
       <input
         type="range"
-        min={MIN_OPACITY}
-        max={100}
-        value={opacity}
-        aria-label="Window opacity"
-        onChange={(event) => updateSettings({ opacity: clampOpacity(Number(event.target.value)) })}
+        // The row is about transparency, so the slider fills as the window clears
+        min={0}
+        max={100 - MIN_OPACITY}
+        value={100 - opacity}
+        aria-label="Window transparency"
+        onChange={(event) => updateSettings({ opacity: clampOpacity(100 - Number(event.target.value)) })}
         style={{
-          background: `linear-gradient(to right, var(--color-primary) ${((opacity - MIN_OPACITY) / (100 - MIN_OPACITY)) * 100}%, color-mix(in srgb, var(--color-foreground) 12%, transparent) 0)`
+          background: `linear-gradient(to right, var(--color-primary) ${((100 - opacity) / (100 - MIN_OPACITY)) * 100}%, color-mix(in srgb, var(--color-foreground) 22%, transparent) 0)`
         }}
-        className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+        className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-border [&::-webkit-slider-thumb]:bg-white"
       />
       <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">{100 - opacity}%</span>
     </div>
@@ -390,10 +398,11 @@ const SETTINGS: SettingSpec[] = [
       'Treeix checks GitHub for a new build on launch, every 30 minutes and when you come back to the app, downloads it in the background, and installs it when you restart.',
     Control: function Updates() {
       const status = useUpdates()
+      // The status sits under the button, so a long one wraps there instead of squeezing the description
       return (
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="truncate text-xs text-muted-foreground">{updateSummary(status)}</span>
+        <div className="flex min-w-0 flex-col items-end gap-1.5">
           <UpdateControl />
+          <span className="max-w-60 text-right text-[11px] leading-snug text-muted-foreground">{updateSummary(status)}</span>
         </div>
       )
     }
@@ -761,7 +770,7 @@ function ThemeCard({
       <button
         data-setting={label}
         onClick={onSelect}
-        className={`w-full min-w-0 overflow-hidden rounded-lg text-left ring-1 ${selected ? 'ring-input' : 'ring-border hover:ring-input'}`}
+        className={`w-full min-w-0 overflow-hidden rounded-lg text-left ${selected ? 'ring-2 ring-primary' : 'ring-1 ring-border hover:ring-input'}`}
       >
         {children}
         <div className="flex items-center gap-2 bg-card px-2.5 py-2 text-xs">
@@ -799,7 +808,7 @@ function ImportTheme(): React.JSX.Element {
     if (theme) pickTheme(addCustomTheme(theme), theme.mode)
   }
   return (
-    <div className="flex items-center justify-between gap-3 px-4 pb-4">
+    <div className="flex items-center justify-between gap-3 px-2 pb-4">
       <span className={`text-xs ${error ? 'text-red-400' : 'text-muted-foreground'}`}>{error ?? 'Import a VS Code color theme or a Treeix theme JSON'}</span>
       <label className="shrink-0 cursor-pointer rounded-lg px-3 py-1.5 text-xs ring-1 ring-border hover:bg-accent">
         Import theme…
@@ -822,7 +831,7 @@ function ThemeGrid({ mode }: { mode: Theme['mode'] }): React.JSX.Element {
   const current = settings[THEME_SLOT[mode]]
   const themes = allThemes().filter(([, theme]) => theme.mode === mode)
   return (
-    <div role="group" aria-label={`${mode === 'light' ? 'Light' : 'Dark'} themes`} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3 px-4 pb-4">
+    <div role="group" aria-label={`${mode === 'light' ? 'Light' : 'Dark'} themes`} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3 px-2 pb-4">
       {themes.map(([id, theme]) => (
         <ThemeCard
           key={id}
@@ -850,7 +859,7 @@ function Themes(): React.JSX.Element {
   const { themeMode } = useSettings()
   return (
     <Card title="Theme">
-      <div className="flex items-center justify-between gap-3 p-4">
+      <div className="flex items-center justify-between gap-3 px-2 py-3">
         <span className="text-sm">{themeMode === 'system' ? 'Follows macOS between the light and the dark theme' : `Always the ${themeMode} theme`}</span>
         <Segmented
           value={themeMode}
@@ -862,9 +871,9 @@ function Themes(): React.JSX.Element {
           onChange={(next) => updateSettings({ themeMode: next })}
         />
       </div>
-      <div className="px-4 pb-2 text-xs text-muted-foreground">Light</div>
+      <div className="px-2 pb-2 text-xs text-muted-foreground">Light</div>
       <ThemeGrid mode="light" />
-      <div className="px-4 pb-2 text-xs text-muted-foreground">Dark</div>
+      <div className="px-2 pb-2 text-xs text-muted-foreground">Dark</div>
       <ThemeGrid mode="dark" />
       <ImportTheme />
     </Card>
@@ -967,7 +976,7 @@ function Appearance(): React.JSX.Element {
 function ShortcutRow({ keys, action }: { keys: string; action: string }): React.JSX.Element | null {
   if (!useSettingMatch(action, keys, 'shortcut')) return null
   return (
-    <div data-setting={action} tabIndex={-1} className={`flex items-center gap-4 border-b border-border px-4 py-2.5 text-[13px] last:border-b-0 ${SETTING_ROW}`}>
+    <div data-setting={action} tabIndex={-1} className={`flex items-center gap-4 border-b border-border px-2 py-2.5 text-[13px] last:border-b-0 ${SETTING_ROW}`}>
       <span className="min-w-0 flex-1 break-words">{action}</span>
       <kbd className="max-w-[45%] shrink-0 rounded-md bg-muted px-2 py-0.5 text-right font-sans text-xs break-words text-muted-foreground ring-1 ring-border">{keys}</kbd>
     </div>
@@ -978,9 +987,10 @@ function ShortcutRow({ keys, action }: { keys: string; action: string }): React.
 function ActionRow({ action }: { action: ActionDef }): React.JSX.Element | null {
   const current = shortcutOf(action.id)
   const keys = current ? shortcutLabel(current) : ''
-  const clash = conflictsOf(action.id)
-    .map((id) => actionOf(id)?.label)
-    .filter((label): label is string => label !== undefined)
+  const others = conflictsOf(action.id).flatMap((id) => actionOf(id) ?? [])
+  // A page's own key wins on that page by design, so a global action sharing it is no clash to fix
+  const clash = others.filter((other) => (other.page === undefined) === (action.page === undefined)).map((other) => other.label)
+  const overrides = others.filter((other) => (other.page === undefined) !== (action.page === undefined)).map((other) => other.label)
   if (!useSettingMatch(action.label, keys, 'shortcut')) return null
   const rebind = (next: Shortcut | null): void => updateSettings({ keymap: { ...getSettings().keymap, [action.id]: next } })
   const reset = (): void => {
@@ -988,10 +998,15 @@ function ActionRow({ action }: { action: ActionDef }): React.JSX.Element | null 
     updateSettings({ keymap: rest })
   }
   return (
-    <div data-setting={action.label} tabIndex={-1} className={`flex items-center gap-3 border-b border-border px-4 py-2.5 text-[13px] last:border-b-0 ${SETTING_ROW}`}>
+    <div data-setting={action.label} tabIndex={-1} className={`flex items-center gap-3 border-b border-border px-2 py-2.5 text-[13px] last:border-b-0 ${SETTING_ROW}`}>
       <span className="min-w-0 flex-1 break-words">
         {action.label}
         {clash.length > 0 && <span className="block text-[11px] text-amber-400">Same key as {clash.join(', ')}</span>}
+        {clash.length === 0 && overrides.length > 0 && (
+          <span className="block text-[11px] text-muted-foreground">
+            {action.page ? `Replaces ${overrides.join(' and ')} on this page` : `On some pages instead: ${overrides.join(' · ')}`}
+          </span>
+        )}
       </span>
       <ShortcutRecorder value={current} onChange={rebind} />
       {isRebound(action.id) && (
@@ -1151,7 +1166,7 @@ function Tools(): React.JSX.Element {
         <button
           disabled={checking}
           onClick={() => void check()}
-          className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:text-foreground disabled:opacity-70"
+          className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground ring-1 ring-border enabled:hover:text-foreground"
         >
           {checking ? 'Checking…' : 'Check'}
         </button>
@@ -1167,7 +1182,7 @@ function Tools(): React.JSX.Element {
 function ToolRow({ tool, check }: { tool: ToolStatus; check: () => Promise<void> }): React.JSX.Element | null {
   if (!useSettingMatch(tool.name, tool.purpose)) return null
   return (
-    <div data-setting={tool.name} tabIndex={-1} className={`flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 ${SETTING_ROW}`}>
+    <div data-setting={tool.name} tabIndex={-1} className={`flex items-start gap-3 border-b border-border px-2 py-3 last:border-b-0 ${SETTING_ROW}`}>
       <span className={`mt-1.5 size-2 shrink-0 rounded-full ${tool.error ? (tool.version ? 'bg-amber-400' : 'bg-red-400') : 'bg-emerald-400'}`} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 text-[13px]">
@@ -1235,6 +1250,8 @@ function ChatAvailability({ agentId, command }: { agentId: string; command: stri
 
 function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React.JSX.Element {
   const { customAgents: custom } = useSettings()
+  // The fields show what was typed; `agent` fills a cleared name or badge for display
+  const saved = custom.find((entry) => entry.id === agent.id) ?? agent
   const write = (next: Agent[]): void => updateSettings({ customAgents: next })
   const edit = (key: AgentField, value: string): void =>
     write(custom.map((entry) => (entry.id === agent.id ? { ...entry, [key]: key === 'command' && !value ? null : value } : entry)))
@@ -1264,8 +1281,9 @@ function AgentRow({ agent, builtin }: { agent: Agent; builtin: boolean }): React
         AGENT_FIELDS.map((field) => (
           <Row key={field.key} label={field.label} description="">
             <input
-              value={String(agent[field.key] ?? '')}
+              value={String(saved[field.key] ?? '')}
               placeholder={field.placeholder}
+              maxLength={field.key === 'mark' ? 2 : undefined}
               onChange={(event) => edit(field.key, event.target.value)}
               className="h-6 w-56 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border"
             />
@@ -1291,7 +1309,7 @@ function Agents(): React.JSX.Element {
   const add = (): void => {
     // crypto.randomUUID over a counter: a counter derived from the current length repeats once an agent added earlier is removed
     const id = crypto.randomUUID()
-    updateSettings({ customAgents: [...custom, { id, label: 'New agent', mark: '●', color: 'var(--color-foreground)', command: null, agent: true }] })
+    updateSettings({ customAgents: [...custom, { id, label: 'New agent', mark: '●', color: '', command: null, agent: true }] })
   }
   return (
     <Card title="Agents">
@@ -1482,7 +1500,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
       inspectorWidth={220}
       inspector={
         <>
-          <div className="flex h-9 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Settings</div>
+          <div className={`${PANE_HEADER} px-3 text-[11px] font-semibold text-foreground`}>Settings</div>
           <div className="shrink-0 border-b border-border p-2">
             <label className="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-xs ring-1 ring-border">
               <Icon name="search" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1530,7 +1548,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
       }
       main={
         <>
-          <header className="flex h-9 shrink-0 items-center gap-3 border-b border-border px-3">
+          <header className={`${PANE_HEADER} gap-3 px-3`}>
             <span className="min-w-0 flex-1 truncate text-xs font-medium">{needle ? `Results for “${needle}”` : (nav[sectionIndex]?.label ?? page)}</span>
             <ListToggle page="settings" panel="inspector" />
           </header>
@@ -1556,7 +1574,9 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
                       ) : (
                         <SearchGroup key={row.page} title={row.label}>
                           <h2 className="mb-3 text-[13px] font-medium">{row.label}</h2>
-                          <Page id={row.page} />
+                          <SearchSection value={row.label}>
+                            <Page id={row.page} />
+                          </SearchSection>
                         </SearchGroup>
                       )
                     )

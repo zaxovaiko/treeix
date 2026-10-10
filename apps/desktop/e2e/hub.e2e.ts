@@ -141,7 +141,12 @@ test('asking an agent from the palette records a run with its thinking and answe
   await page.keyboard.press('Enter')
   await page.getByPlaceholder(/^A one-off question/).fill('Where to?')
   // Short enough that the answer overflows the run, which has to follow it down
-  await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 200))
+  // Below the window's minimum size, which only a test may lift
+  await launched.app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0]
+    window.setMinimumSize(0, 0)
+    window.setSize(1024, 200)
+  })
   await page.keyboard.press('Enter')
 
   await expect(page.getByText('Here is a picture')).toBeVisible({ timeout: 20_000 })

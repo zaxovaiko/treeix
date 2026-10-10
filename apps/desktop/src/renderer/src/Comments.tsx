@@ -1,7 +1,7 @@
 import { actionForEvent, actionKeys } from '../../shared/keymap'
 import { useEffect, useRef, useState } from 'react'
-import { type Attachment, formatComments, type LineRange, rangeLabel, type ReviewComment, type Side } from '../../shared/comments'
-import { focusZone, KeyHintLabel, Keys } from '@treeix/sdk'
+import { type Attachment, formatComments, type LineRange, linesLabel, rangeLabel, type ReviewComment, type Side } from '../../shared/comments'
+import { focusZone, ISLAND, KeyHintLabel, Keys, useShell, PANE_HEADER } from '@treeix/sdk'
 import { copyText, openMenu } from './contextMenu'
 import { FileIcon, Icon } from './Icon'
 import { inlineByDefault } from './toolStatus'
@@ -158,7 +158,7 @@ export function CommentCard({ comment, onDelete }: { comment: ReviewComment; onD
       <Icon name="comment" className="mt-0.5 size-3.5 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] text-muted-foreground">
-          {comment.range.start > 0 ? `Line ${rangeLabel(comment.range)}` : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}
+          {comment.range.start > 0 ? linesLabel(comment.range) : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}
         </div>
         <Markdown>{comment.text}</Markdown>
         <Attachments attachments={comment.attachments ?? []} />
@@ -284,9 +284,14 @@ export function CommentDraft({
         onKeyDown={(event) => {
           const id = actionForEvent(event.nativeEvent, ['composer.saveAlternative', 'composer.save'])
           if (!id) return
+          // Handled keys stop here, else the menu also runs what it binds to them (⇧⌘↩ is Zen)
           if (id === 'composer.saveAlternative' && alternative) {
+            event.preventDefault()
             if (text.trim()) alternative.onSave(text)
-          } else if (id === 'composer.save') save()
+          } else if (id === 'composer.save') {
+            event.preventDefault()
+            save()
+          }
         }}
         placeholder={allowAttachments ? `${placeholder}. Paste or drop files to attach` : placeholder}
         className="w-full resize-y rounded-md border border-input bg-muted px-2 py-1.5 leading-5 outline-none placeholder:text-muted-foreground/70"
@@ -332,7 +337,7 @@ export function CommentDraft({
             {alternative.label}
           </button>
         )}
-        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-40">
+        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
           {busy ? '...' : submitLabel}
         </button>
       </div>
@@ -358,8 +363,11 @@ export function CommentsPanel({
   const filePaths = [...new Set(comments.map((comment) => comment.filePath))]
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
-        <span className="text-xs text-muted-foreground">{comments.length} on this worktree</span>
+      <div className={`${PANE_HEADER} gap-2 px-3`}>
+        <span title="Comments on this worktree" className="text-[11px] font-semibold text-foreground">
+          Comments
+        </span>
+        {comments.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{comments.length}</span>}
         <span className="flex-1" />
         {comments.length > 0 && (
           <button onClick={onClear} className="h-6 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
@@ -398,13 +406,7 @@ export function CommentsPanel({
                 >
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span>
-                      {comment.range.start > 0
-                        ? `Line ${rangeLabel(comment.range)}`
-                        : comment.kind === 'reference'
-                          ? 'Reference'
-                          : comment.kind === 'browser'
-                            ? 'Browser'
-                            : 'General'}
+                      {comment.range.start > 0 ? linesLabel(comment.range) : comment.kind === 'reference' ? 'Reference' : comment.kind === 'browser' ? 'Browser' : 'General'}
                     </span>
                     <span className="flex-1" />
                     {comment.body && comment.kind !== 'browser' && <InlineToggle comment={comment} onChange={onUpdate} />}
@@ -467,6 +469,7 @@ export function AgentCommentsDrawer({
   onRestore: (id: string) => void
   onClose: () => void
 }): React.JSX.Element {
+  const island = useShell().islandUi
   const ref = useRef<HTMLDivElement>(null)
   const paths = [...new Set(comments.map((comment) => comment.worktreePath))]
   const ordered = paths.flatMap((path) => comments.filter((comment) => comment.worktreePath === path))
@@ -523,8 +526,8 @@ export function AgentCommentsDrawer({
       ref={ref}
       data-drawer
       tabIndex={-1}
-      style={{ top, bottom: 0 }}
-      className="fixed right-0 z-[45] flex w-[440px] max-w-[90vw] flex-col border-l border-input bg-popover outline-none [-webkit-app-region:no-drag]"
+      style={island ? { top: top + 8, bottom: 8 } : { top, bottom: 0 }}
+      className={`fixed z-[45] flex w-[440px] max-w-[90vw] flex-col outline-none [-webkit-app-region:no-drag] ${island ? `right-2 overflow-hidden ${ISLAND}` : 'right-0 border-l border-input bg-popover'}`}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <Icon name="comment" className="size-4 text-muted-foreground" />

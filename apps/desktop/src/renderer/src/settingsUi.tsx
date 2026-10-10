@@ -38,7 +38,7 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
       onClick={onChange}
       className={`relative h-5 w-9 shrink-0 rounded-full ${checked ? 'bg-primary' : 'bg-foreground/15'}`}
     >
-      <span className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow ${checked ? 'translate-x-4' : ''}`} />
+      <span className={`absolute top-0.5 left-0.5 size-4 rounded-full bg-white ${checked ? 'translate-x-4' : ''}`} />
     </button>
   )
 }
@@ -62,13 +62,13 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 }
 
 /** The rows' keyboard cursor is focus; focus itself draws nothing */
-export const SETTING_ROW = 'outline-none first:rounded-t-lg last:rounded-b-lg'
+export const SETTING_ROW = 'rounded-md outline-none'
 
 /** One setting: label and description, its control beside them, or wrapped under them when the page is narrow */
 export function Row({ label, description, children }: { label: string; description: string; children: React.ReactNode }): React.JSX.Element | null {
   if (!useSettingMatch(label, description)) return null
   return (
-    <div data-setting={label} tabIndex={-1} className={`flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-3 last:border-b-0 *:max-w-full ${SETTING_ROW}`}>
+    <div data-setting={label} tabIndex={-1} className={`flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-2 py-3 last:border-b-0 *:max-w-full ${SETTING_ROW}`}>
       <span className="min-w-48 flex-1 break-words">
         <span className="block text-[13px]">{label}</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
@@ -79,10 +79,14 @@ export function Row({ label, description, children }: { label: string; descripti
   )
 }
 
+/** The section a search result sits under; a card named the same skips its title instead of repeating it */
+const ResultSection = createContext('')
+export const SearchSection = ResultSection.Provider
+
 export const Card = ({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element => (
   <SearchGroup title={title} className="mb-6">
-    <h2 className="mb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
-    <div data-card={title} className="rounded-lg border border-border bg-card">
+    {useContext(ResultSection) !== title && <h2 className="mb-1.5 text-[11px] font-semibold text-foreground">{title}</h2>}
+    <div data-card={title} className="-mx-2">
       {children}
     </div>
   </SearchGroup>

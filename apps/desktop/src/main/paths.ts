@@ -9,7 +9,8 @@ export const readJsonFile = async (path: string): Promise<unknown> => parseJson(
 export function insideWorktree(worktreePath: string, filePath: string): string {
   const absolute = resolve(worktreePath, filePath)
   const path = relative(worktreePath, absolute)
-  if (!path || path.startsWith('..') || isAbsolute(path)) throw new Error(`${filePath} is outside the worktree`)
+  if (!path) throw new Error(`${filePath || 'An empty name'} is the worktree itself, name something inside it`)
+  if (path.startsWith('..') || isAbsolute(path)) throw new Error(`${filePath} is outside the worktree`)
   return absolute
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KeyHintLabel, Keys } from '@treeix/sdk'
 import { FileIcon, Icon, type IconName } from './Icon'
 import { EmptyState } from './ui'
@@ -58,6 +58,12 @@ export function CommandPalette({
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
+  // More rows below the edge fade out; scroll padding keeps the picked row clear of the fade
+  const [more, setMore] = useState(false)
+  const measureMore = (): void => {
+    const list = listRef.current
+    setMore(!!list && list.scrollHeight > list.clientHeight + list.scrollTop + 1)
+  }
   const previousFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null)
   const settingEntries = useSettingEntries()
   const openSettings = commands.find((command) => command.id === 'settings')?.run
@@ -86,19 +92,20 @@ export function CommandPalette({
   const results = [...(typedPath ? [{ command: typedPath, score: 0, marks: new Set<number>() }] : []), ...paletteResults([...commands, ...settingCommands], query, browseFiles)]
 
   useEffect(() => setActive(0), [query])
+  useLayoutEffect(measureMore, [results.length])
 
   useEffect(() => {
     listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [active])
 
-  // Closing without running anything puts focus back where it was; a command moves it itself
-  const close = (): void => {
-    previousFocus.current?.focus({ preventScroll: true })
-    onClose()
-  }
+  // Closing without running anything, its own key included, puts focus back where it was; a command moves it itself
+  const ran = useRef(false)
+  useEffect(() => () => void (ran.current || previousFocus.current?.focus({ preventScroll: true })), [])
+  const close = onClose
 
   const run = (result: Result | undefined): void => {
     if (!result) return
+    ran.current = true
     onClose()
     result.command.run()
   }
@@ -137,13 +144,15 @@ export function CommandPalette({
           <Keys combo="esc" />
         </label>
 
-        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        <div
+          ref={listRef}
+          onScroll={measureMore}
+          className={`min-h-0 flex-1 scroll-pb-7 overflow-y-auto p-1.5 ${more ? '[mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]' : ''}`}
+        >
           {results.length === 0 && <EmptyState icon="search" title="No matches" />}
           {results.map(({ command, marks }, index) => (
             <div key={command.id}>
-              {command.group !== results[index - 1]?.command.group && (
-                <div className="px-2.5 pt-2 pb-1 text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{command.group}</div>
-              )}
+              {command.group !== results[index - 1]?.command.group && <div className="px-2.5 pt-2 pb-1 text-[11px] font-semibold text-foreground">{command.group}</div>}
               <button
                 data-index={index}
                 tabIndex={-1}
@@ -172,7 +181,7 @@ export function CommandPalette({
         <div className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
           <KeyHintLabel hint={['↑ ↓', 'move']} />
           <KeyHintLabel hint={['⏎', 'open']} />
-          <KeyHintLabel hint={['esc', query ? 'clear' : 'close']} />
+          {query && <KeyHintLabel hint={['esc', 'clear']} />}
           {!browseFiles && (
             <>
               <span className="flex-1" />

@@ -1,7 +1,7 @@
 import { File, type LineAnnotation, MultiFileDiff, Virtualizer } from '@pierre/diffs/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getShell, isPageKey } from '@treeix/sdk'
-import { type Attachment, extractFileLines, type LineRange, rangeLabel, type ReviewComment } from '../../shared/comments'
+import { type Attachment, extractFileLines, type LineRange, linesLabel, type ReviewComment } from '../../shared/comments'
 import { CommentCard, CommentDraft, orderRange, useCodeDrag } from './Comments'
 import { type Navigate, useSymbolNavigation } from './codeNavigation'
 import { Icon } from './Icon'
@@ -136,6 +136,8 @@ function TextFileView({
 }): React.JSX.Element {
   const [loadedContents, setContents] = useState<string | null | undefined>(undefined)
   const contents = providedContents === undefined ? loadedContents : providedContents
+  /** Gone from disk, e.g. deleted from a terminal while the tab was open */
+  const [missing, setMissing] = useState(false)
   const [draft, setDraft] = useState<LineRange | null>(null)
   const drag = useCodeDrag(setDraft)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -159,6 +161,7 @@ function TextFileView({
   const loadFromDisk = (text: string): void => {
     onDisk.current = text
     latest.current = null
+    setMissing(false)
     setConflict(null)
     setComparing(false)
     setStatus('saved')
@@ -167,9 +170,14 @@ function TextFileView({
 
   /** Called when the file changed on disk: follow it when nothing is unsaved, else ask */
   const checkDisk = async (): Promise<void> => {
-    const text = await window.api.readFile(worktreePath, path).catch(() => null)
-    if (text === null || text === onDisk.current) return
     const hasUnsaved = latest.current !== null && latest.current !== onDisk.current
+    const text = await window.api.readFile(worktreePath, path).catch(() => {
+      // Unsaved typing stays on screen; saving it brings the file back
+      if (!hasUnsaved) setMissing(true)
+      return null
+    })
+    if (text !== null) setMissing(false)
+    if (text === null || text === onDisk.current) return
     if (!hasUnsaved) return loadFromDisk(text)
     clearTimeout(timer.current)
     setConflict(text)
@@ -241,6 +249,7 @@ function TextFileView({
     setDraft(null)
     setEditor(null)
     setStatus('saved')
+    setMissing(false)
     latest.current = null
     onDisk.current = null
     if (providedContents !== undefined) return
@@ -250,7 +259,10 @@ function TextFileView({
         onDisk.current = text
         setContents(text)
       },
-      () => setContents(null)
+      () => {
+        setMissing(true)
+        setContents(null)
+      }
     )
     const unwatch = window.api.watchFile(worktreePath, path, () => void checkDiskRef.current())
     // Switching files or closing the tab saves what was typed
@@ -285,6 +297,7 @@ function TextFileView({
   }, [contents, line])
 
   if (contents === undefined) return <EmptyState fill title="Loading..." />
+  if (missing) return <EmptyState fill icon="file" title={`${path.split('/').pop()} no longer exists`} />
   if (contents === null) return <EmptyState fill icon="file" title="Binary or too large to preview" />
 
   const lineAnnotations: LineAnnotation<{ commentId: string | null }>[] = [
@@ -293,7 +306,7 @@ function TextFileView({
   ]
   const draftCard = draft && (
     <CommentDraft
-      label={`Comment on line ${rangeLabel(draft)}`}
+      label={`Comment on ${linesLabel(draft).toLowerCase()}`}
       onCancel={() => setDraft(null)}
       onSave={(text, attachments) => {
         onAddComment(draft, extractFileLines(latest.current ?? contents, draft), text, attachments)
@@ -316,8 +329,10 @@ function TextFileView({
       ]
     : []
 
+  // Once saved, the status pill waits for the pointer so it doesn't sit over the code
+  const quietStatus = status === 'saved' && conflict === null
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div className="group/file relative flex min-h-0 flex-1 flex-col">
       {conflict !== null && (
         <div className="flex shrink-0 items-center gap-2 border-b border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs text-amber-200">
           <span className="flex-1">This file changed on disk while you had unsaved edits. Autosave is paused.</span>
@@ -344,7 +359,9 @@ function TextFileView({
         </div>
       )}
       {editable && (
-        <div className="absolute top-1.5 right-4 z-20 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 text-muted-foreground backdrop-blur">
+        <div
+          className={`absolute top-1.5 right-4 z-20 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 text-muted-foreground backdrop-blur transition-opacity ${quietStatus ? 'opacity-0 group-hover/file:opacity-100 focus-within:opacity-100' : ''}`}
+        >
           <span
             title={
               status === 'failed'

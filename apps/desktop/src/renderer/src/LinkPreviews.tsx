@@ -20,7 +20,7 @@ export function LinkPreviews({ urls, exclude = [] }: { urls: string[]; exclude?:
     <>
       {groups.map(({ preview, links }) => (
         <section key={preview.label} className="mt-4 rounded-xl border border-border">
-          <h3 className="flex items-center border-b border-border px-4 py-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+          <h3 className="flex items-center border-b border-border px-4 py-2 text-[11px] font-semibold text-foreground">
             {preview.label} <span className="ml-1.5 font-normal">{links.length}</span>
           </h3>
           {links.map(({ key, url }) => (

@@ -85,11 +85,12 @@ const paths = {
   folderOpen: (
     <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
   ),
+  // Long straight edges read heavier than a glyph of curves and diagonals at the same stroke, so this one is drawn lighter
   panel: (
-    <>
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M9 3v18" />
-    </>
+    <g strokeWidth={1.5}>
+      <rect width="18" height="14" x="3" y="5" rx="2" />
+      <path d="M9 5v14" />
+    </g>
   ),
   list: <path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13" />,
   bell: (
@@ -370,7 +371,11 @@ export function FileIcon({ path }: { path: string }): React.JSX.Element {
     )
   }
   return (
-    <span aria-hidden style={{ color }} className="inline-flex h-3.5 w-5 shrink-0 items-center justify-center font-mono text-[8.5px] leading-none font-bold tracking-tight">
+    <span
+      aria-hidden
+      style={{ color }}
+      className="file-badge inline-flex h-3.5 w-5 shrink-0 items-center justify-center font-mono text-[8.5px] leading-none font-bold tracking-tight"
+    >
       {label}
     </span>
   )

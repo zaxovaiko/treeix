@@ -130,11 +130,12 @@ export function FilterSearch<T>({
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
           placeholder={tokens.length ? '' : placeholder}
-          className="h-6 min-w-16 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
+          className="h-6 min-w-12 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground/70"
         />
       </label>
 
-      {open && (
+      {/* With nothing to suggest and nothing typed, an empty popup would only cover the list */}
+      {open && (sections.length > 0 || needle) && (
         <Popup anchor={box} align="stretch" className="max-h-96 overflow-y-auto rounded-lg border border-input bg-popover p-1">
           {sections.length === 0 && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{textGroup && needle ? freeTextHint : 'No matching filters'}</p>}
           {sections.map((section, sectionIndex) => (

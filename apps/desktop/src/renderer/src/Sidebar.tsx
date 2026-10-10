@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { focusZone, isPageKey, useListNav, useZone } from '@treeix/sdk'
+import { focusZone, isPageKey, useListNav, useZone, PANE_HEADER } from '@treeix/sdk'
 import type { Branch, Repo, Worktree } from '../../shared/types'
 import { copyText } from './contextMenu'
 import { type Activity, ActivityMark, NEWS } from './activity'
@@ -249,7 +249,7 @@ export function Sidebar({
         <div key={row.key} {...cursor} onContextMenu={(event) => onRepoMenu(event, row.repo)} className="group/row mx-1.5 mt-1 flex h-7 items-center rounded-md hover:bg-accent">
           <button onClick={() => activate(row)} title={tildify(row.repo.path)} className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-1.5 text-left">
             <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground/65 ${open ? 'rotate-90' : ''}`} />
-            <span className="min-w-0 truncate text-[10.5px] font-medium tracking-wide text-muted-foreground uppercase">{baseName(row.repo.path)}</span>
+            <span className="min-w-0 truncate text-[11px] font-semibold text-foreground">{baseName(row.repo.path)}</span>
           </button>
           <button
             title="New worktree or branch (n)"
@@ -283,18 +283,18 @@ export function Sidebar({
         >
           <Icon name={worktree.path === row.repo.path ? 'folder' : 'branch'} className="size-3.5 text-muted-foreground" />
           <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${active ? 'text-foreground' : 'text-foreground/85'}`}>{branchLabel(worktree)}</span>
-          {worktree.changedFiles > 0 && <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>}
           {state && NEWS.includes(state) && <ActivityMark activity={state} className="size-2" />}
+          {worktree.changedFiles > 0 && <span className="shrink-0 rounded bg-amber-400/12 px-1 font-mono text-[10.5px] text-amber-400 tabular-nums">{worktree.changedFiles}</span>}
         </button>
       )
     }
     if (row.kind === 'branches') {
       return (
         <div key={row.key} {...cursor} className="mx-1.5 flex h-6 items-center gap-1 rounded-md pr-1 pl-5 text-[10.5px] text-muted-foreground">
-          <button onClick={() => activate(row)} className="flex min-w-0 flex-1 items-center gap-1 text-left tracking-wide uppercase hover:text-foreground">
+          <button onClick={() => activate(row)} className="flex min-w-0 flex-1 items-center gap-1 text-left hover:text-foreground">
             <Icon name="chevron" className={`size-3 ${branchGroupOpen(row.repo.path) ? 'rotate-90' : ''}`} />
             Branches
-            <span className="tabular-nums normal-case">{showRemote ? row.local + row.remote : row.local}</span>
+            <span className="tabular-nums">{showRemote ? row.local + row.remote : row.local}</span>
           </button>
           {row.remote > 0 && (
             <button
@@ -354,14 +354,14 @@ export function Sidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
-        <div className="flex min-w-0 items-center gap-1">
+      <div className="flex shrink-0 flex-col">
+        <div className={`${PANE_HEADER} min-w-0 gap-1 px-1.5`}>
           <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
             <Icon name="search" className="size-3.5" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter worktrees and branches"
+              placeholder="Filter worktrees"
               className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
             />
             {query && (
@@ -382,7 +382,7 @@ export function Sidebar({
           {canFoldAll && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
         </div>
         {folderFilter && (
-          <div ref={folderAnchor} className="relative flex min-w-0">
+          <div ref={folderAnchor} className="relative flex h-9 min-w-0 items-center border-b border-border px-1.5">
             <button
               title={focus ? 'Exit focus to filter by folder' : folder ? tildify(folder) : 'Filter by folder'}
               disabled={Boolean(focus)}

@@ -99,6 +99,9 @@ export function rangeLabel({ start, end, side, endSide }: LineRange): string {
   return onlyDeletions ? `${lines} (old)` : lines
 }
 
+/** "Line 4" or "Lines 4-9 (old)" */
+export const linesLabel = (range: LineRange): string => `${range.start === range.end ? 'Line' : 'Lines'} ${rangeLabel(range)}`
+
 /** Line 0 means the comment is about the whole file or PR, not specific lines */
 const commentLocation = (comment: ReviewComment): string => (comment.range.start > 0 ? `${comment.filePath}:${rangeLabel(comment.range)}` : comment.filePath)
 
