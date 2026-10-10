@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Kbd, ListToggle, useHost } from '@treeix/sdk'
+import { Kbd, ListToggle, useHost, PANE_HEADER } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
@@ -263,7 +263,7 @@ function LabelEditor({ labels, onAdd, onRemove }: { labels: string[]; onAdd: (la
   const [draft, setDraft] = useState('')
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Labels</span>
+      <span className="mr-1 text-[11px] font-semibold text-foreground">Labels</span>
       {labels.map((label) => (
         <span key={label} className="flex max-w-60 min-w-0 items-center gap-1 rounded bg-foreground/8 pr-0.5 pl-1.5 text-[11px] text-muted-foreground">
           <span className="truncate">{label}</span>
@@ -310,9 +310,7 @@ const Meta = ({ label, children }: { label: string; children: React.ReactNode })
   </span>
 )
 
-const SectionTitle = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
-  <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{children}</h3>
-)
+const SectionTitle = ({ children }: { children: React.ReactNode }): React.JSX.Element => <h3 className="text-[11px] font-semibold text-foreground">{children}</h3>
 
 export function TicketMain({
   ticket,
@@ -353,7 +351,7 @@ export function TicketMain({
 
   return (
     <MarkdownFoldScope>
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-xs text-muted-foreground">
+      <header className={`${PANE_HEADER} gap-2 px-1.5 text-xs text-muted-foreground`}>
         <ListToggle />
         <span className="shrink-0 font-mono text-foreground">{item.key}</span>
         <CopyButton label="Copy key" text={() => item.key} />

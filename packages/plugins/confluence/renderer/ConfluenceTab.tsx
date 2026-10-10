@@ -1,13 +1,13 @@
 import { actionForEvent, matchesAction } from '@treeix/shared/keymap'
 import { useEffect, useState } from 'react'
-import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav, usePageKeys, usePanels, useZone } from '@treeix/sdk'
+import { focusZone, isPageKey, Kbd, ListToggle, PageLayout, useHost, useListNav, usePageKeys, usePanels, useZone, PANE_HEADER } from '@treeix/sdk'
 import { copyText } from '@treeix/app/contextMenu'
 import { type FilterGroup, FilterSearch, type FilterToken, matchesTokens, parseTokens } from '@treeix/app/FilterSearch'
 import { Icon } from '@treeix/app/Icon'
 import { MarkdownFoldButton, MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { timeAgo } from '@treeix/app/time'
-import { EmptyState, errorMessage, FoldAllButton, IconButton, usePersisted } from '@treeix/app/ui'
+import { EmptyState, errorMessage, FoldAllButton, IconButton, Notice, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import type { CommentList, Page, PageList, PageSummary } from '../shared/types'
 import { useCached } from '@treeix/atlassian/renderer/cache'
@@ -69,7 +69,7 @@ function PageComments({ page }: { page: Page }): React.JSX.Element {
         target={page.title}
         title={
           <>
-            <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Comments {commentCount(comments) || ''}</h3>
+            <h3 className="text-[11px] font-semibold text-foreground">Comments {commentCount(comments) || ''}</h3>
             {error && <p className="text-xs break-words text-red-400 select-text">{error}</p>}
           </>
         }
@@ -103,7 +103,7 @@ function PageMain({
   if (!page) return error ? <EmptyState fill icon="file" title={error} /> : <EmptyState fill title="Loading page..." />
   return (
     <MarkdownFoldScope>
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-1.5 text-xs text-muted-foreground">
+      <header className={`${PANE_HEADER} gap-2 px-1.5 text-xs text-muted-foreground`}>
         <ListToggle />
         {parent && (
           <>
@@ -163,7 +163,7 @@ function PageMain({
           </div>
           {page.children.length > 0 && (
             <section className="mt-6">
-              <h3 className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Child pages</h3>
+              <h3 className="mb-1 text-[11px] font-semibold text-foreground">Child pages</h3>
               {page.children.map((child) => (
                 <button key={child.id} onClick={() => openRequest.update({ id: child.id })} className={`${ROW} -mx-2 h-8 px-2 text-[13px]`}>
                   <Icon name="file" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -399,7 +399,8 @@ export function ConfluenceTab(): React.JSX.Element {
   let index = -1
   const listPane = (
     <>
-      <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
+      <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3`}>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground">Pages</span>
         {spaceKeys.length > 1 && <FoldAllButton anyOpen={anySpaceOpen} groups="spaces" onClick={foldAll} />}
         <IconButton label={recentLoading ? 'Reloading...' : 'Reload recently viewed'} onClick={reloadRecent}>
           <Icon name="refresh" className={`size-3.5 ${recentLoading ? 'opacity-40' : ''}`} />
@@ -428,7 +429,7 @@ export function ConfluenceTab(): React.JSX.Element {
             groups={FILTER_GROUPS}
             tokens={filters}
             onChange={setFilters}
-            placeholder="Search (/), filter by space, or paste a page link or id"
+            placeholder="Search or paste a page link"
             freeTextHint="Press ↵ to search Confluence for this text"
           />
         </div>
@@ -437,10 +438,10 @@ export function ConfluenceTab(): React.JSX.Element {
         {(results || filters.length > 0) && sections.length === 0 && <EmptyState title="No pages found" />}
         {sections.map((candidate) => (
           <div key={candidate.title}>
-            <div className="px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-              {candidate.title} {results && <span className="font-normal">{candidate.count}</span>}
+            <div className="px-2 pt-3 pb-1 text-[11px] font-semibold text-foreground">
+              {candidate.title} {results && candidate.count > 0 && <span className="font-normal">{candidate.count}</span>}
             </div>
-            {candidate.error && <p className="px-2 pb-2 text-xs break-words text-amber-400 select-text">{candidate.error}</p>}
+            {candidate.error && <Notice className="mx-1.5 mb-2">{candidate.error}</Notice>}
             {candidate.entries.map((entry) => row(entry, ++index))}
           </div>
         ))}

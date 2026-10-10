@@ -8,7 +8,14 @@ const TIMEOUT_MS = 60_000
 export const failure = (reason: unknown): string => {
   const stderr = isJson(reason) ? text(reason.stderr).trim() : ''
   if (isJson(reason) && reason.code === 'ENOENT') return 'Atlassian CLI not found. Install it with: brew tap atlassian/homebrew-acli && brew install acli'
-  return (stderr || (reason instanceof Error ? reason.message : String(reason))).split('\n')[0]
+  // acli leads with a cross and "Error:"; the notice showing it already says so
+  const line = (stderr || (reason instanceof Error ? reason.message : String(reason)))
+    .split('\n')[0]
+    .replace(/^[✗×✕]\s*/, '')
+    .replace(/^error:\s*/i, '')
+    // acli's sign-in hint names a placeholder, not a command anyone can run
+    .replace(/'?acli \[product\] auth login'?/, 'acli jira auth login --web in a terminal')
+  return line.charAt(0).toUpperCase() + line.slice(1)
 }
 
 /** acli's output; rejects with acli's own message */

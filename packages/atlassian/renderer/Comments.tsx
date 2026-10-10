@@ -82,7 +82,7 @@ function CommentBox({
           <button
             onClick={send}
             disabled={sending || !body.trim()}
-            className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40"
+            className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
           >
             {sending ? 'Sending...' : label}
             <Kbd hint>⌘↵</Kbd>

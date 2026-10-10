@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { parseSite } from '@treeix/atlassian/main/cli'
+import { failure, parseSite } from '@treeix/atlassian/main/cli'
 import { sprintJql, threadComments, toWorkItem } from './acli'
 
 test('toWorkItem reads Jira issue JSON and builds the browse link', () => {
@@ -57,4 +57,10 @@ test("threadComments nests a comment opening with an earlier author under that a
   ])
   expect(roots.map((root) => root.id)).toEqual(['1', '4', '5'])
   expect(roots[0].replies?.map((reply) => reply.id)).toEqual(['2', '3'])
+})
+
+test('the sign-in hint names a command that runs', () => {
+  expect(failure({ stderr: "✗ Error: unauthorized: use 'acli [product] auth login' to authenticate\n" })).toBe(
+    'Unauthorized: use acli jira auth login --web in a terminal to authenticate'
+  )
 })

@@ -1,9 +1,9 @@
 import { actionForEvent } from '@treeix/shared/keymap'
 import { useEffect, useState } from 'react'
-import { focusZone, isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels, useZone } from '@treeix/sdk'
+import { focusZone, isPageKey, Kbd, PageLayout, useHost, useListNav, usePageKeys, usePanels, useZone, PANE_HEADER } from '@treeix/sdk'
 import { copyText, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
-import { EmptyState, FoldAllButton, IconButton, UserAvatar, usePersisted } from '@treeix/app/ui'
+import { EmptyState, FoldAllButton, IconButton, Notice, UserAvatar, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import type { Epic, JiraPerson, WorkItem, WorkItemDetail, WorkItemList } from '../shared/types'
 import { branchFor } from './branch'
@@ -340,7 +340,7 @@ export function JiraTasks(): React.JSX.Element {
         {...nav.rowProps(index)}
         onClick={() => fold(group.id, open)}
         title={open ? 'Fold (←)' : 'Unfold (→)'}
-        className="mt-1 flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase hover:bg-accent hover:text-foreground"
+        className="mt-1 flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-semibold text-foreground hover:bg-accent"
       >
         <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
         {group.bucket && <span className="truncate">{BUCKETS[group.bucket]}</span>}
@@ -380,7 +380,8 @@ export function JiraTasks(): React.JSX.Element {
 
   const listPane = (
     <>
-      <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border pr-1.5 pl-3">
+      <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3`}>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground">Tasks</span>
         {groupIds.length > 1 && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
         <IconButton label={loading ? 'Refreshing...' : 'Refresh'} onClick={refresh}>
           <Icon name="refresh" className={`size-3.5 ${loading ? 'opacity-40' : ''}`} />
@@ -437,7 +438,7 @@ export function JiraTasks(): React.JSX.Element {
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
-        {error && <p className="px-2 py-3 text-xs break-words text-amber-400 select-text">{error}</p>}
+        {error && <Notice className="mx-1.5 my-2">{error}</Notice>}
         {!list && !error && <EmptyState title="Loading tasks..." />}
         {list && visible.length === 0 && <EmptyState title="No tasks match" />}
         {items.length >= LIST_LIMIT && (
@@ -458,17 +459,21 @@ export function JiraTasks(): React.JSX.Element {
       listWidth={400}
       list={listPane}
       main={
-        <TicketMain
-          ticket={ticket}
-          epic={selected ? epicOf.get(selected.key) : undefined}
-          statuses={statuses}
-          types={types}
-          people={people}
-          picker={picker}
-          setPicker={setPicker}
-          editingSummary={editingSummary}
-          setEditingSummary={setEditingSummary}
-        />
+        !ticket && visible.length === 0 ? (
+          <div className="flex-1" />
+        ) : (
+          <TicketMain
+            ticket={ticket}
+            epic={selected ? epicOf.get(selected.key) : undefined}
+            statuses={statuses}
+            types={types}
+            people={people}
+            picker={picker}
+            setPicker={setPicker}
+            editingSummary={editingSummary}
+            setEditingSummary={setEditingSummary}
+          />
+        )
       }
     />
   )

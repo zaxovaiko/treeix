@@ -69,6 +69,7 @@ function JiraSettings(): React.JSX.Element {
         description="JQL for the Tasks tab, without the assignee: the tab's Mine and Anyone switch adds that. Needs the Atlassian CLI signed in: acli jira auth login --web"
       >
         <input
+          aria-label="Work items JQL"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={() => jiraSettings.update({ jql: draft.trim() || DEFAULT_JQL })}

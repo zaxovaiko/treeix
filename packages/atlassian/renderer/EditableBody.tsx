@@ -83,7 +83,11 @@ export function EditableBody({
         <button onClick={close} disabled={saving} className="flex h-7 items-center rounded-md px-3 hover:bg-accent disabled:opacity-40">
           Cancel
         </button>
-        <button onClick={save} disabled={saving} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-white disabled:opacity-40">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+        >
           {saving ? 'Saving...' : 'Save'}
           <Kbd hint>⌘S</Kbd>
         </button>
@@ -122,7 +126,12 @@ export function EditableBody({
             <button onClick={close} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
               Cancel
             </button>
-            <button autoFocus onClick={save} disabled={saving} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:opacity-40">
+            <button
+              autoFocus
+              onClick={save}
+              disabled={saving}
+              className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+            >
               {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
