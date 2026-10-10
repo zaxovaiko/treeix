@@ -238,7 +238,12 @@ export const acpAdapter: ChatAdapter = {
   label: 'Agent Client Protocol',
   connect: async ({ cwd, command, instructions, preset, directories, env, resume }) => {
     // Claude Code reads the CLAUDE.md and rules of added folders only with this set
-    const child = spawnInShell(command, cwd, directories?.length ? { ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1' } : env)
+    // ponytail: claude-agent-acp (0.89.1 too) never closes an advisor call, so a turn that consults it ends in an error; drop the switch once it does
+    const child = spawnInShell(command, cwd, {
+      ...env,
+      CLAUDE_CODE_DISABLE_ADVISOR_TOOL: '1',
+      ...(directories?.length ? { CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1' } : {})
+    })
     let stderr = ''
     const withTail = (message: string) => new Error(`${message}: ${stderr.trim() || 'no output'}`)
     // Counts silence, not total time: a slow start that keeps reporting progress is not a hang
