@@ -37,6 +37,7 @@ import {
   activeSession,
   type ClosedSession,
   closeActiveSession,
+  killSession,
   createSession,
   focusSession,
   isRestored,
@@ -631,6 +632,7 @@ const plugin: RendererPlugin = {
         revealSession(id)
         setTimeout(() => focusSession(id), 50)
       },
+      close: killSession,
       showFile: (root, path) => setPreview({ root, path, line: null })
     }
   },

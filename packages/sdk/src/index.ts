@@ -133,6 +133,8 @@ export type SessionsService = {
   active: () => string | null
   /** Shows the session in the terminal area and focuses it */
   reveal: (id: string) => void
+  /** Ends the session; it stays in the history, so an agent conversation can be resumed */
+  close: (id: string) => void
   /** Shows a file beside the terminals; `path` is relative to `root` */
   showFile: (root: string, path: string) => void
 }

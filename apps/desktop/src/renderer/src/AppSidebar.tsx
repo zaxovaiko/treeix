@@ -56,15 +56,24 @@ function Sessions({ sessions }: { sessions: SessionSummary[] }): React.JSX.Eleme
   return (
     <>
       {sessions.map((session) => (
-        <button
-          key={session.id}
-          onClick={() => open(session.id)}
-          className={`${ROW} h-7 pl-7 hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
-        >
-          {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
-          <span className="min-w-0 flex-1 truncate">{session.title}</span>
-          <StatusDot session={session} />
-        </button>
+        // The close button sits beside the row, not in it, so its click does not also open the session
+        <div key={session.id} className="group relative">
+          <button
+            onClick={() => open(session.id)}
+            className={`${ROW} h-7 pl-7 hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
+          >
+            {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
+            <span className="min-w-0 flex-1 truncate">{session.title}</span>
+            <span className="flex group-hover:invisible">
+              <StatusDot session={session} />
+            </span>
+          </button>
+          <span className="absolute top-0 right-0 hidden group-hover:flex">
+            <IconButton label="Close session" onClick={() => service?.close(session.id)}>
+              <Icon name="close" className="size-3" />
+            </IconButton>
+          </span>
+        </div>
       ))}
     </>
   )
