@@ -64,6 +64,7 @@ function Sessions({ sessions }: { sessions: SessionSummary[] }): React.JSX.Eleme
           >
             {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
             <span className="min-w-0 flex-1 truncate">{session.title}</span>
+            {session.split && <Icon name="splitRight" className="size-3 shrink-0 text-muted-foreground" />}
             <span className="flex group-hover:invisible">
               <StatusDot session={session} />
             </span>

@@ -33,6 +33,7 @@ import { startRename } from './rename'
 import { openSession, WorkspaceTerminals } from './SessionPanel'
 import { findInFiles, resolvePath } from './fileLinks'
 import { NEW_TAB_ACTIONS } from './sessionMeta'
+import type { PaneLayout } from './paneLayout'
 import {
   activeSession,
   type ClosedSession,
@@ -102,13 +103,15 @@ const closeFileTab = (file: FilePreview): void => {
 /** The ⌘⇧J session switcher, `closed` for G H */
 const dialogs = definePluginSettings('terminal-dialog', () => ({ sessions: null as 'all' | 'closed' | null }))
 
-let summaries: { from: Session[]; list: SessionSummary[] } = { from: [], list: [] }
-/** Sessions without their xterm objects, the same array until the sessions change */
+let summaries: { from: Session[]; splits: Record<string, PaneLayout>; list: SessionSummary[] } = { from: [], splits: {}, list: [] }
+/** Sessions without their xterm objects, the same array until the sessions or splits change */
 function sessionSummaries(): SessionSummary[] {
-  const { sessions } = getTerminals()
-  if (summaries.from !== sessions) {
+  const { sessions, splits } = getTerminals()
+  if (summaries.from !== sessions || summaries.splits !== splits) {
+    const split = new Set(Object.values(splits).flat(2))
     summaries = {
       from: sessions,
+      splits,
       list: sessions.map(({ id, kind, view, title, status, exitCode, worktreePath, workspaceId, startedAt }) => ({
         id,
         kind,
@@ -118,7 +121,8 @@ function sessionSummaries(): SessionSummary[] {
         exitCode,
         worktreePath,
         workspaceId,
-        startedAt
+        startedAt,
+        split: split.has(id)
       }))
     }
   }

@@ -108,6 +108,8 @@ export type SessionSummary = {
   worktreePath: string
   workspaceId: string
   startedAt: number
+  /** On screen in a split with other sessions of its workspace */
+  split?: boolean
 }
 
 /** A TCP port a session's process listens on, e.g. a dev server */
