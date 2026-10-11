@@ -43,9 +43,10 @@ function SectionHeader({ label, open, onToggle, children }: { label: string; ope
 }
 
 /** The sessions of the workspace on screen, under its row */
-function Sessions({ sessions }: { sessions: SessionSummary[] }): React.JSX.Element {
+function Sessions({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen: () => void }): React.JSX.Element {
   const host = useHost()
   const open = (id: string): void => {
+    onOpen()
     host.setActiveTab(TERMINAL_TAB)
     host.service('sessions')?.reveal(id)
   }
@@ -177,7 +178,7 @@ function Workspaces({
             </IconButton>
           </span>
         </button>
-        {open && <Sessions sessions={own} />}
+        {open && <Sessions sessions={own} onOpen={() => current || onSwitch(workspace.id)} />}
       </div>
     )
   }
