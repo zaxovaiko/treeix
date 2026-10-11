@@ -652,7 +652,7 @@ function App(): React.JSX.Element {
       comments={comments.filter((comment) => comment.worktreePath === worktreePath && comment.kind === 'file' && comment.filePath === path)}
       onNavigate={navigate}
       onDeleteComment={deleteComment}
-      onSaved={preview ? undefined : () => loadWorktree(worktreePath)}
+      onSaved={() => loadWorktree(worktreePath)}
       onAddComment={(range, code, text, attachments) =>
         setComments([...comments, { id: crypto.randomUUID(), worktreePath, filePath: path, range, code, text, attachments, kind: 'file' }])
       }

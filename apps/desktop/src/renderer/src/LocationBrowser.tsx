@@ -209,7 +209,10 @@ export function LocationsDialog({
       // Only the top dialog reacts: a references lookup can open over search, and later dialogs come later in the DOM
       const dialogs = document.querySelectorAll('[data-locations-dialog]')
       if (dialogs[dialogs.length - 1] !== rootRef.current) return
+      // Arrows and Enter belong to the preview editor while typing in it
+      const inEditor = event.target instanceof Element && event.target.closest('.monaco-editor')
       if (event.key === 'Escape') onClose()
+      else if (inEditor) return
       else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') setIndex((value) => Math.max(0, Math.min(ordered.length - 1, value + (event.key === 'ArrowDown' ? 1 : -1))))
       else if (event.key === 'Enter' && current) onPick(current)
       else return
