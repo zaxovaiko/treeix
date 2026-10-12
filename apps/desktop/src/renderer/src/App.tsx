@@ -744,10 +744,18 @@ function App(): React.JSX.Element {
     setAppTab(tab.key)
   }
 
+  /** Tabs in the order they were last shown, newest last, so closing one goes back to the one before */
+  const tabHistory = useRef<string[]>([])
+  useEffect(() => {
+    tabHistory.current = [...tabHistory.current.filter((tab) => tab !== appTab), appTab].slice(-20)
+  }, [appTab])
+
   const closeTab = (key: string): void => {
     const tab = docTabs.find((candidate) => candidate.key === key)
     setDocTabs(docTabs.filter((candidate) => candidate.key !== key))
-    if (appTab === key) setAppTab(tab?.parent ?? 'worktrees')
+    if (appTab !== key) return
+    const previous = tabHistory.current.findLast((candidate) => candidate !== key && tabExists(candidate))
+    setAppTab(previous ?? tab?.parent ?? 'worktrees')
   }
 
   const startSession = (kind: SessionKind, cwd = defaultCwd, prompt = ''): void => {
