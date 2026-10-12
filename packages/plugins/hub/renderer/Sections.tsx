@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useHost } from '@treeix/sdk'
 import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
@@ -7,7 +6,7 @@ import { errorMessage, IconButton } from '@treeix/app/ui'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { shownRun, StatusIcon } from './RunView'
-import { asking, deleteAgent, type HubChat, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, isStale, setConversation, TAB_ID } from './store'
+import { asking, deleteAgent, type HubChat, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, setConversation, TAB_ID } from './store'
 
 /** One leading column for avatars and icons, so every label in the sidebar starts on the same line */
 const LEAD = 'flex w-[26px] shrink-0 justify-center'
@@ -155,22 +154,21 @@ export function WorkflowsSection(): React.JSX.Element {
   )
 }
 
-/** Conversations and runs, newest first; a day of inactivity folds one into the closed Older group at the end */
+/** Calendar days between `at` and today, so last night reads as Yesterday even a few hours later */
+const daysAgo = (at: number): number => {
+  const midnight = (time: number): number => new Date(time).setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((midnight(Date.now()) - midnight(at)) / (24 * 60 * 60 * 1000)))
+}
+const dayLabel = (days: number): string => (days === 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`)
+
+/** Conversations and runs together, newest first, under a separator per day */
 export function HistorySection(): React.JSX.Element {
   const host = useHost()
   const agents = hubAgents.use()
-  const { conversations, chats: allChats } = hubSettings.use()
+  const { conversations, chats } = hubSettings.use()
   const selection = useShownRow()
   const open = useOpen()
-  const [olderOpen, setOlderOpen] = useState({ chats: false, runs: false })
-  const allRuns = hubRuns.use()
-  const freshRuns = allRuns.filter((run) => run.endedAt === null || !isStale(run.startedAt))
-  const olderRuns = allRuns.filter((run) => !freshRuns.includes(run))
-  const runs = olderOpen.runs ? [...freshRuns, ...olderRuns] : freshRuns
-  const knownChats = allChats.filter((entry) => agents.some((agent) => agent.id === entry.agentId))
-  const freshChats = knownChats.filter((entry) => !isStale(entry.updatedAt))
-  const olderChats = knownChats.filter((entry) => isStale(entry.updatedAt))
-  const chats = olderOpen.chats ? [...freshChats, ...olderChats] : freshChats
+  const runs = hubRuns.use()
 
   const removeChat = (entry: HubChat): void => {
     // The open conversation stays open; a new one replaces it next time the agent is picked
@@ -178,9 +176,9 @@ export function HistorySection(): React.JSX.Element {
     hubSettings.update({ chats: hubSettings.get().chats.filter((other) => other.sessionId !== entry.sessionId) })
   }
 
-  /** A history row with a × on hover; faded inside the Older group */
-  const historyRow = (row: string, title: string, removeLabel: string, onRemove: (() => void) | null, at: number, older: boolean, children: React.ReactNode): React.JSX.Element => (
-    <div key={row} className={`group relative ${older ? 'opacity-50 hover:opacity-100' : ''}`}>
+  /** A history row with a × on hover */
+  const historyRow = (row: string, title: string, removeLabel: string, onRemove: (() => void) | null, at: number, children: React.ReactNode): React.JSX.Element => (
+    <div key={row} className="group relative">
       <button
         onClick={() => open(row)}
         onContextMenu={(event) => onRemove && openMenu(event, [{ label: removeLabel, run: onRemove }])}
@@ -201,59 +199,55 @@ export function HistorySection(): React.JSX.Element {
     </div>
   )
 
-  const olderToggle = (section: 'chats' | 'runs', count: number): React.ReactNode =>
-    count > 0 && (
-      <button
-        key={`older:${section}`}
-        onClick={() => setOlderOpen({ ...olderOpen, [section]: !olderOpen[section] })}
-        aria-expanded={olderOpen[section]}
-        className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <Icon name="chevron" className={`size-3 transition-transform ${olderOpen[section] ? 'rotate-90' : ''}`} />
-        Older
-        <span className="tabular-nums">{count}</span>
-      </button>
+  const chatRows = chats.flatMap((entry) => {
+    const agent = agents.find((candidate) => candidate.id === entry.agentId)
+    if (!agent) return []
+    const row = historyRow(
+      `chat:${entry.sessionId}`,
+      entry.title,
+      'Remove from history',
+      () => removeChat(entry),
+      entry.updatedAt,
+      <>
+        <span className={LEAD}>
+          <AgentAvatar agent={agent} size={16} />
+        </span>
+        <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+      </>
     )
+    return [{ at: entry.updatedAt, row }]
+  })
+  const runRows = runs.map((run) => ({
+    at: run.startedAt,
+    row: historyRow(
+      `run:${run.id}`,
+      run.title.replace(/^(jira|notion):/, ''),
+      'Remove the run',
+      run.endedAt === null ? null : () => void hubApi.removeRun(run.id).catch((reason: unknown) => host.flash(errorMessage(reason))),
+      run.startedAt,
+      <>
+        <span className={LEAD}>
+          <StatusIcon status={shownRun(run)} />
+        </span>
+        {runTitle(run.title)}
+      </>
+    )
+  }))
 
   return (
     <>
-      {chats.map((entry, index) => {
-        const agent = agents.find((candidate) => candidate.id === entry.agentId)
-        return [
-          index === freshChats.length && olderToggle('chats', olderChats.length),
-          historyRow(
-            `chat:${entry.sessionId}`,
-            entry.title,
-            'Remove from history',
-            () => removeChat(entry),
-            entry.updatedAt,
-            index >= freshChats.length,
-            <>
-              <span className={LEAD}>{agent && <AgentAvatar agent={agent} size={16} />}</span>
-              <span className="min-w-0 flex-1 truncate">{entry.title}</span>
-            </>
-          )
-        ]
-      })}
-      {!olderOpen.chats && olderToggle('chats', olderChats.length)}
-      {runs.map((run, index) => [
-        index === freshRuns.length && olderToggle('runs', olderRuns.length),
-        historyRow(
-          `run:${run.id}`,
-          run.title.replace(/^(jira|notion):/, ''),
-          'Remove the run',
-          run.endedAt === null ? null : () => void hubApi.removeRun(run.id).catch((reason: unknown) => host.flash(errorMessage(reason))),
-          run.startedAt,
-          index >= freshRuns.length,
-          <>
-            <span className={LEAD}>
-              <StatusIcon status={shownRun(run)} />
-            </span>
-            {runTitle(run.title)}
-          </>
-        )
-      ])}
-      {!olderOpen.runs && olderToggle('runs', olderRuns.length)}
+      {[...chatRows, ...runRows]
+        .sort((a, b) => b.at - a.at)
+        .map(({ at, row }, index, rows) => {
+          const days = daysAgo(at)
+          if (index > 0 && daysAgo(rows[index - 1].at) === days) return row
+          return [
+            <div key={`day:${days}`} className="flex h-6 items-end px-2 pb-0.5 text-[11px] text-muted-foreground">
+              {dayLabel(days)}
+            </div>,
+            row
+          ]
+        })}
     </>
   )
 }

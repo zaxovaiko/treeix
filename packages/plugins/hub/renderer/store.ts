@@ -98,10 +98,6 @@ hubSelection.subscribe(() => localStorage.setItem(SELECTED_KEY, JSON.stringify(h
 /** The agent the editor dialog is on, `new` for one being created */
 export const hubEditing = createStore<HubAgent | 'new' | null>(null)
 
-const DAY_MS = 24 * 60 * 60 * 1000
-/** A day without a message or a finished run archives it into the sidebar's Older group */
-export const isStale = (at: number): boolean => Date.now() - at > DAY_MS
-
 /** `<run>:<step>`, the step a run opens on when the canvas asks for its log */
 export const hubRunStep = createStore<string | null>(null)
 
