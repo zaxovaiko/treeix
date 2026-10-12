@@ -454,23 +454,6 @@ const SETTINGS: SettingSpec[] = [
   {
     section: 'General',
     card: 'Layout',
-    label: 'Close button',
-    description: 'Which end of an open title bar tab and of a pane header in a split holds its ×, like the window buttons on a Mac.',
-    Control: segmented('tabCloseSide', [
-      ['left', 'Left'],
-      ['right', 'Right']
-    ])
-  },
-  {
-    section: 'General',
-    card: 'Layout',
-    label: 'Island UI',
-    description: 'The sidebar floats over the page as a rounded island, Figma style, instead of sitting in a column beside it. Hidden, it folds to a pill.',
-    Control: toggle('islandUi', 'Island UI')
-  },
-  {
-    section: 'General',
-    card: 'Layout',
     label: 'Branches in sidebar',
     description: 'List branches that have no worktree under each project in the Worktrees sidebar.',
     Control: toggle('sidebarBranches', 'Branches in sidebar')
@@ -487,7 +470,8 @@ const SETTINGS: SettingSpec[] = [
     section: 'General',
     card: 'Hotkey window',
     label: 'Hotkey window',
-    description: 'The shortcut drops Treeix in as a borderless full-screen window and Treeix leaves the Dock and ⌘Tab. Off, the shortcut does nothing and Treeix is a normal window.',
+    description:
+      'The shortcut drops Treeix in as a borderless full-screen window and Treeix leaves the Dock and ⌘Tab. Off, the shortcut does nothing and Treeix is a normal window.',
     Control: toggle('hotkeyWindow', 'Hotkey window')
   },
   {
@@ -541,6 +525,23 @@ const SETTINGS: SettingSpec[] = [
         />
       )
     }
+  },
+  {
+    section: 'Appearance',
+    card: 'Window',
+    label: 'Close button',
+    description: 'Which end of an open title bar tab and of a pane header in a split holds its ×, like the window buttons on a Mac.',
+    Control: segmented('tabCloseSide', [
+      ['left', 'Left'],
+      ['right', 'Right']
+    ])
+  },
+  {
+    section: 'Appearance',
+    card: 'Window',
+    label: 'Island UI',
+    description: 'The sidebar floats over the page as a rounded island, Figma style, instead of sitting in a column beside it. Hidden, it folds to a pill.',
+    Control: toggle('islandUi', 'Island UI')
   },
   { section: 'Appearance', card: 'Fonts', label: 'Interface', description: "Menus, lists, markdown and everything that isn't code.", Control: fontRow('uiFont') },
   {
