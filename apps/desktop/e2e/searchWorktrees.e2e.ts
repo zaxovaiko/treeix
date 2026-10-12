@@ -15,8 +15,13 @@ test.afterAll(() => launched.close())
 
 test('search covers the selected worktree, and every worktree with the toggle on, the selected one highlighted', async () => {
   const { page } = launched
-  await page.keyboard.press('Meta+Shift+F')
-  await page.getByPlaceholder(/^Search in/).fill('needle')
+  const search = page.getByPlaceholder(/^Search in/)
+  // Right after the reload the shortcut can land before the app listens; the shortcut toggles, so it is pressed only while closed
+  await expect(async () => {
+    if (!(await search.isVisible())) await page.keyboard.press('Meta+Shift+F')
+    await expect(search).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 15_000 })
+  await search.fill('needle')
   await expect(page.getByText('1 result in 1 file')).toBeVisible({ timeout: 10_000 })
 
   await page.getByRole('button', { name: 'Search every worktree' }).click()
