@@ -2503,7 +2503,7 @@ function App(): React.JSX.Element {
           {showTitle && (
             <div
               {...tabDropProps}
-              className={`flex h-9 shrink-0 items-center gap-2 px-2 ${settings.islandUi ? '' : 'border-b border-border bg-card'} ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
+              className={`flex h-8 shrink-0 items-center gap-2 px-2 ${settings.islandUi ? '' : 'border-b border-border bg-card'} ${chromeless ? '' : '[-webkit-app-region:drag]'} ${tabDropZone}`}
             >
               {/* Equal sides keep the centre segment in the middle of the window */}
               <div className="flex min-w-0 flex-1 basis-0 items-center">
@@ -2609,7 +2609,7 @@ function App(): React.JSX.Element {
             <AgentCommentsDrawer
               comments={comments}
               labelOf={checkoutLabel}
-              top={showTitle ? 36 : chromeless ? 0 : 28}
+              top={showTitle ? 32 : chromeless ? 0 : 28}
               renderSend={(path, active) => commentsSendButton(path, 'panel', active)}
               onOpen={(comment) => {
                 if (comment.kind === 'reference') return
