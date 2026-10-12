@@ -24,7 +24,11 @@ const WORKSPACE_MIME = 'application/x-treeix-workspace'
 const ALL: Workspace = { id: ALL_PROJECTS, name: 'All projects', color: '#64748b', icon: 'folder', repoPaths: [] }
 
 /** Where a quick shell starts for a workspace: the folder holding its projects, else home */
-const workspaceFolder = (workspace: Workspace): string => (workspace.id === HOME.id ? window.api.home : commonFolder(workspace.repoPaths) || window.api.home)
+const workspaceFolder = (workspace: Workspace): string => {
+  if (workspace.id === HOME.id) return window.api.home
+  if (workspace.terminalPath && workspace.repoPaths.includes(workspace.terminalPath)) return workspace.terminalPath
+  return commonFolder(workspace.repoPaths) || window.api.home
+}
 
 function SectionHeader({ label, open, onToggle, children }: { label: string; open?: boolean; onToggle?: () => void; children?: React.ReactNode }): React.JSX.Element {
   return (
