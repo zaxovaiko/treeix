@@ -71,17 +71,24 @@ function restore(window: BrowserWindow): void {
 /** Focus went to a window on another display, so the hotkey window is not in its way and stays up */
 const clickedOtherDisplay = (window: BrowserWindow): boolean => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id !== screen.getDisplayMatching(window.getBounds()).id
 
+/** Hiding the app hands focus back to whatever was in front before */
+const hide = (window: BrowserWindow): void => (process.platform === 'darwin' ? app.hide() : window.hide())
+
 function dismiss(window: BrowserWindow): void {
-  // Hiding the app hands focus back to whatever was in front before
-  if (process.platform === 'darwin') app.hide()
-  else window.hide()
+  hide(window)
   if (!only) restore(window)
 }
 
 /** `focused` is whether the window had focus when the shortcut was pressed */
 export function toggleHotkeyWindow(window: BrowserWindow, focused = window.isFocused()): void {
-  if (summoned && window.isVisible() && focused) dismiss(window)
-  else summon(window)
+  if (summoned && window.isVisible() && focused) return dismiss(window)
+  if (only) return summon(window)
+  // With the hotkey window off, the shortcut shows and hides the normal window
+  if (window.isVisible() && focused) return hide(window)
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+  app.focus({ steal: true })
 }
 
 /** Registers the global shortcut; returns an error message when it cannot be used */
