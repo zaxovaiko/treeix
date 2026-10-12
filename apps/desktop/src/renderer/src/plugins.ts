@@ -120,3 +120,9 @@ export function useSessions(): SessionSummary[] {
   const service = useService('sessions')
   return useSyncExternalStore(service?.subscribe ?? noSubscription, service?.getSessions ?? noSessions)
 }
+
+/** Id of the session pane with the keyboard, else the one last focused; re-renders when focus moves between panes */
+export function useActiveSessionId(): string | null {
+  const service = useService('sessions')
+  return useSyncExternalStore(service?.subscribe ?? noSubscription, () => service?.active() ?? null)
+}

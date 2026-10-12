@@ -10,7 +10,7 @@ const folderLabel = (path: string, home: string): string => (path === home ? '~'
 /** What the files panel shows, with buttons to browse the terminal's folder or any other */
 function ExplorerHeader(): React.JSX.Element {
   const host = useHost()
-  const label = host.browsedFolder ? folderLabel(host.browsedFolder, window.api.home) : (host.selectedWorktreeLabel ?? '~')
+  const label = host.explorerRoot === host.selectedWorktree && host.selectedWorktreeLabel ? host.selectedWorktreeLabel : folderLabel(host.explorerRoot, window.api.home)
   const showTerminalFolder = async (): Promise<void> => {
     const session = activeSession()
     const cwd = session ? await bridge.invoke<string | null>('cwd', session.id) : null

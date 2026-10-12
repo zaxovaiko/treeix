@@ -222,7 +222,7 @@ export type HostApi = {
   selectedWorktree: string | null
   /** Branch of the selected worktree, for headers */
   selectedWorktreeLabel: string | null
-  /** Folder `renderExplorer` paths are relative to: the browsed folder, else the selected worktree, else the home folder */
+  /** Folder `renderExplorer` paths are relative to: the browsed folder, else the active session's worktree, else the selected worktree, else the home folder */
   explorerRoot: string
   /** A folder the explorer shows instead of the selected worktree; null follows the worktree */
   browsedFolder: string | null

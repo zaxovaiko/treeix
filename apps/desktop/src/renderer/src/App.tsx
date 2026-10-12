@@ -66,7 +66,7 @@ import { codeThemeOptions, diffBackground, FileView, findLineElement } from './F
 import { FileIcon, Icon, type IconName } from './Icon'
 import { McpInstallButton } from './mcpInstall'
 import { setWorkspaceSwitcher } from './notifications'
-import { findService, loadedPlugins, usePlugins, useSessions } from './plugins'
+import { findService, loadedPlugins, useActiveSessionId, usePlugins, useSessions } from './plugins'
 import { SendButton, SUBMIT_AFTER_PASTE } from './SendButton'
 import { LEADER_PAGES, leaderOf, ShortcutSheet, useShellKeys, WhichKey } from './Shell'
 import { isPageId, showSettingsPage } from './settingsNav'
@@ -432,6 +432,7 @@ function App(): React.JSX.Element {
   const drag = useCodeDrag(setDraft)
   const dock = useLayout(panelIds)
   const allSessions = useSessions()
+  const activeSessionId = useActiveSessionId()
   // Read in the same render the workspace changed in, so no page of the old workspace is mounted again
   const visitedTabs = visitedIn(visited, workspaceId)
   useEffect(
@@ -1539,7 +1540,8 @@ function App(): React.JSX.Element {
   const scopeLabel = scope.focus ? baseName(scope.focus) : workspace ? workspace.name : scope.folder ? baseName(scope.folder) : 'all repositories'
   const openDocTab = docTabs.find((tab) => tab.key === appTab)
 
-  const explorerRoot = browseRoot ?? selected ?? window.api.home
+  const sessionRoot = sessions.find((session) => session.id === activeSessionId)?.worktreePath ?? null
+  const explorerRoot = browseRoot ?? sessionRoot ?? selected ?? window.api.home
   // The filesystem root has no parent
   const parentFolder = (path: string): string | null => (path === '/' ? null : path.split('/').slice(0, -1).join('/') || '/')
   const browseParent = (): void => {
@@ -1547,7 +1549,7 @@ function App(): React.JSX.Element {
     if (parent) setBrowsedFolder(parent)
   }
   const renderExplorer = (activePath: string | null, open: (path: string) => void): React.JSX.Element =>
-    worktree && !browseRoot ? (
+    worktree?.path === explorerRoot ? (
       <Explorer
         files={worktreeFiles}
         rootPath={worktree.path}
