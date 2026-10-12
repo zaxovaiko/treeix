@@ -14,6 +14,9 @@ const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
   dormant: { label: 'not started', color: '#737373' }
 }
 
+/** Drag data of a session row, dropped on a terminal pane to open it beside that pane */
+export const SESSION_MIME = 'application/x-treeix-session'
+
 export function worktreeLabel(repos: Repo[] | null, worktreePath: string): string {
   if (worktreePath === window.api.home) return '~ home'
   const repo = repos?.find((candidate) => candidate.worktrees.some((worktree) => worktree.path === worktreePath))

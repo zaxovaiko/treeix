@@ -7,7 +7,7 @@ import { openMenu } from './contextMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Icon } from './Icon'
 import { usePlugins, useSessions } from './plugins'
-import { activityOf, KindBadge, StatusDot } from './sessionUi'
+import { activityOf, KindBadge, SESSION_MIME, StatusDot } from './sessionUi'
 import { digitLabel, toggleIn } from './settings'
 import { IconButton, ResizeHandle } from './ui'
 import { Badge } from './WorkspaceSwitcher'
@@ -30,9 +30,22 @@ const workspaceFolder = (workspace: Workspace): string => {
   return commonFolder(workspace.repoPaths) || window.api.home
 }
 
-function SectionHeader({ label, open, onToggle, children }: { label: string; open?: boolean; onToggle?: () => void; children?: React.ReactNode }): React.JSX.Element {
+/** `children` show while the header is hovered or holds the focus; `pinned` always */
+function SectionHeader({
+  label,
+  open,
+  onToggle,
+  children,
+  pinned
+}: {
+  label: string
+  open?: boolean
+  onToggle?: () => void
+  children?: React.ReactNode
+  pinned?: React.ReactNode
+}): React.JSX.Element {
   return (
-    <div className="flex h-7 shrink-0 items-center gap-1 pr-0.5 pl-2">
+    <div className="group/header flex h-7 shrink-0 items-center gap-1 pr-0.5 pl-2">
       {onToggle ? (
         <button onClick={onToggle} className={`${HEADING} flex flex-1 items-center gap-1 hover:text-foreground`}>
           <Icon name="chevron" className={`size-3 ${open ? 'rotate-90' : ''}`} />
@@ -41,13 +54,14 @@ function SectionHeader({ label, open, onToggle, children }: { label: string; ope
       ) : (
         <span className={`${HEADING} flex-1`}>{label}</span>
       )}
-      {children}
+      <span className="flex opacity-0 group-hover/header:opacity-100 focus-within:opacity-100">{children}</span>
+      {pinned}
     </div>
   )
 }
 
 /** The sessions of the workspace on screen, under its row */
-function Sessions({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen: () => void }): React.JSX.Element {
+function Sessions({ sessions, onOpen, indent = 'pl-7' }: { sessions: SessionSummary[]; onOpen: () => void; indent?: string }): React.JSX.Element {
   const host = useHost()
   const open = (id: string): void => {
     onOpen()
@@ -66,7 +80,13 @@ function Sessions({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen: ()
         <div key={session.id} className="group relative">
           <button
             onClick={() => open(session.id)}
-            className={`${ROW} h-7 pl-7 hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
+            // Dropped on a terminal pane, it opens beside it
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData(SESSION_MIME, session.id)
+              event.dataTransfer.effectAllowed = 'move'
+            }}
+            className={`${ROW} h-7 ${indent} hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
           >
             {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
             <span className="min-w-0 flex-1 truncate">{session.title}</span>
@@ -109,7 +129,11 @@ function Workspaces({
   const newSession = (workspace: Workspace, kind: string): void => {
     const service = host.service('sessions')
     if (!service) return host.flash('Sessions need the Terminal plugin')
-    if (workspace.id !== currentId) onSwitch(workspace.id)
+    if (workspace.id !== currentId) {
+      onSwitch(workspace.id)
+      // Entering an empty Home starts its first shell already
+      if (workspace.id === HOME.id && !sessions.some((session) => session.workspaceId === HOME.id)) return
+    }
     host.setActiveTab(TERMINAL_TAB)
     void service.start(workspaceFolder(workspace), kind).then((id) => service.reveal(id))
   }
@@ -151,7 +175,7 @@ function Workspaces({
       <div key={workspace.id}>
         <button
           data-workspace={workspace.id}
-          title={`${workspace.id === HOME.id ? 'Shells in your home folder, outside every workspace' : workspace.id === ALL_PROJECTS ? 'Every project, across workspaces' : `${workspace.name}\n${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'No projects yet'}`}${keys ? ` (${keys})` : ''}`}
+          title={`${workspace.id === ALL_PROJECTS ? 'Every project, across workspaces' : `${workspace.name}\n${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'No projects yet'}`}${keys ? ` (${keys})` : ''}`}
           data-tip-side="right"
           aria-current={current || undefined}
           onClick={() => (current ? toggle(workspace.id) : onSwitch(workspace.id))}
@@ -189,12 +213,25 @@ function Workspaces({
 
   return (
     <>
+      {/* Shells outside every workspace, in the home folder, listed on their own rather than as a workspace */}
+      <div>
+        <SectionHeader
+          label="Tabs"
+          pinned={
+            <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={onHide}>
+              <Icon name="panel" className="size-3.5" />
+            </IconButton>
+          }
+        >
+          <IconButton label="New shell in your home folder" onClick={() => newSession(HOME, 'shell')}>
+            <Icon name="plus" className="size-3.5" />
+          </IconButton>
+        </SectionHeader>
+        <Sessions sessions={sessions.filter((session) => inWorkspace(session, HOME, repos, workspaces))} onOpen={() => currentId === HOME.id || onSwitch(HOME.id)} indent="pl-2" />
+      </div>
       <SectionHeader label="Workspaces">
         <IconButton label="New workspace" onClick={() => onEdit(null)}>
           <Icon name="plus" className="size-3.5" />
-        </IconButton>
-        <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={onHide}>
-          <Icon name="panel" className="size-3.5" />
         </IconButton>
       </SectionHeader>
       {currentId === ALL_PROJECTS && row(ALL, '')}
@@ -216,7 +253,6 @@ function Workspaces({
             ])
         })
       )}
-      {row(HOME, actionKeys('workspace.home'))}
     </>
   )
 }
@@ -251,10 +287,11 @@ export function AppSidebar({
       style={{ width, minWidth: 180 }}
       className={island ? `absolute top-2 bottom-2 left-2 z-20 flex flex-col overflow-hidden ${ISLAND}` : 'relative flex shrink-0 flex-col border-r border-border bg-sidebar'}
     >
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-1.5">
+      <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto p-1.5">
         <Workspaces repos={repos} onSwitch={onSwitch} onEdit={onEdit} onHide={onHide} />
-        {sections.map((section) => (
-          <div key={section.id} data-sidebar-section={section.id}>
+        {/* The last section, the hub's history, keeps to the bottom */}
+        {sections.map((section, index) => (
+          <div key={section.id} data-sidebar-section={section.id} className={index === sections.length - 1 ? 'mt-auto' : undefined}>
             <SectionHeader
               label={section.label}
               open={!folded.includes(section.id)}

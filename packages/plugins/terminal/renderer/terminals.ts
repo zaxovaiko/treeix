@@ -8,7 +8,7 @@ import { findService, isPluginEnabled } from '@treeix/app/plugins'
 import { terminalTitle } from './terminalTitle'
 import { agentState, agentStatus } from './agentStatus'
 import { findIssueLinks, findRowFileLinks, findWebLinks } from './fileLinks'
-import { getCurrentWorkspaceId, getWorkspaces, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
+import { getCurrentWorkspaceId, getWorkspaces, HOME, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
 import {
@@ -405,6 +405,30 @@ export async function splitSession(anchorId: string, edge: SplitEdge, flash: (me
   const layout = state.splits[workspaceId]?.flat().includes(anchorId) ? state.splits[workspaceId] : [[anchorId]]
   update({ splits: { ...state.splits, [workspaceId]: placePane(layout, id, anchorId, edge) } })
   // Focusing the new pane selects it, once the focus has moved, so the sidebar reads the new one
+  setTimeout(() => focusSession(id))
+}
+
+/**
+ * Puts a session beside `targetId` in its split. On a workspace's page the split's panes join that workspace, so ones
+ * started elsewhere (All projects, another workspace, a deleted one) stay listed there; under All projects the target's holds it
+ */
+export function placeSession(id: string, targetId: string, edge: SplitEdge): void {
+  const target = findSession(targetId)
+  if (!findSession(id) || !target || id === targetId) return
+  const current = getCurrentWorkspaceId()
+  const workspaceId = current === HOME.id || getWorkspaces().some((workspace) => workspace.id === current) ? current : target.workspaceId
+  const split = state.splits[target.workspaceId]
+  const layout = placePane(split?.flat().includes(targetId) ? split : [[targetId]], id, targetId, edge)
+  const panes = layout.flat()
+  const others = Object.entries(state.splits)
+    .filter(([key]) => key !== workspaceId && key !== target.workspaceId)
+    .map(([key, other]): [string, PaneLayout] => [key, panes.reduce(removePane, other)])
+    .filter(([, other]) => other.flat().length > 1)
+  update({
+    sessions: state.sessions.map((session) => (panes.includes(session.id) ? { ...session, workspaceId } : session)),
+    splits: { ...Object.fromEntries(others), [workspaceId]: layout }
+  })
+  void wakeSession(id)
   setTimeout(() => focusSession(id))
 }
 

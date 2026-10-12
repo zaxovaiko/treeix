@@ -5,7 +5,7 @@ import { actionKeys, shortcutOf } from '@treeix/shared/keymap'
 import { toAccelerator } from '@treeix/shared/shortcut'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
-import { KindBadge, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
+import { KindBadge, SESSION_MIME, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
 import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
@@ -15,6 +15,7 @@ import { errorMessage, ResizeGrip, useChromeless } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { droppedPaths } from './fileLinks'
+import type { SplitEdge } from './paneLayout'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
 import { NameInput, renaming, startRename } from './rename'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
@@ -29,6 +30,7 @@ import {
   forgetClosedSession,
   killSession,
   otherView,
+  placeSession,
   pasteClipboard,
   renameSession,
   sendText,
@@ -594,6 +596,26 @@ export function WorkspaceTerminals({
 }): React.JSX.Element {
   useSettings()
   const grow = useTerminals().paneGrow
+  // A session row dragged over a pane: the half it would open in
+  const [drop, setDrop] = useState<{ id: string; edge: SplitEdge } | null>(null)
+  const dropProps = (targetId: string): React.HTMLAttributes<HTMLDivElement> => ({
+    onDragOver: (event) => {
+      if (!event.dataTransfer.types.includes(SESSION_MIME)) return
+      event.preventDefault()
+      const box = event.currentTarget.getBoundingClientRect()
+      // Splits open right or down; the pointer's side of the pane's diagonal picks which
+      const edge = (event.clientX - box.left) / box.width > (event.clientY - box.top) / box.height ? 'right' : 'bottom'
+      if (drop?.id !== targetId || drop.edge !== edge) setDrop({ id: targetId, edge })
+    },
+    onDragLeave: (event) => (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) || setDrop(null),
+    onDrop: (event) => {
+      const id = event.dataTransfer.getData(SESSION_MIME)
+      if (!id || !drop) return
+      event.preventDefault()
+      setDrop(null)
+      placeSession(id, targetId, drop.edge)
+    }
+  })
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <SessionBar session={session} label={label} cwd={cwd} repos={repos} page={page} onHide={onHide} side={side} onMove={onMove} onGoToFolder={onGoToFolder} />
@@ -603,12 +625,17 @@ export function WorkspaceTerminals({
             <div key={column[0].id} style={{ flexGrow: grow[`column:${column[0].id}`] ?? 1 }} className="relative flex min-w-0 basis-0 flex-col">
               {index > 0 && <PaneDivider across={false} before={`column:${panes[index - 1][0].id}`} after={`column:${column[0].id}`} grow={grow} onGrow={setPaneGrow} />}
               {column.map((pane, row) => (
-                <div key={pane.id} style={{ flexGrow: grow[pane.id] ?? 1 }} className="relative flex min-h-0 basis-0">
+                <div key={pane.id} style={{ flexGrow: grow[pane.id] ?? 1 }} className="relative flex min-h-0 basis-0" {...dropProps(pane.id)}>
                   {row > 0 && <PaneDivider across before={column[row - 1].id} after={pane.id} grow={grow} onGrow={setPaneGrow} />}
                   {/* Like iTerm, the panes without the keys dim a little, so the one typed into stands out; the divider keeps its tone */}
                   <div className={`flex min-h-0 min-w-0 flex-1 ${pane.id !== session.id ? 'opacity-60' : ''}`}>
                     <SessionView session={pane} />
                   </div>
+                  {drop?.id === pane.id && (
+                    <div
+                      className={`pointer-events-none absolute z-10 rounded-md bg-primary/15 ring-1 ring-primary/50 ring-inset ${drop.edge === 'right' ? 'inset-y-0 right-0 w-1/2' : 'inset-x-0 bottom-0 h-1/2'}`}
+                    />
+                  )}
                 </div>
               ))}
             </div>
