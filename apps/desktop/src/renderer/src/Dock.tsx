@@ -185,7 +185,7 @@ export function PanelToggle({
           onDragStart(event)
         }}
         onDragEnd={onDragEnd}
-        className={`relative inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${
+        className={`relative inline-flex size-6 items-center justify-center rounded-md hover:bg-accent hover:text-foreground ${
           active ? 'bg-accent text-foreground' : 'text-muted-foreground'
         }`}
       >
