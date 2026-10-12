@@ -480,14 +480,14 @@ const SETTINGS: SettingSpec[] = [
     card: 'Hotkey window',
     label: 'Global shortcut',
     description:
-      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. With a shortcut recorded there is no normal window: Treeix stays the drop-down and only shows or hides. Clear it to get the normal window back. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing.',
+      'Drops Treeix over everything, full screen below the menu bar, from any app. Press again to hide. Works only while Hotkey window is on. Any key works, including § on ISO keyboards; while it is set, that key opens Treeix instead of typing.',
     Control: GlobalShortcut
   },
   {
     section: 'General',
     card: 'Hotkey window',
     label: 'Hotkey window',
-    description: 'The shortcut drops Treeix in as a borderless full-screen window and Treeix leaves the Dock and ⌘Tab. Off, the shortcut just shows and hides the normal window.',
+    description: 'The shortcut drops Treeix in as a borderless full-screen window and Treeix leaves the Dock and ⌘Tab. Off, the shortcut does nothing and Treeix is a normal window.',
     Control: toggle('hotkeyWindow', 'Hotkey window')
   },
   {

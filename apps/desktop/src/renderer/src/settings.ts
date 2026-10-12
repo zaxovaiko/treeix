@@ -353,10 +353,11 @@ const listeners = new Set<() => void>()
 
 export const getSettings = (): Settings => settings
 
-/** A recorded shortcut makes Treeix the hotkey window only, unless that is switched off; clearing it brings the normal window back */
+/** A recorded shortcut makes Treeix the hotkey window only; with the hotkey window switched off the shortcut is not registered at all */
 export function hotkeyOptions(): HotkeyOptions {
   const { hotkey, hotkeyHideOnBlur, hotkeyWindow, menuBarIcon } = settings
-  return { shortcut: hotkey, hideOnBlur: hotkeyHideOnBlur, only: hotkey !== null && hotkeyWindow, menuBar: menuBarIcon }
+  const shortcut = hotkeyWindow ? hotkey : null
+  return { shortcut, hideOnBlur: hotkeyHideOnBlur, only: shortcut !== null, menuBar: menuBarIcon }
 }
 
 export function updateSettings(patch: Partial<Settings>): void {
