@@ -12,7 +12,7 @@ test('a session that needs the user while you look elsewhere counts into the doc
   const { page } = launched
   const terminalTab = page.locator('[data-page-tab="terminal"]')
   await terminalTab.click()
-  await page.getByRole('button', { name: 'Shell' }).click()
+  await page.getByRole('button', { name: /Shell$/ }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   // Reports what an agent's hook would, once the user is on another page

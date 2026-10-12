@@ -48,7 +48,7 @@ test('agent sessions get an MCP server that drives the built-in browser', async 
   // A session's shell carries the server's address and token
   const envFile = join(dirname(repo), 'mcp.txt')
   await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Shell' }).click()
+  await page.getByRole('button', { name: /Shell$/ }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   await page.keyboard.type(`printf '%s\\n%s\\n%s' "$TREEIX_MCP_URL" "$TREEIX_MCP_TOKEN" "$TREEIX_CODEX_MCP" > ${envFile}\n`)

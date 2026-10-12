@@ -45,7 +45,7 @@ async function metaClickFirstRow(): Promise<void> {
 test('⌘-click on a path cut short opens the worktree file it ends', async () => {
   const { page } = launched
   await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Shell' }).click()
+  await page.getByRole('button', { name: /Shell$/ }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   // Printed from the repo root's view, but the file sits deeper

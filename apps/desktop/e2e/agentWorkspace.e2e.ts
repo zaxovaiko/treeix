@@ -26,7 +26,7 @@ test("an agent's browser tab opens in its session's workspace, not the one on sc
   const { page, repo } = launched
   const envFile = join(dirname(repo), 'claude-mcp.json')
   await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Shell' }).click()
+  await page.getByRole('button', { name: /Shell$/ }).click()
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   await page.keyboard.type(`printf '%s' "$TREEIX_CLAUDE_MCP" > ${envFile}\n`)

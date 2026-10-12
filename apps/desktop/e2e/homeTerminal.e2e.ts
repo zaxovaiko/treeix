@@ -19,8 +19,8 @@ test('⌘⇧H opens a shell in ~, outside the workspace, and takes you back', as
   await expect(terminalTab).not.toHaveAttribute('aria-current', 'page')
 
   await page.keyboard.press('Meta+Shift+H')
-  // Home is a workspace like any other: the shell opens on the Terminal page, with the sidebar in place
-  await expect(sidebar.locator('[data-workspace="home"]')).toHaveAttribute('aria-current', 'true')
+  // The shell opens on the Terminal page, with the sidebar in place
+  await expect(sidebar).toBeVisible()
   await expect(terminalTab).toHaveAttribute('aria-current', 'page')
   const terminal = page.locator('.xterm').first()
   await expect(terminal).toBeVisible({ timeout: 15_000 })

@@ -12,7 +12,7 @@ test.afterAll(() => launched.close())
 test('a file dropped from Finder on a terminal is typed as its escaped path', async () => {
   const { page, repo } = launched
   await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Shell' }).click()
+  await page.getByRole('button', { name: /Shell$/ }).click()
   const dropped = join(repo, "Screen Shot (1) it's.png")
   const copy = join(repo, 'copied.png')
   writeFileSync(dropped, 'png')

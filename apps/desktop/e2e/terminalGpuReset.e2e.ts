@@ -12,7 +12,7 @@ test.afterAll(() => launched.close())
 test('a terminal still draws text after the GPU process resets', async () => {
   const { page, app } = launched
   await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Shell' }).click()
+  await page.getByRole('button', { name: /Shell$/ }).click()
   const panes = page.locator('.xterm')
   await expect(panes).toHaveCount(1)
   // The shell starts its prompt
