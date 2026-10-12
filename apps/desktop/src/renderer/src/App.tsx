@@ -2087,10 +2087,14 @@ function App(): React.JSX.Element {
     `flex h-6 max-w-64 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs [-webkit-app-region:no-drag] ${
       active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
     }`
-  // Each project is searched once: in the selected worktree when it belongs to it, otherwise in its main checkout
-  const searchPaths = (workspaceRepos ? reposInScope(workspaceRepos, scope) : []).map((repo) =>
-    repo.worktrees.some((candidate) => candidate.path === selected) && selected ? selected : repo.path
-  )
+  // Search starts from where it was opened: the focused session's worktree on the terminal tab, else the selected one
+  const searchFrom = (appTab === 'terminal' ? sessionRoot : null) ?? selected
+  const searchRepos = workspaceRepos ? reposInScope(workspaceRepos, scope) : []
+  // That checkout goes first, so the result cap never drops its matches
+  const startingFromSearched = (paths: string[]): string[] => paths.sort((a, b) => Number(b === searchFrom) - Number(a === searchFrom))
+  // Each project is searched once: in that worktree when it belongs to it, otherwise in its main checkout
+  const searchPaths = startingFromSearched(searchRepos.map((repo) => (searchFrom && repo.worktrees.some((candidate) => candidate.path === searchFrom) ? searchFrom : repo.path)))
+  const allSearchPaths = startingFromSearched(searchRepos.flatMap((repo) => repo.worktrees.map((candidate) => candidate.path)))
   const activePluginTab = pluginTabs.find((tab) => tab.id === appTab)
   const appTabLabel = openDocTab?.title ?? activePluginTab?.label ?? (appTab === 'settings' ? 'Settings' : appTab === 'worktrees' ? 'Worktrees' : 'This tab')
 
@@ -2714,6 +2718,8 @@ function App(): React.JSX.Element {
             {searchOpen && (
               <SearchDialog
                 worktreePaths={searchPaths}
+                allWorktreePaths={allSearchPaths}
+                activeWorktree={searchFrom}
                 scopeLabel={scopeLabel}
                 renderPreview={(location) => fileView(location.worktreePath, location.path, location.line, true)}
                 onClose={() => setSearchOpen(false)}

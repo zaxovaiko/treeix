@@ -100,7 +100,8 @@ export function LocationsDialog({
   matcher,
   renderPreview,
   onPick,
-  onClose
+  onClose,
+  activeWorktree
 }: {
   header: React.ReactNode
   locations: SearchMatch[]
@@ -109,6 +110,8 @@ export function LocationsDialog({
   renderPreview: (location: SearchMatch) => React.JSX.Element
   onPick: (location: SearchMatch) => void
   onClose: () => void
+  /** Worktree whose header is highlighted when results span several */
+  activeWorktree?: string | null
 }): React.JSX.Element {
   const [index, setIndex] = useState(0)
   /** Folders and files start collapsed; only the path to the first result is opened */
@@ -263,13 +266,14 @@ export function LocationsDialog({
                 const style = { position: 'absolute', top: offsets[firstItem + offset], left: 0, right: 0 } as const
                 if (item.type === 'folder') {
                   const open = expanded.has(item.key)
+                  const active = item.key === `${activeWorktree}\0`
                   return (
                     <button
                       key={item.key}
                       title={item.title}
                       style={{ ...style, paddingLeft: 6 + item.depth * 12 }}
                       onClick={() => setExpanded((previous) => toggleIn(previous, item.key))}
-                      className="flex h-7 items-center gap-1.5 rounded-md pr-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                      className={`flex h-7 items-center gap-1.5 rounded-md pr-1.5 text-left text-xs hover:bg-accent hover:text-foreground ${active ? 'font-medium text-foreground' : 'text-muted-foreground'}`}
                     >
                       <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
                       <Icon name="folder" className="size-3.5 shrink-0" />
@@ -345,7 +349,7 @@ export function LocationsDialog({
   )
 }
 
-function Toggle({ label, title, on, onChange }: { label: string; title: string; on: boolean; onChange: (on: boolean) => void }): React.JSX.Element {
+function Toggle({ label, title, on, onChange }: { label: React.ReactNode; title: string; on: boolean; onChange: (on: boolean) => void }): React.JSX.Element {
   return (
     <button
       title={title}
@@ -361,12 +365,19 @@ function Toggle({ label, title, on, onChange }: { label: string; title: string; 
 /** ⇧⌘F: text search across every project in scope */
 export function SearchDialog({
   worktreePaths,
+  allWorktreePaths,
+  activeWorktree,
   scopeLabel,
   renderPreview,
   onPick,
   onClose
 }: {
+  /** One checkout per project */
   worktreePaths: string[]
+  /** Every checkout of those projects, searched with the worktrees toggle on */
+  allWorktreePaths: string[]
+  /** The checkout search was opened from, highlighted in the results */
+  activeWorktree: string | null
   scopeLabel: string
   renderPreview: (location: SearchMatch) => React.JSX.Element
   onPick: (location: SearchMatch) => void
@@ -376,11 +387,13 @@ export function SearchDialog({
   const [caseSensitive, setCaseSensitive] = usePersisted<boolean>(workspaceKey('search.caseSensitive'), false)
   const [wholeWord, setWholeWord] = usePersisted<boolean>(workspaceKey('search.wholeWord'), false)
   const [regex, setRegex] = usePersisted<boolean>(workspaceKey('search.regex'), false)
+  const [allWorktrees, setAllWorktrees] = usePersisted<boolean>(workspaceKey('search.allWorktrees'), false)
   const [result, setResult] = useState<SearchResult>({ matches: [], truncated: false })
   const [status, setStatus] = useState<'idle' | 'searching' | 'done'>('idle')
   const [error, setError] = useState<string | null>(null)
   const options: SearchOptions = { caseSensitive, wholeWord, regex }
-  const paths = worktreePaths.join('\n')
+  const searched = allWorktrees ? allWorktreePaths : worktreePaths
+  const paths = searched.join('\n')
 
   useEffect(() => {
     if (!query) {
@@ -391,7 +404,7 @@ export function SearchDialog({
     let cancelled = false
     const timer = setTimeout(() => {
       setStatus('searching')
-      window.api.searchText(worktreePaths, query, options).then(
+      window.api.searchText(searched, query, options).then(
         (next) => {
           if (cancelled) return
           setResult(next)
@@ -423,6 +436,7 @@ export function SearchDialog({
       renderPreview={renderPreview}
       onPick={onPick}
       onClose={onClose}
+      activeWorktree={activeWorktree}
       header={
         <>
           <Icon name="search" className="size-3.5 shrink-0" />
@@ -447,6 +461,7 @@ export function SearchDialog({
           <Toggle label="Aa" title="Match case" on={caseSensitive} onChange={setCaseSensitive} />
           <Toggle label="ab" title="Match whole word" on={wholeWord} onChange={setWholeWord} />
           <Toggle label=".*" title="Use regular expression" on={regex} onChange={setRegex} />
+          <Toggle label={<Icon name="branch" className="size-3.5" />} title="Search every worktree" on={allWorktrees} onChange={setAllWorktrees} />
         </>
       }
     />
