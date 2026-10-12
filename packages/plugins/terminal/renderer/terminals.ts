@@ -373,14 +373,18 @@ setInterval(() => {
 /** The session shown in the current workspace */
 export const currentSession = (): Session | undefined => findSession(state.selected[getCurrentWorkspaceId()] ?? '')
 
-/** Puts the session on screen in its own workspace */
+/**
+ * Puts the session on screen in the workspace on screen. Keyed by that workspace, not the session's own: a session
+ * listed elsewhere (All projects, or a workspace that took it in after its own was deleted) is shown from there
+ */
 export function selectSession(id: string): void {
   const session = findSession(id)
-  if (!session || state.selected[session.workspaceId] === id) return
+  const workspaceId = getCurrentWorkspaceId()
+  if (!session || state.selected[workspaceId] === id) return
   // A pane of the split just takes the keys; any other session shows alone
   const inSplit = state.splits[session.workspaceId]?.flat().includes(id)
   update({
-    selected: { ...state.selected, [session.workspaceId]: id },
+    selected: { ...state.selected, [workspaceId]: id },
     splits: inSplit ? state.splits : Object.fromEntries(Object.entries(state.splits).filter(([key]) => key !== session.workspaceId))
   })
 }
@@ -967,8 +971,10 @@ export function killSession(id: string): void {
   // The pane before it takes over, as the one beside or above it in reading order
   const panes = state.splits[session.workspaceId]?.flat() ?? []
   const pane = panes[panes.indexOf(id) - 1] ?? panes[panes.indexOf(id) + 1]
-  const next = state.selected[session.workspaceId] === id ? (pane ?? sessions.find((candidate) => candidate.workspaceId === session.workspaceId)?.id) : undefined
-  update({ sessions, splits, selected: next ? { ...state.selected, [session.workspaceId]: next } : state.selected })
+  const next = pane ?? sessions.find((candidate) => candidate.workspaceId === session.workspaceId)?.id
+  // Every workspace showing it moves on; one with nothing left falls back to its first session
+  const selected = Object.entries(state.selected).flatMap(([workspaceId, shown]) => (shown !== id ? [[workspaceId, shown]] : next ? [[workspaceId, next]] : []))
+  update({ sessions, splits, selected: Object.fromEntries(selected) })
   setHistory([{ id, ...metaOf(session), endedAt: Date.now() }, ...state.history])
 }
 
@@ -1102,7 +1108,7 @@ export async function switchView(id: string): Promise<void> {
   }
   update({
     sessions: state.sessions.filter((candidate) => candidate.id !== id),
-    selected: state.selected[session.workspaceId] === id ? { ...state.selected, [session.workspaceId]: next } : state.selected,
+    selected: Object.fromEntries(Object.entries(state.selected).map(([workspaceId, shown]) => [workspaceId, shown === id ? next : shown])),
     splits: {
       ...state.splits,
       ...(state.splits[session.workspaceId] && { [session.workspaceId]: state.splits[session.workspaceId].map((column) => column.map((pane) => (pane === id ? next : pane))) })
