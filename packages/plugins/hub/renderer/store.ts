@@ -2,7 +2,6 @@ import { type ChatOption, type ChatService, type ChatSpec, createBridge, createS
 import { errorMessage } from '@treeix/app/ui'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
-import { alienStill, characterOf } from './Alien'
 import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
 import type { Subagent } from '../shared/subagents'
 import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type Workflow } from '../shared/workflow'
@@ -188,7 +187,7 @@ export function asAgent(agent: HubAgent): Agent | null {
     id: registryId(agent),
     label: agent.name,
     mark: agent.icon,
-    image: agent.avatar ?? alienStill(agent.alien ?? characterOf(agent.runtime.kind === 'agent' ? agent.runtime.agent : undefined)),
+    image: agent.avatar ?? undefined,
     color: agent.color,
     command: null,
     agent: true,
