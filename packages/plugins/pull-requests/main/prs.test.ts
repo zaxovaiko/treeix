@@ -58,6 +58,18 @@ test('normalizeGitlabDiff', () => {
   expect(splitPatch(normalizeGitlabDiff(`${created}\n${deleted}`)).map(({ path }) => path)).toEqual(['n.sql', 'd.sql'])
 })
 
+test('githubThreads puts review summaries in the conversation by time, skipping empty and pending ones', () => {
+  const [conversation] = githubThreads([], [{ id: 9, user: { login: 'lead' }, body: 'first', created_at: '2026-01-01T10:00:00Z' }], new Map(), [
+    { id: 5, user: { login: 'me' }, body: 'Looks good', state: 'COMMENTED', submitted_at: '2026-01-01T09:00:00Z' },
+    { id: 6, user: { login: 'kasia' }, body: '', state: 'APPROVED', submitted_at: '2026-01-01T11:00:00Z' },
+    { id: 7, user: { login: 'me' }, body: 'draft', state: 'PENDING' }
+  ])
+  expect(conversation.comments.map((comment) => [comment.id, comment.body])).toEqual([
+    ['pullreview:5', 'Looks good'],
+    ['issue:9', 'first']
+  ])
+})
+
 test('githubThreads groups replies under their root comment', () => {
   const threads = githubThreads(
     [

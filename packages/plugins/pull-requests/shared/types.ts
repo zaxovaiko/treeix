@@ -48,7 +48,7 @@ export const REACTIONS = ['+1', '-1', 'laugh', 'hooray', 'confused', 'heart', 'r
 export type Reaction = (typeof REACTIONS)[number]
 
 export type ThreadComment = {
-  /** `review:<id>` or `issue:<id>` on GitHub, `note:<id>` on GitLab */
+  /** `review:<id>`, `issue:<id>` or a review summary's `pullreview:<id>` on GitHub, `note:<id>` on GitLab */
   id: string
   author: string
   avatarUrl: string | null

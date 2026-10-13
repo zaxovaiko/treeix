@@ -822,6 +822,8 @@ function ThreadCard({
       )}
       {thread.comments.map((comment) => {
         const mine = viewer !== null && comment.author === viewer
+        // GitHub can neither delete a submitted review nor react to one over its REST API
+        const reviewSummary = comment.id.startsWith('pullreview:')
         const remove = (): void => onDelete(comment)
         return (
           <div
@@ -831,7 +833,7 @@ function ThreadCard({
               openMenu(event, [
                 { label: 'Copy comment', run: () => copyText(comment.body) },
                 mine && { label: 'Edit comment', run: () => onEdit({ id: comment.id, body: comment.body }) },
-                mine && { label: 'Delete comment', run: remove },
+                mine && !reviewSummary && { label: 'Delete comment', run: remove },
                 { label: `Copy @${comment.author}`, run: () => copyText(`@${comment.author}`) },
                 null,
                 { label: added ? 'Added to agent comments' : 'Add thread to agent comments', enabled: !added, run: onAdd },
@@ -851,9 +853,11 @@ function ThreadCard({
                     <IconButton label="Edit comment (e)" onClick={() => onEdit({ id: comment.id, body: comment.body })}>
                       <Icon name="pencil" className="size-3" />
                     </IconButton>
-                    <IconButton label="Delete comment (d)" onClick={remove}>
-                      <Icon name="trash" className="size-3" />
-                    </IconButton>
+                    {!reviewSummary && (
+                      <IconButton label="Delete comment (d)" onClick={remove}>
+                        <Icon name="trash" className="size-3" />
+                      </IconButton>
+                    )}
                   </span>
                 )}
               </div>
@@ -891,7 +895,7 @@ function ThreadCard({
                   </Markdown>
                 </div>
               )}
-              <Reactions pr={pr} comment={comment} />
+              {!reviewSummary && <Reactions pr={pr} comment={comment} />}
             </div>
           </div>
         )

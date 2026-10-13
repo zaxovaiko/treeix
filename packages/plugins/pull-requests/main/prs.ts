@@ -368,7 +368,8 @@ export function githubThreadStates(raw: unknown): Map<number, ThreadState> {
   return states
 }
 
-export function githubThreads(reviewComments: Json[], issueComments: Json[], states = new Map<number, ThreadState>()): ReviewThread[] {
+/** `reviews` adds each submitted review's summary to the conversation; most reviews have none */
+export function githubThreads(reviewComments: Json[], issueComments: Json[], states = new Map<number, ThreadState>(), reviews: Json[] = []): ReviewThread[] {
   const threads = new Map<number, ReviewThread>()
   for (const raw of reviewComments) {
     const rootId = numberOrNull(raw.in_reply_to_id) ?? numberOrNull(raw.id) ?? 0
@@ -388,19 +389,11 @@ export function githubThreads(reviewComments: Json[], issueComments: Json[], sta
       resolveId: states.get(rootId)?.resolveId ?? null
     })
   }
-  const conversation: ReviewThread[] = issueComments.length
-    ? [
-        {
-          id: 'conversation',
-          path: null,
-          line: null,
-          side: 'additions',
-          comments: issueComments.map((raw) => toComment(`issue:${raw.id}`, raw.user, raw.body, raw.created_at, raw.reactions)),
-          resolved: null,
-          resolveId: null
-        }
-      ]
-    : []
+  const general = [
+    ...issueComments.map((raw) => toComment(`issue:${raw.id}`, raw.user, raw.body, raw.created_at, raw.reactions)),
+    ...reviews.filter((raw) => text(raw.body).trim() && text(raw.state) !== 'PENDING').map((raw) => toComment(`pullreview:${raw.id}`, raw.user, raw.body, raw.submitted_at))
+  ].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  const conversation: ReviewThread[] = general.length ? [{ id: 'conversation', path: null, line: null, side: 'additions', comments: general, resolved: null, resolveId: null }] : []
   return [...conversation, ...threads.values()]
 }
 
@@ -590,11 +583,12 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
         assignees(first: 30) { nodes { login avatarUrl } }
       } }
     }`
-    const [filePatches, view, reviewComments, issueComments, extra] = await Promise.all([
+    const [filePatches, view, reviewComments, issueComments, reviews, extra] = await Promise.all([
       patches,
       runJson('gh', ['pr', 'view', `${number}`, '-R', repo, '--json', 'body,headRefOid'], repoPath),
       pages(`repos/${remote.slug}/pulls/${number}/comments`),
       pages(`repos/${remote.slug}/issues/${number}/comments`),
+      pages(`repos/${remote.slug}/pulls/${number}/reviews`),
       // Without it threads and files still show, just without resolve buttons and viewed marks
       runJson(
         'gh',
@@ -605,7 +599,7 @@ export async function pullRequestDetail(pullRequest: PullRequest): Promise<PullR
     return {
       body: text(object(view).body),
       patches: filePatches,
-      threads: githubThreads(reviewComments, issueComments, githubThreadStates(extra)),
+      threads: githubThreads(reviewComments, issueComments, githubThreadStates(extra), reviews),
       reviewEvents: githubReviewEvents(extra),
       // ponytail: first 100 files only, paginate when PRs get bigger
       viewedFiles: extra === null ? null : githubViewedFiles(extra),
@@ -707,11 +701,11 @@ const GITLAB_AWARDS: Record<Reaction, string> = {
   eyes: 'eyes'
 }
 
-/** Comment ids are `review:<id>` or `issue:<id>` on GitHub and `note:<id>` on GitLab */
+/** Comment ids are `review:<id>` or `issue:<id>` on GitHub and `note:<id>` on GitLab; review summaries take no reactions */
 export async function reactToPullRequestComment(pullRequest: PullRequest, commentId: string, reaction: Reaction): Promise<void> {
   const { repoPath, number } = pullRequest
   const [kind, id] = commentId.split(':')
-  if (!/^\d+$/.test(id ?? '') || !REACTIONS.includes(reaction)) throw new Error('Invalid reaction target')
+  if (!/^\d+$/.test(id ?? '') || kind === 'pullreview' || !REACTIONS.includes(reaction)) throw new Error('Invalid reaction target')
   const remote = await requireRemote(repoPath)
   if (remote.provider === 'github') {
     const endpoint = kind === 'review' ? `pulls/comments/${id}/reactions` : `issues/comments/${id}/reactions`
@@ -738,12 +732,13 @@ function gitlabUser(repoPath: string): Promise<string | null> {
   return asking
 }
 
-/** The API path of one of your comments, from its `review:`, `issue:` or `note:` id */
+/** The API path of one of your comments, from its `review:`, `issue:`, `pullreview:` or `note:` id */
 async function commentEndpoint(pullRequest: PullRequest, commentId: string): Promise<{ command: 'gh' | 'glab'; args: string[] }> {
   const [kind, id] = commentId.split(':')
   if (!/^\d+$/.test(id ?? '')) throw new Error('Invalid comment')
   const remote = await requireRemote(pullRequest.repoPath)
   if (remote.provider === 'github') {
+    if (kind === 'pullreview') return { command: 'gh', args: ['api', '--hostname', remote.host, `repos/${remote.slug}/pulls/${pullRequest.number}/reviews/${id}`] }
     return { command: 'gh', args: ['api', '--hostname', remote.host, `repos/${remote.slug}/${kind === 'review' ? 'pulls' : 'issues'}/comments/${id}`] }
   }
   return { command: 'glab', args: ['api', `projects/:id/merge_requests/${pullRequest.number}/notes/${id}`] }
@@ -752,10 +747,13 @@ async function commentEndpoint(pullRequest: PullRequest, commentId: string): Pro
 export async function editPullRequestComment(pullRequest: PullRequest, commentId: string, body: string): Promise<void> {
   const { command, args } = await commentEndpoint(pullRequest, commentId)
   const [api, ...rest] = args
-  await cli(() => runWithBody(command, [api, '-X', command === 'gh' ? 'PATCH' : 'PUT', ...rest], pullRequest.repoPath, { body }))
+  // GitHub edits a review summary with PUT, its comments with PATCH
+  const method = command === 'gh' && !commentId.startsWith('pullreview:') ? 'PATCH' : 'PUT'
+  await cli(() => runWithBody(command, [api, '-X', method, ...rest], pullRequest.repoPath, { body }))
 }
 
 export async function deletePullRequestComment(pullRequest: PullRequest, commentId: string): Promise<void> {
+  if (commentId.startsWith('pullreview:')) throw new Error("GitHub can't delete a submitted review; edit it instead")
   const { command, args } = await commentEndpoint(pullRequest, commentId)
   const [api, ...rest] = args
   await cli(() => run(command, [api, '-X', 'DELETE', ...rest], pullRequest.repoPath))
