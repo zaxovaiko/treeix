@@ -111,7 +111,21 @@ import {
 import { digitLabel, digitPressed, groupOpen, type Settings, stepFontSize, updateSettings, useSettings } from './settings'
 import { UpdateBanner } from './updates'
 
-import { CopyButton, EmptyState, errorMessage, FoldAllButton, IconButton, NothingOpen, readStored, ResizeHandle, TextPrompt, Tooltips, useChromeless, usePersisted } from './ui'
+import {
+  CONTENT_MIN,
+  CopyButton,
+  EmptyState,
+  errorMessage,
+  FoldAllButton,
+  IconButton,
+  NothingOpen,
+  readStored,
+  ResizeHandle,
+  TextPrompt,
+  Tooltips,
+  useChromeless,
+  usePersisted
+} from './ui'
 import { isJson, isString, list, object } from '../../shared/json'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
@@ -2595,7 +2609,8 @@ function App(): React.JSX.Element {
                   <HostContext.Provider key={page.id} value={ownHosts.get(page.id) ?? host}>
                     <div
                       data-split-pane={page.id}
-                      style={resizable ? { width: splitWidth } : undefined}
+                      // Capped so a width saved in a wider window never pushes the page beside it off screen
+                      style={resizable ? { width: splitWidth, maxWidth: `calc(100% - ${CONTENT_MIN.across}px)` } : undefined}
                       className={`relative flex min-h-0 min-w-0 flex-col border-l border-border ${resizable ? 'shrink-0' : 'flex-1'}`}
                     >
                       {resizable && <ResizeHandle edge="left" onResize={setSplitWidth} />}

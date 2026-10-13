@@ -20,3 +20,20 @@ test('a page opened beside another in a narrow pane keeps its main zone and its 
   expect(toggle.x + toggle.width).toBeLessThanOrEqual(paneBox.x + paneBox.width)
   await close()
 })
+
+test('a split saved wider than the window leaves the page beside it in view', async () => {
+  const { app, page, close } = await launch({ 'README.md': '# alpha\n' })
+  await page.evaluate(() => localStorage.setItem('app.splitWidth', '1100'))
+  await page.reload()
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1200, 800))
+  await page.locator('[data-page-tab="terminal"]').click()
+  await page.locator('[data-page-tab="prs"]').click({ modifiers: ['Shift'] })
+  const pane = page.locator('[data-split-pane="prs"]')
+  await expect(pane).toBeVisible()
+
+  const main = (await page.locator('[data-zone="main"]').first().boundingBox()) ?? { width: 0 }
+  const split = (await pane.boundingBox()) ?? { x: 0, width: Infinity }
+  expect(main.width).toBeGreaterThanOrEqual(240)
+  expect(split.x + split.width).toBeLessThanOrEqual(await page.evaluate(() => innerWidth))
+  await close()
+})

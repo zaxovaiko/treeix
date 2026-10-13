@@ -24,7 +24,7 @@ export function usePersisted<T extends string | number | boolean | null>(key: st
 /** A dragged panel keeps this much, unless it is already drawn smaller */
 const PANEL_MIN = { across: 150, vertical: 100 }
 /** And leaves this much of the window beyond it for the content it sits beside */
-const CONTENT_MIN = { across: 240, vertical: 120 }
+export const CONTENT_MIN = { across: 240, vertical: 120 }
 
 /** Drags the panel it sits in, from the size it is drawn at, to any size that keeps it usable and leaves the content beside it room */
 export function ResizeHandle({
