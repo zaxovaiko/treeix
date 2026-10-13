@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-dependencies",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "dependencies",
+    "name": "Dependency graph",
+    "description": "A Dependencies tab that draws the worktree's architecture: its package.json packages and what they depend on, or its folders and the imports between them, tsconfig paths included.",
+    "enabledByDefault": true
+  }
+}
