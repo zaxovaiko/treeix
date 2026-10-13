@@ -55,6 +55,12 @@ export type MainContext = {
   menuBar: (status: MenuBarStatus | null) => void
   /** An adapter contributed by any enabled plugin */
   chatAdapter: (id: string) => ChatAdapter | null
+  /** Tells other plugins something happened, named `<plugin id>.<name>`; true when one started work for it, so the sender can keep the payload until it is taken */
+  emit: (name: string, payload: Record<string, unknown>) => Promise<boolean>
+  /** Hears every plugin's events; answer true when work started, such as a workflow run */
+  onEvent: (listener: (name: string, payload: Record<string, unknown>) => Promise<boolean>) => void
+  /** Runs a tool any enabled plugin offers through `mcpTool`; resolves to its text, throws when it fails */
+  callTool: (name: string, args: Record<string, unknown>) => Promise<string>
 }
 
 export type MainPlugin = {

@@ -3,7 +3,8 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ChatAdapter, MainContext, MainPlugin, ToolDefinition } from '@treeix/sdk/main'
 import { setMenuBarStatus } from './menuBar'
-import { mcpEnv, registerMcpTool } from './mcp'
+import { emitPluginEvent, onPluginEvent } from './events'
+import { mcpEnv, registerMcpTool, runMcpTool } from './mcp'
 import { adaptersOf } from './pluginAdapters'
 
 const modules = import.meta.glob<MainPlugin>('../../../../packages/plugins/*/main/index.ts', { eager: true, import: 'default' })
@@ -48,7 +49,10 @@ function activate(pluginId: string, plugin: MainPlugin, userData: string): { dis
     onDispose: (dispose) => disposers.push(dispose),
     mcpTool: (tool) => disposers.push(registerMcpTool(tool)),
     menuBar: setMenuBarStatus,
-    chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null
+    chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null,
+    emit: (name, payload) => emitPluginEvent(`${pluginId}.${name}`, payload),
+    onEvent: (listener) => disposers.push(onPluginEvent(listener)),
+    callTool: runMcpTool
   }
   plugin.activate?.(context)
   return {

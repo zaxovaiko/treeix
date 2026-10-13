@@ -50,6 +50,14 @@ async function callTool(params: Record<string, unknown>, call: McpCall): Promise
   }
 }
 
+/** Runs a registered tool for another plugin, such as a workflow step; its text comes back, a failed call throws */
+export async function runMcpTool(name: string, args: Record<string, unknown>): Promise<string> {
+  const { content, isError } = await callTool({ name, arguments: args }, { workspaceId: null })
+  const text = content.map((part) => (part.type === 'text' ? part.text : `[${part.mimeType} image]`)).join('\n')
+  if (isError) throw new Error(text)
+  return text
+}
+
 /** One JSON-RPC message; null for notifications, which get no answer */
 async function answer(request: Request, call: McpCall = { workspaceId: null }): Promise<Reply | null> {
   if (request.id === undefined || request.id === null) return null
