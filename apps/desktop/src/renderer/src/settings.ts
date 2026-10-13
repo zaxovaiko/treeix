@@ -31,8 +31,6 @@ export type Settings = {
   sections: 'expanded' | 'hidden'
   /** A bottom panel sits under the content beside the sidebar, or spans the full width under it */
   bottomPanel: 'content' | 'full'
-  /** Title bar tabs show only their icon; panes and the tooltip carry the name */
-  compactTabs: boolean
   /** The sidebar floats over the page as a rounded island, Figma style, instead of being a column beside it */
   islandUi: boolean
   /** Which end of an open title bar tab holds its close button */
@@ -223,7 +221,6 @@ const DEFAULTS: Settings = {
   diffStyle: 'split',
   sections: 'hidden',
   bottomPanel: 'content',
-  compactTabs: true,
   tabCloseSide: 'right',
   titleBarTabs: [],
   tabIcons: {},
@@ -298,8 +295,7 @@ function load(): Settings {
     const stored = readStored(KEY)
     if (!isJson(stored)) return DEFAULTS
     const candidate = stored as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyWindow' | 'compactTabs' | 'editorMinimap' | 'editorWordWrap'): boolean =>
-      typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key]
+    const flag = (key: 'hotkeyHideOnBlur' | 'hotkeyWindow' | 'editorMinimap' | 'editorWordWrap'): boolean => (typeof candidate[key] === 'boolean' ? candidate[key] : DEFAULTS[key])
     const workers = candidate.highlightWorkers
     return {
       plugins: parsePluginChoices(candidate),
@@ -311,7 +307,6 @@ function load(): Settings {
       diffStyle: candidate.diffStyle === 'unified' ? 'unified' : 'split',
       sections: candidate.sections === 'expanded' ? 'expanded' : 'hidden',
       bottomPanel: candidate.bottomPanel === 'full' ? 'full' : 'content',
-      compactTabs: flag('compactTabs'),
       islandUi: candidate.islandUi === true,
       tabCloseSide: candidate.tabCloseSide === 'left' ? 'left' : 'right',
       titleBarTabs: parseBarLayout(candidate.titleBarTabs),

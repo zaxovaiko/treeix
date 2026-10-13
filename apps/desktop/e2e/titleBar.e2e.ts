@@ -7,7 +7,7 @@ test.beforeAll(async () => {
 })
 test.afterAll(() => launched.close())
 
-test('ctrl+tab cycles the tabs and inactive tabs can show only their icon', async () => {
+test('ctrl+tab cycles the tabs', async () => {
   const { page } = launched
   // Hovering moves a title into data-tip for the app's own tooltip
   const tab = (name: string) => page.locator(`button[title^="${name}"], button[data-tip^="${name}"]`).first()
@@ -17,14 +17,6 @@ test('ctrl+tab cycles the tabs and inactive tabs can show only their icon', asyn
   await expect(tab('Worktrees')).not.toHaveAttribute('aria-current', 'page')
   await page.keyboard.press('Control+Shift+Tab')
   await expect(tab('Worktrees')).toHaveAttribute('aria-current', 'page')
-
-  // Compact is the default: tabs show only their icon, the active one too
-  await expect(tab('Worktrees')).not.toContainText('Worktrees')
-  await page.getByRole('button', { name: 'Show tab names' }).click()
-  await expect(tab('Worktrees')).toContainText('Worktrees')
-  await expect(tab('Terminal')).toContainText('Terminal')
-  await page.getByRole('button', { name: 'Hide tab names' }).click()
-  await expect(tab('Terminal')).not.toContainText('Terminal')
 })
 
 test('a workspace takes any hex colour or shade and an icon', async () => {

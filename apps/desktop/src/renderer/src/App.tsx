@@ -1588,29 +1588,28 @@ function App(): React.JSX.Element {
   const [tightTabs, setTightTabs] = useState(false)
   // Still too many even without names: the strip scrolls, and its fading edge says so
   const [clippedTabs, setClippedTabs] = useState(false)
-  const compactTabs = settings.compactTabs || tightTabs
+  const compactTabs = tightTabs
   useLayoutEffect(() => {
     const strip = tabStrip.current
     if (!strip) return
     const fit = (): void => {
-      // With names off by choice only the fade needs keeping
-      if (!settings.compactTabs && !tightTabs) {
+      if (!tightTabs) {
         namedTabsWidth.current = strip.scrollWidth
         if (strip.scrollWidth > strip.clientWidth) setTightTabs(true)
-      } else if (!settings.compactTabs && strip.clientWidth >= namedTabsWidth.current) setTightTabs(false)
+      } else if (strip.clientWidth >= namedTabsWidth.current) setTightTabs(false)
       setClippedTabs(strip.scrollWidth > strip.clientWidth + strip.scrollLeft + 1)
     }
     fit()
     const resize = new ResizeObserver(fit)
     resize.observe(strip)
     // A tab added or closed: measure again, named
-    const tabs = new MutationObserver(() => (tightTabs && !settings.compactTabs ? setTightTabs(false) : fit()))
+    const tabs = new MutationObserver(() => (tightTabs ? setTightTabs(false) : fit()))
     tabs.observe(strip, { childList: true })
     return () => {
       resize.disconnect()
       tabs.disconnect()
     }
-  }, [tightTabs, settings.compactTabs, showTitle])
+  }, [tightTabs, showTitle])
   const showSidebar = sidebarShown && !shell.zen
   /** A page without that panel says so rather than flipping a hidden state that shows up on some later page */
   const toggleShellPanel = (panel: PanelName): void => {
@@ -2395,14 +2394,6 @@ function App(): React.JSX.Element {
           {settings.tabCloseSide === 'right' && closeButton('Close tab', () => closeTab(tab.key))}
         </div>
       ))}
-      <button
-        title={settings.compactTabs ? 'Show tab names' : 'Hide tab names'}
-        aria-pressed={settings.compactTabs}
-        onClick={() => updateSettings({ compactTabs: !settings.compactTabs })}
-        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
-      >
-        <Icon name="chevron" className={`size-3.5 ${settings.compactTabs ? '' : 'rotate-180'}`} />
-      </button>
     </>
   )
   // The sidebar carries its own toggle; the title bar only holds the way back while it is hidden, beside the traffic lights where the sidebar was
