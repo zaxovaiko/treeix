@@ -64,7 +64,14 @@ export function HubSettings(): React.JSX.Element {
             <div className="flex items-center gap-2">
               <span className={`text-xs ${FIT_COLOR[rating]}`}>{rating}</span>
               {job && !job.failed ? (
-                <span className="text-xs text-muted-foreground">{job.label}</span>
+                <>
+                  <span className="text-xs text-muted-foreground">{job.label}</span>
+                  {!installed && (
+                    <button className={button} onClick={() => void hubApi.cancelPull(model.id)}>
+                      Cancel
+                    </button>
+                  )}
+                </>
               ) : installed ? (
                 <>
                   {!long && (
@@ -76,7 +83,10 @@ export function HubSettings(): React.JSX.Element {
                       Long context
                     </button>
                   )}
-                  <button className={button} onClick={() => run(model.id, 'Deleting…', hubApi.deleteModel)}>
+                  <button
+                    className={button}
+                    onClick={() => window.confirm(`Delete ${model.name}? Downloading it again takes ${model.sizeGB} GB.`) && run(model.id, 'Deleting…', hubApi.deleteModel)}
+                  >
                     Delete
                   </button>
                 </>

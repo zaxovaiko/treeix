@@ -40,6 +40,7 @@ export const hubApi = {
   retry: (runId: string, node: string) => bridge.invoke<void>('retryRun', runId, node),
   localModels: () => bridge.invoke<LocalModelsState>('localModels'),
   pullModel: (id: string) => bridge.invoke<void>('pullModel', id),
+  cancelPull: (id: string) => bridge.invoke<void>('cancelPull', id),
   deleteModel: (id: string) => bridge.invoke<void>('deleteModel', id),
   longContext: (id: string) => bridge.invoke<void>('longContext', id),
   /** Download progress of a model, in percent */

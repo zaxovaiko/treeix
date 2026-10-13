@@ -13,11 +13,13 @@ async function ollama(path: string, init?: RequestInit): Promise<Response> {
   return response
 }
 
-const post = (path: string, body: Record<string, unknown>, method = 'POST'): Promise<Response> =>
-  ollama(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+const post = (path: string, body: Record<string, unknown>, init: RequestInit = {}): Promise<Response> =>
+  ollama(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), ...init })
 
 /** Downloads, deletes and lists models through Ollama's own API for the Local models settings */
 export function ollamaHandlers(context: MainContext): void {
+  const pulls = new Map<string, AbortController>()
+
   context.handle('localModels', async (): Promise<LocalModelsState> => {
     try {
       const models = list(object(await (await ollama('/api/tags')).json()).models)
@@ -28,8 +30,8 @@ export function ollamaHandlers(context: MainContext): void {
   })
 
   // Progress streams as JSON lines; each layer reports its own total, so the fraction restarts per layer
-  context.handle('pullModel', async (_, id: string) => {
-    const response = await post('/api/pull', { model: id })
+  const pull = async (id: string, signal: AbortSignal): Promise<void> => {
+    const response = await post('/api/pull', { model: id }, { signal })
     if (!response.body) throw new Error('Ollama sent nothing')
     let rest = ''
     let percent = -1
@@ -46,9 +48,22 @@ export function ollamaHandlers(context: MainContext): void {
         if (next !== percent) context.broadcast('pull', id, (percent = next))
       }
     }
+  }
+  // A cancelled download ends quietly; Ollama keeps the layers it got, so a later Download resumes
+  context.handle('pullModel', async (_, id: string) => {
+    const abort = new AbortController()
+    pulls.set(id, abort)
+    try {
+      await pull(id, abort.signal)
+    } catch (error) {
+      if (!abort.signal.aborted) throw error
+    } finally {
+      pulls.delete(id)
+    }
   })
+  context.handle('cancelPull', (_, id: string) => pulls.get(id)?.abort())
 
-  context.handle('deleteModel', async (_, id: string) => void (await post('/api/delete', { model: id }, 'DELETE')))
+  context.handle('deleteModel', async (_, id: string) => void (await post('/api/delete', { model: id }, { method: 'DELETE' })))
   context.handle(
     'longContext',
     async (_, id: string) => void (await post('/api/create', { model: longContextId(id), from: id, parameters: { num_ctx: LONG_CONTEXT_TOKENS }, stream: false }))
