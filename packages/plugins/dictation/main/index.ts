@@ -1,7 +1,8 @@
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { shell, systemPreferences } from 'electron'
-import { type NativeHelper, nativeBinary, nativeHelpersSupported, superviseHelper } from '@treeix/host/nativeHelper'
+import { type NativeHelper, nativeBinary, nativeHelpersSupported, speechModelsPath, superviseHelper } from '@treeix/host/nativeHelper'
 import { readJsonFile } from '@treeix/host/paths'
 import { isJson, isString, list, object } from '@treeix/shared/json'
 import type { MainPlugin } from '@treeix/sdk/main'
@@ -20,6 +21,15 @@ const permissions = (): Permissions => ({
 })
 
 const openPrivacyPane = (pane: 'Microphone' | 'Accessibility'): Promise<void> => shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?Privacy_${pane}`)
+
+/** Models used to live in the plugin's own folder; they move to the shared one once, and copies it already has go */
+function adoptModels(legacy: string): void {
+  if (!existsSync(legacy)) return
+  const shared = speechModelsPath()
+  mkdirSync(shared, { recursive: true })
+  for (const name of readdirSync(legacy)) if (!existsSync(join(shared, name))) renameSync(join(legacy, name), join(shared, name))
+  rmSync(legacy, { recursive: true, force: true })
+}
 
 const plugin: MainPlugin = {
   activate: (context) => {
@@ -41,7 +51,7 @@ const plugin: MainPlugin = {
     const configure = (): void => {
       if (!settings) return
       const { hotkey, tapToToggle, sounds, model, formatting } = settings
-      command({ type: 'configure', hotkey, tapToToggle, sounds, model, formatting: formatting.enabled && formatting.model !== '', modelsPath: join(context.dataPath, 'models') })
+      command({ type: 'configure', hotkey, tapToToggle, sounds, model, formatting: formatting.enabled && formatting.model !== '', modelsPath: speechModelsPath() })
     }
 
     let saving = Promise.resolve()
@@ -110,6 +120,7 @@ const plugin: MainPlugin = {
     context.handle('formatterModels', (_, baseUrl: unknown) => (isString(baseUrl) ? formatterModels(baseUrl) : []))
 
     if (nativeHelpersSupported) {
+      adoptModels(join(context.dataPath, 'models'))
       helper = superviseHelper(nativeBinary('treeix-voice'), 'dictation', {
         line: (line) => {
           const message = parseHelperMessage(line)

@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { app, Notification, shell, systemPreferences } from 'electron'
-import { type NativeHelper, nativeBinary, nativeHelpersSupported, superviseHelper } from '@treeix/host/nativeHelper'
+import { Notification, shell, systemPreferences } from 'electron'
+import { type NativeHelper, nativeBinary, nativeHelpersSupported, speechModelsPath, superviseHelper } from '@treeix/host/nativeHelper'
 import { isString, object, text } from '@treeix/shared/json'
 import type { MainPlugin } from '@treeix/sdk/main'
 import { type CalendarEvent, type Meeting, type Permissions, parseSettings, type Status } from '../shared/types'
@@ -146,7 +146,7 @@ const plugin: MainPlugin = {
       switch (message.type) {
         case 'ready':
           setStatus({ helper: 'running' })
-          command({ type: 'configure', modelsPath: join(app.getPath('userData'), 'models') })
+          command({ type: 'configure', modelsPath: speechModelsPath() })
           return void recover()
         case 'mic':
           micApps = message.apps

@@ -15,6 +15,9 @@ export const nativeHelpersSupported = process.platform === 'darwin' && process.a
 /** A binary built from `apps/desktop/native/voice`, unpacked next to the asar in a packaged app */
 export const nativeBinary = (name: string): string => join(app.getAppPath(), 'native', 'voice', 'bin', name).replace('app.asar', 'app.asar.unpacked')
 
+/** Speech models both helpers load, so dictation and meetings share one download */
+export const speechModelsPath = (): string => join(app.getPath('userData'), 'models')
+
 export type NativeHelper = { send: (message: Record<string, unknown>) => void; stop: () => void }
 
 /**
