@@ -45,6 +45,8 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - **Agents can drive Treeix.** It serves its own MCP tools, so a session can open a page in the browser, start another session, save a workspace or run one of your workflows.
 - **Always a key away.** A global shortcut brings Treeix to the front over any other app, and it keeps the Mac awake while an agent works, with the lid closed if you ask.
 - **Dictation.** Hold a key, speak, and the text lands in any app. Recognised on the Mac, optionally cleaned up by a local model.
+- **Meetings.** Google Meet, Slack huddles, Zoom and Teams calls record on their own and become transcripts with speakers, on the Mac. A workflow turns them into notes and tasks.
+- **Slack and Notion.** Slack messages collect in batches for a workflow to pick todos from, and any workflow can add pages to a Notion database.
 - **Themes.** Light and dark, after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized.
 - **Markdown.** Headings fold, mermaid blocks render, private uploads load their images, and full screen zooms.
 - **Everything is a plugin.** Switch any feature above off in Settings and it stops loading its code entirely.
@@ -122,7 +124,7 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 
 | Plugin | Default | What it adds |
 | --- | --- | --- |
-| [`hub`](packages/plugins/hub) | on | AI Hub tab: your own agents on Claude, Codex, OpenRouter or Ollama, workflows on a canvas, runs, schedules and an MCP server |
+| [`hub`](packages/plugins/hub) | on | AI Hub tab: your own agents on Claude, Codex, OpenRouter or Ollama, workflows on a canvas started by hand, schedules or other plugins' events, local model downloads and an MCP server |
 | [`terminal`](packages/plugins/terminal) | on | Terminal tab, docked panel, sessions for Claude, Codex, a shell or any agent you configure, surviving reloads |
 | [`chat`](packages/plugins/chat) | on | Chat view for Claude, Codex and any agent with a chat command, next to their terminals |
 | [`pull-requests`](packages/plugins/pull-requests) | on | GitHub and GitLab pull requests, review threads, viewed files, conflicts |
@@ -133,6 +135,9 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 | [`themes`](packages/plugins/themes) | on | Light and dark themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized |
 | [`diagrams`](packages/plugins/diagrams) | on | Mermaid code blocks, loaded on the first diagram |
 | [`keep-awake`](packages/plugins/keep-awake) | on | Keeps the Mac awake while an agent is working, optionally with the lid closed |
+| [`meetings`](packages/plugins/meetings) | off | Records calls when they start, transcribes them with speakers on the Mac, lists them with today's calendar, and hands transcripts to workflows |
+| [`slack`](packages/plugins/slack) | off | Collects Slack messages over Socket Mode and hands them to workflows in batches |
+| [`notion`](packages/plugins/notion) | off | A `notion_create_pages` tool that adds pages to any database, for agents and workflow steps |
 | [`dictation`](packages/plugins/dictation) | off | Hold a key, speak, and the text is pasted into any app; speech recognised on the Mac, optional cleanup by a local model |
 | [`jira`](packages/plugins/jira) | off | Jira work items, status changes, worktree per item, sending items to agents |
 | [`confluence`](packages/plugins/confluence) | off | Confluence pages, search, page trees, link previews |

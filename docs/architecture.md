@@ -37,6 +37,10 @@ The `chat` plugin gives agents a chat view next to their terminals. It talks to 
 
 The `hub` plugin (ADR 0006) adds personas, workflows and runs on top of chat. Personas join the agent registry through `RendererPlugin.agents` as `hub.<id>`; the plugin also contributes an OpenAI-compatible chat adapter for OpenRouter, Ollama and LM Studio, with API keys kept in main. Workflow runs execute in the hub's main process (`packages/plugins/hub/main/engine.ts`) over `context.chatAdapter`, so they outlive a window reload; run state and event logs live under the plugin's data folder. The canvas is `@xyflow/react`, loaded lazily.
 
+Plugins that produce something hand it to workflows instead of knowing where it goes (ADR 0008). `context.emit(name, payload)` names the event `<plugin id>.<name>` and resolves true once a listener (the hub, whose input steps can list events) started a run, so a producer keeps the payload until then. A workflow's `tool` step calls any MCP tool Treeix serves through `context.callTool`. So `meetings` emits `transcribed`, `slack` emits `messages`, `notion` offers `notion_create_pages`, and which model writes the notes and which database gets them is the user's workflow. Tokens these plugins keep go through `@treeix/host/secrets`, encrypted with `safeStorage`.
+
+`meetings` and `dictation` run Swift helpers from `apps/desktop/native/voice` (one Swift package, two executables) over JSON lines on stdin and stdout, supervised by `@treeix/host/nativeHelper`. Both read speech models from one `models` folder in the app's data, so a model is downloaded once. The meetings helper records the call app's audio with a Core Audio process tap and the microphone into separate CAF files, which stay readable if the app is killed mid-call, and reads the macOS calendar with EventKit.
+
 ## Imports
 
 | Alias | Points at |

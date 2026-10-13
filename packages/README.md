@@ -17,6 +17,7 @@ The folder name must match `id`. The host finds plugins with `import.meta.glob`,
 - **Main modules** are bundled into the main process, but `activate` only runs while the plugin is enabled. Handlers registered with `context.handle` are removed when it is disabled.
 - **Renderer modules** are separate chunks. They are fetched only once the plugin is enabled, and heavy views inside them should use `React.lazy`.
 - **Talking between the two sides:** `createBridge(id)` from `@treeix/sdk` calls the plugin's own main handlers.
+- **Handing work to other plugins:** a main module calls `context.emit(name, payload)` when something happened (a transcript, a batch of messages) and offers tools with `context.mcpTool`. Hub workflows start on events and call tools, so the producer never names a destination. Keep the payload until `emit` resolves true.
 - **Talking to other plugins:** plugins don't import each other. They offer and look up services (`services` in `RendererPlugin`, `host.service(name)`, `useService(name)`). A plugin adds its service to the `Services` interface with module augmentation.
 - **Settings:** a plugin keeps its settings apart from the app's with `definePluginSettings`.
 - **Link previews:** a plugin can recognise URLs (`linkPreviews`). Any view renders `<LinkPreviews urls>` from `@treeix/app/LinkPreviews`, and each link shows through whichever enabled plugin recognises it. Jira issues and Confluence pages preview this way in Jira items, Confluence pages and pull request descriptions.
