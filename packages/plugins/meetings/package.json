@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-meetings",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "meetings",
+    "name": "Meetings",
+    "description": "Records your calls in Google Meet, Slack, Zoom and Teams, transcribes them on the Mac with speakers told apart, and hands the transcript to AI Hub workflows.",
+    "enabledByDefault": false
+  }
+}

@@ -1,10 +1,7 @@
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { release } from 'node:os'
 import { join } from 'node:path'
-import { createInterface } from 'node:readline'
-import { app, shell, systemPreferences } from 'electron'
+import { shell, systemPreferences } from 'electron'
+import { type NativeHelper, nativeBinary, nativeHelpersSupported, superviseHelper } from '@treeix/host/nativeHelper'
 import { readJsonFile } from '@treeix/host/paths'
 import { isJson, isString, list, object } from '@treeix/shared/json'
 import type { MainPlugin } from '@treeix/sdk/main'
@@ -13,12 +10,6 @@ import { type HelperCommand, type HelperMessage, parseHelperMessage } from './pr
 import { applyVocabulary, format, formatterModels } from './text'
 
 const HISTORY_LIMIT = 50
-/** A helper that ran this long before dying starts again right away; quicker deaths back off up to MAX_BACKOFF_MS */
-const HEALTHY_MS = 60_000
-const MAX_BACKOFF_MS = 30_000
-
-/** FluidAudio runs speech models on the Neural Engine and needs macOS 14 (Darwin 23) */
-const supported = process.platform === 'darwin' && process.arch === 'arm64' && Number(release().split('.')[0]) >= 23
 
 const isDictation = (value: unknown): value is Dictation =>
   isJson(value) && typeof value.at === 'number' && isString(value.raw) && isString(value.text) && (value.app === null || isString(value.app))
@@ -32,14 +23,10 @@ const openPrivacyPane = (pane: 'Microphone' | 'Accessibility'): Promise<void> =>
 
 const plugin: MainPlugin = {
   activate: (context) => {
-    const binary = join(app.getAppPath(), 'native', 'voice', 'bin', 'treeix-voice').replace('app.asar', 'app.asar.unpacked')
     const historyPath = join(context.dataPath, 'history.json')
-    let status: Status = { helper: supported ? 'starting' : 'unsupported', models: [], error: null }
+    let status: Status = { helper: nativeHelpersSupported ? 'starting' : 'unsupported', models: [], error: null }
     let settings: DictationSettings | null = null
-    let helper: ChildProcessWithoutNullStreams | null = null
-    let restartTimer: ReturnType<typeof setTimeout> | undefined
-    let failures = 0
-    let disposed = false
+    let helper: NativeHelper | null = null
     let history: Promise<Dictation[]> = readJsonFile(historyPath).then((value) => list(value, isDictation))
 
     const setStatus = (patch: Partial<Status>): void => {
@@ -48,7 +35,7 @@ const plugin: MainPlugin = {
     }
 
     const command = (message: HelperCommand): void => {
-      helper?.stdin.write(`${JSON.stringify(message)}\n`)
+      helper?.send(message)
     }
 
     const configure = (): void => {
@@ -99,32 +86,6 @@ const plugin: MainPlugin = {
       }
     }
 
-    const start = (): void => {
-      if (!existsSync(binary)) return setStatus({ helper: 'missing' })
-      const startedAt = Date.now()
-      const child = spawn(binary, [], { stdio: ['pipe', 'pipe', 'pipe'] })
-      helper = child
-      // Writing to a helper that just died fails asynchronously; the exit handler restarts it
-      child.stdin.on('error', () => undefined)
-      child.stderr.resume()
-      createInterface({ input: child.stdout }).on('line', (line) => {
-        const message = parseHelperMessage(line)
-        if (message) receive(message)
-      })
-      let ended = false
-      const stopped = (reason: string): void => {
-        if (ended) return
-        ended = true
-        helper = null
-        if (disposed) return
-        failures = Date.now() - startedAt > HEALTHY_MS ? 0 : failures + 1
-        setStatus({ helper: 'crashed', models: [], error: reason })
-        restartTimer = setTimeout(start, Math.min(MAX_BACKOFF_MS, 500 * 2 ** failures))
-      }
-      child.on('error', (error) => stopped(`The dictation helper couldn't start: ${error.message}`))
-      child.on('exit', (code, signal) => stopped(`The dictation helper stopped (${signal ?? `exit ${code}`}), restarting`))
-    }
-
     context.handle('configure', (_, stored: unknown) => {
       settings = parseSettings(object(stored))
       configure()
@@ -148,13 +109,17 @@ const plugin: MainPlugin = {
     context.handle('clearHistory', () => updateHistory(() => []))
     context.handle('formatterModels', (_, baseUrl: unknown) => (isString(baseUrl) ? formatterModels(baseUrl) : []))
 
-    context.onDispose(() => {
-      disposed = true
-      clearTimeout(restartTimer)
-      helper?.kill()
-    })
-
-    if (supported) start()
+    if (nativeHelpersSupported) {
+      helper = superviseHelper(nativeBinary('treeix-voice'), 'dictation', {
+        line: (line) => {
+          const message = parseHelperMessage(line)
+          if (message) receive(message)
+        },
+        down: (reason) => setStatus({ helper: 'crashed', models: [], error: reason })
+      })
+      if (!helper) setStatus({ helper: 'missing' })
+    }
+    context.onDispose(() => helper?.stop())
   }
 }
 
