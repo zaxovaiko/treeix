@@ -1503,7 +1503,7 @@ export function SettingsView({ onClose }: { onClose: () => void }): React.JSX.El
         <>
           <div className={`${PANE_HEADER} px-3 text-[11px] font-semibold text-foreground`}>Settings</div>
           <div className="shrink-0 border-b border-border p-2">
-            <label className="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-xs ring-1 ring-border">
+            <label className="flex h-7 items-center gap-2 rounded-md px-2 text-xs ring-1 ring-border">
               <Icon name="search" className="size-3.5 shrink-0 text-muted-foreground" />
               <input
                 ref={searchRef}

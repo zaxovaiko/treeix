@@ -136,7 +136,7 @@ export function MeetingsTab(): React.JSX.Element {
         <span className="text-[11px] font-semibold">Meetings</span>
       </div>
       <div className="shrink-0 border-b border-border p-2">
-        <label className="flex h-7 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
+        <label className="flex h-7 items-center gap-2 rounded-md px-2 text-muted-foreground ring-1 ring-border">
           <Icon name="search" className="size-3.5" />
           <input
             value={query}

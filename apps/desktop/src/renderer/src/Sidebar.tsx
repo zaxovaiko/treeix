@@ -356,7 +356,7 @@ export function Sidebar({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-col">
         <div className={`${PANE_HEADER} min-w-0 gap-1 px-1.5`}>
-          <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted px-2 text-muted-foreground ring-1 ring-border">
+          <label className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-muted-foreground ring-1 ring-border">
             <Icon name="search" className="size-3.5" />
             <input
               value={query}

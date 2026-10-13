@@ -108,7 +108,7 @@ export function FilterSearch<T>({
   let index = -1
   return (
     <div className="relative min-w-0 flex-1">
-      <label ref={box} className="flex min-h-8 flex-wrap items-center gap-1 rounded-lg bg-muted py-1 pr-1.5 pl-2.5 text-muted-foreground ring-1 ring-border">
+      <label ref={box} className="flex min-h-8 flex-wrap items-center gap-1 rounded-lg py-1 pr-1.5 pl-2.5 text-muted-foreground ring-1 ring-border">
         <Icon name="search" className="mr-0.5 size-3.5" />
         {tokens.map((token) => (
           <span key={`${token.kind}:${token.value}`} className="flex h-6 max-w-40 items-center gap-1.5 rounded-md bg-accent pr-1 pl-1.5 text-xs text-foreground ring-1 ring-border">
