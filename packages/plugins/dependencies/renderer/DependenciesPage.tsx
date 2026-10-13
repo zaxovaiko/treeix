@@ -141,6 +141,7 @@ export function DependenciesPage(): React.JSX.Element {
           onNodeDoubleClick={(_, node: BoxNode) => node.data.item.manifest && openManifest(node.data.item.manifest)}
           nodesConnectable={false}
           fitView
+          fitViewOptions={{ maxZoom: 1 }}
           minZoom={0.1}
           proOptions={{ hideAttribution: true }}
           style={FLOW_THEME}

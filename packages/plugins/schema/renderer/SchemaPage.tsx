@@ -146,6 +146,7 @@ export function SchemaPage(): React.JSX.Element {
           onNodeDoubleClick={(_, node: TableNode) => openSource(node.data.table)}
           nodesConnectable={false}
           fitView
+          fitViewOptions={{ maxZoom: 1 }}
           minZoom={0.1}
           proOptions={{ hideAttribution: true }}
           style={FLOW_THEME}
