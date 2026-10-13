@@ -122,15 +122,9 @@ function PageMain({
         <IconButton label="Reload page (r)" onClick={onReload}>
           <Icon name="refresh" className="size-3.5" />
         </IconButton>
-        <button
-          onClick={onAgent}
-          title="Add to agent comments (a)"
-          className="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] ring-1 ring-border hover:bg-accent hover:text-foreground"
-        >
-          <Icon name="comment" className="size-3" />
-          To agent
-          <Kbd hint>a</Kbd>
-        </button>
+        <IconButton label="Add to agent comments (a)" onClick={onAgent}>
+          <Icon name="comment" className="size-3.5" />
+        </IconButton>
         <IconButton label="Copy link (y)" onClick={onCopy}>
           <Icon name="copy" className="size-3.5" />
         </IconButton>
