@@ -74,3 +74,9 @@ export type Status = {
 }
 
 export type Permissions = { microphone: string; calendar: string }
+
+/** Elapsed time as m:ss */
+export const clock = (ms: number): string => {
+  const seconds = Math.floor(ms / 1000)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}

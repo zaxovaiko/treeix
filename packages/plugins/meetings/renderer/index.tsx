@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { RendererPlugin } from '@treeix/sdk'
 import { errorMessage } from '@treeix/app/ui'
-import type { Status } from '../shared/types'
+import { clock, type Status } from '../shared/types'
 import { MeetingsTab } from './MeetingsTab'
 import { MeetingsSettings } from './Settings'
 import { bridge, meetingsSettings, revision, status, TAB_ID } from './state'
@@ -19,11 +19,6 @@ function Sync(): null {
     }
   }, [])
   return null
-}
-
-const clock = (ms: number): string => {
-  const seconds = Math.floor(ms / 1000)
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 /** Shown only while recording: how long, and a way to stop */

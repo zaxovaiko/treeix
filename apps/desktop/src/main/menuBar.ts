@@ -5,8 +5,9 @@ import { HEIGHT, menuBarAlpha } from './menuBarImage'
 
 let tray: Tray | null = null
 let open: (() => void) | null = null
-const EMPTY: MenuBarStatus = { title: '', meters: [], lines: [] }
-let status = EMPTY
+/** Each plugin's own part; the item shows them side by side */
+const statuses = new Map<string, MenuBarStatus>()
+let status: MenuBarStatus = { title: '', meters: [], lines: [] }
 
 function glyphAlpha(): { width: number; alpha: Uint8Array } {
   const image = nativeImage.createFromPath(glyphPath).resize({ height: HEIGHT })
@@ -48,8 +49,18 @@ export function showMenuBar(onOpen: (() => void) | null): void {
   render()
 }
 
-/** What the menu bar item shows; null clears it back to the glyph */
-export function setMenuBarStatus(next: MenuBarStatus | null): void {
-  status = next ?? EMPTY
+/** What a plugin shows in the menu bar item, beside the other plugins' parts; null takes its part away */
+export function setMenuBarStatus(pluginId: string, next: MenuBarStatus | null): void {
+  if (next) statuses.set(pluginId, next)
+  else statuses.delete(pluginId)
+  const parts = [...statuses.values()]
+  status = {
+    title: parts
+      .map((part) => part.title)
+      .filter(Boolean)
+      .join('  '),
+    meters: parts.flatMap((part) => part.meters),
+    lines: parts.flatMap((part) => part.lines)
+  }
   render()
 }

@@ -5,7 +5,7 @@ import { Notification, shell, systemPreferences } from 'electron'
 import { type NativeHelper, nativeBinary, nativeHelpersSupported, speechModelsPath, superviseHelper } from '@treeix/host/nativeHelper'
 import { isString, object, text } from '@treeix/shared/json'
 import type { MainPlugin } from '@treeix/sdk/main'
-import { type CalendarEvent, type Meeting, type Permissions, parseSettings, type Status } from '../shared/types'
+import { type CalendarEvent, clock, type Meeting, type Permissions, parseSettings, type Status } from '../shared/types'
 import { type Call, type DetectorState, detect, needsTabs, step, type Tab } from './detector'
 import { type HelperCommand, type HelperMessage, parseHelperMessage } from './protocol'
 import { createStore } from './store'
@@ -57,6 +57,22 @@ const plugin: MainPlugin = {
     let calendarAccess = 'unknown'
     /** Folders sent to the helper to transcribe; a helper that dies on one fails it, so it isn't retried forever */
     const transcribing = new Set<string>()
+
+    // The menu bar shows a recording's time and that transcripts are being made, like a call app's indicator
+    let shown = ''
+    const showMenuBar = (): void => {
+      const { recording } = status
+      const next = recording
+        ? { title: `● ${clock(Date.now() - recording.since)}`, meters: [], lines: [`Recording ${recording.title}`] }
+        : transcribing.size
+          ? { title: 'Transcribing…', meters: [], lines: [`Transcribing ${transcribing.size === 1 ? 'a meeting' : `${transcribing.size} meetings`}`] }
+          : null
+      if (JSON.stringify(next) === shown) return
+      shown = JSON.stringify(next)
+      context.menuBar(next)
+    }
+    const menuBarClock = setInterval(showMenuBar, 1000)
+    context.onDispose(() => clearInterval(menuBarClock))
 
     /** One reply of each type is awaited at a time; a newer question answers the older one with null */
     const waiting = new Map<HelperMessage['type'], (message: HelperMessage | null) => void>()
