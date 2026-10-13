@@ -11,13 +11,13 @@ import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
 import { PANE_HEADER, useHost, usePanels } from '@treeix/sdk'
-import { errorMessage, ResizeGrip, useChromeless } from '@treeix/app/ui'
+import { errorMessage, NameInput, ResizeGrip, useChromeless } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { droppedPaths } from './fileLinks'
 import type { SplitEdge } from './paneLayout'
 import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
-import { NameInput, renaming, startRename } from './rename'
+import { renaming, startRename } from './rename'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
   attachSession,
@@ -152,14 +152,15 @@ export function ClosedSessions({ entries, repos }: { entries: ClosedSession[]; r
 }
 
 /** Actions of a session, in the toolbar, the sidebar and the terminal menu */
-export const sessionEntries = (session: Session, flash: (message: string) => void): MenuEntry[] => [
+/** `rename` defaults to editing the name in the session's header */
+export const sessionEntries = (session: Session, flash: (message: string) => void, rename = (): void => startRename(session.id)): MenuEntry[] => [
   {
     label: session.view === 'chat' ? 'New chat here' : `New ${agentOr(session.kind).label} session here`,
     run: () => openSession(session.worktreePath, session.kind, session.view)
   },
   otherView(session) === 'chat' && { label: 'Open as chat', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
   otherView(session) === 'terminal' && { label: 'Open in terminal', run: () => void switchView(session.id).catch((reason: unknown) => flash(errorMessage(reason))) },
-  { label: 'Rename…', run: () => startRename(session.id) },
+  { label: 'Rename…', run: rename },
   null,
   { label: 'Split right', accelerator: acceleratorOf('terminal.splitRight'), run: () => void splitSession(session.id, 'right', flash) },
   { label: 'Split down', accelerator: acceleratorOf('terminal.splitDown'), run: () => void splitSession(session.id, 'bottom', flash) },
@@ -171,7 +172,7 @@ export const sessionEntries = (session: Session, flash: (message: string) => voi
 ]
 
 const SessionNameInput = ({ session }: { session: Session }): React.JSX.Element => (
-  <NameInput value={session.title} label="Session name" onSave={(name) => renameSession(session.id, name)} onDone={focusShown} />
+  <NameInput value={session.title} label="Session name" onSave={(name) => renameSession(session.id, name)} onClose={() => renaming.update({ id: null })} onDone={focusShown} />
 )
 
 /** The session on screen: its terminal, or the chat plugin's view */

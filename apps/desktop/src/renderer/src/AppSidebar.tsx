@@ -1,15 +1,15 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ISLAND, type SessionSummary, type SidebarSection, useHost } from '@treeix/sdk'
 import type { Repo } from '../../shared/types'
 import { ActivityMark, NEWS } from './activity'
 import { getAgents, isChatOnly } from './agents'
-import { openMenu } from './contextMenu'
+import { type MenuAction, openMenu } from './contextMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Icon } from './Icon'
 import { usePlugins, useSessions } from './plugins'
 import { activityOf, KindBadge, SESSION_MIME, StatusDot } from './sessionUi'
 import { digitLabel, toggleIn } from './settings'
-import { IconButton, ResizeHandle } from './ui'
+import { IconButton, NameInput, Popup, ResizeHandle } from './ui'
 import { Badge } from './WorkspaceSwitcher'
 import { ALL_PROJECTS, commonFolder, deleteWorkspace, HOME, inWorkspace, moveWorkspace, useWorkspaces, type Workspace } from './workspaces'
 import { actionKeys } from '../../shared/keymap'
@@ -19,6 +19,7 @@ const noSubscription = (): (() => void) => () => undefined
 const HEADING = 'text-[11px] font-semibold text-foreground'
 const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md pr-1 text-left text-xs hover:text-foreground'
 const WORKSPACE_MIME = 'application/x-treeix-workspace'
+const MENU_CLOSE_MS = 150
 
 /** The scope with no workspace picked: every project, and every session but Home's. Only listed while it is the one on screen */
 const ALL: Workspace = { id: ALL_PROJECTS, name: 'All projects', color: '#64748b', icon: 'folder', repoPaths: [] }
@@ -73,36 +74,100 @@ function Sessions({ sessions, onOpen, indent = 'pl-7' }: { sessions: SessionSumm
   const active = useSyncExternalStore(service?.subscribe ?? noSubscription, () => service?.active() ?? null)
   // Highlighted only while the terminal shows it, so one row in the sidebar marks what is on screen
   const onScreen = host.activeTab === TERMINAL_TAB
+  const [editing, setEditing] = useState<string | null>(null)
   return (
     <>
-      {sessions.map((session) => (
-        // The close button sits beside the row, not in it, so its click does not also open the session
-        <div key={session.id} className="group relative">
-          <button
-            onClick={() => open(session.id)}
-            // Dropped on a terminal pane, it opens beside it
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData(SESSION_MIME, session.id)
-              event.dataTransfer.effectAllowed = 'move'
-            }}
-            className={`${ROW} h-7 ${indent} hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
-          >
-            {session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />}
-            <span className="min-w-0 flex-1 truncate">{session.title}</span>
-            {session.split && <Icon name="splitRight" className="size-3 shrink-0 text-muted-foreground" />}
-            <span className="flex group-hover:invisible">
-              <StatusDot session={session} />
+      {sessions.map((session) => {
+        const icon = session.view === 'chat' ? <Icon name="comment" className="size-3.5 shrink-0 text-muted-foreground" /> : <KindBadge kind={session.kind} />
+        if (session.id === editing)
+          return (
+            <div key={session.id} className={`${ROW} h-7 ${indent} bg-accent`}>
+              {icon}
+              <NameInput value={session.title} label="Session name" onSave={(name) => service?.rename(session.id, name)} onClose={() => setEditing(null)} />
+            </div>
+          )
+        return (
+          // The close button sits beside the row, not in it, so its click does not also open the session
+          <div key={session.id} className="group relative">
+            <button
+              // A double click renames; opening again would focus the terminal and end the rename
+              onClick={(event) => event.detail < 2 && open(session.id)}
+              onDoubleClick={() => setEditing(session.id)}
+              onContextMenu={(event) =>
+                service &&
+                openMenu(
+                  event,
+                  service.menu(session.id, host.flash, () => setEditing(session.id))
+                )
+              }
+              // Dropped on a terminal pane, it opens beside it
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData(SESSION_MIME, session.id)
+                event.dataTransfer.effectAllowed = 'move'
+              }}
+              className={`${ROW} h-7 ${indent} hover:bg-accent ${session.id === active ? `font-medium text-foreground ${onScreen ? 'bg-accent' : ''}` : 'text-muted-foreground'}`}
+            >
+              {icon}
+              <span className="min-w-0 flex-1 truncate">{session.title}</span>
+              {session.split && <Icon name="splitRight" className="size-3 shrink-0 text-muted-foreground" />}
+              <span className="flex group-hover:invisible">
+                <StatusDot session={session} />
+              </span>
+            </button>
+            <span className="absolute top-0 right-0 hidden group-hover:flex">
+              <IconButton label="Close session" onClick={() => service?.close(session.id)}>
+                <Icon name="close" className="size-3" />
+              </IconButton>
             </span>
-          </button>
-          <span className="absolute top-0 right-0 hidden group-hover:flex">
-            <IconButton label="Close session" onClick={() => service?.close(session.id)}>
-              <Icon name="close" className="size-3" />
-            </IconButton>
-          </span>
-        </div>
-      ))}
+          </div>
+        )
+      })}
     </>
+  )
+}
+
+/** A workspace row's plus: a click starts the first entry, hovering lists them all */
+function NewSessionMenu({ label, entries }: { label: string; entries: MenuAction[] }): React.JSX.Element {
+  const anchor = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  const closing = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(closing.current), [])
+  const show = (): void => {
+    clearTimeout(closing.current)
+    setOpen(true)
+  }
+  // A moment's grace, so the pointer can cross the gap to the menu
+  const hide = (): void => {
+    clearTimeout(closing.current)
+    closing.current = setTimeout(() => setOpen(false), MENU_CLOSE_MS)
+  }
+  const run = (entry: MenuAction | undefined): void => {
+    setOpen(false)
+    entry?.run()
+  }
+  return (
+    // Clicks stay out of the row, the portaled menu's too; React counts the menu as inside for hovering
+    <span
+      ref={anchor}
+      onClick={(event) => event.stopPropagation()}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      className={`absolute right-0.5 ${open ? 'flex' : 'hidden group-hover:flex'}`}
+    >
+      <IconButton label={label} onClick={() => run(entries[0])}>
+        <Icon name="plus" className="size-3.5" />
+      </IconButton>
+      {open && (
+        <Popup anchor={anchor} align="end" role="menu" className="w-44 rounded-lg border border-input bg-popover p-1">
+          {entries.map((entry) => (
+            <button key={entry.label} role="menuitem" onClick={() => run(entry)} className="flex h-7 w-full items-center rounded-md px-2 text-left text-xs hover:bg-accent">
+              {entry.label}
+            </button>
+          ))}
+        </Popup>
+      )}
+    </span>
   )
 }
 
@@ -137,6 +202,13 @@ function Workspaces({
     host.setActiveTab(TERMINAL_TAB)
     void service.start(workspaceFolder(workspace), kind).then((id) => service.reveal(id))
   }
+
+  const newSessionEntries = (workspace: Workspace): MenuAction[] => [
+    { label: 'New shell here', run: () => newSession(workspace, 'shell') },
+    ...getAgents()
+      .filter((agent) => agent.agent && !isChatOnly(agent))
+      .map((agent) => ({ label: `New ${agent.label} here`, run: () => newSession(workspace, agent.id) }))
+  ]
 
   const dragProps = (workspace: Workspace, index: number): React.HTMLAttributes<HTMLButtonElement> & { draggable: true } => ({
     draggable: true,
@@ -200,11 +272,7 @@ function Workspaces({
             {!open && NEWS.includes(activity) && <ActivityMark activity={activity} className="size-2" />}
             {!open && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
           </span>
-          <span className="absolute right-0.5 hidden group-hover:flex">
-            <IconButton label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} onClick={() => newSession(workspace, 'shell')}>
-              <Icon name="plus" className="size-3.5" />
-            </IconButton>
-          </span>
+          <NewSessionMenu label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} entries={newSessionEntries(workspace)} />
         </button>
         {open && <Sessions sessions={own} onOpen={() => current || onSwitch(workspace.id)} />}
       </div>
@@ -240,10 +308,7 @@ function Workspaces({
           ...dragProps(workspace, index),
           onContextMenu: (event) =>
             openMenu(event, [
-              { label: 'New shell here', run: () => newSession(workspace, 'shell') },
-              ...getAgents()
-                .filter((agent) => agent.agent && !isChatOnly(agent))
-                .map((agent) => ({ label: `New ${agent.label} here`, run: () => newSession(workspace, agent.id) })),
+              ...newSessionEntries(workspace),
               { label: 'Edit workspace…', run: () => onEdit(workspace) },
               null,
               {

@@ -30,7 +30,7 @@ import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } fro
 import { Inspector } from './Inspector'
 import { SessionsDialog } from './SessionsDialog'
 import { startRename } from './rename'
-import { openSession, WorkspaceTerminals } from './SessionPanel'
+import { openSession, sessionEntries, WorkspaceTerminals } from './SessionPanel'
 import { findInFiles, resolvePath } from './fileLinks'
 import { NEW_TAB_ACTIONS } from './sessionMeta'
 import type { PaneLayout } from './paneLayout'
@@ -46,6 +46,7 @@ import {
   getPorts,
   getTerminals,
   isTerminalFocused,
+  renameSession,
   restoreClosedSession,
   revealSession,
   selectSession,
@@ -634,9 +635,19 @@ const plugin: RendererPlugin = {
       active: () => activeSession()?.id ?? null,
       reveal: (id) => {
         revealSession(id)
-        setTimeout(() => focusSession(id), 50)
+        const before = document.activeElement
+        // Unless a field took the keys meanwhile, like the sidebar's rename after a double click
+        setTimeout(() => {
+          const now = document.activeElement
+          if (now === before || !(now instanceof HTMLInputElement)) focusSession(id)
+        }, 50)
       },
       close: killSession,
+      rename: renameSession,
+      menu: (id, flash, onRename) => {
+        const session = getTerminals().sessions.find((candidate) => candidate.id === id)
+        return session ? sessionEntries(session, flash, onRename) : []
+      },
       showFile: (root, path) => setPreview({ root, path, line: null })
     }
   },

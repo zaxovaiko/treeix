@@ -1,5 +1,6 @@
 import { createContext, type ComponentType, type ReactNode, useContext, useSyncExternalStore } from 'react'
 import type { Command } from '@treeix/app/CommandPalette'
+import type { MenuEntry } from '@treeix/app/contextMenu'
 import type { IconName } from '@treeix/app/Icon'
 import type { Agent } from '@treeix/app/agents'
 import type { Theme } from '@treeix/app/themes'
@@ -137,6 +138,10 @@ export type SessionsService = {
   reveal: (id: string) => void
   /** Ends the session; it stays in the history, so an agent conversation can be resumed */
   close: (id: string) => void
+  /** An empty title goes back to the automatic one */
+  rename: (id: string, title: string) => void
+  /** The session's context menu, with `onRename` behind its Rename… */
+  menu: (id: string, flash: (message: string) => void, onRename: () => void) => MenuEntry[]
   /** Shows a file beside the terminals; `path` is relative to `root` */
   showFile: (root: string, path: string) => void
 }
