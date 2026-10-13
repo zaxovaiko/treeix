@@ -63,12 +63,19 @@ afterAll(async () => {
 })
 const updates: Run[] = []
 let flakyIsBack = false
+let notionIsUp = false
+const toolCalls: [string, Record<string, unknown>][] = []
 const engineOver = (store: typeof runs) =>
   createEngine({
     adapter: (id) => (id === 'fake' ? adapter : null),
     runtime: async (agent) => (agent === 'gone' || (agent === 'flaky' && !flakyIsBack) ? null : { agent, adapter: 'fake', command: agent, cwd: '/' }),
     autoApprove: async (agent) => agent === 'trusty',
     sessionEnv: async () => ({}),
+    callTool: async (name, args) => {
+      toolCalls.push([name, args])
+      if (name === 'notion_create_pages' && !notionIsUp) throw new Error('Notion is down')
+      return `${name} ok`
+    },
     runs: store,
     onRun: (run) => updates.push(run),
     onEvents: () => undefined
@@ -184,4 +191,17 @@ test('retrying a failed step runs it and what follows again', async () => {
   flakyIsBack = true
   await engine.retry(failed?.id ?? '', 'flaky')
   expect(await engine.wait(failed?.id ?? '')).toMatchObject({ status: 'done', output: 'Shipped flaky: Build v5', nodes: { flaky: { attempt: 1 } } })
+})
+
+test('a tool step gets its arguments from earlier outputs, fails the run when the call fails, and a retry calls only what failed', async () => {
+  const workflow = gated({ id: 'save', kind: 'tool', tool: 'notion_create_pages', args: '{"pages":"{{input.tasks}}","title":"From {{input.title}}"}' })
+  const input = JSON.stringify({ title: 'Daily', tasks: [{ Name: 'Ship it' }] })
+  const failed = await engine.wait(engine.launch('workflow', 'Daily', workflow, input).id)
+  expect(failed).toMatchObject({ status: 'failed', nodes: { save: { status: 'failed', error: 'Notion is down' }, output: { status: 'pending' } } })
+  expect(toolCalls.at(-1)).toEqual(['notion_create_pages', { pages: [{ Name: 'Ship it' }], title: 'From Daily' }])
+
+  notionIsUp = true
+  await engine.retry(failed?.id ?? '', 'save')
+  expect(await engine.wait(failed?.id ?? '')).toMatchObject({ status: 'done', output: 'Shipped notion_create_pages ok' })
+  expect(toolCalls).toHaveLength(2)
 })

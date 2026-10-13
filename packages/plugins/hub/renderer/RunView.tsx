@@ -27,7 +27,15 @@ const STATUS: Record<Shown, { icon: IconName; className: string; label: string }
 export const shownNode = (node: NodeRun): Shown => (node.waiting ? 'waiting' : node.status)
 export const shownRun = (run: Run): Shown => (isWaiting(run) ? 'waiting' : run.status)
 
-export const KIND_LABEL: Record<WorkflowNode['kind'], string> = { input: 'Input', agent: 'Agent', merge: 'Merge', condition: 'Condition', approval: 'Approval', output: 'Output' }
+export const KIND_LABEL: Record<WorkflowNode['kind'], string> = {
+  input: 'Input',
+  agent: 'Agent',
+  merge: 'Merge',
+  condition: 'Condition',
+  approval: 'Approval',
+  tool: 'Tool',
+  output: 'Output'
+}
 
 export function StatusIcon({ status, className = 'size-3.5' }: { status: Shown; className?: string }): React.JSX.Element {
   return (

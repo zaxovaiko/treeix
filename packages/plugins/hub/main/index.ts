@@ -21,6 +21,7 @@ import { jsonList } from './store'
 const DETECT_TIMEOUT_MS = 60_000
 const MINUTE_MS = 60_000
 const NOTICE_CHARS = 300
+const TITLE_CHARS = 80
 const COMMAND_TIMEOUT_MS = 60_000
 
 const exec = promisify(execFile)
@@ -86,6 +87,7 @@ const plugin: MainPlugin = {
       runtime: async (agent) => (await runtimes.get()).find((entry) => entry.agent === agent) ?? null,
       autoApprove: async (agent) => (await agents.get()).find((entry) => entry.id === agent)?.autoApprove === true,
       sessionEnv: context.sessionEnv,
+      callTool: context.callTool,
       runs: createRuns(join(context.dataPath, 'runs')),
       onRun: (run) => context.broadcast('run', run),
       onEvents: (runId, events) => context.broadcast('events', runId, events)
@@ -215,6 +217,28 @@ const plugin: MainPlugin = {
     }
     tick()
     context.onDispose(() => clearTimeout(timer))
+
+    // A workflow whose input lists an event starts on it; a failed run says so, since nobody watched it start
+    context.onEvent(async (name, payload) => {
+      const triggered = (await workflows.get()).filter((workflow) => workflow.nodes.some((node) => node.kind === 'input' && node.events?.includes(name)))
+      const ids = (await agents.get()).map((agent) => agent.id)
+      let started = false
+      for (const workflow of triggered) {
+        const problem = validate(workflow, ids)[0]
+        if (problem) {
+          show(`${workflow.name} can't start on ${name}`, problem.message, null)
+          continue
+        }
+        const title = isString(payload.title) && payload.title.trim() ? `${workflow.name}: ${payload.title.trim()}`.slice(0, TITLE_CHARS) : workflow.name
+        const run = engine.launch('workflow', title, workflow, JSON.stringify(payload))
+        started = true
+        void engine.wait(run.id).then((ended) => {
+          if (!ended || ended.status === 'done') return
+          show(`${workflow.name} ${ended.status}`, Object.values(ended.nodes).find((node) => node.error)?.error ?? '', ended.id)
+        })
+      }
+      return started
+    })
 
     context.on('cancelRun', (_, id: string) => engine.cancel(id))
     context.on('decide', (_, runId: string, node: string, approved: boolean) => engine.decide(runId, node, approved))

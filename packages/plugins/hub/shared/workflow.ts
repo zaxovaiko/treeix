@@ -1,5 +1,5 @@
 import type { ChatEvent, ChatSpec } from '@treeix/sdk/main'
-import { isJson } from '@treeix/shared/json'
+import { isJson, isString } from '@treeix/shared/json'
 import { isSchedule, type Schedule } from './types'
 
 /** An agent node's run: one fresh session, one prompt, the reply as its output */
@@ -18,14 +18,18 @@ export type AgentNode = {
   subagent?: string | null
 }
 
+export type ToolNode = { id: string; kind: 'tool'; tool: string; args: string }
+
 export type WorkflowNode =
-  /** `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input */
-  | { id: string; kind: 'input'; schedules?: Schedule[] }
+  /** `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input; `events` start it when a plugin emits one, with the event's JSON as the input */
+  | { id: string; kind: 'input'; schedules?: Schedule[]; events?: string[] }
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
   | { id: string; kind: 'condition'; source: string; test: 'contains' | 'equals' | 'regex' | 'empty'; value: string }
   /** Pauses the run until the user approves `message`; passes what came in on */
   | { id: string; kind: 'approval'; message: string }
+  /** Calls a tool an enabled plugin offers; `args` is a JSON object template, its text reply is the output */
+  | ToolNode
 
 /** `branch` is set on edges leaving a condition: only the side that matched runs */
 export type Edge = { id: string; from: string; to: string; branch: 'true' | 'false' | null }
@@ -35,7 +39,7 @@ type Point = { x: number; y: number }
 /** `layout` is where each step sits on the canvas; runs ignore it */
 export type Workflow = { id: string; name: string; nodes: WorkflowNode[]; edges: Edge[]; layout: Record<string, Point>; updatedAt: number }
 
-const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'approval', 'output'] satisfies WorkflowNode['kind'][]
+const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'approval', 'tool', 'output'] satisfies WorkflowNode['kind'][]
 
 /** Saved workflows come from the renderer; this keeps a malformed one out of the file */
 export const isWorkflow = (value: unknown): value is Workflow =>
@@ -49,7 +53,8 @@ export const isWorkflow = (value: unknown): value is Workflow =>
       typeof node.id === 'string' &&
       typeof node.kind === 'string' &&
       KINDS.includes(node.kind) &&
-      (node.schedules === undefined || (Array.isArray(node.schedules) && node.schedules.every(isSchedule)))
+      (node.schedules === undefined || (Array.isArray(node.schedules) && node.schedules.every(isSchedule))) &&
+      (node.events === undefined || (Array.isArray(node.events) && node.events.every(isString)))
   ) &&
   Array.isArray(value.edges) &&
   value.edges.every((edge) => isJson(edge) && typeof edge.from === 'string' && typeof edge.to === 'string') &&

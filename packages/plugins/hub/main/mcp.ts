@@ -112,9 +112,15 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
   const field = (name: string, fallback: string): string => optional(value, name) ?? fallback
   switch (value.kind) {
     case 'input': {
-      const { schedules } = value
+      const { schedules, events } = value
       if (schedules !== undefined && !Array.isArray(schedules)) throw new Error('schedules must be a list')
-      return { id, kind: 'input', ...(schedules?.length ? { schedules: schedules.map(toSchedule) } : {}) }
+      if (events !== undefined && !(Array.isArray(events) && events.every(isString))) throw new Error('events must be a list of names')
+      return {
+        id,
+        kind: 'input',
+        ...(schedules?.length ? { schedules: schedules.map(toSchedule) } : {}),
+        ...(events?.length ? { events: events.map((name) => name.trim()).filter(Boolean) } : {})
+      }
     }
     case 'agent':
       return {
@@ -139,6 +145,9 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
     }
     case 'approval':
       return { id, kind: 'approval', message: field('message', '{{prev}}') }
+    case 'tool':
+      // Arguments come as the JSON template itself or as an object, which reads better in a call
+      return { id, kind: 'tool', tool: required(value, 'tool').trim(), args: isJson(value.args) ? JSON.stringify(value.args) : field('args', '{}') }
   }
   throw new Error(`Step ${id} has an unknown kind`)
 }
@@ -317,12 +326,13 @@ export function hubTools(deps: {
       description: [
         'Creates an AI Hub workflow, or replaces the steps of the one with this name. It is saved only when it can run, else the call fails with what to fix.',
         'Steps by kind:',
-        "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}]}; where the run input enters; exactly one. A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
+        "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}], events?: [name]}; where the run input enters; exactly one. Events are other plugins' (e.g. meetings.transcribed, slack.messages): each one starts a run with its JSON payload as the input. A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
         '- agent: {agent: name, prompt, folder?, model?, subagent?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output. model overrides the agent\'s. subagent is a path from hub_subagents: the step runs with that subagent\'s prompt and model, so one agent covers every role its repos already define.',
         '- merge | output: {template}; at least one output, whose text is the run result.',
         '- condition: {source, test: "contains"|"equals"|"regex"|"empty", value}; edges leaving it set branch "true" or "false".',
         '- approval: {message}; waits for the user to approve in the AI Hub, then passes its input on.',
-        'Templates and prompts read {{input}}, {{prev}} (what flows in) and {{nodes.<id>.output}} of an earlier step.'
+        '- tool: {tool: name, args: object}; calls an MCP tool Treeix has (e.g. notion_create_pages), its reply is the output. A string in args that is only a {{reference}} gets the value as is, so an agent step answering in JSON can pass lists and objects.',
+        'Templates and prompts read {{input}}, {{prev}} (what flows in) and {{nodes.<id>.output}} of an earlier step; a dotted path reads a field of JSON, e.g. {{input.title}} or {{nodes.notes.output.tasks}}.'
       ].join('\n'),
       inputSchema: {
         type: 'object',
@@ -333,7 +343,7 @@ export function hubTools(deps: {
             type: 'array',
             items: {
               type: 'object',
-              properties: { id: { type: 'string' }, kind: { type: 'string', enum: ['input', 'agent', 'merge', 'condition', 'approval', 'output'] } },
+              properties: { id: { type: 'string' }, kind: { type: 'string', enum: ['input', 'agent', 'tool', 'merge', 'condition', 'approval', 'output'] } },
               required: ['id', 'kind']
             }
           },

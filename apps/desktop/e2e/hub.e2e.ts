@@ -240,3 +240,22 @@ test('an approval step holds the run until approved', async () => {
   await page.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByText(/^Done · /)).toBeVisible()
 })
+
+test('a tool step calls an MCP tool of Treeix and passes its reply on', async () => {
+  const { page } = launched
+  const steps = page.locator('.react-flow__node')
+  await page.getByRole('button', { name: 'New workflow' }).click()
+  await page.getByRole('textbox', { name: 'Workflow name' }).fill('Lister')
+  await steps.filter({ hasText: 'Input' }).click()
+  await page.getByRole('button', { name: 'Tool', exact: true }).click()
+  await expect(page.getByText('Pick a tool').first()).toBeVisible()
+  await page.getByPlaceholder('notion_create_pages').fill('hub_workflows')
+  await page.getByRole('textbox', { name: 'Arguments' }).fill('{}')
+  await expect(page.getByText('Pick a tool')).toHaveCount(0)
+
+  await section(page, 'workflows').locator('button', { hasText: 'Lister' }).hover()
+  await page.getByRole('button', { name: 'Run Lister' }).click()
+  await page.getByPlaceholder(/^The input/).fill('now')
+  await page.keyboard.press('Enter')
+  await expect(steps.filter({ hasText: 'hub_workflows' }).getByTitle('Done')).toBeVisible({ timeout: 20_000 })
+})

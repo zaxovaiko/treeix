@@ -79,3 +79,41 @@ test('an input step keeps its schedules, and a bad one is refused', () => {
     toWorkflow({ name: 'Bad', nodes: [{ id: 'in', kind: 'input', schedules: [{ cron: 'daily', prompt: 'p' }] }, ...steps.nodes.slice(1)], edges: steps.edges }, [], [news], 1)
   ).toThrow('crontab')
 })
+
+test('a tool step takes its arguments as an object and an input step its events', () => {
+  const nodes = [
+    { id: 'in', kind: 'input', events: [' meetings.transcribed '] },
+    { id: 'save', kind: 'tool', tool: 'notion_create_pages', args: { dataSource: 'db', pages: '{{input.tasks}}' } },
+    { id: 'out', kind: 'output' }
+  ]
+  const workflow = toWorkflow(
+    {
+      name: 'Notes',
+      nodes,
+      edges: [
+        { from: 'in', to: 'save' },
+        { from: 'save', to: 'out' }
+      ]
+    },
+    [],
+    [],
+    1
+  )
+  expect(workflow.nodes).toMatchObject([{ events: ['meetings.transcribed'] }, { tool: 'notion_create_pages', args: '{"dataSource":"db","pages":"{{input.tasks}}"}' }, {}])
+  expect(isWorkflow(workflow)).toBe(true)
+  expect(() =>
+    toWorkflow(
+      {
+        name: 'Bad',
+        nodes: [nodes[0], { id: 'save', kind: 'tool', tool: 'x', args: '[1' }, nodes[2]],
+        edges: [
+          { from: 'in', to: 'save' },
+          { from: 'save', to: 'out' }
+        ]
+      },
+      [],
+      [],
+      1
+    )
+  ).toThrow('JSON object')
+})

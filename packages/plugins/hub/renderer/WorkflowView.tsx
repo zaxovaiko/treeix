@@ -36,7 +36,7 @@ const COLUMN = 260
 const ROW = 120
 const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 const LABEL = 'flex flex-col gap-1.5 text-xs text-muted-foreground'
-const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', approval: 'lock', output: 'check' }
+const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', approval: 'lock', tool: 'plug', output: 'check' }
 const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the pattern', empty: 'is empty' } as const satisfies Record<
   Extract<WorkflowNode, { kind: 'condition' }>['test'],
   string
@@ -92,6 +92,8 @@ function blankStep(kind: Exclude<WorkflowNode['kind'], 'input'>, id: string, age
       return { id, kind, source: '{{prev}}', test: 'contains', value: '' }
     case 'approval':
       return { id, kind, message: 'Go on with {{prev}}?' }
+    case 'tool':
+      return { id, kind, tool: '', args: '{}' }
     case 'merge':
     case 'output':
       return { id, kind, template: '{{prev}}' }
@@ -103,20 +105,22 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
   const agent = hubAgents.use().find((candidate) => step.kind === 'agent' && candidate.id === step.agent)
   const state = run[id]
   const issues = problems.get(id)
-  const title = step.kind === 'agent' ? (agent?.name ?? 'Pick an agent') : KIND_LABEL[step.kind]
+  const title = step.kind === 'agent' ? (agent?.name ?? 'Pick an agent') : step.kind === 'tool' ? step.tool || 'Pick a tool' : KIND_LABEL[step.kind]
   const detail =
     step.kind === 'input'
-      ? (step.schedules ?? [])
-          .filter((schedule) => schedule.enabled)
-          .map((schedule) => [schedule.cron, schedule.command].filter(Boolean).join(' · '))
-          .join('; ') || 'What the run starts with'
+      ? [
+          ...(step.schedules ?? []).filter((schedule) => schedule.enabled).map((schedule) => [schedule.cron, schedule.command].filter(Boolean).join(' · ')),
+          ...(step.events ?? [])
+        ].join('; ') || 'What the run starts with'
       : step.kind === 'agent'
         ? step.prompt
         : step.kind === 'condition'
           ? `${step.source} ${TESTS[step.test]} ${step.test === 'empty' ? '' : step.value}`
           : step.kind === 'approval'
             ? step.message
-            : step.template
+            : step.kind === 'tool'
+              ? step.args
+              : step.template
 
   return (
     <div
@@ -190,6 +194,33 @@ function TemplateField({
   )
 }
 
+/** Events of other plugins that start the workflow, their payload as its input */
+function EventsField({ events, onChange }: { events: string[]; onChange: (events: string[]) => void }): React.JSX.Element {
+  const [draft, setDraft] = useState(events.join(', '))
+  return (
+    <label className={LABEL}>
+      Starts on events
+      <input
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() =>
+          onChange(
+            draft
+              .split(',')
+              .map((name) => name.trim())
+              .filter(Boolean)
+          )
+        }
+        placeholder="meetings.transcribed, slack.messages"
+        className={`${FIELD} h-8 font-mono text-xs`}
+      />
+      <span>
+        Each event's payload becomes {'{{input}}'}; read its fields as {'{{input.title}}'}.
+      </span>
+    </label>
+  )
+}
+
 function Inspector({
   step,
   sources,
@@ -217,6 +248,7 @@ function Inspector({
         <>
           <p className="text-xs text-muted-foreground">The text you run the workflow with, or a schedule starts it with. Steps read it as {'{{input}}'}.</p>
           <Schedules workflow schedules={step.schedules ?? []} onChange={(schedules) => onChange({ ...step, schedules })} />
+          <EventsField events={step.events ?? []} onChange={(events) => onChange({ ...step, events })} />
         </>
       )}
       {step.kind === 'agent' && (
@@ -311,6 +343,23 @@ function Inspector({
       {(step.kind === 'merge' || step.kind === 'output') && (
         <TemplateField label="Template" value={step.template} sources={sources} onChange={(template) => onChange({ ...step, template })} />
       )}
+      {step.kind === 'tool' && (
+        <>
+          <label className={LABEL}>
+            Tool
+            <input
+              value={step.tool}
+              onChange={(event) => onChange({ ...step, tool: event.target.value.trim() })}
+              placeholder="notion_create_pages"
+              className={`${FIELD} h-8 font-mono text-xs`}
+            />
+          </label>
+          <TemplateField label="Arguments" value={step.args} sources={sources} onChange={(args) => onChange({ ...step, args })} />
+          <p className="text-xs text-muted-foreground">
+            A JSON object. A value that is just {'{{reference}}'} gets what it points at as is, so a step that answers in JSON can pass lists and objects. Any MCP tool Treeix has.
+          </p>
+        </>
+      )}
       {step.kind === 'condition' && (
         <>
           <TemplateField label="Check" value={step.source} sources={sources} onChange={(source) => onChange({ ...step, source })} />
@@ -361,7 +410,7 @@ function tidy(nodes: StepNode[], edges: FlowEdge[]): StepNode[] {
   return nodes.map((node) => ({ ...node, position: placed.get(node.id) ?? node.position }))
 }
 
-const STEP_KINDS = ['agent', 'merge', 'condition', 'approval', 'output'] as const
+const STEP_KINDS = ['agent', 'tool', 'merge', 'condition', 'approval', 'output'] as const
 const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
 
 /** Steps to add and the view's controls, one island at the bottom of the canvas */

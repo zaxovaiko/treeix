@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import type { ChatAdapter, ChatConnection, ChatEvent } from '@treeix/sdk/main'
 import { createBatcher } from '@treeix/host/batcher'
-import { render, type TemplateScope } from '../shared/template'
+import { render, renderArgs, type TemplateScope } from '../shared/template'
 import { descendants } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, freshNode, type NodeRun, type Run, type RunEvent, type RunStatus, type Workflow } from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, askWorkflow, freshNode, type NodeRun, type Run, type RunEvent, type RunStatus, type ToolNode, type Workflow } from '../shared/workflow'
 import { holds, isLive, nextSteps } from './schedule'
 import { readSubagent } from './subagents'
 import { KEEP_RUNS, mergeChunks, type Runs } from './runs'
@@ -64,6 +64,8 @@ export function createEngine(deps: {
   /** Whether the agent allows every permission it asks for */
   autoApprove: (agent: string) => Promise<boolean>
   sessionEnv: () => Promise<Record<string, string>>
+  /** Runs a tool some plugin offers; throws when the call fails */
+  callTool: (name: string, args: Record<string, unknown>) => Promise<string>
   runs: Runs
   onRun: (run: Run) => void
   onEvents: (runId: string, events: RunEvent[]) => void
@@ -187,6 +189,21 @@ export function createEngine(deps: {
     step(entry)
   }
 
+  /** A failed call ends the run, so a retry from this step redoes only what didn't happen */
+  async function runTool(entry: Active, node: ToolNode, scope: TemplateScope): Promise<void> {
+    try {
+      const args = renderArgs(node.args, scope)
+      set(entry, node.id, { status: 'running', prompt: JSON.stringify(args, null, 2), attempt: 1, startedAt: Date.now() })
+      const output = await Promise.race([deps.callTool(node.tool, args), entry.stopped])
+      set(entry, node.id, { status: 'done', output, endedAt: Date.now() })
+    } catch (error) {
+      if (entry.run.status !== 'running') return
+      set(entry, node.id, { status: 'failed', error: error instanceof Error ? error.message : String(error), endedAt: Date.now() })
+      return end(entry, 'failed')
+    }
+    step(entry)
+  }
+
   /** Starts every node whose inputs are in, skips what can't run, and ends the run once nothing is left */
   function step(entry: Active): void {
     for (let progress = true; progress && entry.run.status === 'running';) {
@@ -232,6 +249,9 @@ export function createEngine(deps: {
       }
       case 'approval':
         return set(entry, id, { status: 'running', prompt: render(node.message, scope), startedAt: now, waiting: 'approval' })
+      case 'tool':
+        set(entry, id, { status: 'running', startedAt: now })
+        return void runTool(entry, node, scope)
       case 'agent': {
         const prompt = render(node.prompt, scope)
         set(entry, id, { status: 'running', prompt })

@@ -1,3 +1,4 @@
+import { isJson, parseJson } from '@treeix/shared/json'
 import { references } from './template'
 import type { Workflow, WorkflowNode } from './workflow'
 
@@ -14,6 +15,8 @@ const templatesOf = (node: WorkflowNode): string[] => {
       return [node.source]
     case 'approval':
       return [node.message]
+    case 'tool':
+      return [node.args]
     case 'merge':
     case 'output':
       return [node.template]
@@ -52,6 +55,8 @@ export function validate(workflow: Workflow, agents: string[]): Problem[] {
     if (node.kind !== 'input' && before.size === 0) add('Connect a step to it')
     if (node.kind === 'agent' && !agents.includes(node.agent)) add('Pick an agent')
     if (node.kind === 'agent' && !node.prompt.trim()) add('Write a prompt')
+    if (node.kind === 'tool' && !node.tool.trim()) add('Pick a tool')
+    if (node.kind === 'tool' && !isJson(parseJson(node.args))) add('The arguments must be a JSON object')
     if (node.kind === 'condition' && !workflow.edges.some((edge) => edge.from === node.id)) add('Connect its yes or no side')
     if (node.kind === 'condition' && node.test === 'regex') {
       try {
