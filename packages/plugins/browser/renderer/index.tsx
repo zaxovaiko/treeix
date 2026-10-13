@@ -152,7 +152,7 @@ function ServerNotices(): React.JSX.Element | null {
     // Under the title bar on the right, clear of the work below
     <div className="fixed top-11 right-3 z-40 flex w-56 flex-col gap-1.5">
       {notices.map((notice) => (
-        <div key={notice.id} role="status" aria-label={`${notice.label} is up`} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2 py-1.5">
+        <div key={notice.id} role="status" aria-label={`${notice.label} is up`} className="flex items-center gap-2 rounded-lg border border-border bg-popover px-2 py-1.5">
           <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
           <div className="min-w-0 flex-1">
             <div className="truncate font-mono text-[11px] text-foreground">{notice.label}</div>
