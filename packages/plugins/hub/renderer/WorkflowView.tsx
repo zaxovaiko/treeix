@@ -13,12 +13,13 @@ import {
   Panel,
   Position,
   ReactFlow,
-  useReactFlow
+  useReactFlow,
+  useStore
 } from '@xyflow/react'
 import { ISLAND, usePanels, useHost, Zone, PANE_HEADER } from '@treeix/sdk'
 import { actionKeys } from '@treeix/shared/keymap'
 import { Icon, type IconName } from '@treeix/app/Icon'
-import { FLOW_THEME, layered } from '@treeix/app/flow'
+import { FLOW_THEME, prettify } from '@treeix/app/flow'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
@@ -378,8 +379,20 @@ const STEP_KINDS = ['agent', 'tool', 'merge', 'condition', 'approval', 'output']
 const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
 
 /** Steps to add and the view's controls, one island at the bottom of the canvas */
-function Toolbar({ onAdd, onUndo, onTidy, room }: { onAdd: (kind: (typeof STEP_KINDS)[number]) => void; onUndo: () => void; onTidy: () => void; room: number }): React.JSX.Element {
+function Toolbar({
+  onAdd,
+  onUndo,
+  onTidy,
+  room
+}: {
+  onAdd: (kind: (typeof STEP_KINDS)[number]) => void
+  onUndo: () => void
+  onTidy: (aspect: number) => void
+  room: number
+}): React.JSX.Element {
   const flow = useReactFlow()
+  // The canvas left of the side island
+  const aspect = useStore((state) => Math.max(1, state.width - room) / Math.max(1, state.height))
   return (
     // Centred between the islands, not under them; inline, as React Flow's own panel margin would win
     <Panel position="bottom-center" style={{ marginLeft: -room / 2 }} className={`flex items-center gap-0.5 p-1 ${ISLAND}`}>
@@ -394,7 +407,13 @@ function Toolbar({ onAdd, onUndo, onTidy, room }: { onAdd: (kind: (typeof STEP_K
       <IconButton label="Undo (⌘Z)" onClick={onUndo}>
         <Icon name="undo" className="size-3.5" />
       </IconButton>
-      <IconButton label="Tidy layout" onClick={onTidy}>
+      <IconButton
+        label="Prettify"
+        onClick={() => {
+          onTidy(aspect)
+          requestAnimationFrame(() => void flow.fitView({ ...fit(room), duration: 200 }))
+        }}
+      >
         <Icon name="wand" className="size-3.5" />
       </IconButton>
       <IconButton label="Fit view" onClick={() => void flow.fitView(fit(room))}>
@@ -535,9 +554,9 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
     setEdges([...moved, { id: crypto.randomUUID(), source: after.id, target: id, sourceHandle: branching ? 'true' : null }])
   }
 
-  const prettify = (): void => {
+  const tidy = (aspect: number): void => {
     checkpoint()
-    setNodes(layered(nodes, edges, { column: COLUMN, height: () => ROW }))
+    setNodes(prettify(nodes, edges, { column: COLUMN, height: () => ROW, aspect }))
   }
 
   const update = (step: WorkflowNode): void => setNodes(nodes.map((node) => (node.id === step.id ? { ...node, data: { step } } : node)))
@@ -603,7 +622,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
           style={FLOW_THEME}
         >
           <Background gap={20} />
-          <Toolbar onAdd={add} onUndo={undo} onTidy={prettify} room={room} />
+          <Toolbar onAdd={add} onUndo={undo} onTidy={tidy} room={room} />
         </ReactFlow>
       </CanvasContext>
       {panels.inspector ? (

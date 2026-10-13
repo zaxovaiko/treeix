@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { layered, untangle } from './flow'
+import { layered, prettify, untangle } from './flow'
 
 const node = (id: string, y = 0): { id: string; position: { x: number; y: number } } => ({ id, position: { x: 0, y } })
 const at = (nodes: ReturnType<typeof layered<ReturnType<typeof node>>>): Record<string, string> =>
@@ -24,6 +24,14 @@ test('untangle levels a node with the one it links to', () => {
   ]
   const result = at(untangle(layered(nodes, edges, { column: 100, height: () => 50 }), edges, () => 50))
   expect(result.a1.split(',')[1] === result.b2.split(',')[1] && result.a2.split(',')[1] === result.b1.split(',')[1]).toBe(true)
+})
+
+test('prettify wraps a tall column to fill a wide canvas', () => {
+  const nodes = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, index) => node(id, index))
+  const result = prettify(nodes, [], { column: 100, height: () => 50, aspect: 2 })
+  // 3 columns of 2 fit a 2:1 canvas best: 300 by 100
+  expect(new Set(result.map((each) => each.position.x)).size).toBe(3)
+  expect(Math.max(...result.map((each) => each.position.y))).toBe(50)
 })
 
 test('layered survives cycles and self edges', () => {

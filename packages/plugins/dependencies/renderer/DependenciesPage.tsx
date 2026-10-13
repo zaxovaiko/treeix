@@ -1,8 +1,8 @@
 import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useState } from 'react'
-import { applyNodeChanges, Background, Controls, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
+import { applyNodeChanges, Background, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
 import { createBridge, PageLayout, PANE_HEADER, useHost } from '@treeix/sdk'
-import { FLOW_THEME, layered, untangle } from '@treeix/app/flow'
+import { FLOW_THEME, FlowControls, layered, prettify } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { Segmented, Switch } from '@treeix/app/settingsUi'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
@@ -15,6 +15,7 @@ const WIDTH = 220
 const HEIGHT = 52
 const GAP = 16
 const MAX_DEPTH = 6
+const LAYOUT = { column: WIDTH + 100, height: () => HEIGHT + GAP }
 
 type View = 'packages' | 'folders'
 type BoxNode = Node<{ item: GraphNode }, 'box'>
@@ -45,7 +46,7 @@ function toFlow(graph: Graph): { nodes: BoxNode[]; edges: Edge[] } {
     style: { strokeWidth: 1 + Math.log2(edge.count), strokeDasharray: edge.kind === 'devDependencies' ? '4 3' : undefined }
   }))
   const nodes: BoxNode[] = graph.nodes.map((item, index) => ({ id: item.id, type: 'box', position: { x: 0, y: index }, data: { item } }))
-  return { nodes: layered(nodes, edges, { column: WIDTH + 100, height: () => HEIGHT + GAP }), edges }
+  return { nodes: layered(nodes, edges, LAYOUT), edges }
 }
 
 export function DependenciesPage(): React.JSX.Element {
@@ -125,11 +126,6 @@ export function DependenciesPage(): React.JSX.Element {
         )}
         <span className="flex-1" />
         <span className="truncate">{flow ? `${flow.nodes.length} nodes, ${flow.edges.length} links` : loading ? 'Reading imports' : ''}</span>
-        {flow && (
-          <IconButton label="Prettify: fewer crossing links" onClick={() => setNodes(untangle(flow.nodes, flow.edges, () => HEIGHT + GAP))}>
-            <Icon name="wand" className="size-3.5" />
-          </IconButton>
-        )}
         <IconButton label="Rescan" onClick={rescan}>
           <Icon name={loading ? 'loader' : 'refresh'} className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
         </IconButton>
@@ -152,7 +148,7 @@ export function DependenciesPage(): React.JSX.Element {
           style={FLOW_THEME}
         >
           <Background gap={20} />
-          <Controls showInteractive={false} />
+          <FlowControls onPrettify={(aspect) => setNodes(prettify(nodes, edges, { ...LAYOUT, aspect }))} />
         </ReactFlow>
       )}
     </div>

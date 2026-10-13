@@ -1,8 +1,8 @@
 import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useState } from 'react'
-import { applyNodeChanges, Background, Controls, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
+import { applyNodeChanges, Background, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
 import { createBridge, PageLayout, PANE_HEADER, useHost } from '@treeix/sdk'
-import { FLOW_THEME, layered } from '@treeix/app/flow'
+import { FLOW_THEME, FlowControls, layered, prettify } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage, IconButton } from '@treeix/app/ui'
@@ -16,6 +16,8 @@ const ROW = 24
 const GAP = 40
 
 type TableNode = Node<{ table: Table; enums: Schema['enums']; linked: Set<string> }, 'table'>
+
+const LAYOUT = { column: WIDTH + 120, height: (node: TableNode) => HEADER + node.data.table.columns.length * ROW + GAP }
 
 const handleId = (column: string, side: 'in' | 'out'): string => `${column}:${side}`
 
@@ -79,7 +81,7 @@ function toFlow(schema: Schema): { nodes: TableNode[]; edges: Edge[] } {
     position: { x: 0, y: index },
     data: { table, enums: schema.enums, linked: linked.get(table.id) ?? new Set() }
   }))
-  return { nodes: layered(nodes, edges, { column: WIDTH + 120, height: (node) => HEADER + node.data.table.columns.length * ROW + GAP }), edges }
+  return { nodes: layered(nodes, edges, LAYOUT), edges }
 }
 
 export function SchemaPage(): React.JSX.Element {
@@ -152,7 +154,7 @@ export function SchemaPage(): React.JSX.Element {
           style={FLOW_THEME}
         >
           <Background gap={20} />
-          <Controls showInteractive={false} />
+          <FlowControls onPrettify={(aspect) => setNodes(prettify(nodes, edges, { ...LAYOUT, aspect }))} />
         </ReactFlow>
       )}
     </div>
