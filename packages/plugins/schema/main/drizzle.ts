@@ -10,7 +10,16 @@ const exec = promisify(execFile)
 const TABLE_FUNCTION = /^(pg|mysql|sqlite|singlestore|gel)Table$/
 const TABLE_FACTORY = /^(pg|mysql|sqlite|singlestore|gel)(TableCreator|Schema)$/
 const ENUM_FUNCTION = /^(pg|gel)Enum$/
-const DEFAULT_MODIFIERS = new Set(['default', 'defaultNow', 'defaultRandom', '$default', '$defaultFn', 'generatedAlwaysAsIdentity', 'generatedByDefaultAsIdentity', 'autoincrement'])
+const DEFAULT_MODIFIERS = new Set([
+  'default',
+  'defaultNow',
+  'defaultRandom',
+  '$default',
+  '$defaultFn',
+  'generatedAlwaysAsIdentity',
+  'generatedByDefaultAsIdentity',
+  'autoincrement'
+])
 const SOURCE_GLOBS = ['*.ts', '*.mts', '*.cts', '*.js', '*.mjs']
 
 type ColumnRef = { table: string; column: string }
@@ -35,8 +44,7 @@ function columnRef(node: ts.Node): ColumnRef | null {
   return ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) ? { table: node.expression.text, column: node.name.text } : null
 }
 
-const refsIn = (node: ts.Expression | undefined): ColumnRef[] =>
-  node && ts.isArrayLiteralExpression(node) ? node.elements.flatMap((element) => columnRef(element) ?? []) : []
+const refsIn = (node: ts.Expression | undefined): ColumnRef[] => (node && ts.isArrayLiteralExpression(node) ? node.elements.flatMap((element) => columnRef(element) ?? []) : [])
 
 /** The object literal a columns argument is, or returns: `{ ... }` and `(t) => ({ ... })` */
 function objectOf(node: ts.Node | undefined): ts.ObjectLiteralExpression | null {
@@ -175,12 +183,12 @@ export function parseSchema(files: { path: string; text: string }[]): Schema {
 
 /** Files git knows or would add that mention Drizzle; `git grep` exits 1 when nothing matches */
 async function candidateFiles(worktreePath: string): Promise<string[]> {
-  const { stdout } = await exec('git', ['-C', worktreePath, 'grep', '-l', '--untracked', '-E', 'drizzle-orm|Table\\(|Table\\.', '--', ...SOURCE_GLOBS], { maxBuffer: 64 << 20 }).catch(
-    (reason: { code?: number }) => {
-      if (reason.code === 1) return { stdout: '' }
-      throw reason
-    }
-  )
+  const { stdout } = await exec('git', ['-C', worktreePath, 'grep', '-l', '--untracked', '-E', 'drizzle-orm|Table\\(|Table\\.', '--', ...SOURCE_GLOBS], {
+    maxBuffer: 64 << 20
+  }).catch((reason: { code?: number }) => {
+    if (reason.code === 1) return { stdout: '' }
+    throw reason
+  })
   return stdout.split('\n').filter(Boolean)
 }
 

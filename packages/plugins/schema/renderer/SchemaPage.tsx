@@ -120,13 +120,7 @@ export function SchemaPage(): React.JSX.Element {
     })
   }
 
-  const empty = !worktree
-    ? 'Select a worktree to see its schema'
-    : error
-      ? error
-      : schema && schema.tables.length === 0
-        ? 'No Drizzle tables found in this worktree'
-        : null
+  const empty = !worktree ? 'Select a worktree to see its schema' : error ? error : schema && schema.tables.length === 0 ? 'No Drizzle tables found in this worktree' : null
 
   const main = (
     <div className="flex min-h-0 flex-1 flex-col">

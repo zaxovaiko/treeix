@@ -45,13 +45,15 @@ export function folderGraph({ files, imports }: Pick<DependencyScan, 'files' | '
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   return {
-    nodes: [...sizes].sort(([a], [b]) => a.localeCompare(b)).map(([folder, size]) => ({
-      id: folder,
-      label: folder,
-      detail: `${size} file${size === 1 ? '' : 's'}`,
-      external: false,
-      manifest: null
-    })),
+    nodes: [...sizes]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([folder, size]) => ({
+        id: folder,
+        label: folder,
+        detail: `${size} file${size === 1 ? '' : 's'}`,
+        external: false,
+        manifest: null
+      })),
     edges: [...counts].map(([key, count]) => {
       const [source, target] = key.split('\n')
       return { source, target, count, kind: 'import' as const }

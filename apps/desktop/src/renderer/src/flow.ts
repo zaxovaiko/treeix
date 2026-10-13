@@ -22,11 +22,7 @@ type Positioned = { id: string; position: { x: number; y: number } }
  * Left to right by depth: a node sits one column after its deepest source, stacked within its column top-to-bottom as it
  * already was. `height` is the room a node takes in its column. A cycle is cut where the walk meets it again
  */
-export function layered<N extends Positioned>(
-  nodes: N[],
-  edges: { source: string; target: string }[],
-  { column, height }: { column: number; height: (node: N) => number }
-): N[] {
+export function layered<N extends Positioned>(nodes: N[], edges: { source: string; target: string }[], { column, height }: { column: number; height: (node: N) => number }): N[] {
   const sources = new Map<string, string[]>()
   for (const edge of edges) if (edge.source !== edge.target) sources.set(edge.target, [...(sources.get(edge.target) ?? []), edge.source])
   const depth = new Map<string, number>()

@@ -27,10 +27,15 @@ test('folderGraph counts imports between folders and drops ones inside a folder'
 
 test('packageGraph links workspace packages and adds externals only when asked', () => {
   const packages: Package[] = [
-    { name: 'web', version: '1.0.0', manifest: 'apps/web/package.json', dependencies: [
-      { name: 'ui', range: 'workspace:*', kind: 'dependencies' },
-      { name: 'react', range: '^19', kind: 'dependencies' }
-    ] },
+    {
+      name: 'web',
+      version: '1.0.0',
+      manifest: 'apps/web/package.json',
+      dependencies: [
+        { name: 'ui', range: 'workspace:*', kind: 'dependencies' },
+        { name: 'react', range: '^19', kind: 'dependencies' }
+      ]
+    },
     { name: 'ui', version: null, manifest: 'packages/ui/package.json', dependencies: [{ name: 'react', range: '^19', kind: 'peerDependencies' }] }
   ]
   expect(packageGraph(packages, false).edges.map((edge) => `${edge.source}>${edge.target}`)).toEqual(['web>ui'])
