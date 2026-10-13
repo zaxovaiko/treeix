@@ -1,62 +1,61 @@
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { join } from 'node:path'
+import { promisify } from 'node:util'
 import type { MainPlugin } from '@treeix/sdk/main'
-import { createSecrets } from '@treeix/host/secrets'
 import { isJson, list, text } from '@treeix/shared/json'
 import { type Schema, toProperties } from './properties'
 
-const API = 'https://api.notion.com/v1'
+const exec = promisify(execFile)
 const VERSION = '2026-03-11'
-const TOKEN = 'token'
 const TIMEOUT_MS = 30_000
+const SIGN_IN = 'run ntn login in a terminal'
 
-async function notion(token: string, method: string, path: string, body?: unknown): Promise<Record<string, unknown>> {
-  const response = await fetch(`${API}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, 'notion-version': VERSION, 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS)
-  })
-  const reply: unknown = await response.json().catch(() => null)
-  if (!response.ok || !isJson(reply)) throw new Error(`Notion ${method} ${path}: ${isJson(reply) ? text(reply.message) : response.status}`)
-  return reply
+/** ntn's own message: its "error:" prefix dropped, a missing CLI or login turned into the fix */
+export const failure = (reason: unknown): string => {
+  if (isJson(reason) && reason.code === 'ENOENT') return `Notion CLI not found. Install it with: curl -fsSL https://ntn.dev | bash, then ${SIGN_IN}`
+  const stderr = isJson(reason) ? text(reason.stderr).trim() : ''
+  const message = stderr || (reason instanceof Error ? reason.message : String(reason))
+  // Signed out, ntn says "No workspace selected" with a hint to run ntn login
+  if (/ntn login|unauthorized/i.test(message)) return `Notion CLI is not signed in: ${SIGN_IN}`
+  return message.split('\n')[0].replace(/^error:\s*/i, '')
 }
 
-/** The name of the integration a token belongs to; asking proves the token works */
-const whoIs = async (token: string): Promise<string> => text((await notion(token, 'GET', '/users/me')).name) || 'the integration'
+/** A public API call through ntn, which holds the login; rejects with ntn's message */
+async function notion(method: string, path: string, body?: unknown): Promise<Record<string, unknown>> {
+  const args = ['api', `/v1${path}`, '-X', method, '--notion-version', VERSION, ...(body === undefined ? [] : ['-d', JSON.stringify(body)])]
+  try {
+    const reply: unknown = JSON.parse((await exec('ntn', args, { timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 })).stdout)
+    if (!isJson(reply)) throw new Error(`Notion ${method} ${path} answered no object`)
+    return reply
+  } catch (reason) {
+    throw new Error(failure(reason), { cause: reason })
+  }
+}
+
+/** Who ntn acts for; pages it makes come from the Notion CLI bot on their behalf */
+const whoIs = async (): Promise<string> => {
+  const me = await notion('GET', '/users/me')
+  const owner = isJson(me.bot) && isJson(me.bot.owner) && isJson(me.bot.owner.user) ? text(me.bot.owner.user.name) : ''
+  return owner || text(me.name) || 'the Notion CLI'
+}
 
 const plugin: MainPlugin = {
   activate: (context) => {
-    const secrets = createSecrets(join(context.dataPath, 'secrets.bin'))
-    const token = async (): Promise<string> => {
-      const saved = await secrets.get(TOKEN)
-      if (!saved) throw new Error('Notion is not connected; add the integration token in Settings > Notion')
-      return saved
-    }
     const schemas = new Map<string, Schema>()
     // A retried workflow step skips the pages it already made, so a failure halfway through a batch duplicates nothing
     const created = new Map<string, string>()
 
-    context.handle('connection', async () => {
-      const saved = await secrets.get(TOKEN)
-      return saved
-        ? whoIs(saved).then(
-            (name) => `Connected as ${name}`,
-            (reason: unknown) => `Saved, but Notion refused it: ${String(reason)}`
-          )
-        : null
-    })
-    context.handle('connect', async (_, secret: string) => {
-      const name = await whoIs(secret)
-      await secrets.set(TOKEN, secret)
-      return `Connected as ${name}`
-    })
-    context.handle('disconnect', () => secrets.set(TOKEN, null))
+    context.handle('connection', () =>
+      whoIs().then(
+        (name) => ({ connected: true, message: `Signed in as ${name}` }),
+        (reason: unknown) => ({ connected: false, message: reason instanceof Error ? reason.message : String(reason) })
+      )
+    )
 
     context.mcpTool({
       name: 'notion_create_pages',
       description: [
-        'Adds pages to a Notion data source (a database) the integration was shared with. Replies with their URLs.',
+        'Adds pages to a Notion data source (a database) the Notion CLI login can reach. Replies with their URLs.',
         "properties take plain values by property name: text for title and rich_text, an ISO date, a select or status option's name, a list or comma-separated names for multi_select, true for a checkbox, page URLs or ids for a relation (an earlier notion_create_pages reply works); an object is passed as Notion's own property value. Empty values are left out.",
         "markdown is the page body, Notion-flavored Markdown. defaults fill properties a page doesn't set."
       ].join('\n'),
@@ -82,10 +81,9 @@ const plugin: MainPlugin = {
         if (!dataSource) throw new Error('dataSource is required')
         const pages = list(args.pages)
         if (!pages.length) return 'No pages to add'
-        const auth = await token()
         let schema = schemas.get(dataSource)
         if (!schema) {
-          const properties = (await notion(auth, 'GET', `/data_sources/${dataSource}`)).properties
+          const properties = (await notion('GET', `/data_sources/${dataSource}`)).properties
           schema = Object.fromEntries(Object.entries(isJson(properties) ? properties : {}).map(([name, property]) => [name, { type: isJson(property) ? text(property.type) : '' }]))
           schemas.set(dataSource, schema)
         }
@@ -98,7 +96,7 @@ const plugin: MainPlugin = {
             ...(text(page.markdown).trim() ? { markdown: text(page.markdown) } : {})
           }
           const key = createHash('sha256').update(JSON.stringify(body)).digest('hex')
-          const url = created.get(key) ?? text((await notion(auth, 'POST', '/pages', body)).url)
+          const url = created.get(key) ?? text((await notion('POST', '/pages', body)).url)
           created.set(key, url)
           urls.push(url)
         }
