@@ -15,6 +15,7 @@ import { createEngine } from './engine'
 import { createKeys } from './keys'
 import { hubTools } from './mcp'
 import { createOpenAiAdapter } from './openaiAdapter'
+import { ollamaHandlers } from './ollama'
 import { createRuns } from './runs'
 import { jsonList } from './store'
 
@@ -57,6 +58,7 @@ const plugin: MainPlugin = {
     // The renderer learns whether a key is saved, never the key
     context.handle('hasKey', async (_, baseUrl: string) => (await apiKeys.get(baseUrl)) !== null)
     context.handle('setKey', (_, baseUrl: string, key: string | null) => apiKeys.set(baseUrl, key))
+    ollamaHandlers(context)
 
     /** The models and modes an agent offers, read from a throwaway session */
     context.handle('detect', async (_, adapterId: string, command: string, cwd: string): Promise<ChatOption[]> => {

@@ -118,7 +118,7 @@ function Models({ current }: { current: Status | null }): React.JSX.Element {
       {(Object.keys(MODELS) as ModelId[]).map((id) => {
         const state = current?.models.find((entry) => entry.id === id)
         return (
-          <Row key={id} label={MODELS[id].name} description={state?.error ?? MODELS[id].description}>
+          <Row key={id} label={MODELS[id].name} description={state?.error ?? `${MODELS[id].description} Quality ${MODELS[id].quality}/5, speed ${MODELS[id].speed}/5.`}>
             <ModelControls id={id} state={state} selected={id === model} />
           </Row>
         )

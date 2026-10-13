@@ -62,6 +62,9 @@ function Setup(): React.JSX.Element {
           </button>
         )}
       </Row>
+      <Row label="Speech models" description="Parakeet v3 and the speaker models, about 480 MB, download with the first transcript into the folder dictation uses.">
+        <span />
+      </Row>
       <Row label="Google Chrome" description="Rules with a URL read Chrome's tabs while Chrome uses the microphone. macOS asks the first time; it's under Automation.">
         <OpenPane pane="Automation" />
       </Row>

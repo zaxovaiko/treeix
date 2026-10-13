@@ -4,10 +4,10 @@ import { isJson, isString, list, object, text } from '@treeix/shared/json'
 export const HOTKEYS = { rightOption: 'Right ⌥', rightCommand: 'Right ⌘', rightControl: 'Right ⌃', rightShift: 'Right ⇧', fn: 'fn' } as const
 export type Hotkey = keyof typeof HOTKEYS
 
-/** Speech models the helper knows, in its order */
+/** Speech models the helper knows, in its order; quality and speed are 1-5, edited by hand */
 export const MODELS = {
-  'parakeet-v3': { name: 'Parakeet v3', description: '25 European languages, Ukrainian and Polish among them. About 460 MB.' },
-  'parakeet-v2': { name: 'Parakeet v2', description: 'English only, slightly more accurate there. About 460 MB.' }
+  'parakeet-v3': { name: 'Parakeet v3', description: '25 European languages, Ukrainian and Polish among them. About 460 MB.', quality: 4, speed: 5 },
+  'parakeet-v2': { name: 'Parakeet v2', description: 'English only, slightly more accurate there. About 460 MB.', quality: 5, speed: 5 }
 } as const
 export type ModelId = keyof typeof MODELS
 

@@ -4,6 +4,7 @@ import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
 import { alienStill, characterOf } from './Alien'
 import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
+import type { LocalModelsState } from '../shared/catalog'
 import type { Subagent } from '../shared/subagents'
 import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type Workflow } from '../shared/workflow'
 
@@ -37,7 +38,13 @@ export const hubApi = {
   /** Lets an approval step through, or rejects it and fails the run */
   decide: (runId: string, node: string, approved: boolean) => bridge.send('decide', runId, node, approved),
   /** Runs an ended run again from the step */
-  retry: (runId: string, node: string) => bridge.invoke<void>('retryRun', runId, node)
+  retry: (runId: string, node: string) => bridge.invoke<void>('retryRun', runId, node),
+  localModels: () => bridge.invoke<LocalModelsState>('localModels'),
+  pullModel: (id: string) => bridge.invoke<void>('pullModel', id),
+  deleteModel: (id: string) => bridge.invoke<void>('deleteModel', id),
+  longContext: (id: string) => bridge.invoke<void>('longContext', id),
+  /** Download progress of a model, in percent */
+  onPull: (listener: (id: string, percent: number) => void) => bridge.on('pull', (id, percent) => typeof id === 'string' && typeof percent === 'number' && listener(id, percent))
 }
 
 export const hubAgents = createStore<HubAgent[]>([])

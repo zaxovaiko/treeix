@@ -5,6 +5,7 @@ import { subscribeSettings } from '@treeix/app/settings'
 import { notify } from '@treeix/app/notifications'
 import { type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
+import { HubSettings } from './Settings'
 import { AgentsSection, HistorySection, NewAgentButton, NewWorkflowButton, WorkflowsSection } from './Sections'
 import {
   asAgent,
@@ -129,6 +130,7 @@ const plugin: RendererPlugin = {
     { id: 'hub.history', label: 'History', order: 3, render: HistorySection }
   ],
   Root,
+  Settings: HubSettings,
   commands: () => [
     ...hubAgents.get().map((agent) => ({
       id: `hub.ask.${agent.id}`,
