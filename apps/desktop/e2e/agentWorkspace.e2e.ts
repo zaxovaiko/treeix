@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { dirname, join } from 'node:path'
-import { launch, type Launched } from './app'
+import { AGENT_BROWSER, launch, type Launched } from './app'
 
 let launched: Launched
 let site: Server
@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve))
   const address = site.address()
   siteUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/`
-  launched = await launch({ 'README.md': '# alpha\n' })
+  launched = await launch({ 'README.md': '# alpha\n' }, undefined, AGENT_BROWSER)
 })
 test.afterAll(async () => {
   await launched.close()

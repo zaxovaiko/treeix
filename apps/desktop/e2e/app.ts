@@ -21,10 +21,13 @@ function fakeHome(files: Record<string, string>): { home: string; repo: string }
   return { home, repo }
 }
 
+/** Settings > Browser > Let agents use this browser, which is off by default */
+export const AGENT_BROWSER = { 'plugin.browser.settings': JSON.stringify({ agentTools: true }) }
+
 export type Launched = { app: ElectronApplication; page: Page; repo: string; close: () => Promise<void> }
 
-/** The built app on a fake home, opened on `open` in the worktree's file viewer when given */
-export async function launch(files: Record<string, string>, open?: string): Promise<Launched> {
+/** The built app on a fake home, opened on `open` in the worktree's file viewer when given, with `storage` seeded into localStorage */
+export async function launch(files: Record<string, string>, open?: string, storage: Record<string, string> = {}): Promise<Launched> {
   const { home, repo } = fakeHome(files)
   // A run killed mid-test leaves macOS window state behind, and its "reopen windows?" alert then blocks every launch
   const app = await electron.launch({
@@ -38,6 +41,7 @@ export async function launch(files: Record<string, string>, open?: string): Prom
   // Tests start on a file if asked, as if left there
   if (open)
     await page.evaluate((place) => localStorage.setItem('app.place@all', JSON.stringify(place)), { appTab: 'worktrees', selected: repo, viewer: { path: open, line: null } })
+  await page.evaluate((entries) => entries.forEach(([key, value]) => localStorage.setItem(key, value)), Object.entries(storage))
   await page.reload()
   return {
     app,

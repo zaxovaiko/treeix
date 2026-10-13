@@ -49,8 +49,8 @@ export type MainContext = {
   sessionEnv: (workspaceId?: string) => Promise<Record<string, string>>
   /** Runs when the plugin is disabled or the app quits */
   onDispose: (dispose: () => void) => void
-  /** Offers a tool to agent sessions through Treeix's MCP server while the plugin is enabled */
-  mcpTool: (tool: McpTool) => void
+  /** Offers a tool to agent sessions through Treeix's MCP server while the plugin is enabled; the returned function withdraws it sooner */
+  mcpTool: (tool: McpTool) => () => void
   /** Sets what Treeix's menu bar item shows, which is there while the hotkey window is on; null clears it */
   menuBar: (status: MenuBarStatus | null) => void
   /** An adapter contributed by any enabled plugin */

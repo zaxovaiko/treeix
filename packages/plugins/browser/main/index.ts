@@ -36,7 +36,12 @@ const plugin: MainPlugin = {
       watchGuest(guest, context)
       if (typeof tabId === 'string') registerTab(tabId, guest)
     })
-    browserTools(context).forEach(context.mcpTool)
+    // Off unless Settings turns them on: a dozen tool descriptions in every agent session's context
+    let withdraw: (() => void)[] = []
+    context.handle('agentTools', (_, on: unknown) => {
+      withdraw.forEach((dispose) => dispose())
+      withdraw = on === true ? browserTools(context).map(context.mcpTool) : []
+    })
     context.handle('responseBody', (event, guestId: number, requestId: string) => {
       const guest = ownGuest(event, guestId)
       return guest && responseBody(guest, requestId)

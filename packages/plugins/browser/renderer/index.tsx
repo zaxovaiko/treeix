@@ -183,6 +183,8 @@ function ServerNotices(): React.JSX.Element | null {
 function Root(): React.JSX.Element {
   const current = useHost()
   host = current
+  const { agentTools } = browserSettings.use()
+  useEffect(() => void bridge.invoke('agentTools', agentTools), [agentTools])
   // Before paint, so a workspace never flashes the previous one's tabs
   useLayoutEffect(() => setBrowserWorkspace(current.workspaceId), [current.workspaceId])
   // Looking at the browser is reading the pages an agent opened there

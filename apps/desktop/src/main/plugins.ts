@@ -47,7 +47,11 @@ function activate(pluginId: string, plugin: MainPlugin, userData: string): { dis
     },
     sessionEnv,
     onDispose: (dispose) => disposers.push(dispose),
-    mcpTool: (tool) => disposers.push(registerMcpTool(tool)),
+    mcpTool: (tool) => {
+      const dispose = registerMcpTool(tool)
+      disposers.push(dispose)
+      return dispose
+    },
     menuBar: (status) => setMenuBarStatus(pluginId, status),
     chatAdapter: (id) => enabledChatAdapters().find((adapter) => adapter.id === id) ?? null,
     emit: (name, payload) => emitPluginEvent(`${pluginId}.${name}`, payload),

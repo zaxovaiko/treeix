@@ -42,7 +42,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - **History.** Closed sessions stay in History. Reopen one and the agent picks up the same conversation.
 - **Workspaces.** Group the folders of one job together and switch between them with a digit. Each keeps its own tabs, worktrees and sessions.
 - **Search everything.** One palette for commands, workspaces, files, pull requests, tickets and settings, plus `G` and a letter to jump from anywhere, terminals included.
-- **Agents can drive Treeix.** It serves its own MCP tools, so a session can open a page in the browser, start another session, save a workspace or run one of your workflows.
+- **Agents can drive Treeix.** It serves its own MCP tools, so a session can open a page in the browser (once Settings > Browser allows it), start another session, save a workspace or run one of your workflows.
 - **Always a key away.** A global shortcut brings Treeix to the front over any other app, and it keeps the Mac awake while an agent works, with the lid closed if you ask.
 - **Dictation.** Hold a key, speak, and the text lands in any app. Recognised on the Mac, optionally cleaned up by a local model.
 - **Meetings.** Google Meet, Slack huddles, Zoom and Teams calls record on their own and become transcripts with speakers, on the Mac. A workflow turns them into notes and tasks.
