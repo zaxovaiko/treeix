@@ -57,7 +57,7 @@ const plugin: MainPlugin = {
       name: 'notion_create_pages',
       description: [
         'Adds pages to a Notion data source (a database) the integration was shared with. Replies with their URLs.',
-        "properties take plain values by property name: text for title and rich_text, an ISO date, a select or status option's name, a list or comma-separated names for multi_select, true for a checkbox; an object is passed as Notion's own property value. Empty values are left out.",
+        "properties take plain values by property name: text for title and rich_text, an ISO date, a select or status option's name, a list or comma-separated names for multi_select, true for a checkbox, page URLs or ids for a relation (an earlier notion_create_pages reply works); an object is passed as Notion's own property value. Empty values are left out.",
         "markdown is the page body, Notion-flavored Markdown. defaults fill properties a page doesn't set."
       ].join('\n'),
       inputSchema: {

@@ -7,7 +7,8 @@ const schema = {
   Type: { type: 'select' },
   Tags: { type: 'multi_select' },
   Done: { type: 'checkbox' },
-  Owner: { type: 'people' }
+  Owner: { type: 'people' },
+  Tasks: { type: 'relation' }
 }
 
 test('plain values become property values by type, empty ones are left out', () => {
@@ -24,4 +25,9 @@ test("an object is Notion's own value, an unknown property or type is refused wi
   expect(toProperties(schema, { Owner: { people: [{ id: 'u1' }] } })).toEqual({ Owner: { people: [{ id: 'u1' }] } })
   expect(() => toProperties(schema, { Nmae: 'x' })).toThrow('No property Nmae; the data source has Name, Due')
   expect(() => toProperties(schema, { Owner: 'Me' })).toThrow("people property; pass Notion's own value object")
+})
+
+test('a relation takes the page ids in URLs', () => {
+  const urls = 'https://www.notion.so/Ship-it-28a2c5e0b1c24f6e9d3a7b8c9d0e1f2a\nhttps://www.notion.so/Test-38a2c5e0b1c24f6e9d3a7b8c9d0e1f2b'
+  expect(toProperties(schema, { Tasks: urls })).toEqual({ Tasks: { relation: [{ id: '28a2c5e0b1c24f6e9d3a7b8c9d0e1f2a' }, { id: '38a2c5e0b1c24f6e9d3a7b8c9d0e1f2b' }] } })
 })

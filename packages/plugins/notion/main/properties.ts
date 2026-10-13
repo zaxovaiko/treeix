@@ -4,6 +4,7 @@ import { isJson } from '@treeix/shared/json'
 export type Schema = Record<string, { type: string }>
 
 const TEXT_LIMIT = 2000
+const PAGE_ID = /[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/gi
 const richText = (value: unknown): { text: { content: string } }[] => [{ text: { content: String(value).slice(0, TEXT_LIMIT) } }]
 const names = (value: unknown): string[] => (Array.isArray(value) ? value.map(String) : String(value).split(',')).map((name) => name.trim()).filter(Boolean)
 
@@ -38,6 +39,10 @@ export function toProperties(schema: Schema, values: Record<string, unknown>): R
         break
       case 'date':
         properties[name] = { date: { start: String(value) } }
+        break
+      // Page ids or URLs, such as the reply of an earlier notion_create_pages
+      case 'relation':
+        properties[name] = { relation: (String(value).match(PAGE_ID) ?? []).map((id) => ({ id })) }
         break
       case 'url':
       case 'email':

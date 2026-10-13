@@ -167,8 +167,8 @@ export function MeetingsSettings(): React.JSX.Element {
       <Rules />
       <Card title="Workflows">
         <p className="px-2 text-[11px] text-muted-foreground">
-          Each transcript starts the AI Hub workflows listening for meetings.transcribed, with id, title, start, end, app, url, invitees, folder and transcript. They can save notes
-          back with the meetings_save_notes tool.
+          Each transcript starts the AI Hub workflows listening for meetings.transcribed, with id, title, date, start, end, app, url, invitees, folder and transcript. They can save
+          notes back with the meetings_save_notes tool.
         </p>
       </Card>
     </>

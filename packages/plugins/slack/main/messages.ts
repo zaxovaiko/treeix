@@ -11,12 +11,12 @@ export const permalink = (workspaceUrl: string, channel: string, ts: string): st
 
 export type Message = { channel: string; user: string; text: string; ts: string; permalink: string; thread: boolean }
 
-/** Numbered lines a prompt can point back at: `[1] #general (thread reply) 14:05 Anna: text` */
+/** Numbered lines a prompt can point back at, each with its link for a task to quote: `[1] #general (thread reply) 14:05 Anna: text (link)` */
 export function render(messages: Message[]): string {
   return messages
     .map((message, index) => {
       const time = new Date(Number(message.ts) * 1000).toTimeString().slice(0, 5)
-      return `[${index + 1}] ${message.channel}${message.thread ? ' (thread reply)' : ''} ${time} ${message.user}: ${message.text}`
+      return `[${index + 1}] ${message.channel}${message.thread ? ' (thread reply)' : ''} ${time} ${message.user}: ${message.text}${message.permalink ? ` (${message.permalink})` : ''}`
     })
     .join('\n')
 }

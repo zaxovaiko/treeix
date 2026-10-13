@@ -138,8 +138,9 @@ const plugin: MainPlugin = {
       await emitTranscribed(done, transcript)
     }
 
+    // `date` is the local day the folder name starts with, for date properties that take no time
     const emitTranscribed = ({ id, title, start, end, app: callApp, url, invitees }: Meeting, transcript: string): Promise<boolean> =>
-      context.emit('transcribed', { id, title, start, end, app: callApp, url, invitees, folder: store.folder(id), transcript })
+      context.emit('transcribed', { id, title, date: id.slice(0, 10), start, end, app: callApp, url, invitees, folder: store.folder(id), transcript })
 
     const receive = (message: HelperMessage): void => {
       const id = 'folder' in message && message.folder ? (message.folder.split('/').pop() ?? '') : ''
