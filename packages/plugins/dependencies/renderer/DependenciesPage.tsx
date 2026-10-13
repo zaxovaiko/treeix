@@ -2,7 +2,7 @@ import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useState } from 'react'
 import { applyNodeChanges, Background, Controls, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
 import { createBridge, PageLayout, PANE_HEADER, useHost } from '@treeix/sdk'
-import { FLOW_THEME, layered } from '@treeix/app/flow'
+import { FLOW_THEME, layered, untangle } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { Segmented, Switch } from '@treeix/app/settingsUi'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
@@ -125,6 +125,11 @@ export function DependenciesPage(): React.JSX.Element {
         )}
         <span className="flex-1" />
         <span className="truncate">{flow ? `${flow.nodes.length} nodes, ${flow.edges.length} links` : loading ? 'Reading imports' : ''}</span>
+        {flow && (
+          <IconButton label="Prettify: fewer crossing links" onClick={() => setNodes(untangle(flow.nodes, flow.edges, () => HEIGHT + GAP))}>
+            <Icon name="wand" className="size-3.5" />
+          </IconButton>
+        )}
         <IconButton label="Rescan" onClick={rescan}>
           <Icon name={loading ? 'loader' : 'refresh'} className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
         </IconButton>

@@ -47,3 +47,33 @@ export function layered<N extends Positioned>(nodes: N[], edges: { source: strin
   }
   return nodes.map((node) => ({ ...node, position: placed.get(node.id) ?? node.position }))
 }
+
+/**
+ * Reorders each column of a `layered` layout so linked nodes sit level with each other, which uncrosses most links: every
+ * sweep moves a node to the mean height of its links, alternating left-to-right and back
+ */
+export function untangle<N extends Positioned>(nodes: N[], edges: { source: string; target: string }[], height: (node: N) => number, sweeps = 6): N[] {
+  const links = new Map<string, string[]>()
+  for (const { source, target } of edges) {
+    if (source === target) continue
+    links.set(source, [...(links.get(source) ?? []), target])
+    links.set(target, [...(links.get(target) ?? []), source])
+  }
+  const y = new Map(nodes.map((node) => [node.id, node.position.y]))
+  const byX = new Map<number, N[]>()
+  for (const node of nodes) byX.set(node.position.x, [...(byX.get(node.position.x) ?? []), node])
+  const columns = [...byX].sort(([a], [b]) => a - b).map(([, column]) => column)
+  const center = (node: N): number => {
+    const around = (links.get(node.id) ?? []).map((id) => y.get(id) ?? 0)
+    return around.length ? around.reduce((sum, value) => sum + value, 0) / around.length : (y.get(node.id) ?? 0)
+  }
+  for (let sweep = 0; sweep < sweeps; sweep++)
+    for (const column of sweep % 2 ? [...columns].reverse() : columns) {
+      let top = 0
+      for (const [node] of column.map((node) => [node, center(node)] as const).sort((a, b) => a[1] - b[1])) {
+        y.set(node.id, top)
+        top += height(node)
+      }
+    }
+  return nodes.map((node) => ({ ...node, position: { x: node.position.x, y: y.get(node.id) ?? node.position.y } }))
+}
