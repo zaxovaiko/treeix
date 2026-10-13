@@ -2413,9 +2413,9 @@ function App(): React.JSX.Element {
   )
   // Dock panels for this tab: all of them in Worktrees, the ones a plugin tab asks for elsewhere
   // Worktrees and PRs leave Terminal and Browser to their own tabs, which open beside them; an open Browser panel keeps its toggle to close it
-  // The Terminal toggle stays out of Worktrees, PRs and Browser altogether: the Terminal tab and t reach it
+  // The Terminal toggle stays out of every other tab: the Terminal tab and t reach it
   const panelToggles = (appTab === 'worktrees' ? panelIds : (activePluginTab?.panels ?? openDocTab?.panels ?? []).filter((id) => panelIds.includes(id)))
-    .filter((panel) => !(['worktrees', 'prs', 'browser'].includes(appTab) && panel === 'terminal'))
+    .filter((panel) => appTab === 'terminal' || panel !== 'terminal')
     .filter((panel) => !(['worktrees', 'prs'].includes(appTab) && panel === 'browser' && !dock.isVisible(panel)))
     .flatMap((panel) => {
       const info = panelInfo(panel)
