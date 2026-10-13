@@ -50,6 +50,9 @@ function createWindow(): void {
     trafficLightPosition: { x: 14, y: 10 },
     // Keep the blur when the window loses focus instead of flattening to grey
     visualEffectState: 'active',
+    // Transparency only takes at creation: clearing the background later left stale frames smeared under translucent pages
+    transparent: true,
+    backgroundColor: '#00000000',
     // macOS otherwise spends the first click on an inactive window just focusing it, so the palette button needed two
     acceptFirstMouse: true,
     // A never-shown window would otherwise be throttled like a background one
@@ -153,14 +156,12 @@ app.whenReady().then(() => {
   })
   ipcMain.on('revealInFinder', (_, path: string) => shell.showItemInFolder(path))
   ipcMain.on('openPath', (_, path: string) => void shell.openPath(path))
-  ipcMain.on('setTranslucent', (event, translucent: boolean, background: string, appearance: unknown) => {
+  ipcMain.on('setTranslucent', (event, translucent: boolean, appearance: unknown) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     // Vibrancy tints by the app appearance, which otherwise follows macOS: a dark theme on a light Mac got light, washed-out glass
     if (appearance === 'dark' || appearance === 'light' || appearance === 'system') nativeTheme.themeSource = appearance
     // The page paints its own backgrounds with reduced alpha; vibrancy supplies the blurred desktop underneath
     window?.setVibrancy(translucent ? 'under-window' : null)
-    // Opaque windows show this wherever Chromium hasn't painted yet (fast scrolling), so it follows the theme
-    window?.setBackgroundColor(translucent ? '#00000000' : /^#[0-9a-f]{6}$/i.test(background) ? background : '#0a0a0a')
   })
   ipcMain.handle('saveAttachment', (_, name: string, data: Uint8Array) => saveAttachment(name, data))
   const history = createHistory(join(app.getPath('userData'), 'history'))

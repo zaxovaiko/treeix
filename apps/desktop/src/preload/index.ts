@@ -47,7 +47,7 @@ const api: Api = {
   discardChanges: (worktreePath, filePath) => ipcRenderer.invoke('discardChanges', worktreePath, filePath),
   revealInFinder: (path) => ipcRenderer.send('revealInFinder', path),
   openPath: (path) => ipcRenderer.send('openPath', path),
-  setTranslucent: (translucent, background, appearance) => ipcRenderer.send('setTranslucent', translucent, background, appearance),
+  setTranslucent: (translucent, appearance) => ipcRenderer.send('setTranslucent', translucent, appearance),
   configureHotkey: (options) => ipcRenderer.invoke('configureHotkey', options),
   onWindowChromeless: (listener) => {
     const handler = (_: IpcRendererEvent, chromeless: boolean): void => listener(chromeless)

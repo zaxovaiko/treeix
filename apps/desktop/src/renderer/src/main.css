@@ -29,6 +29,11 @@ body {
   overflow: hidden;
 }
 
+/* The window itself is always transparent; an opaque theme paints its own backdrop */
+html:not([data-translucent]) {
+  background: var(--color-background);
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
