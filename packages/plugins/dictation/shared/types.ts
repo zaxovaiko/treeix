@@ -1,8 +1,32 @@
 import { isJson, isString, list, object, text } from '@treeix/shared/json'
 
-/** Modifier keys the helper can tell apart on their own; the value is the label */
-export const HOTKEYS = { rightOption: 'Right ⌥', rightCommand: 'Right ⌘', rightControl: 'Right ⌃', rightShift: 'Right ⇧', fn: 'fn' } as const
-export type Hotkey = keyof typeof HOTKEYS
+/** Modifier keys the helper tells apart, by `KeyboardEvent.code`; the value is the label */
+export const MODIFIER_KEYS = {
+  MetaLeft: 'Left ⌘',
+  MetaRight: 'Right ⌘',
+  AltLeft: 'Left ⌥',
+  AltRight: 'Right ⌥',
+  ControlLeft: 'Left ⌃',
+  ControlRight: 'Right ⌃',
+  ShiftLeft: 'Left ⇧',
+  ShiftRight: 'Right ⇧',
+  Fn: 'fn'
+} as const
+export type ModifierKey = keyof typeof MODIFIER_KEYS
+/** Modifiers held together on their own */
+export type Hotkey = ModifierKey[]
+export const DEFAULT_HOTKEY: Hotkey = ['MetaLeft', 'AltRight']
+export const isModifierKey = (code: unknown): code is ModifierKey => typeof code === 'string' && Object.hasOwn(MODIFIER_KEYS, code)
+export const hotkeyLabel = (hotkey: Hotkey): string => hotkey.map((key) => MODIFIER_KEYS[key]).join(' ')
+
+/** The single key settings stored before chords */
+const LEGACY_HOTKEYS: Record<string, ModifierKey> = { rightOption: 'AltRight', rightCommand: 'MetaRight', rightControl: 'ControlRight', rightShift: 'ShiftRight', fn: 'Fn' }
+
+function parseHotkey(value: unknown): Hotkey {
+  if (Object.hasOwn(LEGACY_HOTKEYS, text(value))) return [LEGACY_HOTKEYS[text(value)]]
+  const keys = list(value, isModifierKey)
+  return keys.length ? keys : DEFAULT_HOTKEY
+}
 
 /** Speech models the helper knows, in its order; quality and speed are 1-5, edited by hand */
 export const MODELS = {
@@ -33,7 +57,7 @@ const isTerm = (value: unknown): value is Term => isJson(value) && isString(valu
 export function parseSettings(stored: Record<string, unknown>): DictationSettings {
   const formatting = object(stored.formatting)
   return {
-    hotkey: Object.hasOwn(HOTKEYS, text(stored.hotkey)) ? (text(stored.hotkey) as Hotkey) : 'rightOption',
+    hotkey: parseHotkey(stored.hotkey),
     tapToToggle: stored.tapToToggle !== false,
     sounds: stored.sounds !== false,
     model: Object.hasOwn(MODELS, text(stored.model)) ? (text(stored.model) as ModelId) : 'parakeet-v3',

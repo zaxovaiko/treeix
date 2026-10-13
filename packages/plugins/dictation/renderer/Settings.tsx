@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Select } from '@treeix/app/Picker'
-import { Card, Row, Segmented, Switch } from '@treeix/app/settingsUi'
+import { Card, Row, Switch } from '@treeix/app/settingsUi'
 import { CopyButton } from '@treeix/app/ui'
-import { DEFAULT_PROMPT, HOTKEYS, type Hotkey, MODELS, type ModelId, type ModelState, type Permissions, type Status } from '../shared/types'
+import { DEFAULT_PROMPT, type Hotkey, hotkeyLabel, isModifierKey, MODELS, type ModelId, type ModelState, type Permissions, type Status } from '../shared/types'
 import { bridge, dictationSettings, history, status } from './state'
 
 const field = 'h-7 rounded-md bg-muted px-2 text-xs ring-1 ring-border outline-none focus:ring-primary'
@@ -63,12 +63,57 @@ function Setup({ current }: { current: Status | null }): React.JSX.Element {
   )
 }
 
+/** Records modifiers pressed together; the chord is saved once all of them are let go */
+function HotkeyRecorder({ value, onChange }: { value: Hotkey; onChange: (hotkey: Hotkey) => void }): React.JSX.Element {
+  const [recording, setRecording] = useState(false)
+  const [pressed, setPressed] = useState<Hotkey>([])
+  useEffect(() => {
+    if (!recording) return
+    const held = new Set<string>()
+    let chord: Hotkey = []
+    const stop = (): void => {
+      setRecording(false)
+      setPressed([])
+    }
+    const down = (event: KeyboardEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.key === 'Escape') return stop()
+      if (!isModifierKey(event.code)) return
+      held.add(event.code)
+      if (!chord.includes(event.code)) chord = [...chord, event.code]
+      setPressed(chord)
+    }
+    const up = (event: KeyboardEvent): void => {
+      held.delete(event.code)
+      if (held.size || !chord.length) return
+      onChange(chord)
+      stop()
+    }
+    window.addEventListener('keydown', down, true)
+    window.addEventListener('keyup', up, true)
+    window.addEventListener('blur', stop)
+    return () => {
+      window.removeEventListener('keydown', down, true)
+      window.removeEventListener('keyup', up, true)
+      window.removeEventListener('blur', stop)
+    }
+  }, [recording, onChange])
+  return (
+    <button onClick={() => setRecording(!recording)} aria-pressed={recording} className={`${button} min-w-32 ${recording ? 'ring-1 ring-primary' : ''}`}>
+      {recording ? (pressed.length ? hotkeyLabel(pressed) : 'Press modifiers…') : hotkeyLabel(value)}
+    </button>
+  )
+}
+
+const saveHotkey = (hotkey: Hotkey): void => dictationSettings.update({ hotkey })
+
 function Shortcut(): React.JSX.Element {
   const { hotkey, tapToToggle, sounds } = dictationSettings.use()
   return (
     <Card title="Shortcut">
-      <Row label="Key" description="Hold it and speak; release to paste. Pressing it together with another key, or Esc, cancels.">
-        <Segmented<Hotkey> value={hotkey} options={Object.entries(HOTKEYS) as [Hotkey, string][]} onChange={(next) => dictationSettings.update({ hotkey: next })} />
+      <Row label="Keys" description="Hold them and speak; release to paste. Pressing another key, or Esc, cancels. Click to record modifiers pressed together.">
+        <HotkeyRecorder value={hotkey} onChange={saveHotkey} />
       </Row>
       <Row label="Tap for hands-free" description="A quick tap keeps listening until you tap again.">
         <Switch checked={tapToToggle} label="Tap for hands-free" onChange={() => dictationSettings.update({ tapToToggle: !tapToToggle })} />

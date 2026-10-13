@@ -52,7 +52,7 @@ final class Controller {
     // MARK: Settings and models
 
     private func configure(_ message: [String: Any]) {
-        hotkey.key = HotkeyKey(rawValue: message["hotkey"] as? String ?? "") ?? .rightOption
+        hotkey.chord = HotkeyChord(message["hotkey"] as? [String] ?? [])
         tapToToggle = message["tapToToggle"] as? Bool ?? true
         sounds = message["sounds"] as? Bool ?? true
         formatting = message["formatting"] as? Bool ?? false
