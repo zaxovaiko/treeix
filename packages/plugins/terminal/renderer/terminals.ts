@@ -274,6 +274,12 @@ async function pollPorts(): Promise<void> {
     setPorts(found.map(({ sessionId, port, cwd, command }) => ({ sessionId, port, cwd, command, url: `http://localhost:${port}` })).sort((a, b) => a.port - b.port))
 }
 
+/** Stops a session's server; it leaves the list now, and the next poll brings it back if it survived */
+export async function killPort({ sessionId, port }: SessionPort): Promise<void> {
+  await bridge.invoke('killPort', sessionId, port)
+  setPorts(ports.filter((entry) => entry.sessionId !== sessionId || entry.port !== port))
+}
+
 /** Asks main for listening ports only while some session has a running process */
 function syncPortPolling(): void {
   const live = state.sessions.some((session) => session.view === 'terminal' && session.status !== 'exited' && session.status !== 'dormant')

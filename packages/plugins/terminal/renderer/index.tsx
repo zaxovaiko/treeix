@@ -28,6 +28,7 @@ import { IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { getCurrentWorkspaceId, inWorkspace, useWorkspaces, workspaceOf } from '@treeix/app/workspaces'
 import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } from './folder'
 import { Inspector } from './Inspector'
+import { Ports } from './Ports'
 import { SessionsDialog } from './SessionsDialog'
 import { startRename } from './rename'
 import { openSession, sessionEntries, WorkspaceTerminals } from './SessionPanel'
@@ -573,6 +574,7 @@ const plugin: RendererPlugin = {
       Badge: () => <WaitingDot className="absolute top-1 right-1 size-1.5 ring-2 ring-background" />
     }
   ],
+  titleBar: [{ order: 1, render: Ports }],
   Root,
   onKeyDown,
   onCloseShortcut: () => {

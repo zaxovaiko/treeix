@@ -37,6 +37,11 @@ const plugin: MainPlugin = {
     context.handle('list', (event) => listTerminals(event.sender))
     context.handle('cwd', (_, id: string) => terminalCwd(id))
     context.handle('ports', () => listeningPorts())
+    // Looked up again, so only a server a session started can be stopped, never any pid the renderer names
+    context.handle('killPort', async (_, sessionId: string, port: number) => {
+      const entry = (await listeningPorts()).find((found) => found.sessionId === sessionId && found.port === port)
+      if (entry) process.kill(entry.pid, 'SIGTERM')
+    })
     context.handle('codexConversations', (_, cwd: string, since: number) => codexConversations(cwd, since))
     context.handle('searchTranscripts', (_, query: string, refs: TranscriptRef[]) => searchTranscripts(String(query), Array.isArray(refs) ? refs : []))
     context.handle('usage', async (_, ref: TranscriptRef): Promise<SessionUsage | null> => {
