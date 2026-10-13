@@ -36,10 +36,6 @@ export const commandItems = (stdout: string): { input: string; title: string }[]
     return input ? [{ input, title: [input, ...title].join(' ').trim() }] : []
   })
 
-/** The aliens an agent can look like, each with its own renders */
-export const ALIENS = ['claude', 'codex', 'shell'] as const
-export type Character = (typeof ALIENS)[number]
-
 /** An agent of the user's own: a persona on top of a runtime from the agent registry */
 export type HubAgent = {
   id: string
@@ -48,8 +44,6 @@ export type HubAgent = {
   icon: string
   /** A small square image as a data URL; the glyph on the color when null */
   avatar: string | null
-  /** The alien it shows without an image; its runtime's when unset */
-  alien?: Character
   color: string
   runtime: Runtime
   /** Option values the runtime offers; null keeps its default */
@@ -90,7 +84,6 @@ export const isHubAgent = (value: unknown): value is HubAgent =>
   ['id', 'name', 'icon', 'color', 'instructions'].every((key) => isString(value[key])) &&
   ['avatar', 'model', 'mode', 'folder'].every((key) => isNullableString(value[key])) &&
   isRuntime(value.runtime) &&
-  (value.alien === undefined || ALIENS.some((alien) => alien === value.alien)) &&
   (value.directories === undefined || (Array.isArray(value.directories) && value.directories.every(isString))) &&
   (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
   (value.schedules === undefined || (Array.isArray(value.schedules) && value.schedules.every(isSchedule))) &&

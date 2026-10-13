@@ -7,7 +7,7 @@ export type Agent = {
   label: string
   /** One glyph on the session's badge */
   mark: string
-  /** Picture to show instead of the glyph where there is room, e.g. the hub agent's avatar or alien */
+  /** Picture to show instead of the glyph where there is room, e.g. the hub agent's avatar */
   image?: string
   color: string
   /** null runs the user's plain login shell */

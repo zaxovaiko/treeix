@@ -425,9 +425,11 @@ export function TicketMain({
               <Picker
                 title={ticket.linked[0] ? `Worktrees for ${item.key}: w goes to ${ticket.linked[0].worktree.branch}, ⇧W creates another` : 'Create a worktree for this ticket (w)'}
                 trigger={
-                  <span className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90">
+                  <span
+                    aria-label={ticket.linked[0] ? 'Go to worktree' : 'Open worktree'}
+                    className="flex h-7 min-w-7 items-center justify-center gap-1.5 rounded-md bg-primary px-1.5 text-xs text-white hover:bg-primary/90"
+                  >
                     <Icon name="branch" className="size-3.5" />
-                    {ticket.linked[0] ? 'Go to worktree' : 'Open worktree'}
                     <Kbd hint>w</Kbd>
                   </span>
                 }
@@ -462,10 +464,10 @@ export function TicketMain({
               <button
                 onClick={() => ticket.addToComments()}
                 title="Add to agent comments (a)"
-                className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent"
+                aria-label="To agent"
+                className="flex h-7 min-w-7 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs ring-1 ring-border hover:bg-accent"
               >
                 <Icon name="comment" className="size-3.5" />
-                To agent
                 <Kbd hint>a</Kbd>
               </button>
             </div>

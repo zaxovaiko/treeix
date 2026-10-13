@@ -486,12 +486,11 @@ else { process.stderr.write('not in the demo: glab ' + line + '\\n'); process.ex
   Bun.spawnSync(['chmod', '+x', `${home}/bin/gh`, `${home}/bin/glab`])
 }
 
-const hubAgent = (id: string, name: string, color: string, alien: string, instructions: string): Record<string, unknown> => ({
+const hubAgent = (id: string, name: string, color: string, instructions: string): Record<string, unknown> => ({
   id,
   name,
   icon: name[0],
   avatar: null,
-  alien,
   color,
   runtime: { kind: 'agent', agent: id === 'triage' ? 'codex' : 'claude' },
   model: id === 'triage' ? 'gpt-5' : 'opus',
@@ -562,9 +561,9 @@ export async function writeHubFixtures(home: string, repo: string): Promise<void
     `${hub}/agents.json`,
     JSON.stringify(
       [
-        hubAgent('ticket', 'Ticket', '#d9823b', 'claude', 'You pick up a ticket, ship the change and report back on the branch you pushed.'),
-        hubAgent('triage', 'Triage', '#5b8def', 'codex', 'You read new issues, label them and say who should take them.'),
-        hubAgent('release', 'Release', '#4caf7d', 'shell', 'You cut releases and write the notes from the commits.')
+        hubAgent('ticket', 'Ticket', '#d9823b', 'You pick up a ticket, ship the change and report back on the branch you pushed.'),
+        hubAgent('triage', 'Triage', '#5b8def', 'You read new issues, label them and say who should take them.'),
+        hubAgent('release', 'Release', '#4caf7d', 'You cut releases and write the notes from the commits.')
       ],
       null,
       2

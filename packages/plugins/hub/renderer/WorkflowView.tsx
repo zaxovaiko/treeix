@@ -18,6 +18,7 @@ import {
 import { ISLAND, usePanels, useHost, Zone, PANE_HEADER } from '@treeix/sdk'
 import { actionKeys } from '@treeix/shared/keymap'
 import { Icon, type IconName } from '@treeix/app/Icon'
+import { FLOW_THEME, layered } from '@treeix/app/flow'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
@@ -41,21 +42,6 @@ const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the patt
   Extract<WorkflowNode, { kind: 'condition' }>['test'],
   string
 >
-// Follows the app theme instead of React Flow's own light colors
-const THEME = {
-  '--xy-edge-stroke': 'var(--color-muted-foreground)',
-  '--xy-edge-stroke-selected': 'var(--color-primary)',
-  '--xy-connectionline-stroke': 'var(--color-primary)',
-  '--xy-handle-background-color': 'color-mix(in srgb, var(--color-muted-foreground) 45%, transparent)',
-  '--xy-handle-border-color': 'var(--color-popover)',
-  // React Flow reads this one for every pattern; its `-dots-color` sibling is only a default it ignores once this is set
-  '--xy-background-pattern-color': 'color-mix(in srgb, var(--color-foreground) 20%, transparent)',
-  '--xy-controls-button-background-color': 'var(--color-popover)',
-  '--xy-controls-button-background-color-hover': 'var(--color-accent)',
-  '--xy-controls-button-color': 'var(--color-foreground)',
-  '--xy-controls-button-border-color': 'var(--color-border)',
-  '--xy-attribution-background-color': 'transparent'
-} as React.CSSProperties
 
 /** What the canvas cards show besides their step: the last run's state of each and what is wrong with it */
 const CanvasContext = createContext<{ run: Record<string, NodeRun>; problems: Map<string, string[]> }>({ run: {}, problems: new Map() })
@@ -388,28 +374,6 @@ function Inspector({
   )
 }
 
-/** Left to right by depth: a step sits one column after its deepest source, stacked in rows within its column, top-to-bottom as it already was */
-function tidy(nodes: StepNode[], edges: FlowEdge[]): StepNode[] {
-  const depth = new Map<string, number>()
-  const depthOf = (id: string, seen: Set<string>): number => {
-    const known = depth.get(id)
-    if (known !== undefined) return known
-    if (seen.has(id)) return 0
-    const value = Math.max(0, ...edges.filter((edge) => edge.target === id).map((edge) => depthOf(edge.source, new Set(seen).add(id)) + 1))
-    depth.set(id, value)
-    return value
-  }
-  const taken = new Map<number, number>()
-  const placed = new Map<string, { x: number; y: number }>()
-  for (const node of [...nodes].sort((a, b) => a.position.y - b.position.y)) {
-    const column = depthOf(node.id, new Set())
-    const row = taken.get(column) ?? 0
-    taken.set(column, row + 1)
-    placed.set(node.id, { x: column * COLUMN, y: row * ROW })
-  }
-  return nodes.map((node) => ({ ...node, position: placed.get(node.id) ?? node.position }))
-}
-
 const STEP_KINDS = ['agent', 'tool', 'merge', 'condition', 'approval', 'output'] as const
 const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
 
@@ -573,7 +537,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
 
   const prettify = (): void => {
     checkpoint()
-    setNodes(tidy(nodes, edges))
+    setNodes(layered(nodes, edges, { column: COLUMN, height: () => ROW }))
   }
 
   const update = (step: WorkflowNode): void => setNodes(nodes.map((node) => (node.id === step.id ? { ...node, data: { step } } : node)))
@@ -636,7 +600,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
           fitViewOptions={fit(room)}
           minZoom={0.3}
           proOptions={{ hideAttribution: true }}
-          style={THEME}
+          style={FLOW_THEME}
         >
           <Background gap={20} />
           <Toolbar onAdd={add} onUndo={undo} onTidy={prettify} room={room} />

@@ -5,12 +5,9 @@ import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
-import type { Mood } from './Alien'
 import { chatIdOf, followRunEvents, hubAgents, hubApi, hubSelection, setConversation, hubRunStep } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
-
-const runMood = (run: Run): Mood => (isWaiting(run) ? 'waiting' : run.status === 'running' ? 'working' : run.status === 'done' || run.status === 'failed' ? run.status : 'idle')
 
 const STATUS: Record<Shown, { icon: IconName; className: string; label: string }> = {
   pending: { icon: 'history', className: 'text-muted-foreground', label: 'Waiting' },
@@ -121,7 +118,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* The steps island floats over the header's right end, so the header ends before it */}
       <header className={`${PANE_HEADER} gap-2.5 pl-3 ${sidebar && openSteps ? 'pr-60' : 'pr-1.5'}`}>
-        {lead ? <AgentAvatar agent={lead} size={28} mood={runMood(run)} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
+        {lead ? <AgentAvatar agent={lead} size={28} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{run.title}</div>
           <div className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">

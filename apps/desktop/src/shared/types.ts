@@ -188,8 +188,7 @@ export type Api = {
   revealInFinder: (path: string) => void
   openPath: (path: string) => void
   /** Blurs the desktop behind the window's see-through backgrounds, or turns that off */
-  /** `background` is the opaque theme color, used when not translucent */
-  setTranslucent: (translucent: boolean, background: string, appearance: 'dark' | 'light' | 'system') => void
+  setTranslucent: (translucent: boolean, appearance: 'dark' | 'light' | 'system') => void
   /** Window zoom: 1 in, -1 out, 0 back to normal */
   zoom: (step: number) => void
   /** The Dock icon's count: unread notifications, none at 0 */

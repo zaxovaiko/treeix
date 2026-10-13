@@ -24,9 +24,8 @@ test('a stored agent passes, one from an older or broken file does not', () => {
   expect(isHubAgent(missing)).toBe(false)
 })
 
-test('an alien is one with renders, and more folders are paths', () => {
-  expect(isHubAgent({ ...agent, alien: 'codex', directories: ['/repo'] })).toBe(true)
-  expect(isHubAgent({ ...agent, alien: 'robot' })).toBe(false)
+test('more folders are paths', () => {
+  expect(isHubAgent({ ...agent, directories: ['/repo'] })).toBe(true)
   expect(isHubAgent({ ...agent, directories: '/repo' })).toBe(false)
 })
 

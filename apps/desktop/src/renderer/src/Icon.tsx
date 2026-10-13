@@ -251,6 +251,20 @@ const paths = {
   ),
   braces: <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" />,
   layers: <path d="m12 2 10 5-10 5L2 7zM2 17l10 5 10-5M2 12l10 5 10-5" />,
+  database: (
+    <>
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0" />
+    </>
+  ),
+  network: (
+    <>
+      <rect x="16" y="16" width="6" height="6" rx="1" />
+      <rect x="2" y="16" width="6" height="6" rx="1" />
+      <rect x="9" y="2" width="6" height="6" rx="1" />
+      <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8" />
+    </>
+  ),
   compare: (
     <>
       <circle cx="18" cy="18" r="3" />

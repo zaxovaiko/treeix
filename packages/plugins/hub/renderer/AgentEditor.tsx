@@ -2,13 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { type ChatOption, useHost } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { Alien, characterOf, type Mood } from './Alien'
 import { Select, type SelectOption } from '@treeix/app/Picker'
 import { Dialog, errorMessage } from '@treeix/app/ui'
 import { shrinkImage } from '@treeix/app/WorkspaceSwitcher'
 import { WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { CRON_PRESETS, isCron } from '../shared/cron'
-import { ALIENS, API_PRESETS, type Character, type HubAgent, MAX_TIMEOUT_MIN, type Runtime, type Schedule } from '../shared/types'
+import { API_PRESETS, type HubAgent, MAX_TIMEOUT_MIN, type Runtime, type Schedule } from '../shared/types'
 import { ASK_TIMEOUT_MIN } from '../shared/workflow'
 import { useEscape } from './AskDialog'
 import { hubApi, runtimeSpec } from './store'
@@ -25,18 +24,21 @@ const runtimeChoice = (runtime: Runtime): string =>
 const fromChoice = (choice: string): Runtime =>
   choice.startsWith('agent:') ? { kind: 'agent', agent: choice.slice('agent:'.length) } : { kind: 'api', baseUrl: choice.slice('api:'.length) }
 
-/** The one-character badge an agent falls back to where no picture fits; the avatar or alien is the agent's real face */
+/** The one-character badge an agent shows without an uploaded image */
 const glyphOf = (agent: Pick<HubAgent, 'icon' | 'name'>): string => agent.icon || agent.name.trim().slice(0, 1).toUpperCase() || '?'
 
-/** The alien it picked, else its runtime's */
-export const alienOf = (agent: Pick<HubAgent, 'alien' | 'runtime'>): Character => agent.alien ?? characterOf(agent.runtime.kind === 'agent' ? agent.runtime.agent : undefined)
-
-/** The agent's uploaded image, else its alien */
-export function AgentAvatar({ agent, size, mood = 'idle' }: { agent: Pick<HubAgent, 'avatar' | 'alien' | 'runtime'>; size: number; mood?: Mood }): React.JSX.Element {
+/** The agent's uploaded image, else its glyph on its colour */
+export function AgentAvatar({ agent, size }: { agent: Pick<HubAgent, 'avatar' | 'icon' | 'name' | 'color'>; size: number }): React.JSX.Element {
   return agent.avatar ? (
     <img src={agent.avatar} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-lg object-cover" />
   ) : (
-    <Alien character={alienOf(agent)} mood={mood} size={size} />
+    <span
+      aria-hidden
+      style={{ width: size, height: size, background: agent.color, fontSize: Math.round(size * 0.5) }}
+      className="grid shrink-0 place-items-center rounded-lg font-medium text-white"
+    >
+      {glyphOf(agent)}
+    </span>
   )
 }
 
@@ -339,25 +341,6 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             </div>
           </div>
         </div>
-
-        {!draft.avatar && (
-          <div className={LABEL}>
-            Alien
-            <div className="flex gap-1.5">
-              {ALIENS.map((alien) => (
-                <button
-                  key={alien}
-                  aria-label={`Alien ${alien}`}
-                  aria-pressed={alienOf(draft) === alien}
-                  onClick={() => patch({ alien })}
-                  className={`grid size-10 place-items-center rounded-md ${alienOf(draft) === alien ? 'bg-accent ring-1 ring-primary' : 'hover:bg-accent'}`}
-                >
-                  <Alien character={alien} mood="idle" size={28} />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="flex items-end gap-2">
           <div className={`${LABEL} flex-1`}>
