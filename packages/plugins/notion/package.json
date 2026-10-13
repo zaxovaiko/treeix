@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-notion",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "notion",
+    "name": "Notion",
+    "description": "Lets agents and AI Hub workflows add pages to your Notion databases, such as meeting notes and tasks.",
+    "enabledByDefault": false
+  }
+}

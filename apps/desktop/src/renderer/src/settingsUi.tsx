@@ -1,5 +1,6 @@
 /** Building blocks for the settings page, also used by plugins' settings */
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useState } from 'react'
+import { errorMessage } from '../../shared/errors'
 
 /** Settings search; '' shows everything */
 const SettingsQuery = createContext('')
@@ -91,3 +92,56 @@ export const Card = ({ title, children }: { title: string; children: React.React
     </div>
   </SearchGroup>
 )
+
+/** A token kept by main: who it connects as once saved, else a password box; saving checks it first and shows why it was refused */
+export function SecretRow({
+  label,
+  description,
+  saved,
+  placeholder,
+  onSave,
+  onRemove
+}: {
+  label: string
+  description: string
+  saved: string | null
+  placeholder: string
+  onSave: (secret: string) => Promise<void>
+  onRemove: () => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState('')
+  const [problem, setProblem] = useState('')
+  const save = (): void => {
+    if (!draft.trim()) return
+    onSave(draft.trim()).then(
+      () => (setDraft(''), setProblem('')),
+      (reason: unknown) => setProblem(errorMessage(reason))
+    )
+  }
+  return (
+    <Row label={label} description={problem || description}>
+      {saved !== null ? (
+        <span className="flex items-center gap-2 text-xs">
+          <span className="text-emerald-400">{saved}</span>
+          <button className="h-7 rounded-md border border-border px-2.5 hover:bg-accent" onClick={onRemove}>
+            Remove
+          </button>
+        </span>
+      ) : (
+        <form className="flex gap-2" onSubmit={(event) => (event.preventDefault(), save())}>
+          <input
+            type="password"
+            aria-label={label}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={placeholder}
+            className="h-7 w-56 rounded-md bg-muted px-2 font-mono text-xs ring-1 ring-border outline-none focus:ring-primary"
+          />
+          <button type="submit" disabled={!draft.trim()} className="h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent disabled:opacity-50">
+            Save
+          </button>
+        </form>
+      )}
+    </Row>
+  )
+}
