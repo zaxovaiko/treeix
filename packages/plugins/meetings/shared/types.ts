@@ -80,3 +80,15 @@ export const clock = (ms: number): string => {
   const seconds = Math.floor(ms / 1000)
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
+
+/** The list heading a meeting falls under: Today, Yesterday, N days ago within a week, This month, then the month itself */
+export function dayGroup(at: Date, now = new Date()): string {
+  const midnight = (date: Date): number => new Date(date).setHours(0, 0, 0, 0)
+  const days = Math.round((midnight(now) - midnight(at)) / (24 * 60 * 60 * 1000))
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days} days ago`
+  const thisYear = at.getFullYear() === now.getFullYear()
+  if (thisYear && at.getMonth() === now.getMonth()) return 'This month'
+  return at.toLocaleDateString([], thisYear ? { month: 'long' } : { month: 'long', year: 'numeric' })
+}

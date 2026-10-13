@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { PageLayout, PANE_HEADER, useHost, useListNav } from '@treeix/sdk'
 import { Icon } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
-import { EmptyState, errorMessage } from '@treeix/app/ui'
-import type { CalendarEvent, Meeting, MeetingDetail, MeetingStatus, Rule } from '../shared/types'
+import { EmptyState, errorMessage, IconButton } from '@treeix/app/ui'
+import { type CalendarEvent, dayGroup, type Meeting, type MeetingDetail, type MeetingStatus, type Rule } from '../shared/types'
 import { bridge, button, meetingsSettings, revision, status } from './state'
 
 const ROW = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent'
+const HEADING = 'px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground'
 const DOT: Record<MeetingStatus, string> = { recording: 'bg-red-400', transcribing: 'bg-amber-400', done: '', failed: 'bg-red-400/60' }
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 const day = (iso: string): string => new Date(iso).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
@@ -41,7 +42,7 @@ function Upcoming(): React.JSX.Element | null {
   if (!events.length) return null
   return (
     <div className="border-b border-border pb-1.5">
-      <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground">Upcoming</div>
+      <div className={HEADING}>Upcoming</div>
       {events.map((event) => (
         <div key={`${event.start} ${event.title}`} className="mx-1.5 flex items-center gap-2 rounded-md px-2 py-1">
           <span className="w-10 shrink-0 text-[11px] text-muted-foreground tabular-nums">{time(event.start)}</span>
@@ -118,6 +119,7 @@ function MeetingView({ id }: { id: string }): React.JSX.Element {
 }
 
 export function MeetingsTab(): React.JSX.Element {
+  const host = useHost()
   const version = revision.use()
   const helper = status.use()?.helper
   const [query, setQuery] = useState('')
@@ -128,6 +130,13 @@ export function MeetingsTab(): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [query, version])
   const current = meetings.find((meeting) => meeting.id === selected) ?? meetings[0] ?? null
+  const remove = (meeting: Meeting): void => {
+    if (!window.confirm(`Delete ${meeting.title} with its audio, transcript and notes?`)) return
+    bridge.invoke('remove', meeting.id).then(
+      () => host.flash('Deleted'),
+      (reason: unknown) => host.flash(errorMessage(reason))
+    )
+  }
   const nav = useListNav({ count: meetings.length, index: current ? meetings.indexOf(current) : -1, onSelect: (index) => setSelected(meetings[index].id) })
 
   const list = (
@@ -149,17 +158,32 @@ export function MeetingsTab(): React.JSX.Element {
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         <Upcoming />
         {meetings.length === 0 && <EmptyState title={query ? 'Nothing matches' : 'No meetings recorded yet'} />}
-        {meetings.map((meeting, index) => (
-          <button key={meeting.id} {...nav.rowProps(index)} onClick={() => setSelected(meeting.id)} className={`${ROW} ${meeting === current ? 'bg-accent' : ''}`}>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs">{meeting.title}</span>
-              <span className="block text-[11px] text-muted-foreground">
-                {day(meeting.start)}, {time(meeting.start)}
-              </span>
-            </span>
-            {DOT[meeting.status] && <span title={meeting.status} className={`size-1.5 shrink-0 rounded-full ${DOT[meeting.status]}`} />}
-          </button>
-        ))}
+        {meetings.map((meeting, index) => {
+          const group = dayGroup(new Date(meeting.start))
+          return (
+            <div key={meeting.id}>
+              {(index === 0 || dayGroup(new Date(meetings[index - 1].start)) !== group) && <div className={HEADING}>{group}</div>}
+              <div className="group relative">
+                <button {...nav.rowProps(index)} onClick={() => setSelected(meeting.id)} className={`${ROW} ${meeting === current ? 'bg-accent' : ''}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs">{meeting.title}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {day(meeting.start)}, {time(meeting.start)}
+                    </span>
+                  </span>
+                  {DOT[meeting.status] && <span title={meeting.status} className={`size-1.5 shrink-0 rounded-full ${DOT[meeting.status]}`} />}
+                </button>
+                {meeting.status !== 'recording' && (
+                  <span className="absolute inset-y-0 right-3 hidden items-center group-hover:flex">
+                    <IconButton label="Delete meeting" onClick={() => remove(meeting)}>
+                      <Icon name="close" className="size-3" />
+                    </IconButton>
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </>
   )
