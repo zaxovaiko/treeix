@@ -48,7 +48,7 @@ function SectionHeader({
   return (
     <div className="group/header flex h-7 shrink-0 items-center gap-1 pr-0.5 pl-2">
       {onToggle ? (
-        <button onClick={onToggle} className={`${HEADING} flex flex-1 items-center gap-1 hover:text-foreground`}>
+        <button onClick={onToggle} aria-expanded={open} className={`${HEADING} flex flex-1 items-center gap-1 hover:text-foreground`}>
           <Icon name="chevron" className={`size-3 ${open ? 'rotate-90' : ''}`} />
           {label}
         </button>
@@ -344,7 +344,7 @@ export function AppSidebar({
   onHide: () => void
 }): React.JSX.Element {
   const { loaded } = usePlugins()
-  const [folded, setFolded] = useState<string[]>([])
+  const [folded, setFolded] = useState<string[]>(['hub.history'])
   const sections: SidebarSection[] = loaded.flatMap(({ plugin }) => plugin.sidebar ?? []).sort((a, b) => a.order - b.order)
   return (
     <div

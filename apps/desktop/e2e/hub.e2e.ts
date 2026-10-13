@@ -57,6 +57,8 @@ test.beforeAll(async () => {
   await page.reload()
   // CI's screen is small; the canvas has to fit there
   await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 740))
+  // History starts folded
+  await section(page, 'history').getByRole('button', { name: 'History' }).click()
 })
 test.afterAll(async () => {
   api?.close()
