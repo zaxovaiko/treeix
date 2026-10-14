@@ -152,7 +152,8 @@ export function Select({
   custom = false,
   width = 'w-72',
   note,
-  onOpen
+  onOpen,
+  transparent = false
 }: {
   value: string | null
   options: SelectOption[]
@@ -165,6 +166,8 @@ export function Select({
   note?: string
   /** Lets the caller load options only once someone looks */
   onOpen?: () => void
+  /** A trigger without the field fill, for a pane header */
+  transparent?: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -203,7 +206,7 @@ export function Select({
       }))}
       trigger={
         <span
-          className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-md border bg-muted px-2.5 text-left text-[13px] group-focus:border-foreground/22 ${open ? 'border-foreground/22' : 'border-input'}`}
+          className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-md border ${transparent ? '' : 'bg-muted'} px-2.5 text-left text-[13px] group-focus:border-foreground/22 ${open ? 'border-foreground/22' : 'border-input'}`}
         >
           <span className={`min-w-0 flex-1 truncate ${current ? 'text-foreground' : 'text-muted-foreground/60'}`}>{current?.label ?? placeholder}</span>
           {current?.hint && <span className="shrink-0 truncate text-xs text-muted-foreground">{current.hint}</span>}

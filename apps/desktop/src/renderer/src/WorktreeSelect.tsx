@@ -21,7 +21,7 @@ export function WorktreeSelect({ value, onChange }: { value: string | null; onCh
   const options = repos.flatMap((repo) => repo.worktrees.map((worktree) => ({ value: worktree.path, label: branchLabel(worktree), hint: baseName(repo.path) })))
   return (
     <div className="w-56 min-w-0">
-      <Select title="Worktree to read" placeholder="Pick a worktree" value={value} options={options} onChange={onChange} />
+      <Select title="Worktree to read" placeholder="Pick a worktree" value={value} options={options} onChange={onChange} transparent />
     </div>
   )
 }
