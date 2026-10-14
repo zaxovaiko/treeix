@@ -213,3 +213,31 @@ export function sortPullRequests(pullRequests: PullRequest[], sort: PullRequestS
   }[sort]
   return [...pullRequests].sort(compare)
 }
+
+/**
+ * The file before a one-file patch, rebuilt from the file after it: context and added lines must match `after`, so a
+ * file that moved on since the patch gives null instead of a wrong one
+ */
+export function fileBefore(patch: string, after: string): string | null {
+  const next = after.split('\n')
+  const before: string[] = []
+  let at = 0
+  for (const hunk of patch.split(/^(?=@@ )/m).slice(1)) {
+    const start = Number(/^@@ -\d+(?:,\d+)? \+(\d+)/.exec(hunk)?.[1] ?? 1)
+    // A hunk adding to an empty file starts at +0
+    const from = Math.max(0, start - 1)
+    if (from < at) return null
+    before.push(...next.slice(at, from))
+    at = from
+    for (const line of hunk.split('\n').slice(1)) {
+      const [mark, text] = [line[0], line.slice(1)]
+      if (mark === '-') before.push(text)
+      else if (mark === ' ' || mark === '+') {
+        if (next[at] !== text) return null
+        if (mark === ' ') before.push(text)
+        at++
+      }
+    }
+  }
+  return [...before, ...next.slice(at)].join('\n')
+}

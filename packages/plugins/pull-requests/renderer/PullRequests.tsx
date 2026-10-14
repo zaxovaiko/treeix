@@ -34,6 +34,7 @@ import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
 import {
   ConflictMark,
   conversationFeed,
+  fileBefore,
   groupPullRequests,
   PipelineDot,
   PipelineLink,
@@ -1696,6 +1697,12 @@ export function PullRequestDetailView({
                 ...codeThemeOptions(),
                 diffStyle,
                 disableFileHeader: true,
+                loadDiffFiles: async ({ name, prevName = name }) => {
+                  const after = await readPullRequestFile(name)
+                  const before = after === null ? null : fileBefore(patch.patch, after)
+                  if (after === null || before === null) throw new Error(`${name} cannot be expanded`)
+                  return { oldFile: { name: prevName, contents: before }, newFile: { name, contents: after } }
+                },
                 enableLineSelection: true,
                 enableGutterUtility: true,
                 onGutterUtilityClick: startDraft,

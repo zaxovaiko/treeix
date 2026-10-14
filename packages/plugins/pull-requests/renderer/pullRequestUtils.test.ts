@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { PullRequest, ReviewThread } from '../shared/types'
-import { conversationFeed, groupPullRequests, involvesYou, sortPullRequests, threadReference, untilLabel } from './pullRequestUtils'
+import { conversationFeed, fileBefore, groupPullRequests, involvesYou, sortPullRequests, threadReference, untilLabel } from './pullRequestUtils'
 
 test('conversationFeed slots review events between threads by time', () => {
   const thread = (createdAt: string) => ({ comments: [{ createdAt }] }) as ReviewThread
@@ -89,4 +89,14 @@ test('threadReference points at the thread without copying bodies or code', () =
     'MR !5 https://gitlab.com/o/r/-/merge_requests/5 review thread by @ann on b.ts:4 (old): https://gitlab.com/o/r/-/merge_requests/5#note_3'
   )
   expect(threadReference(github, thread('review:7', 'src/a.ts', 42))).not.toContain('secret body')
+})
+
+test('fileBefore reverses a patch onto the file after it, and refuses a file that moved on', () => {
+  const before = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`)
+  const after = ['first', ...before.slice(1, 10), 'eleven', 'line 12', 'added'].join('\n')
+  const patch = ['diff --git a/x b/x', '@@ -1,2 +1,2 @@', '-line 1', '+first', ' line 2', '@@ -10,3 +10,4 @@', ' line 10', '-line 11', '+eleven', ' line 12', '+added', ''].join(
+    '\n'
+  )
+  expect(fileBefore(patch, after)).toBe(before.join('\n'))
+  expect(fileBefore(patch, after.replace('line 2', 'changed'))).toBeNull()
 })
