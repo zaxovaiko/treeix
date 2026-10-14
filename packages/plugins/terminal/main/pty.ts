@@ -6,7 +6,7 @@ import { dirname } from 'node:path'
 import type { WebContents } from 'electron'
 import { type IPty, spawn } from 'node-pty'
 import { type AgentHookStatus, type LiveTerminal, sessionFolder, type TerminalOptions } from '../shared/types'
-import { withoutAgentVariables } from '@treeix/host/env'
+import { userShell, withoutAgentVariables } from '@treeix/host/env'
 import { coalesceOutput } from './coalesce'
 import { attributePorts, parseCwds, parseListeners, parseParents, type SessionPortEntry } from './ports'
 
@@ -48,7 +48,7 @@ export function createTerminal(owner: WebContents, { cwd, command, cols, rows, m
   const wanted = sessionFolder(cwd)
   const folder = existingFolder(wanted)
   // Login shell so GUI launches still get the user's PATH (claude, codex, bun...)
-  const pty = spawn(process.env.SHELL ?? '/bin/zsh', ['-l'], {
+  const pty = spawn(userShell(), ['-l'], {
     name: 'xterm-256color',
     cwd: folder,
     cols,

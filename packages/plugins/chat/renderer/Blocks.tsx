@@ -9,6 +9,7 @@ import { Expandable } from '@treeix/app/Lightbox'
 import { useSettings } from '@treeix/app/settings'
 import { baseName } from '@treeix/app/Sidebar'
 import { type Block, diffCounts, fileTarget, type PendingPermission } from './feed'
+import { keysText } from '@treeix/shared/shortcut'
 
 type Diff = Extract<ToolOutput, { type: 'diff' }>
 
@@ -238,7 +239,7 @@ export function PermissionCard({ permission, newest, onAnswer }: { permission: P
             className={`h-6 rounded-md px-2.5 font-medium ${option === allow ? 'bg-primary text-white' : 'text-foreground ring-1 ring-border hover:bg-accent'}`}
           >
             {option.name}
-            {newest && option === allow && <span className="ml-1.5 opacity-70">⌘↵</span>}
+            {newest && option === allow && <span className="ml-1.5 opacity-70">{keysText('⌘↵')}</span>}
             {newest && option === reject && <span className="ml-1.5 text-muted-foreground">Esc</span>}
           </button>
         ))}

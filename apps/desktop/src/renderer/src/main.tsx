@@ -8,12 +8,15 @@ import App from './App'
 import { ErrorBoundary } from './ErrorBoundary'
 import { activeTheme, activeThemeId, codeThemes, fontStack, getSettings, hotkeyOptions, MONO_STACK, SANS_STACK, subscribeSettings } from './settings'
 import { applyTheme } from './themes'
+import { IS_MAC } from '../../shared/platform'
 
 // Fetched while the settings below apply; ~330KB of editor code stays out of the entry chunk
 const editModule = import('@pierre/diffs/edit')
 
 function applyAppearance(): void {
-  const { opacity, editorFontSize, uiFont, editorFont } = getSettings()
+  const { editorFontSize, uiFont, editorFont } = getSettings()
+  // See Transparency in SettingsView: only macOS can see through the window
+  const opacity = IS_MAC ? getSettings().opacity : 100
   const theme = activeTheme()
   applyTheme(activeThemeId(), theme, opacity / 100, getSettings().borderStrength / 100)
   document.documentElement.style.setProperty('--font-sans', fontStack(uiFont, SANS_STACK))

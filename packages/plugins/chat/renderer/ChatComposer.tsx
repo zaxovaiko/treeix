@@ -9,6 +9,7 @@ import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
 import { builtinOf, completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning, withBuiltins } from './composer'
 import { cancel, clear, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
+import { primaryKey } from '@treeix/shared/shortcut'
 
 const readImage = (file: File): Promise<ChatImage> =>
   new Promise((resolve, reject) => {
@@ -274,7 +275,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         setSelected((index) => (index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length)
         return
       }
-      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && !event.metaKey) {
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && !primaryKey(event)) {
         event.preventDefault()
         accept(Math.min(selected, items.length - 1))
         return
@@ -286,7 +287,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         return
       }
     }
-    if (event.key === 'Enter' && (event.metaKey || !event.shiftKey)) {
+    if (event.key === 'Enter' && (primaryKey(event) || !event.shiftKey)) {
       event.preventDefault()
       submit()
     }

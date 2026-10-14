@@ -30,6 +30,7 @@ import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
 import { MAX_TIMEOUT_MIN } from '../shared/types'
 import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
 import { asking, hubAgents, hubApi, hubRunStep, hubRuns, hubSelection } from './store'
+import { keysText } from '@treeix/shared/shortcut'
 
 type StepNode = FlowNode<{ step: WorkflowNode }, 'step'>
 
@@ -687,7 +688,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
             ) : (
               <p className="text-xs text-muted-foreground">
                 Select a step to edit it, or add one with the buttons on the canvas; it goes after the selected step. Drag from a step's right edge to another to connect them, and
-                press Backspace to delete what's selected. ⌘Z undoes.
+                press Backspace to delete what's selected. {keysText('⌘Z')} undoes.
               </p>
             )}
           </div>

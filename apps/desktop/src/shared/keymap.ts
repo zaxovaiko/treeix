@@ -1,4 +1,4 @@
-import { matchesShortcut, type Shortcut, shortcutLabel } from './shortcut'
+import { forPlatform, matchesShortcut, type Shortcut, shortcutLabel } from './shortcut'
 
 /**
  * Every named action the keyboard can reach, with the key it ships with. The app and its plugins declare theirs
@@ -18,7 +18,8 @@ export type ActionDef = {
   keys: Shortcut | null
 }
 
-export const key = (code: string, modifiers: Partial<Shortcut> = {}): Shortcut => ({ code, meta: false, alt: false, ctrl: false, shift: false, ...modifiers })
+/** A default key, written with macOS modifiers */
+export const key = (code: string, modifiers: Partial<Shortcut> = {}): Shortcut => forPlatform({ code, meta: false, alt: false, ctrl: false, shift: false, ...modifiers })
 
 const registry = new Map<string, ActionDef>()
 /** Rebound keys from Settings; an id set to null is unbound on purpose */

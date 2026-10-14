@@ -12,6 +12,8 @@ import { toggleStrip } from './Strip'
 import { closeTab, findTab, getBrowser, openTab, openTabIn, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
 import type { Vital } from '../shared/types'
+import { primaryKey, secondaryKey } from '@treeix/shared/shortcut'
+import { IS_MAC } from '@treeix/shared/platform'
 
 const VITAL_NAMES: Vital['name'][] = ['LCP', 'INP', 'CLS', 'Long task']
 
@@ -22,7 +24,7 @@ let host: HostApi | null = null
 const isBrowserFocused = (): boolean => document.activeElement?.closest('[data-browser]') != null
 // Closing a tab removes the focused page or button, so focus falls to the body; the Browser page keeps its keys then
 const ownsKeys = (current: HostApi): boolean => isBrowserFocused() || (current.activeTab === TAB_ID && document.activeElement === document.body)
-const isConsoleKey = (event: KeyboardEvent): boolean => event.code === 'KeyJ' && event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey
+const isConsoleKey = (event: KeyboardEvent): boolean => event.code === 'KeyJ' && primaryKey(event) && !event.shiftKey && !event.altKey && !secondaryKey(event)
 
 /** Chrome's keys, while the browser has focus */
 const SHORTCUTS: ShortcutInfo[] = (
@@ -248,7 +250,16 @@ function Root(): React.JSX.Element {
       bridge.on('key', (input, key) => {
         const { code, meta, shift, alt, control } = input as KeyInput
         window.dispatchEvent(
-          new KeyboardEvent('keydown', { code, key: String(key), metaKey: meta, shiftKey: shift, altKey: alt, ctrlKey: control, bubbles: true, cancelable: true })
+          new KeyboardEvent('keydown', {
+            code,
+            key: String(key),
+            metaKey: IS_MAC ? meta : control,
+            shiftKey: shift,
+            altKey: alt,
+            ctrlKey: IS_MAC ? control : meta,
+            bubbles: true,
+            cancelable: true
+          })
         )
       }),
     []
@@ -289,7 +300,7 @@ const plugin: RendererPlugin = {
   onKeyDown: (event, current) => {
     if (!ownsKeys(current)) return false
     if (isConsoleKey(event)) return toggleStrip()
-    const action = browserAction({ code: event.code, meta: event.metaKey, shift: event.shiftKey, alt: event.altKey, control: event.ctrlKey })
+    const action = browserAction({ code: event.code, meta: primaryKey(event), shift: event.shiftKey, alt: event.altKey, control: secondaryKey(event) })
     if (!action || action === 'closeTab') return false
     runBrowserAction(action)
     return true

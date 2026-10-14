@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { IS_MAC } from '../../shared/platform'
 
 test('clampOpacity keeps the window visible', async () => {
   globalThis.localStorage ??= { getItem: () => null, setItem: () => undefined } as unknown as Storage
@@ -16,9 +17,10 @@ test('digitPressed matches the physical digit with exactly the chosen modifiers'
   const { digitPressed } = await import('./settings')
   const key = (code: string, modifiers: Partial<Pick<KeyboardEvent, 'metaKey' | 'altKey' | 'ctrlKey' | 'shiftKey'>> = {}) =>
     ({ code, metaKey: false, altKey: false, ctrlKey: false, shiftKey: false, ...modifiers }) as KeyboardEvent
-  expect(digitPressed(key('Digit3', { metaKey: true }), 'meta')).toBe(3)
-  expect(digitPressed(key('Digit3', { metaKey: true, altKey: true }), 'meta')).toBeNull()
-  expect(digitPressed(key('Digit0', { metaKey: true, altKey: true }), 'altMeta')).toBe(0)
+  const primary = IS_MAC ? 'metaKey' : 'ctrlKey'
+  expect(digitPressed(key('Digit3', { [primary]: true }), 'meta')).toBe(3)
+  expect(digitPressed(key('Digit3', { [primary]: true, altKey: true }), 'meta')).toBeNull()
+  expect(digitPressed(key('Digit0', { [primary]: true, altKey: true }), 'altMeta')).toBe(0)
   expect(digitPressed(key('Digit2', { altKey: true }), 'alt')).toBe(2)
   expect(digitPressed(key('KeyA', { altKey: true }), 'alt')).toBeNull()
   expect(digitPressed(key('Digit2', { altKey: true }), 'off')).toBeNull()

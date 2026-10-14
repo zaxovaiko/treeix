@@ -2,12 +2,13 @@ import { getSharedHighlighter } from '@pierre/diffs'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supportsLanguageService } from '../../shared/languages'
 import type { HoverInfo, NavigationKind, SymbolTarget } from '../../shared/types'
-import { matchesShortcut, toAccelerator } from '../../shared/shortcut'
 import { copyText, type MenuEntry, openMenu } from './contextMenu'
 import { activeTheme, getSettings } from './settings'
 import { LazyMarkdown } from './LazyMarkdown'
 import { Popup } from './ui'
 import { codeTheme } from './themes'
+import { matchesShortcut, primaryKey, toAccelerator } from '../../shared/shortcut'
+import { IS_MAC } from '../../shared/platform'
 
 const HOVER_DELAY_MS = 450
 const HOVER_GRACE_MS = 200
@@ -125,7 +126,7 @@ function paintUnderline(element: HTMLElement | null, metaKey: boolean): void {
 }
 window.addEventListener('scroll', () => paintUnderline(null, false), true)
 for (const type of ['keydown', 'keyup'] as const) {
-  window.addEventListener(type, (event) => event.key === 'Meta' && paintUnderline(underlined, event.metaKey))
+  window.addEventListener(type, (event) => event.key === (IS_MAC ? 'Meta' : 'Control') && paintUnderline(underlined, primaryKey(event)))
 }
 window.addEventListener('blur', () => paintUnderline(underlined, false))
 
@@ -174,7 +175,7 @@ export function useSymbolNavigation({ worktreePath, path, exact = true, onNaviga
       const target = targetFromToken(path, token, exact)
       if (!target) return
       activeTarget = { target, worktreePath }
-      if (event.metaKey) onNavigate('definition', target, worktreePath)
+      if (primaryKey(event)) onNavigate('definition', target, worktreePath)
     },
     onTokenEnter: (token: TokenEvent, event: PointerEvent) => {
       // Measured now: the renderer re-creates token spans on hover, so the element may be gone when the card opens
@@ -182,7 +183,7 @@ export function useSymbolNavigation({ worktreePath, path, exact = true, onNaviga
       const anchor = new DOMRect(event.clientX - 12, top, 0, height)
       const target = targetFromToken(path, token, exact)
       hovered.current = target
-      paintUnderline(target ? token.tokenElement : null, event.metaKey)
+      paintUnderline(target ? token.tokenElement : null, primaryKey(event))
       if (!target) return
       activeTarget = { target, worktreePath }
       clearTimeout(timer.current)
@@ -260,7 +261,7 @@ export function NavigableCode(props: React.HTMLAttributes<HTMLElement>): React.J
         const target = symbolAt(event)
         if (!target) return
         activeTarget = { target, worktreePath: context.worktreePath }
-        if (event.metaKey) context.onNavigate('definition', target, context.worktreePath)
+        if (primaryKey(event)) context.onNavigate('definition', target, context.worktreePath)
       }}
       onContextMenu={(event) => {
         const target = symbolAt(event)

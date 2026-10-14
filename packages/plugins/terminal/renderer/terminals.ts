@@ -26,6 +26,9 @@ import { isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
 import { type PaneLayout, placePane, removePane, type SplitEdge } from './paneLayout'
 import { notify as notifyCenter } from '@treeix/app/notifications'
+import { primaryKey } from '@treeix/shared/shortcut'
+import { IS_MAC } from '@treeix/shared/platform'
+import { actionList, matchesAction } from '@treeix/shared/keymap'
 
 export { type SessionKind, type SessionView }
 
@@ -469,7 +472,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     // Hyperlinks programs print (Claude Code's PR and file links) would otherwise open in the browser on a plain click
     linkHandler: {
       activate: (event, uri) => {
-        if (!event.metaKey) return
+        if (!primaryKey(event)) return
         if (/^https?:\/\//.test(uri)) webLinkHandler?.(uri)
         else if (uri.startsWith('file://')) fileLinkHandler?.(id, [{ path: decodeURIComponent(new URL(uri).pathname), line: null }])
       }
@@ -498,7 +501,7 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
         range: { start: { x: start + 1, y: row }, end: { x: end, y: row } },
         decorations: { underline: true, pointerCursor: true },
         activate: (event: MouseEvent) => {
-          if (event.metaKey) open()
+          if (primaryKey(event)) open()
         }
       })
       callback([
@@ -528,14 +531,23 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
       }
       return false
     }
+    // Linux: plain Ctrl belongs to the shell. Ctrl chords with Shift or Alt the app binds are the app's, and any other
+    // Ctrl+Shift one stands for the app's plain Ctrl key, like Ctrl+Shift+T in GNOME Terminal
+    if (!IS_MAC && event.ctrlKey && (event.shiftKey || event.altKey) && event.code !== 'Tab') {
+      if (actionList().some(({ id }) => matchesAction(event, id))) return false
+      if (event.shiftKey && !event.altKey) {
+        if (event.type === 'keydown') appKeyFromTerminal(event, terminal)
+        return false
+      }
+    }
     // ⌘←, ⌘→ and ⌘⌫ edit the line like in iTerm and Terminal.app: start of line, end of line, delete to start
-    const lineKey = event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey ? LINE_KEYS[event.key] : undefined
+    const lineKey = IS_MAC && event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey ? LINE_KEYS[event.key] : undefined
     if (lineKey) {
       if (event.type === 'keydown') bridge.send('write', id, lineKey)
       return false
     }
     // ⌃- and ⌃⇧- are the app's Go Back and Go Forward, ⌃Tab and ⌃⇧Tab its next and previous tab, not terminal input
-    if (event.ctrlKey && (event.code === 'Minus' || event.code === 'Tab')) return false
+    if (event.ctrlKey && ((IS_MAC && event.code === 'Minus') || event.code === 'Tab')) return false
     // ⌥ digits pick a session; the page and workspace digits are set in Settings
     const { tabs, workspaces } = getSettings().digitShortcuts
     const digitShortcut = (['alt', tabs, workspaces] as const).some((modifier) => digitPressed(event, modifier) !== null)
@@ -895,18 +907,6 @@ function redrawGlyphs(): void {
 // xterm restores its context but keeps the blank atlas; the event doesn't bubble, so it's caught on the way down
 document.addEventListener('webglcontextrestored', () => requestAnimationFrame(redrawGlyphs), true)
 
-function drawWithGpu(session: TerminalSession): void {
-  const index = gpuOrder.indexOf(session.id)
-  if (index !== -1) gpuOrder.splice(index, 1)
-  gpuOrder.push(session.id)
-  if (gpu.has(session.id)) return
-  // The DOM renderer draws the first frames in a different font; blank until the GPU takes over reads as no change.
-  // Transparent rather than hidden, which would stop the terminal taking focus
-  const shown = (): void => void (session.element.style.opacity = '')
-  session.element.style.opacity = '0'
-  const loading = { dispose: shown }
-  gpu.set(session.id, loading)
-  trimGpu()
 /**
  * xterm's GPU renderer blends a glyph's alpha into the canvas alpha too, squaring it, so on a see-through canvas text
  * came out thin and faded; the canvas alpha has to add up as coverage instead. Kept across xterm's own resets
@@ -919,6 +919,18 @@ function blendCoverage(terminal: Terminal): void {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 }
 
+function drawWithGpu(session: TerminalSession): void {
+  const index = gpuOrder.indexOf(session.id)
+  if (index !== -1) gpuOrder.splice(index, 1)
+  gpuOrder.push(session.id)
+  if (gpu.has(session.id)) return
+  // The DOM renderer draws the first frames in a different font; blank until the GPU takes over reads as no change.
+  // Transparent rather than hidden, which would stop the terminal taking focus
+  const shown = (): void => void (session.element.style.opacity = '')
+  session.element.style.opacity = '0'
+  const loading = { dispose: shown }
+  gpu.set(session.id, loading)
+  trimGpu()
   void import('@xterm/addon-webgl')
     .then(({ WebglAddon }) => {
       // Released while the addon loaded
@@ -932,6 +944,7 @@ function blendCoverage(terminal: Terminal): void {
         session.terminal.refresh(0, session.terminal.rows - 1)
       })
       session.terminal.loadAddon(webgl)
+      blendCoverage(session.terminal)
       gpu.set(session.id, release)
       // The atlas draws on the next frame
       requestAnimationFrame(shown)
@@ -944,7 +957,6 @@ function blendCoverage(terminal: Terminal): void {
 
 /** A session leaving the screen keeps its context until newer ones need the room */
 export function releaseGpu(id: string, container: HTMLElement): void {
-      blendCoverage(session.terminal)
   if (findTerminal(id)?.element.parentElement === container) trimGpu()
 }
 
@@ -1082,6 +1094,15 @@ export function sendText(id: string, text: string, submit: boolean): void {
       .then(write)
   } else write()
   revealSession(id)
+}
+
+/** A terminal's Ctrl+Shift chord as the app's Ctrl one; C and V copy and paste, as in other Linux terminals */
+function appKeyFromTerminal(event: KeyboardEvent, terminal: Terminal): void {
+  event.preventDefault()
+  event.stopPropagation()
+  if (event.code === 'KeyC') return void navigator.clipboard.writeText(terminal.getSelection())
+  if (event.code === 'KeyV') return void navigator.clipboard.readText().then((text) => terminal.paste(text))
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: event.code, key: event.key.toLowerCase(), ctrlKey: true, bubbles: true, cancelable: true }))
 }
 
 export const terminalSelection = (id: string): string => findTerminal(id)?.terminal.getSelection() ?? ''

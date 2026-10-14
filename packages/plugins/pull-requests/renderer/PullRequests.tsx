@@ -80,6 +80,7 @@ import {
   PANE_HEADER
 } from '@treeix/sdk'
 import { isJson, isString, list as jsonList, parseJson } from '@treeix/shared/json'
+import { keysText } from '@treeix/shared/shortcut'
 
 // ponytail: keeps the most recently loaded details, which carry every patch; raise if reopening older PRs refetches too often
 const MAX_CACHED_DETAILS = 30
@@ -876,7 +877,7 @@ function ThreadCard({
                     className="w-full resize-y rounded-md bg-muted px-2 py-1.5 text-[13px] leading-5 ring-1 ring-border outline-none"
                   />
                   <div className="mt-1.5 flex flex-wrap items-center justify-end gap-2">
-                    <span className="mr-auto text-[11px] text-muted-foreground">⌘↵ to save, esc to cancel</span>
+                    <span className="mr-auto text-[11px] text-muted-foreground">{keysText('⌘↵ to save, esc to cancel')}</span>
                     <button onClick={() => onEdit(null)} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
                       Cancel
                     </button>

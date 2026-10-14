@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 
 import { errorMessage } from '../../shared/errors'
+import { IS_MAC } from '../../shared/platform'
+import { keysText } from '../../shared/shortcut'
 import { readStored } from './storage'
 
 export { readStored }
@@ -188,7 +190,7 @@ export function FoldAllButton({
 export { errorMessage }
 
 const TOOLTIP_DELAY_MS = 350
-const SHORTCUT_SUFFIX = /^(.*?)\s*\(([⌘⇧⌥⌃][^)]*)\)$/s
+const SHORTCUT_SUFFIX = /^(.*?)\s*\(((?:[⌘⇧⌥⌃]|(?:Ctrl|Super|Alt|Shift)\+)[^)]*)\)$/s
 
 type Tip = { text: string; shortcut: string | null; x: number; y: number; side: 'below' | 'above' | 'right' }
 
@@ -219,14 +221,14 @@ export function placePopup(
   align: PopupAlign,
   side: PopupSide | null
 ): { side: PopupSide; left: number; top: number | null; bottom: number | null; maxHeight: number } {
-  const room = { below: viewport.height - trigger.bottom - POPUP_GAP - EDGE_GAP, above: trigger.top - POPUP_GAP - EDGE_GAP }
-  const fits = (candidate: PopupSide): boolean => size.height <= room[candidate]
   if (align === 'beside') {
     const right = trigger.right + POPUP_GAP
     const left = right + size.width <= viewport.width - EDGE_GAP ? right : Math.max(EDGE_GAP, trigger.left - POPUP_GAP - size.width)
     const top = Math.max(EDGE_GAP, Math.min(trigger.top, viewport.height - EDGE_GAP - size.height))
     return { side: 'below', left, top, bottom: null, maxHeight: viewport.height - top - EDGE_GAP }
   }
+  const room = { below: viewport.height - trigger.bottom - POPUP_GAP - EDGE_GAP, above: trigger.top - POPUP_GAP - EDGE_GAP }
+  const fits = (candidate: PopupSide): boolean => size.height <= room[candidate]
   const next: PopupSide = side && fits(side) ? side : fits('below') || room.below >= room.above ? 'below' : 'above'
   const x = align === 'end' ? trigger.right - size.width : trigger.left
   return {
@@ -358,7 +360,7 @@ export function Tooltips(): React.JSX.Element | null {
       if (element !== clicked) clicked = null
       if (!element || element === clicked) return
       moveTitle(element)
-      const text = titled ? element.getAttribute('data-tip') : element.textContent?.trim()
+      const text = keysText((titled ? element.getAttribute('data-tip') : element.textContent?.trim()) ?? '')
       if (!text) return
       target = element
       timer = window.setTimeout(() => {
@@ -586,10 +588,10 @@ export function UserAvatar({ name, url, size = 'size-[22px]', title = name }: { 
   )
 }
 
-/** True while the window has no traffic lights: full screen, or the hotkey window */
+/** True while the window has no traffic lights: full screen, or the hotkey window. Linux draws its own frame, so always */
 export function useChromeless(): boolean {
-  const [chromeless, setChromeless] = useState(false)
-  useEffect(() => window.api.onWindowChromeless(setChromeless), [])
+  const [chromeless, setChromeless] = useState(!IS_MAC)
+  useEffect(() => (IS_MAC ? window.api.onWindowChromeless(setChromeless) : undefined), [])
   return chromeless
 }
 

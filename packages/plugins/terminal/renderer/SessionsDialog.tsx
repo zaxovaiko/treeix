@@ -6,6 +6,7 @@ import { timeAgo } from '@treeix/app/time'
 import { Keys } from '@treeix/sdk'
 import { type ClosedSession, forgetClosedSession, killSession, searchTranscripts, type Session, sessionUsage, transcriptRef } from './terminals'
 import type { SessionUsage } from '../shared/types'
+import { primaryKey } from '@treeix/shared/shortcut'
 
 /** Shorter queries match too many conversations to be useful, and each search reads every transcript */
 const CONTENT_QUERY_MIN = 3
@@ -123,7 +124,7 @@ export function SessionsDialog({
     else if (event.key === 'ArrowUp') setActive((current - 1 + rows.length) % Math.max(rows.length, 1))
     else if (event.key === 'Enter') pick(rows[current])
     else if (event.key === 'Escape') onClose()
-    else if (event.key === 'Backspace' && event.metaKey) remove(rows[current])
+    else if (event.key === 'Backspace' && primaryKey(event)) remove(rows[current])
     else return
     event.preventDefault()
     event.stopPropagation()

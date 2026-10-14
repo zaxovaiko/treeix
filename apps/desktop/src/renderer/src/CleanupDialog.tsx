@@ -6,6 +6,7 @@ import { baseName, branchLabel } from './Sidebar'
 import { Dialog, errorMessage } from './ui'
 import { toggleIn } from './settings'
 import { type CleanupCandidate, cleanupCandidates } from './worktreePlans'
+import { primaryKey } from '../../shared/shortcut'
 
 /** Lists worktrees that look finished and removes the checked ones */
 export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; onRemoved: (paths: string[]) => void; onClose: () => void }): React.JSX.Element {
@@ -54,7 +55,7 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
       offset="pt-[14vh]"
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose()
-        if (event.key === 'Enter' && event.metaKey) void remove()
+        if (event.key === 'Enter' && primaryKey(event)) void remove()
       }}
       tabIndex={-1}
       autoFocus

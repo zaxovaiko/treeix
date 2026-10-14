@@ -2,7 +2,7 @@ import { type ComponentType, useEffect, useRef, useState } from 'react'
 import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav, PANE_HEADER } from '@treeix/sdk'
 import type { ToolStatus } from '../../shared/types'
 import { Icon, ICON_NAMES, type IconName } from './Icon'
-import { isModifierCode, type Shortcut, shortcutLabel } from '../../shared/shortcut'
+import { isModifierCode, keysText, type Shortcut, shortcutLabel } from '../../shared/shortcut'
 import { type ActionDef, actionList, actionOf, conflictsOf, isRebound, shortcutOf } from '../../shared/keymap'
 import { NAVIGATION_ACTIONS } from './codeNavigation'
 import {
@@ -35,6 +35,7 @@ import { copyText } from './contextMenu'
 import { McpSetup } from './mcpInstall'
 import { useKeyExtras, useShortcuts } from './Shell'
 import { checkForUpdates, updateSummary, useUpdates } from './updates'
+import { IS_MAC } from '../../shared/platform'
 
 /** Click or ⏎, then press the combination; Esc cancels. Bare keys like § or F12 are allowed. */
 function ShortcutRecorder({ value, onChange }: { value: Shortcut | null; onChange: (shortcut: Shortcut | null) => void }): React.JSX.Element {
@@ -503,13 +504,18 @@ const SETTINGS: SettingSpec[] = [
     description: "Adds Treeix's MCP server to Claude Code and Codex, so sessions started outside Treeix reach its browser, sessions and AI Hub too.",
     Control: McpSetup
   },
-  {
-    section: 'Appearance',
-    card: 'Window',
-    label: 'Transparency',
-    description: 'Lets the blurred desktop show through backgrounds while text stays solid. Applies instantly.',
-    Control: Transparency
-  },
+  // Vibrancy is macOS only; on Linux a translucent page would only fade into the window's own background
+  ...(IS_MAC
+    ? [
+        {
+          section: 'Appearance',
+          card: 'Window',
+          label: 'Transparency',
+          description: 'Lets the blurred desktop show through backgrounds while text stays solid. Applies instantly.',
+          Control: Transparency
+        } satisfies SettingSpec
+      ]
+    : []),
   {
     section: 'Appearance',
     card: 'Window',
@@ -548,7 +554,7 @@ const SETTINGS: SettingSpec[] = [
     section: 'Editor',
     card: 'Editor',
     label: 'Font',
-    description: 'Code in the editor, diffs and pull requests. Size is independent of window zoom (⌘+ / ⌘-).',
+    description: keysText('Code in the editor, diffs and pull requests. Size is independent of window zoom (⌘+ / ⌘-).'),
     Control: fontRow('editorFont', { key: 'editorFontSize', fallback: 13, label: 'editor font' })
   },
   { section: 'Editor', card: 'Editor', label: 'Minimap', description: 'The code overview along the right edge of the editor.', Control: toggle('editorMinimap', 'Minimap') },
@@ -574,7 +580,7 @@ const SETTINGS: SettingSpec[] = [
     section: 'Terminal',
     card: 'Font',
     label: 'Terminal font',
-    description: 'Terminal and agent sessions. Open terminals resize to fit; ⌥⌘= and ⌥⌘- change the size from a terminal.',
+    description: keysText('Terminal and agent sessions. Open terminals resize to fit; ⌥⌘= and ⌥⌘- change the size from a terminal.'),
     Control: fontRow('terminalFont', { key: 'terminalFontSize', fallback: 12, label: 'terminal font' })
   },
   {
@@ -707,7 +713,7 @@ const SETTINGS: SettingSpec[] = [
       return (
         <Segmented
           value={digitShortcuts[target]}
-          options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, name])}
+          options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, keysText(name)])}
           onChange={(next) => updateSettings({ digitShortcuts: { ...getSettings().digitShortcuts, [target]: next } })}
         />
       )

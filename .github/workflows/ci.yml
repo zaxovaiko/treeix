@@ -37,3 +37,16 @@ jobs:
             apps/desktop/playwright-report
             apps/desktop/test-results
           retention-days: 7
+
+  linux:
+    # node-pty compiles from source here, and the shortcut and shell code takes its non-mac branches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - run: bun run typecheck
+      - run: bun run test

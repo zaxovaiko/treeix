@@ -21,7 +21,8 @@
     "dist:dmg:notarized": "bun run build && electron-builder --mac dmg zip --publish never -c.mac.entitlements=build/entitlements.mac.app.plist -c.mac.provisioningProfile=build/developerID.provisionprofile",
     "dist:mas": "bun run build && electron-builder --mac mas --publish never",
     "release:mac": "bun run build && electron-builder --mac dmg zip --publish never",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper && node-gyp rebuild -C native/mac-window && sh scripts/dev-app-name.sh",
+    "release:linux": "bun run build && electron-builder --linux AppImage --publish never",
+    "postinstall": "sh scripts/postinstall.sh",
     "build:native": "node-gyp rebuild -C native/mac-window",
     "build:voice": "swift build -c release --package-path native/voice && mkdir -p native/voice/bin && cp \"$(swift build -c release --package-path native/voice --show-bin-path)\"/treeix-voice \"$(swift build -c release --package-path native/voice --show-bin-path)\"/treeix-meetings native/voice/bin/"
   },
@@ -70,5 +71,6 @@
     "vite": "7.3.6",
     "zod": "4.6.5"
   },
+  "desktopName": "treeix.desktop",
   "productName": "Treeix"
 }

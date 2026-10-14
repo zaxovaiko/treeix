@@ -1,3 +1,5 @@
+import { IS_MAC } from './platform'
+
 /** A recorded key combination; `code` is the physical key (KeyboardEvent.code), so layouts don't change it */
 export type Shortcut = { code: string; meta: boolean; alt: boolean; ctrl: boolean; shift: boolean }
 
@@ -46,18 +48,60 @@ function keyName(code: string): string {
   return NAMED_KEYS[code] ?? code
 }
 
-/** "⌃⌥⇧⌘ K" in the macOS modifier order */
-export const matchesShortcut = (event: KeyboardEvent, shortcut: Shortcut | null): boolean =>
+/** ⌘ on macOS. Elsewhere hand-written checks read ⌘ as Ctrl and ⌃ as the Super key, as `forPlatform` does for defaults */
+export const primaryKey = (event: { metaKey: boolean; ctrlKey: boolean }): boolean => (IS_MAC ? event.metaKey : event.ctrlKey)
+export const secondaryKey = (event: { metaKey: boolean; ctrlKey: boolean }): boolean => (IS_MAC ? event.ctrlKey : event.metaKey)
+
+/** Default keys are written for macOS. Elsewhere Ctrl stands in for ⌘, and ⌃⌘ becomes Ctrl+Alt since the desktop owns Super */
+export const forPlatform = (shortcut: Shortcut): Shortcut => (IS_MAC || !shortcut.meta ? shortcut : { ...shortcut, meta: false, ctrl: true, alt: shortcut.alt || shortcut.ctrl })
+
+type KeyChord = Pick<KeyboardEvent, 'code' | 'metaKey' | 'altKey' | 'ctrlKey' | 'shiftKey'> & { target?: EventTarget | null }
+
+/** Linux terminals keep plain Ctrl chords for the shell (^C, ^R, ^W); Ctrl+Shift stands in for them there, see terminals.ts */
+const isShellChord = (event: KeyChord): boolean =>
+  !IS_MAC &&
+  event.ctrlKey &&
+  !event.shiftKey &&
+  !event.altKey &&
+  event.code !== 'Tab' &&
+  typeof Element !== 'undefined' &&
+  event.target instanceof Element &&
+  event.target.closest('.xterm') !== null
+
+export const matchesShortcut = (event: KeyChord, shortcut: Shortcut | null): boolean =>
   shortcut !== null &&
+  !isShellChord(event) &&
   event.code === shortcut.code &&
   event.metaKey === shortcut.meta &&
   event.altKey === shortcut.alt &&
   event.ctrlKey === shortcut.ctrl &&
   event.shiftKey === shortcut.shift
 
+/** "⌃⌥⇧⌘ K" in the macOS modifier order, "Ctrl+Alt+Shift+K" elsewhere */
 export function shortcutLabel(shortcut: Shortcut): string {
+  if (!IS_MAC) return [shortcut.ctrl && 'Ctrl', shortcut.meta && 'Super', shortcut.alt && 'Alt', shortcut.shift && 'Shift', keyName(shortcut.code)].filter(Boolean).join('+')
   const modifiers = `${shortcut.ctrl ? '⌃' : ''}${shortcut.alt ? '⌥' : ''}${shortcut.shift ? '⇧' : ''}${shortcut.meta ? '⌘' : ''}`
   return `${modifiers}${modifiers ? ' ' : ''}${keyName(shortcut.code)}`
+}
+
+const SPELLED_MODIFIERS = [
+  ['⌘', 'Ctrl'],
+  ['⌃', 'Super'],
+  ['⌥', 'Alt'],
+  ['⇧', 'Shift']
+] as const
+
+/** Key glyphs in UI copy ("⇧⌘T", "⌘ [ ]", "⌘-click") spelled out off macOS ("Ctrl+Shift+T", "Ctrl+[ ]", "Ctrl-click") */
+export function keysText(text: string): string {
+  if (IS_MAC) return text
+  // The space in "⌘ W" goes only when a lone key follows, so "with ⌘ work" keeps it
+  return text.replace(/([⌘⌃⌥⇧]+)(?: (?=\S(?:$|[\s)])))?/g, (match: string, run: string, offset: number) => {
+    const names = SPELLED_MODIFIERS.filter(([glyph]) => run.includes(glyph))
+      .map(([, name]) => name)
+      .join('+')
+    const next = text[offset + match.length]
+    return next && !/[\s)-]/.test(next) ? `${names}+` : names
+  })
 }
 
 // macOS virtual key codes (Events.h kVK_*) for the physical keys
@@ -184,5 +228,5 @@ export function toAccelerator(shortcut: Shortcut): string | null {
   const { code } = shortcut
   const key = /^Key[A-Z]$/.test(code) || /^Digit[0-9]$/.test(code) ? keyName(code) : /^F([1-9]|1[0-9]|20)$/.test(code) ? code : ACCELERATOR_KEYS[code]
   if (!key) return null
-  return [shortcut.ctrl && 'Control', shortcut.alt && 'Alt', shortcut.shift && 'Shift', shortcut.meta && 'Command', key].filter(Boolean).join('+')
+  return [shortcut.ctrl && 'Control', shortcut.alt && 'Alt', shortcut.shift && 'Shift', shortcut.meta && (IS_MAC ? 'Command' : 'Super'), key].filter(Boolean).join('+')
 }

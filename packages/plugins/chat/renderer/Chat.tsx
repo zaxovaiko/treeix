@@ -8,6 +8,7 @@ import { firstAllow, firstReject, formatElapsed, useElapsed } from './Blocks'
 import { Composer } from './ChatComposer'
 import { pendingOf, TurnBlocks } from './Transcript'
 import { activityOf, answer, cancel, type ChatState, isBusy, isConnecting, retry, useChat } from './store'
+import { primaryKey, keysText } from '@treeix/shared/shortcut'
 
 const STICK_PX = 40
 
@@ -18,7 +19,7 @@ function Activity({ chat }: { chat: ChatState }): React.JSX.Element {
       <div className="flex items-center gap-2 px-1 text-xs text-amber-300">
         <Icon name="alert" className="size-3.5 shrink-0" />
         <span>Waiting for your approval</span>
-        <span className="text-muted-foreground">⌘↵ allow · Esc deny</span>
+        <span className="text-muted-foreground">{keysText('⌘↵ allow · Esc deny')}</span>
       </div>
     )
   }
@@ -116,7 +117,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
     if (!newest || !(event.target instanceof Node && root.current?.contains(event.target))) return
     // Esc with the completion list open closes the list
     if (event.key === 'Escape' && event.target instanceof HTMLElement && event.target.getAttribute('aria-expanded') === 'true') return
-    const option = event.key === 'Enter' && event.metaKey ? firstAllow(newest.options) : event.key === 'Escape' ? firstReject(newest.options) : undefined
+    const option = event.key === 'Enter' && primaryKey(event) ? firstAllow(newest.options) : event.key === 'Escape' ? firstReject(newest.options) : undefined
     if (!option) return
     event.preventDefault()
     event.stopPropagation()

@@ -127,6 +127,8 @@ import {
   usePersisted
 } from './ui'
 import { isJson, isString, list, object } from '../../shared/json'
+import { primaryKey, secondaryKey } from '../../shared/shortcut'
+import { IS_MAC } from '../../shared/platform'
 
 /** Document tabs a plugin opened (one pull request, one plan) don't survive a restart; plugin tab ids never contain a colon */
 const isRestorableTab = (tab: string): boolean => tab !== 'settings' && !tab.includes(':')
@@ -1099,6 +1101,17 @@ function App(): React.JSX.Element {
     if (openDocTab) closeTab(openDocTab.key)
   }
   useEffect(() => window.api.onCloseShortcut(() => closeShortcut.current()), [])
+  // Linux sends Ctrl+W here rather than through the main process, so a focused terminal can keep it for the shell
+  useEffect(() => {
+    if (IS_MAC) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.code !== 'KeyW' || !event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return
+      event.preventDefault()
+      closeShortcut.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const openSettingsRef = useRef(openSettings)
   openSettingsRef.current = openSettings
   // A preload from before this menu item (dev window not reloaded yet) has no listener
@@ -1224,11 +1237,11 @@ function App(): React.JSX.Element {
         return anywhere[anywhereId]()
       }
       // ⌘+ is ⇧⌘= on most layouts, and the numpad has its own keys; all of them zoom
-      if (event.metaKey && !event.altKey && !event.ctrlKey && ['Equal', 'NumpadAdd', 'NumpadEqual'].includes(event.code) && event.shiftKey) {
+      if (primaryKey(event) && !event.altKey && !secondaryKey(event) && ['Equal', 'NumpadAdd', 'NumpadEqual'].includes(event.code) && event.shiftKey) {
         event.preventDefault()
         return window.api.zoom(1)
       }
-      const numpadStep = event.metaKey && event.altKey && !event.shiftKey && !event.ctrlKey ? NUMPAD_FONT_STEPS.get(event.code) : undefined
+      const numpadStep = primaryKey(event) && event.altKey && !event.shiftKey && !secondaryKey(event) ? NUMPAD_FONT_STEPS.get(event.code) : undefined
       if (numpadStep !== undefined) {
         event.preventDefault()
         return stepFontSize(isTerminalFocused() ? 'terminalFontSize' : 'editorFontSize', numpadStep)
@@ -1728,7 +1741,7 @@ function App(): React.JSX.Element {
   // ⌘-click on any link goes through the plugins first; a plain click still opens the browser
   useEffect(() => {
     const onClick = (event: MouseEvent): void => {
-      const anchor = event.metaKey && event.target instanceof Element ? event.target.closest('a') : null
+      const anchor = primaryKey(event) && event.target instanceof Element ? event.target.closest('a') : null
       if (!anchor || !/^https?:\/\//.test(anchor.getAttribute('href') ?? '')) return
       event.preventDefault()
       hostRef.current?.openLink(anchor.href)

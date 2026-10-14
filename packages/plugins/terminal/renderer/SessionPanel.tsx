@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Repo } from '@treeix/shared/types'
 import { useService } from '@treeix/app/plugins'
 import { actionKeys, shortcutOf } from '@treeix/shared/keymap'
-import { toAccelerator } from '@treeix/shared/shortcut'
+import { toAccelerator, keysText } from '@treeix/shared/shortcut'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, SESSION_MIME, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
@@ -548,7 +548,7 @@ function EmptySessions({ label, cwd, history, repos }: { label: string; cwd: str
         ))}
       </div>
       <p className="text-[11px] text-muted-foreground">
-        <kbd className="kbd">⌘T</kbd> new shell
+        <kbd className="kbd">{keysText('⌘T')}</kbd> new shell
       </p>
       {history.length > 0 && (
         <div className="w-full max-w-md text-left">

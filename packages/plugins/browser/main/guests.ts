@@ -5,6 +5,7 @@ import type { Attachment } from '@treeix/shared/comments'
 import { ENTRY_LIMIT, applyNetworkEvent, consoleFromApi, consoleFromException, consoleFromLog, keepLast } from './entries'
 import { browserAction, forwardsToApp } from '../shared/keys'
 import type { ConsoleEntry, EntryBatch, NetworkEntry } from '../shared/types'
+import { IS_MAC } from '@treeix/shared/platform'
 
 const watched = new WeakSet<WebContents>()
 /** What each page logged, kept here too so agents can read it without the window */
@@ -49,7 +50,8 @@ export function watchGuest(guest: WebContents, context: MainContext): void {
   })
   guest.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !host) return
-    const key = { code: input.code, meta: input.meta, shift: input.shift, alt: input.alt, control: input.control }
+    // KeyInput names keys as macOS does; elsewhere Ctrl plays ⌘
+    const key = { code: input.code, meta: IS_MAC ? input.meta : input.control, shift: input.shift, alt: input.alt, control: IS_MAC ? input.control : input.meta }
     const action = browserAction(key)
     if (action) {
       event.preventDefault()

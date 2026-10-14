@@ -34,6 +34,8 @@ import { installMcp, mcpInstallStatus } from './mcp'
 import { setupUpdates } from './updates'
 import { BROWSER_PARTITION, configureBrowserSession, hardenWebview } from './webviewPolicy'
 import { enablePasskeys } from './passkeys'
+import { IS_MAC } from '../shared/platform'
+import iconPath from '../../resources/icon.png?asset'
 
 app.setAboutPanelOptions({ applicationName: 'Treeix', applicationVersion: __APP_VERSION__, version: '', copyright: 'Apache 2.0' })
 
@@ -61,13 +63,18 @@ function createWindow(): void {
     minHeight: 500,
     show: false,
     title: 'Treeix',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 10 },
-    // Keep the blur when the window loses focus instead of flattening to grey
-    visualEffectState: 'active',
-    // Transparency only takes at creation: clearing the background later left stale frames smeared under translucent pages
-    transparent: true,
-    backgroundColor: '#00000000',
+    // Linux keeps the desktop's own frame: there are no traffic lights to inset, and no vibrancy to see through to
+    ...(IS_MAC
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 14, y: 10 },
+          // Keep the blur when the window loses focus instead of flattening to grey
+          visualEffectState: 'active',
+          // Transparency only takes at creation: clearing the background later left stale frames smeared under translucent pages
+          transparent: true,
+          backgroundColor: '#00000000'
+        }
+      : { autoHideMenuBar: true, icon: iconPath }),
     // macOS otherwise spends the first click on an inactive window just focusing it, so the palette button needed two
     acceptFirstMouse: true,
     // A never-shown window would otherwise be throttled like a background one
@@ -78,9 +85,10 @@ function createWindow(): void {
   // The built-in browser's pages: our isolation and preload whatever the renderer asked for
   window.webContents.on('will-attach-webview', (_, prefs) => hardenWebview(prefs, join(__dirname, '../preload/browserInject.js')))
   buildMenu(window, [])
-  // ⌘W closes the focused terminal pane when there is one; the page decides and closes the window otherwise
+  // ⌘W closes the focused terminal pane when there is one; the page decides and closes the window otherwise.
+  // Linux's Ctrl+W goes to the page first instead, where a focused terminal keeps it for the shell
   window.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || !input.meta || input.shift || input.alt || input.control || input.code !== 'KeyW') return
+    if (!IS_MAC || input.type !== 'keyDown' || !input.meta || input.shift || input.alt || input.control || input.code !== 'KeyW') return
     event.preventDefault()
     window.webContents.send('close-shortcut')
   })

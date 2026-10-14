@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { IS_MAC } from '../../shared/platform'
 import { defineActions, key } from '../../shared/keymap'
 import { menuActions, registerActionRunner, runAction, runnableActionFor } from './actionRunners'
 
@@ -26,7 +27,7 @@ test('the menu carries the short label and the key the action answers to', () =>
   const drops = [registerActionRunner('test.page', () => undefined), registerActionRunner('test.zen', () => undefined)]
   expect(menuActions()).toEqual([
     { id: 'test.page', label: 'Worktrees', section: 'Go to' },
-    { id: 'test.zen', label: 'Zen', section: 'Panels', accelerator: 'Shift+Command+Enter' }
+    { id: 'test.zen', label: 'Zen', section: 'Panels', accelerator: IS_MAC ? 'Shift+Command+Enter' : 'Control+Shift+Enter' }
   ])
   drops.forEach((drop) => drop())
 })
@@ -55,11 +56,11 @@ test('running an id calls its runner, and an unknown id is a no-op', () => {
 test('an editor hands ⌘ chords with a runner back to the app, never plain keys', () => {
   const drop = registerActionRunner('test.zen', () => undefined)
   const dropLine = registerActionRunner('test.line', () => undefined)
-  const press = (code: string, modifiers: Partial<Record<'metaKey' | 'shiftKey', boolean>> = {}) =>
-    ({ code, key: code, metaKey: false, shiftKey: false, altKey: false, ctrlKey: false, ...modifiers }) as KeyboardEvent
-  expect(runnableActionFor(press('Enter', { metaKey: true, shiftKey: true }))).toBe('test.zen')
+  const press = (code: string, { primary = false, shiftKey = false } = {}) =>
+    ({ code, key: code, metaKey: IS_MAC && primary, shiftKey, altKey: false, ctrlKey: !IS_MAC && primary }) as KeyboardEvent
+  expect(runnableActionFor(press('Enter', { primary: true, shiftKey: true }))).toBe('test.zen')
   expect(runnableActionFor(press('KeyJ'))).toBeUndefined()
   drop()
   dropLine()
-  expect(runnableActionFor(press('Enter', { metaKey: true, shiftKey: true }))).toBeUndefined()
+  expect(runnableActionFor(press('Enter', { primary: true, shiftKey: true }))).toBeUndefined()
 })

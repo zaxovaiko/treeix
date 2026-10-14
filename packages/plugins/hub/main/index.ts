@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { Notification } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
+import { userShell } from '@treeix/host/env'
 import { isJson, isString } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
@@ -172,7 +173,7 @@ const plugin: MainPlugin = {
       polling.add(schedule.id)
       try {
         // A login shell, so the command sees the user's PATH even when Treeix started from the Dock
-        const { stdout } = await exec(process.env.SHELL || '/bin/zsh', ['-lc', schedule.command ?? ''], { cwd: folder ?? homedir(), timeout: COMMAND_TIMEOUT_MS })
+        const { stdout } = await exec(userShell(), ['-lc', schedule.command ?? ''], { cwd: folder ?? homedir(), timeout: COMMAND_TIMEOUT_MS })
         for (const item of commandItems(stdout)) start(item.title, render(schedule.prompt, { input: item.input, prev: '', outputs: {} }))
       } catch (error) {
         show(`${owner}'s schedule command failed`, error instanceof Error ? error.message : String(error), null)

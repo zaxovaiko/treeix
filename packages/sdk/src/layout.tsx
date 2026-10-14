@@ -4,6 +4,7 @@ import { ResizeHandle } from '@treeix/app/ui'
 import { HostContext } from './index'
 import { isJson, object } from '@treeix/shared/json'
 import { actionKeys } from '@treeix/shared/keymap'
+import { keysText } from '@treeix/shared/shortcut'
 import { readStored } from '@treeix/app/storage'
 
 /**
@@ -587,7 +588,7 @@ export function useListNav(options: {
 export function Kbd({ children, on = false, hint = false }: { children: ReactNode; on?: boolean; hint?: boolean }): React.JSX.Element {
   return (
     <kbd data-key-hint={hint ? '' : undefined} className={on ? 'kbd kbd-on' : 'kbd'}>
-      {children}
+      {typeof children === 'string' ? keysText(children) : children}
     </kbd>
   )
 }

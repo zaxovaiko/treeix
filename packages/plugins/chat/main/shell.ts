@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { withoutAgentVariables } from '@treeix/host/env'
+import { userShell, withoutAgentVariables } from '@treeix/host/env'
 
 const KILL_GRACE_MS = 3000
 
@@ -8,7 +8,7 @@ const KILL_GRACE_MS = 3000
 export function spawnInShell(command: string, cwd: string, env: Record<string, string>): ChildProcessWithoutNullStreams {
   // spawn blames the shell for a missing cwd, so a deleted worktree reads as `spawn /bin/zsh ENOENT`
   if (!existsSync(cwd)) throw new Error(`${cwd} is gone`)
-  const shell = process.env.SHELL || '/bin/zsh'
+  const shell = userShell()
   return spawn(shell, ['-lc', command], { cwd, env: { ...withoutAgentVariables(process.env), ...env }, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
 }
 

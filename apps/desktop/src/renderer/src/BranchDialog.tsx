@@ -8,6 +8,7 @@ import { type Agent, useAgents } from './agents'
 import { useService } from './plugins'
 import { Dialog, errorMessage, Popup, usePersisted } from './ui'
 import { raceBranches } from './worktreePlans'
+import { primaryKey } from '../../shared/shortcut'
 
 /** Several agents race on the same prompt, each in a worktree of its own named after it */
 /** What `git check-ref-format` refuses, so the dialog says so while typing instead of after submit */
@@ -174,7 +175,7 @@ export function BranchDialog({
       offset="pt-[14vh]"
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose()
-        if (event.key === 'Enter' && event.metaKey) submit()
+        if (event.key === 'Enter' && primaryKey(event)) submit()
       }}
       className="w-[480px] max-w-[92vw] p-4"
     >

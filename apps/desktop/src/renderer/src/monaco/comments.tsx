@@ -8,6 +8,7 @@ import { type Navigate, openSymbolMenu, setActiveTarget } from '../codeNavigatio
 import { copyText, type MenuEntry, openMenu } from '../contextMenu'
 import type { CodeEditorHandle } from './CodeEditor'
 import { gutterRange } from './text'
+import { primaryKey } from '../../../shared/shortcut'
 
 const targetAt = (handle: CodeEditorHandle, path: string, position: { lineNumber: number; column: number } | null): SymbolTarget | null => {
   const model = handle.editor.getModel()
@@ -39,12 +40,12 @@ export function useEditorNavigation(handle: CodeEditorHandle | null, worktreePat
         if (target) setActiveTarget(target, worktreePath)
       }),
       editor.onMouseDown(({ event, target }) => {
-        clicked = event.metaKey ? symbolUnder(target) : null
+        clicked = primaryKey(event) ? symbolUnder(target) : null
       }),
       editor.onMouseUp(({ event, target }) => {
         const symbol = clicked
         clicked = null
-        const released = event.metaKey ? symbolUnder(target) : null
+        const released = primaryKey(event) ? symbolUnder(target) : null
         if (symbol && released?.line === symbol.line && released.column === symbol.column) navigate.current('definition', symbol, worktreePath)
       }),
       editor.onContextMenu(({ event, target }) => {

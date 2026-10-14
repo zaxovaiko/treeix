@@ -5,6 +5,7 @@ import type { BrowserProfile, ImportInfo, ImportResult } from '../shared/types'
 import { type SearchEngine, searchUrl, toUrl } from './address'
 import { clearRecent } from './recent'
 import { browserSettings } from './settings'
+import { keysText } from '@treeix/shared/shortcut'
 
 const bridge = createBridge('browser')
 
@@ -114,7 +115,7 @@ export function BrowserSettings(): React.JSX.Element {
   return (
     <>
       <Card title="General">
-        <Row label="Open links from terminals here" description="⌘-click on a URL in a session opens it in the Browser tab instead of your default browser">
+        <Row label="Open links from terminals here" description={keysText('⌘-click on a URL in a session opens it in the Browser tab instead of your default browser')}>
           <Switch checked={openLinks} label="Open links from terminals here" onChange={() => browserSettings.update({ openLinks: !openLinks })} />
         </Row>
         <Row label="Search engine" description="What the address bar searches when you type words instead of an address">

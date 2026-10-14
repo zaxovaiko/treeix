@@ -5,6 +5,7 @@ import { registerActionRunner } from './actionRunners'
 import { Icon, type IconName } from './Icon'
 import { usePlugins } from './plugins'
 import { DIGIT_MODIFIERS, useSettings } from './settings'
+import { keysText } from '../../shared/shortcut'
 
 /** G then a letter goes to a page, by tab id; pages of plugins that are off are skipped */
 export const LEADER_PAGES: Record<string, string> = { t: 'terminal', p: 'prs', w: 'worktrees', j: 'tasks', c: 'confluence', e: 'env', s: 'settings' }
@@ -15,7 +16,7 @@ export function useKeyExtras(): ShortcutInfo[] {
   const { loaded } = usePlugins()
   const { digitShortcuts } = useSettings()
   const digits = (target: 'tabs' | 'workspaces', label: string): ShortcutInfo[] =>
-    digitShortcuts[target] === 'off' ? [] : [{ keys: `${DIGIT_MODIFIERS[digitShortcuts[target]]} 1-9`, label, section: 'Go to' }]
+    digitShortcuts[target] === 'off' ? [] : [{ keys: keysText(`${DIGIT_MODIFIERS[digitShortcuts[target]]} 1-9`), label, section: 'Go to' }]
   return [
     ...digits('tabs', 'Title bar page by position, 9 is the last'),
     ...digits('workspaces', 'Workspace by menu order'),
@@ -161,7 +162,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
       <div className="flex max-h-[86vh] w-[1040px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-input bg-popover">
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
           <span className="text-[13px] font-medium">Keyboard</span>
-          <span className="truncate text-xs text-muted-foreground">Chords with ⌘ work everywhere, single letters work outside text fields and the terminal.</span>
+          <span className="truncate text-xs text-muted-foreground">{keysText('Chords with ⌘ work everywhere, single letters work outside text fields and the terminal.')}</span>
           <span className="flex-1" />
           <Keys combo="?" />
           <Keys combo="esc" />
@@ -172,7 +173,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
               <div className="mb-1 text-[11px] font-semibold text-foreground">{section}</div>
               {shortcuts.map((shortcut) => (
                 <div key={`${shortcut.keys}:${shortcut.label}`} className="flex min-h-6 items-center gap-2 py-0.5 text-xs text-foreground/85">
-                  <span className="flex-1">{shortcut.label}</span>
+                  <span className="flex-1">{keysText(shortcut.label)}</span>
                   <Keys combo={shortcut.keys} />
                 </div>
               ))}
@@ -180,7 +181,7 @@ export function ShortcutSheet({ onClose }: { onClose: () => void }): React.JSX.E
           ))}
           <div className="break-inside-avoid rounded-md border border-border p-2.5 text-[11px] leading-4 text-muted-foreground">
             <b className="text-foreground/80">Model.</b> Zones are list, main, inspector and bottom terminal. F6 cycles them, the focused one has a frame. Inside a zone j k move a
-            cursor, ⏎ acts, esc steps back. Terminals keep every bare key, so from a terminal use chords, ⌘G or F6.
+            cursor, ⏎ acts, esc steps back. Terminals keep every bare key, so from a terminal use chords, {keysText('⌘G')} or F6.
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { setKeymapOverrides } from '../../shared/keymap'
-import { isShortcut, type Shortcut } from '../../shared/shortcut'
+import { isShortcut, keysText, primaryKey, secondaryKey, type Shortcut } from '../../shared/shortcut'
 import type { HotkeyOptions, NavigationKind } from '../../shared/types'
 import type { Agent } from './agents'
 import { codeTheme, DEFAULT_THEME, resolveTheme, subscribeThemes, type Theme } from './themes'
@@ -166,13 +166,13 @@ export function digitPressed(event: KeyboardEvent, modifier: DigitModifier): num
   const meta = modifier === 'meta' || modifier === 'altMeta' || modifier === 'ctrlMeta'
   const alt = modifier === 'alt' || modifier === 'altMeta'
   const ctrl = modifier === 'ctrl' || modifier === 'ctrlMeta'
-  const matches = event.metaKey === meta && event.altKey === alt && event.ctrlKey === ctrl && !event.shiftKey
+  const matches = primaryKey(event) === meta && event.altKey === alt && secondaryKey(event) === ctrl && !event.shiftKey
   return matches ? Number(digit) : null
 }
 
 export const digitLabel = (target: DigitTarget, digit: number | string): string => {
   const modifier = getSettings().digitShortcuts[target]
-  return modifier === 'off' ? '' : `${DIGIT_MODIFIERS[modifier]}${digit}`
+  return modifier === 'off' ? '' : keysText(`${DIGIT_MODIFIERS[modifier]}${digit}`)
 }
 
 export const FONT_SIZE_RANGE = { min: 9, max: 24 } as const

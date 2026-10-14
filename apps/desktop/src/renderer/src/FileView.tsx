@@ -12,6 +12,7 @@ import { EmptyState, errorMessage } from './ui'
 
 import { activeTheme, codeThemes, getSettings } from './settings'
 import { withAlpha } from './themes'
+import { primaryKey } from '../../shared/shortcut'
 
 /** The diff renders in a shadow root with its own background, so pass the theme color in */
 export const diffBackground = (): React.CSSProperties => {
@@ -223,7 +224,7 @@ function TextFileView({
   useEffect(() => {
     if (!editable) return
     const onKey = (event: KeyboardEvent): void => {
-      if (!event.metaKey || event.code !== 'KeyS') return
+      if (!primaryKey(event) || event.code !== 'KeyS') return
       event.preventDefault()
       flushRef.current()
     }

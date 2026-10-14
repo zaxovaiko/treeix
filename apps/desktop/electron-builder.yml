@@ -117,6 +117,20 @@ dmg:
   artifactName: ${productName}-${arch}.${ext}
   # ULFO is lzfse; UDZO, the default, is zlib. Needs macOS 10.11+, and the app asks for 14.
   format: ULFO
+linux:
+  electronLanguages:
+    - en
+  # Built from build/icon.icns when unset, which is the 1024px icon anyway; the png skips the conversion
+  icon: resources/icon.png
+  category: Development
+  target: AppImage
+  # The prebuilds are macOS and Windows only; Linux loads the one postinstall compiles into build/Release
+  files:
+    - '!node_modules/node-pty/prebuilds/**'
+    - '!node_modules/node-pty/build/{Release/obj.target,Release/.deps,deps}/**'
+appImage:
+  # latest-linux.yml points at this name, so it stays stable across versions like the DMG's
+  artifactName: ${productName}-${arch}.${ext}
 mas:
   hardenedRuntime: false
   entitlements: build/entitlements.mas.plist

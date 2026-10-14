@@ -5,6 +5,7 @@ import type { Attachment } from '@treeix/shared/comments'
 import { elementComment } from './comments'
 import { clearSelection, useDesign } from './pages'
 import { useBrowser } from './tabs'
+import { primaryKey, keysText } from '@treeix/shared/shortcut'
 
 const bridge = createBridge('browser')
 const WIDTH = 300
@@ -95,7 +96,7 @@ export function DesignPopover(): React.JSX.Element | null {
         placeholder="What should change here"
         onChange={(event) => (setNote(event.target.value), setError(false))}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && event.metaKey) void add()
+          if (event.key === 'Enter' && primaryKey(event)) void add()
           if (event.key === 'Escape') close()
         }}
         className="w-full resize-none rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
@@ -111,7 +112,7 @@ export function DesignPopover(): React.JSX.Element | null {
           Cancel
         </button>
         <button onClick={() => void add()} className="flex h-6 shrink-0 items-center gap-1.5 rounded border border-border px-2 text-xs whitespace-nowrap hover:bg-accent">
-          Add comment <span className="text-muted-foreground">⌘↵</span>
+          Add comment <span className="text-muted-foreground">{keysText('⌘↵')}</span>
         </button>
       </div>
     </div>

@@ -105,7 +105,7 @@ export function Picker({
               if (event.key === 'Enter' && ordered[active]) pick(ordered[active].id)
             }}
             placeholder={placeholder}
-            className="mb-1 h-7 w-full shrink-0 rounded-md bg-muted px-2 text-xs ring-1 ring-border outline-none placeholder:text-muted-foreground/70"
+            className="mb-1 h-7 w-full shrink-0 rounded-md px-2 text-xs ring-1 ring-border outline-none placeholder:text-muted-foreground/70"
           />
           <div className="max-h-80 min-h-0 overflow-y-auto">
             {(sections.length === 0 || note) && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{note ?? 'No matches'}</p>}

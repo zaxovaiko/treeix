@@ -8,6 +8,7 @@ import type { SessionKind, SessionSummary as Session } from '@treeix/sdk'
 import { useService, useSessions } from './plugins'
 import { inWorkspace, useWorkspaces, workspaceOf } from './workspaces'
 import { Popup, useMenuKeys, usePersisted } from './ui'
+import { primaryKey } from '../../shared/shortcut'
 
 const lastTargets = new Map<string, string>()
 /** Whether a send presses Enter after pasting */
@@ -101,7 +102,7 @@ export function SendButton({
     const onKey = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing || !anchor.current?.closest('[data-drawer]')?.contains(document.activeElement)) return
       const action =
-        event.metaKey && event.key === 'Enter'
+        primaryKey(event) && event.key === 'Enter'
           ? latest.current.sendDefault
           : !event.metaKey && !event.ctrlKey && !event.altKey && event.key === 't'
             ? latest.current.openMenu

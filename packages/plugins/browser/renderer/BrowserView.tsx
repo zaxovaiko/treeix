@@ -28,6 +28,7 @@ import {
 } from './tabs'
 import type { BrowserAction } from '../shared/keys'
 import { httpProblem, loadError } from './loadErrors'
+import { keysText } from '@treeix/shared/shortcut'
 
 const bridge = createBridge('browser')
 
@@ -92,7 +93,9 @@ function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
       </div>
       <div>
         <div className="text-sm font-medium text-foreground">Open a page</div>
-        <div className="mt-1 max-w-64 text-xs text-muted-foreground">A dev server, a pull request preview or any site. Links you ⌘-click in a terminal open here too.</div>
+        <div className="mt-1 max-w-64 text-xs text-muted-foreground">
+          A dev server, a pull request preview or any site. {keysText('Links you ⌘-click in a terminal open here too.')}
+        </div>
       </div>
       {(running.length > 0 || saved.length > 0) && (
         <div className="w-full max-w-80 text-left">
@@ -102,7 +105,7 @@ function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
       )}
       <button onClick={onOpen} className="flex h-7 items-center gap-2 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
         Type an address
-        <kbd className="rounded bg-muted px-1 font-sans text-[10.5px]">⌘L</kbd>
+        <kbd className="rounded bg-muted px-1 font-sans text-[10.5px]">{keysText('⌘L')}</kbd>
       </button>
     </div>
   )

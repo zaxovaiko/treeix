@@ -2,7 +2,7 @@ import { type ChildProcess, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { ToolStatus } from '../shared/types'
 import type { ToolDefinition } from '@treeix/sdk/main'
-import { withoutAgentVariables } from './env'
+import { userShell, withoutAgentVariables } from './env'
 
 const exec = promisify(execFile)
 const TIMEOUT_MS = 15_000
@@ -13,7 +13,7 @@ process.on('exit', () => running.forEach((child) => child.kill()))
 
 /** The user's login shell, so results match what terminal sessions find on PATH */
 function loginShell(args: string[]): Promise<{ stdout: string; stderr: string }> {
-  const call = exec(process.env.SHELL ?? '/bin/zsh', args, { timeout: TIMEOUT_MS, env: withoutAgentVariables(process.env) })
+  const call = exec(userShell(), args, { timeout: TIMEOUT_MS, env: withoutAgentVariables(process.env) })
   running.add(call.child)
   return call.finally(() => running.delete(call.child))
 }

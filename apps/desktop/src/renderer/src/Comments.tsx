@@ -9,6 +9,7 @@ import { LazyMarkdown as Markdown } from './LazyMarkdown'
 import { EmptyState, errorMessage } from './ui'
 import type { SentBatch } from './sentComments'
 import { timeAgo } from './time'
+import { keysText } from '../../shared/shortcut'
 
 type LinePoint = { lineNumber: number; side?: Side }
 
@@ -320,7 +321,7 @@ export function CommentDraft({
             />
           </>
         )}
-        <span className="mr-auto truncate px-1 text-[11px] whitespace-nowrap text-muted-foreground">⌘↵ save · esc cancel</span>
+        <span className="mr-auto truncate px-1 text-[11px] whitespace-nowrap text-muted-foreground">{keysText('⌘↵ save · esc cancel')}</span>
         {(!persistent || text) && (
           <button onClick={cancel} className="h-7 shrink-0 rounded-md px-2.5 whitespace-nowrap text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
             Cancel

@@ -1,4 +1,5 @@
 import { type ActionDef, defineActions, key } from '../../shared/keymap'
+import { IS_MAC } from '../../shared/platform'
 
 /**
  * The app's own actions and the keys they ship with. Plugins add theirs the same way, from their own modules.
@@ -17,7 +18,7 @@ const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'app.settings', label: 'Settings', section: 'Go to', keys: key('Comma', { meta: true }) },
   { id: 'app.comments', label: 'Agent comments drawer', menuLabel: 'Agent comments', section: 'Go to', keys: key('KeyI', { meta: true }) },
   { id: 'app.search', label: 'Search across projects in scope', menuLabel: 'Search across projects', section: 'Go to', keys: key('KeyF', { meta: true, shift: true }) },
-  { id: 'app.back', label: 'Back to the tab, worktree, file and line you were on', menuLabel: 'Back', section: 'Go to', keys: key('Minus', { ctrl: true }) },
+  { id: 'app.back', label: 'Back to the tab, worktree, file and line you were on', menuLabel: 'Back', section: 'Go to', keys: key('Minus', { ctrl: true, alt: !IS_MAC }) },
   { id: 'app.nextTab', label: 'Next tab', section: 'Go to', keys: key('Tab', { ctrl: true }) },
   { id: 'app.previousTab', label: 'Previous tab', section: 'Go to', keys: key('Tab', { ctrl: true, shift: true }) },
   { id: 'app.forward', label: 'Forward again', menuLabel: 'Forward', section: 'Go to', keys: key('Minus', { ctrl: true, shift: true }) },
