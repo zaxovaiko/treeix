@@ -154,7 +154,7 @@ export function SchemaPage(): React.JSX.Element {
           style={FLOW_THEME}
         >
           <Background gap={20} />
-          <FlowControls onPrettify={(aspect) => setNodes(prettify(nodes, edges, { ...LAYOUT, aspect }))} />
+          <FlowControls onLayout={(view) => setNodes(prettify(nodes, edges, { ...LAYOUT, ...view }))} />
         </ReactFlow>
       )}
     </div>

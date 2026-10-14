@@ -47,7 +47,7 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
 /** Options side by side; ← and → on its settings row step through them */
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (value: T) => void }): React.JSX.Element {
   return (
-    <div data-segmented className="flex max-w-full shrink-0 flex-wrap gap-0.5 rounded-lg bg-muted p-1 ring-1 ring-border">
+    <div data-segmented className="flex max-w-full shrink-0 flex-wrap gap-0.5">
       {options.map(([option, label]) => (
         <button
           key={option}

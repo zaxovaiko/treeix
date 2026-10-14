@@ -360,10 +360,10 @@ function App(): React.JSX.Element {
   const sidebarWidth = Math.min(savedSidebarWidth, SIDEBAR_MAX)
   // Reopen where the app was left: tab, worktree and file
   useEffect(() => {
-    const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : 'worktrees', selected, viewer }
+    const place: SavedPlace = { appTab: isRestorableTab(appTab) ? appTab : DEFAULT_TAB, selected, viewer }
     localStorage.setItem(workspaceKey('app.place'), JSON.stringify(place))
   }, [appTab, selected, viewer])
-  const tabBeforeSettings = useRef('worktrees')
+  const tabBeforeSettings = useRef(DEFAULT_TAB)
   const openSettings = (page?: unknown): void => {
     // Menu and button handlers may pass their event, so only a page id counts
     if (typeof page === 'string' && isPageId(page)) showSettingsPage(page)

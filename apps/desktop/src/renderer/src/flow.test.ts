@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { layered, prettify, untangle } from './flow'
+import { crossings, layered, prettify, untangle } from './flow'
 
 const node = (id: string, y = 0): { id: string; position: { x: number; y: number } } => ({ id, position: { x: 0, y } })
 const at = (nodes: ReturnType<typeof layered<ReturnType<typeof node>>>): Record<string, string> =>
@@ -32,6 +32,51 @@ test('prettify wraps a tall column to fill a wide canvas', () => {
   // 3 columns of 2 fit a 2:1 canvas best: 300 by 100
   expect(new Set(result.map((each) => each.position.x)).size).toBe(3)
   expect(Math.max(...result.map((each) => each.position.y))).toBe(50)
+})
+
+test('crossings counts lines that cross, not ones meeting at a node', () => {
+  const at = { a: { x: 0, y: 0 }, b: { x: 0, y: 10 }, c: { x: 10, y: 0 }, d: { x: 10, y: 10 } }
+  const point = (id: string): { x: number; y: number } | undefined => at[id as keyof typeof at]
+  expect(
+    crossings(
+      [
+        { source: 'a', target: 'd' },
+        { source: 'b', target: 'c' }
+      ],
+      point
+    )
+  ).toBe(1)
+  expect(
+    crossings(
+      [
+        { source: 'a', target: 'c' },
+        { source: 'b', target: 'd' }
+      ],
+      point
+    )
+  ).toBe(0)
+  expect(
+    crossings(
+      [
+        { source: 'a', target: 'd' },
+        { source: 'a', target: 'c' }
+      ],
+      point
+    )
+  ).toBe(0)
+})
+
+test('vertical turns columns into centered rows; grid fills rows to suit the canvas', () => {
+  const nodes = ['a', 'b', 'c'].map((id, index) => node(id, index))
+  const edges = [
+    { source: 'a', target: 'b' },
+    { source: 'a', target: 'c' }
+  ]
+  expect(at(prettify(nodes, edges, { column: 100, height: () => 50, aspect: 1, layout: 'vertical' }))).toEqual({ a: '50,0', b: '0,50', c: '100,50' })
+  // 9 nodes on a 4:1 canvas: 5 per row (500 by 100) zooms in further than 3 per row (300 by 150) or one row (900 by 50)
+  const many = Array.from({ length: 9 }, (_, index) => node(`n${index}`, index))
+  const grid = prettify(many, [], { column: 100, height: () => 50, aspect: 4, layout: 'grid' })
+  expect(new Set(grid.map((each) => each.position.y)).size).toBe(2)
 })
 
 test('layered survives cycles and self edges', () => {
