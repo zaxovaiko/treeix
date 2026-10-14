@@ -62,10 +62,7 @@ type TerminalTheme = Record<string, string>
 /** ANSI colors of the app theme's code theme; they load async, so a theme switch repaints once they arrive */
 let palette: { theme: Theme; colors: TerminalTheme } | null = null
 
-/**
- * Glyphs the GPU renderer draws onto a transparent canvas come out at about half their color, so the canvas is opaque in
- * the theme's background unless the window itself is see-through
- */
+/** The canvas is opaque in the theme's background unless the window itself is see-through */
 const seeThrough = (): boolean => getSettings().opacity < 100
 
 /** Canvas text misses the font smoothing macOS gives page text, so dark on light matches it a step heavier */
@@ -910,6 +907,18 @@ function drawWithGpu(session: TerminalSession): void {
   const loading = { dispose: shown }
   gpu.set(session.id, loading)
   trimGpu()
+/**
+ * xterm's GPU renderer blends a glyph's alpha into the canvas alpha too, squaring it, so on a see-through canvas text
+ * came out thin and faded; the canvas alpha has to add up as coverage instead. Kept across xterm's own resets
+ */
+function blendCoverage(terminal: Terminal): void {
+  const canvas = terminal.element?.querySelector<HTMLCanvasElement>('.xterm-screen > canvas:not(.xterm-link-layer)')
+  const gl = canvas?.getContext('webgl2')
+  if (!gl) return
+  gl.blendFunc = (source, destination) => gl.blendFuncSeparate(source, destination, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+}
+
   void import('@xterm/addon-webgl')
     .then(({ WebglAddon }) => {
       // Released while the addon loaded
@@ -935,6 +944,7 @@ function drawWithGpu(session: TerminalSession): void {
 
 /** A session leaving the screen keeps its context until newer ones need the room */
 export function releaseGpu(id: string, container: HTMLElement): void {
+      blendCoverage(session.terminal)
   if (findTerminal(id)?.element.parentElement === container) trimGpu()
 }
 
