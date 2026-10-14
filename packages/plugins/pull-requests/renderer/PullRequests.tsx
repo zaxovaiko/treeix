@@ -386,7 +386,7 @@ export function PullRequestsView({
       </div>
       <div className="flex shrink-0 flex-col gap-1.5 border-b border-border p-2">
         <div data-pr-search className="flex min-w-0">
-          <FilterSearch pullRequests={byProvider} filters={filters} onChange={setFilters} />
+          <FilterSearch pullRequests={byProvider.filter((pr) => pr.state === status)} filters={filters} onChange={setFilters} />
         </div>
         <Segment
           fill
