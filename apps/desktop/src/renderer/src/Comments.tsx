@@ -322,7 +322,7 @@ export function CommentDraft({
         )}
         <span className="mr-auto truncate px-1 text-[11px] whitespace-nowrap text-muted-foreground">⌘↵ save · esc cancel</span>
         {(!persistent || text) && (
-          <button onClick={cancel} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button onClick={cancel} className="h-7 shrink-0 rounded-md px-2.5 whitespace-nowrap text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
             Cancel
           </button>
         )}
@@ -331,13 +331,17 @@ export function CommentDraft({
             title="⌘⇧↵"
             onClick={() => alternative.onSave(text)}
             disabled={!text.trim()}
-            className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-foreground ring-1 ring-border hover:bg-accent disabled:opacity-40"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs whitespace-nowrap text-foreground ring-1 ring-border hover:bg-accent disabled:opacity-40"
           >
             <Icon name="comment" className="size-3.5" />
             {alternative.label}
           </button>
         )}
-        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
+        <button
+          onClick={save}
+          disabled={!canSave}
+          className="h-7 shrink-0 rounded-md bg-primary whitespace-nowrap px-2.5 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+        >
           {busy ? '...' : submitLabel}
         </button>
       </div>
