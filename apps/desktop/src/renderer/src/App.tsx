@@ -2294,6 +2294,12 @@ function App(): React.JSX.Element {
                               ...codeThemeOptions(),
                               diffStyle: shownDiffStyle,
                               disableFileHeader: true,
+                              // Both sides in full, so the lines between hunks can be expanded
+                              loadDiffFiles: async ({ name, prevName = name }) => {
+                                const [before, after] = await Promise.all([window.api.readHeadFile(worktree.path, prevName), window.api.readFile(worktree.path, name)])
+                                if (before === null || after === null) throw new Error(`${name} cannot be expanded`)
+                                return { oldFile: { name: prevName, contents: before }, newFile: { name, contents: after } }
+                              },
                               enableLineSelection: true,
                               enableGutterUtility: true,
                               onGutterUtilityClick: (range) => setDraft(orderRange(range)),

@@ -138,6 +138,8 @@ export type Api = {
   /** Where a dropped or picked file lives on disk; empty for one that is not a file there */
   pathForFile: (file: File) => string
   readFile: (worktreePath: string, filePath: string) => Promise<string | null>
+  /** The file as last committed; null when HEAD has no such file */
+  readHeadFile: (worktreePath: string, filePath: string) => Promise<string | null>
   /** A data URL of a picture in the worktree; null when it is not one or too big */
   readImage: (worktreePath: string, filePath: string) => Promise<string | null>
   /** Bytes of a PDF in the worktree; null when outside it or too big */

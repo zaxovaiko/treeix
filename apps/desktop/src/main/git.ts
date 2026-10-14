@@ -164,6 +164,9 @@ export async function readFile(worktreePath: string, filePath: string): Promise<
   return bytes.includes(0) ? null : bytes.toString('utf8')
 }
 
+/** The file as last committed; null when HEAD has no such file */
+export const readHeadFile = (worktreePath: string, filePath: string): Promise<string | null> => git(worktreePath, ['show', `HEAD:${filePath}`]).catch(() => null)
+
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const IMAGE_TYPES: Record<string, string> = {
   png: 'image/png',

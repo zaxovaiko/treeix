@@ -14,6 +14,7 @@ const api: Api = {
   pickFolder: () => ipcRenderer.invoke('pickFolder'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   readFile: (worktreePath, filePath) => ipcRenderer.invoke('readFile', worktreePath, filePath),
+  readHeadFile: (worktreePath, filePath) => ipcRenderer.invoke('readHeadFile', worktreePath, filePath),
   readImage: (worktreePath, filePath) => ipcRenderer.invoke('readImage', worktreePath, filePath),
   readPdf: (worktreePath, filePath) => ipcRenderer.invoke('readPdf', worktreePath, filePath),
   navigate: (worktreePath, kind, target) => ipcRenderer.invoke('navigate', worktreePath, kind, target),
