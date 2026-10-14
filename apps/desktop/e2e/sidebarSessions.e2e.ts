@@ -11,6 +11,8 @@ test.afterAll(() => launched.close())
 test('a sidebar session is renamed by double-click or from its context menu', async () => {
   const { app, page } = launched
   const sidebar = page.locator('[data-app-sidebar]')
+  // Before the terminal plugin loads, ⌘⇧H opens an empty home with no shell to start
+  await expect(page.locator('[data-page-tab="terminal"]')).toBeVisible()
   await page.keyboard.press('Meta+Shift+H')
   await expect(page.locator('.xterm').first()).toBeVisible({ timeout: 15_000 })
   const row = sidebar.locator('button[draggable]:not([data-workspace])').first()

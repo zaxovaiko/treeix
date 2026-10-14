@@ -348,6 +348,11 @@ export function browserTools(context: MainContext): McpTool[] {
         show(context, guest)
         await pause(SHOW_DELAY_MS)
         let image = await guest.capturePage()
+        // A tab just brought on screen can take a few frames to paint on a busy machine
+        for (let tries = 0; image.isEmpty() && tries < 10; tries++) {
+          await pause(SHOW_DELAY_MS)
+          image = await guest.capturePage()
+        }
         if (image.isEmpty()) throw new Error('The tab is not on screen, so there is nothing to capture')
         if (image.getSize().width > SCREENSHOT_WIDTH) image = image.resize({ width: SCREENSHOT_WIDTH })
         return [{ type: 'image', data: image.toPNG().toString('base64'), mimeType: 'image/png' }]
