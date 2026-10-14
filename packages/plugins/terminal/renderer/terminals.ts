@@ -1134,7 +1134,7 @@ export const isTerminalFocused = (): boolean => document.activeElement?.closest(
 export function closeActiveSession(): void {
   const session = activeSession()
   if (!session) return
-  killSession(session.id)
+  if (window.confirm(`Close ${session.title}?`)) killSession(session.id)
   focusShown()
 }
 
