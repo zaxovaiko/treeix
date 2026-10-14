@@ -127,13 +127,19 @@ function Sessions({ sessions, onOpen, indent = 'pl-7' }: { sessions: SessionSumm
   )
 }
 
+// One plus menu at a time: the next row's opens before this one's grace runs out
+let shownMenu: { close: () => void } | null = null
+
 /** A workspace row's plus: a click starts the first entry, hovering lists them all */
 function NewSessionMenu({ label, entries }: { label: string; entries: MenuAction[] }): React.JSX.Element {
   const anchor = useRef<HTMLSpanElement>(null)
   const [open, setOpen] = useState(false)
   const closing = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const self = useRef({ close: () => setOpen(false) })
   useEffect(() => () => clearTimeout(closing.current), [])
   const show = (): void => {
+    if (shownMenu !== self.current) shownMenu?.close()
+    shownMenu = self.current
     clearTimeout(closing.current)
     setOpen(true)
   }
@@ -153,6 +159,8 @@ function NewSessionMenu({ label, entries }: { label: string; entries: MenuAction
       onClick={(event) => event.stopPropagation()}
       onMouseEnter={show}
       onMouseLeave={hide}
+      // The menu says what the plus does, so its tip stays away
+      data-tip-off={open || undefined}
       className={`absolute right-0.5 ${open ? 'flex' : 'hidden group-hover:flex'}`}
     >
       <IconButton label={label} onClick={() => run(entries[0])}>

@@ -364,7 +364,7 @@ export function Tooltips(): React.JSX.Element | null {
       if (!text) return
       target = element
       timer = window.setTimeout(() => {
-        if (!element.isConnected) return
+        if (!element.isConnected || element.closest('[data-tip-off]')) return
         const rect = element.getBoundingClientRect()
         // A full-width list row opts into `data-tip-side="right"`, so the tip sits beside the list rather than over the next row
         const side = element.getAttribute('data-tip-side') === 'right' ? 'right' : rect.bottom + 48 < window.innerHeight ? 'below' : 'above'
