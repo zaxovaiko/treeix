@@ -170,7 +170,11 @@ function readPlace(workspaceId: string): SavedPlace {
     viewer: viewer && typeof viewer.path === 'string' ? { path: viewer.path, line: typeof viewer.line === 'number' ? viewer.line : null } : null
   }
 }
-const SAVED_PLACE = readPlace(getCurrentWorkspaceId())
+/** A new window opens on the Terminal; a reload keeps the tab, since sessionStorage outlives it */
+const coldLaunch = sessionStorage.getItem('app.launched') === null
+sessionStorage.setItem('app.launched', '1')
+const lastPlace = readPlace(getCurrentWorkspaceId())
+const SAVED_PLACE: SavedPlace = coldLaunch ? { ...lastPlace, appTab: DEFAULT_TAB } : lastPlace
 
 const SPLITS_KEY = 'app.splitsByWorkspace'
 const readSplits = (): Record<string, string[]> =>
