@@ -6,6 +6,7 @@ import { FLOW_THEME, FlowControls, layered, prettify } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage, IconButton } from '@treeix/app/ui'
+import { useWorktreeFolder, WorktreeSelect } from '@treeix/app/WorktreeSelect'
 import type { Schema, Table } from '../shared/types'
 
 const bridge = createBridge('schema')
@@ -86,7 +87,7 @@ function toFlow(schema: Schema): { nodes: TableNode[]; edges: Edge[] } {
 
 export function SchemaPage(): React.JSX.Element {
   const host = useHost()
-  const worktree = host.selectedWorktree
+  const [worktree, setWorktree] = useWorktreeFolder()
   const [schema, setSchema] = useState<Schema | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -122,11 +123,12 @@ export function SchemaPage(): React.JSX.Element {
     })
   }
 
-  const empty = !worktree ? 'Select a worktree to see its schema' : error ? error : schema && schema.tables.length === 0 ? 'No Drizzle tables found in this worktree' : null
+  const empty = !worktree ? 'Pick a worktree to see its schema' : error ? error : schema && schema.tables.length === 0 ? 'No Drizzle tables found in this worktree' : null
 
   const main = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={`${PANE_HEADER} gap-2 px-3 text-xs text-muted-foreground`}>
+        <WorktreeSelect value={worktree} onChange={setWorktree} />
         <span className="truncate">
           {schema ? `${schema.tables.length} tables, ${schema.relations.length} relations` : loading ? 'Reading schema files' : ''}
           {schema?.errors.length ? ` · ${schema.errors.length} files unreadable` : ''}

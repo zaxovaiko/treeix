@@ -6,6 +6,7 @@ import { FLOW_THEME, FlowControls, layered, prettify } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { Segmented, Switch } from '@treeix/app/settingsUi'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
+import { useWorktreeFolder, WorktreeSelect } from '@treeix/app/WorktreeSelect'
 import { folderGraph, type Graph, type GraphNode, packageGraph } from '../shared/graph'
 import type { DependencyScan } from '../shared/types'
 
@@ -51,7 +52,7 @@ function toFlow(graph: Graph): { nodes: BoxNode[]; edges: Edge[] } {
 
 export function DependenciesPage(): React.JSX.Element {
   const host = useHost()
-  const worktree = host.selectedWorktree
+  const [worktree, setWorktree] = useWorktreeFolder()
   const [scan, setScan] = useState<DependencyScan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -93,12 +94,13 @@ export function DependenciesPage(): React.JSX.Element {
   }
 
   const empty = !worktree
-    ? 'Select a worktree to see its dependencies'
+    ? 'Pick a worktree to see its dependencies'
     : (error ?? (flow && flow.nodes.length === 0 ? (view === 'packages' ? 'No package.json in this worktree' : 'No source files in this worktree') : null))
 
   const main = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={`${PANE_HEADER} gap-3 px-3 text-xs text-muted-foreground`}>
+        <WorktreeSelect value={worktree} onChange={setWorktree} />
         <Segmented
           value={view}
           options={[
