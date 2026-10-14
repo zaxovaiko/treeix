@@ -14,18 +14,22 @@ const TICK_MS = 2_000
 const ASK_TIMEOUT_MS = 5_000
 const DAY_MS = 86_400_000
 
-const CHROME_TABS = `tell application "Google Chrome"
-  set out to ""
-  repeat with w in windows
-    repeat with t in tabs of w
-      set out to out & (URL of t) & tab & (title of t) & linefeed
-    end repeat
-  end repeat
-  return out
-end tell`
+// Every running Chrome by process id: `tell application "Google Chrome"` reaches only one, often a test browser (Playwright) instead of the user's
+const CHROME_TABS = `ObjC.import('AppKit')
+ObjC.import('ScriptingBridge')
+const lines = []
+for (const instance of $.NSRunningApplication.runningApplicationsWithBundleIdentifier('com.google.Chrome').js) {
+  const chrome = $.SBApplication.applicationWithProcessIdentifier(instance.processIdentifier)
+  const tabs = chrome.valueForKey('windows').valueForKey('tabs')
+  const urls = ObjC.deepUnwrap(tabs.valueForKey('URL')).flat()
+  const titles = ObjC.deepUnwrap(tabs.valueForKey('title')).flat()
+  if (!chrome.lastError.isNil()) throw new Error('Chrome error ' + chrome.lastError.code)
+  urls.forEach((url, index) => lines.push(url + '\\t' + titles[index]))
+}
+lines.join('\\n')`
 
 async function chromeTabs(): Promise<Tab[]> {
-  const { stdout } = await promisify(execFile)('osascript', ['-e', CHROME_TABS], { timeout: ASK_TIMEOUT_MS })
+  const { stdout } = await promisify(execFile)('osascript', ['-l', 'JavaScript', '-e', CHROME_TABS], { timeout: ASK_TIMEOUT_MS })
   return stdout
     .split('\n')
     .filter(Boolean)
