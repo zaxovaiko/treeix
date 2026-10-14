@@ -71,6 +71,8 @@ export type Status = {
   recording: { id: string; title: string; since: number } | null
   /** The last thing that went wrong, for Settings */
   error: string | null
+  /** Why a call looks on while nothing records, so a missed recording shows */
+  unrecorded: string | null
 }
 
 export type Permissions = { microphone: string; calendar: string }

@@ -30,6 +30,12 @@ export function detect(rules: Rule[], micApps: string[], tabs: Tab[]): Call | nu
   return null
 }
 
+/** Why a call looks on even when no rule matches it: an app a rule names on the microphone (a Chrome call without its tab), or a camera (a call joined muted) */
+export function callHint(rules: Rule[], micApps: string[], camera: boolean): string | null {
+  if (micApps.some((app) => rules.some((rule) => rule.app && app.startsWith(rule.app)))) return 'A call app is using the microphone, but nothing is recording'
+  return camera ? 'The camera is on, but nothing is recording' : null
+}
+
 /** `dismissed`: stopped by hand, so the same call doesn't start again until it's gone */
 export type DetectorState = { state: 'idle' } | { state: 'pending'; call: Call; since: number } | { state: 'recording'; call: Call; lastSeen: number } | { state: 'dismissed' }
 

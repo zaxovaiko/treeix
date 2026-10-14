@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { RendererPlugin } from '@treeix/sdk'
+import { type RendererPlugin, useHost } from '@treeix/sdk'
 import { errorMessage } from '@treeix/app/ui'
 import { clock, type Status } from '../shared/types'
 import { MeetingsTab } from './MeetingsTab'
@@ -21,15 +21,28 @@ function Sync(): null {
   return null
 }
 
-/** Shown only while recording: how long, and a way to stop */
+/** Shown while recording: how long, and a way to stop; while a call looks on but nothing records: a way to start */
 function Recording(): React.JSX.Element | null {
-  const recording = status.use()?.recording
+  const host = useHost()
+  const current = status.use()
+  const recording = current?.recording
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     if (!recording) return
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [recording])
+  if (!recording && current?.unrecorded)
+    return (
+      <button
+        title={`${current.unrecorded}. Click to record`}
+        onClick={() => void bridge.invoke('start').catch((reason: unknown) => host.flash(errorMessage(reason)))}
+        className="flex h-6 items-center gap-1.5 rounded-md bg-amber-400/12 px-2 text-[11px] text-amber-400 hover:bg-amber-400/20 [-webkit-app-region:no-drag]"
+      >
+        <span className="size-1.5 rounded-full ring-1 ring-amber-400" />
+        Not recording
+      </button>
+    )
   if (!recording) return null
   return (
     <button

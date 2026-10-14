@@ -5,8 +5,8 @@ import { isUtterance, type Utterance } from './store'
 /** What the helper (`treeix-meetings` in `apps/desktop/native/voice`) prints, one JSON object per line */
 export type HelperMessage =
   | { type: 'ready' }
-  /** Bundle ids of the processes using the microphone, sent whenever they change */
-  | { type: 'mic'; apps: string[] }
+  /** Bundle ids of the processes using the microphone and whether a camera is on, sent whenever either changes */
+  | { type: 'mic'; apps: string[]; camera: boolean }
   | { type: 'recording'; folder: string }
   | { type: 'stopped'; folder: string }
   | { type: 'transcript'; folder: string; utterances: Utterance[] }
@@ -48,7 +48,7 @@ export function parseHelperMessage(line: string): HelperMessage | null {
     case 'ready':
       return { type: 'ready' }
     case 'mic':
-      return { type: 'mic', apps: list(message.apps, isString) }
+      return { type: 'mic', apps: list(message.apps, isString), camera: message.camera === true }
     case 'recording':
     case 'stopped':
       return { type: message.type, folder: text(message.folder) }

@@ -6,7 +6,7 @@ import { type NativeHelper, nativeBinary, nativeHelpersSupported, speechModelsPa
 import { isString, object, text } from '@treeix/shared/json'
 import type { MainPlugin } from '@treeix/sdk/main'
 import { type CalendarEvent, clock, type Meeting, type Permissions, parseSettings, type Status } from '../shared/types'
-import { type Call, type DetectorState, detect, needsTabs, step, type Tab } from './detector'
+import { type Call, callHint, type DetectorState, detect, needsTabs, step, type Tab } from './detector'
 import { type HelperCommand, type HelperMessage, parseHelperMessage } from './protocol'
 import { createStore } from './store'
 
@@ -46,7 +46,7 @@ const plugin: MainPlugin = {
   activate: (context) => {
     let settings = parseSettings({})
     const store = createStore(() => settings.folder || join(context.dataPath, 'meetings'))
-    let status: Status = { helper: nativeHelpersSupported ? 'starting' : 'unsupported', recording: null, error: null }
+    let status: Status = { helper: nativeHelpersSupported ? 'starting' : 'unsupported', recording: null, error: null, unrecorded: null }
     const setStatus = (patch: Partial<Status>): void => {
       status = { ...status, ...patch }
       context.broadcast('status', status)
@@ -55,6 +55,7 @@ const plugin: MainPlugin = {
     let helper: NativeHelper | null = null
     const command = (message: HelperCommand): void => helper?.send(message)
     let micApps: string[] = []
+    let camera = false
     let detector: DetectorState = { state: 'idle' }
     let starting = false
     let ticking = false
@@ -62,15 +63,25 @@ const plugin: MainPlugin = {
     /** Folders sent to the helper to transcribe; a helper that dies on one fails it, so it isn't retried forever */
     const transcribing = new Set<string>()
 
-    // The menu bar shows a recording's time and that transcripts are being made, like a call app's indicator
+    /** A call app on the microphone or a camera on while nothing records or is about to; not after a recording was stopped by hand */
+    const unrecordedCall = (): string | null => {
+      if (status.recording || starting || status.helper !== 'running' || detector.state !== 'idle') return null
+      return callHint(settings.rules, micApps, camera)
+    }
+
+    // The menu bar shows a recording's time, a call that isn't recorded and that transcripts are being made, like a call app's indicator
     let shown = ''
     const showMenuBar = (): void => {
+      const unrecorded = unrecordedCall()
+      if (unrecorded !== status.unrecorded) setStatus({ unrecorded })
       const { recording } = status
       const next = recording
         ? { title: `● ${clock(Date.now() - recording.since)}`, meters: [], lines: [`Recording ${recording.title}`] }
-        : transcribing.size
-          ? { title: 'Transcribing…', meters: [], lines: [`Transcribing ${transcribing.size === 1 ? 'a meeting' : `${transcribing.size} meetings`}`] }
-          : null
+        : unrecorded
+          ? { title: '○ Not recording', meters: [], lines: [unrecorded] }
+          : transcribing.size
+            ? { title: 'Transcribing…', meters: [], lines: [`Transcribing ${transcribing.size === 1 ? 'a meeting' : `${transcribing.size} meetings`}`] }
+            : null
       if (JSON.stringify(next) === shown) return
       shown = JSON.stringify(next)
       context.menuBar(next)
@@ -171,6 +182,7 @@ const plugin: MainPlugin = {
           return void recover()
         case 'mic':
           micApps = message.apps
+          camera = message.camera
           return
         case 'stopped':
           return void update(id, { end: new Date().toISOString() }).then((meeting) => meeting && transcribe(id))
@@ -324,6 +336,7 @@ const plugin: MainPlugin = {
         },
         down: (reason) => {
           micApps = []
+          camera = false
           if (status.recording) detector = { state: 'dismissed' }
           for (const id of transcribing) void fail(id, 'The helper stopped while transcribing this meeting')
           transcribing.clear()

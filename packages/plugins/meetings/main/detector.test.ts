@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { DEFAULT_RULES } from '../shared/types'
-import { type Call, type DetectorState, detect, needsTabs, step } from './detector'
+import { type Call, callHint, type DetectorState, detect, needsTabs, step } from './detector'
 
 const CHROME = 'com.google.Chrome.helper'
 const meet = { url: 'https://meet.google.com/abc-defg-hij?authuser=0', title: 'Meet - Daily' }
@@ -88,5 +88,17 @@ describe('step', () => {
     const dismissed: DetectorState = { state: 'dismissed' }
     expect(step(dismissed, call, 0, delays).next).toEqual(dismissed)
     expect(step(dismissed, null, 0, delays).next).toEqual({ state: 'idle' })
+  })
+})
+
+describe('callHint', () => {
+  it('flags a call app on the microphone even when no tab matches', () => {
+    expect(callHint(DEFAULT_RULES, ['com.google.Chrome.helper'], false)).toContain('microphone')
+  })
+  it('flags a camera that is on', () => {
+    expect(callHint(DEFAULT_RULES, [], true)).toContain('camera')
+  })
+  it('ignores other apps on the microphone', () => {
+    expect(callHint(DEFAULT_RULES, ['com.apple.CoreSpeech'], false)).toBeNull()
   })
 })

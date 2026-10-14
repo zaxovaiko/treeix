@@ -1,3 +1,4 @@
+import CoreMediaIO
 import Foundation
 
 private let iso: ISO8601DateFormatter = {
@@ -15,6 +16,7 @@ final class Meetings {
     private var modelsPath = FileManager.default.temporaryDirectory
     private var recording: Recording?
     private var micApps: [String] = []
+    private var camera = false
     private let calendar = MeetingCalendar()
     private let transcriber = Transcriber()
     /// Transcriptions run one at a time; the models are let go once none is waiting
@@ -49,12 +51,14 @@ final class Meetings {
         }
     }
 
-    /// Bundle ids, sent whenever the set changes
+    /// Bundle ids and whether a camera is on, sent whenever either changes
     private func pollMicrophone() {
         let apps = Set(AudioProcesses.all().filter(\.isUsingMicrophone).map(\.bundleID).filter { !$0.isEmpty }).sorted()
-        guard apps != micApps else { return }
+        let cameraOn = cameraInUse()
+        guard apps != micApps || cameraOn != camera else { return }
         micApps = apps
-        send(["type": "mic", "apps": apps])
+        camera = cameraOn
+        send(["type": "mic", "apps": apps, "camera": cameraOn])
     }
 
     private func record(folder: String, app: String) {
@@ -95,5 +99,25 @@ final class Meetings {
             queued -= 1
             if queued == 0 { await transcriber.release() }
         }
+    }
+}
+
+/// Whether any app has a camera on; a call joined muted holds no microphone but often the camera
+private func cameraInUse() -> Bool {
+    var address = CMIOObjectPropertyAddress(
+        mSelector: CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices),
+        mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal),
+        mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain)
+    )
+    let system = CMIOObjectID(kCMIOObjectSystemObject)
+    var size: UInt32 = 0
+    guard CMIOObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr else { return false }
+    var devices = [CMIOObjectID](repeating: 0, count: Int(size) / MemoryLayout<CMIOObjectID>.size)
+    guard CMIOObjectGetPropertyData(system, &address, 0, nil, size, &size, &devices) == noErr else { return false }
+    address.mSelector = CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere)
+    return devices.contains { device in
+        var running: UInt32 = 0
+        var read: UInt32 = 0
+        return CMIOObjectGetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &read, &running) == noErr && running != 0
     }
 }
