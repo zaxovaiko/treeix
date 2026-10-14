@@ -122,7 +122,8 @@ export const LAYOUTS = [
   { id: 'fit', label: 'Fit the screen' },
   { id: 'horizontal', label: 'Left to right' },
   { id: 'vertical', label: 'Top to bottom' },
-  { id: 'grid', label: 'Grid' }
+  { id: 'grid', label: 'Grid' },
+  { id: 'circle', label: 'Circle' }
 ] as const
 export type Layout = (typeof LAYOUTS)[number]['id']
 
@@ -134,7 +135,7 @@ type Placement = { placed: Map<string, Point>; width: number; height: number }
 /**
  * `layered` and `untangle`, then arranged as `layout` asks: `fit` wraps each column into as many side-by-side columns as
  * fill a canvas `aspect` wide per unit of height at the largest zoom, `vertical` turns the columns into rows, `grid` fills
- * rows in that order with as many per row as fill the canvas best
+ * rows in that order with as many per row as fill the canvas best, `circle` rings them in that order, neighbours a column apart
  */
 export function prettify<N extends Positioned>(
   nodes: N[],
@@ -174,8 +175,20 @@ export function prettify<N extends Positioned>(
     }
     return { placed, width: lane * column, height: tallest }
   }
+  const ring = (order: N[]): Placement => {
+    // The chord between neighbours clears the widest and tallest node
+    const gap = Math.max(column, ...order.map(height))
+    const radius = order.length > 1 ? gap / (2 * Math.sin(Math.PI / order.length)) : 0
+    const placed = new Map<string, Point>()
+    order.forEach((node, index) => {
+      const angle = (2 * Math.PI * index) / order.length - Math.PI / 2
+      placed.set(node.id, { x: radius * (1 + Math.cos(angle)), y: radius * (1 + Math.sin(angle)) - height(node) / 2 })
+    })
+    return { placed, width: 2 * radius + column, height: 2 * radius + gap }
+  }
   const chosen = (() => {
     if (layout === 'vertical') return rows(levels)
+    if (layout === 'circle') return ring(levels.flat())
     if (layout === 'grid') {
       const order = levels.flat()
       return biggest(
@@ -201,7 +214,7 @@ export function FlowControls({ onLayout }: { onLayout: (view: { layout: Layout; 
         <Icon name="wand" />
       </ControlButton>
       {open && (
-        <Popup anchor={open} onDismiss={() => setOpen(null)} className="w-40 rounded-lg border border-input bg-popover p-1 text-xs text-foreground">
+        <Popup anchor={open} align="beside" onDismiss={() => setOpen(null)} className="w-40 rounded-lg border border-input bg-popover p-1 text-xs text-foreground">
           {LAYOUTS.map(({ id, label }) => (
             <button
               key={id}

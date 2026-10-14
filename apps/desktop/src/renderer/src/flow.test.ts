@@ -79,6 +79,13 @@ test('vertical turns columns into centered rows; grid fills rows to suit the can
   expect(new Set(grid.map((each) => each.position.y)).size).toBe(2)
 })
 
+test('circle rings the nodes with neighbours at least a column apart', () => {
+  const nodes = ['a', 'b', 'c', 'd'].map((id, index) => node(id, index))
+  const ring = prettify(nodes, [], { column: 100, height: () => 50, aspect: 1, layout: 'circle' }).map(({ position }) => position)
+  const distance = (a: { x: number; y: number }, b: { x: number; y: number }): number => Math.hypot(a.x - b.x, a.y - b.y)
+  ring.forEach((point, index) => expect(distance(point, ring[(index + 1) % ring.length])).toBeCloseTo(100))
+})
+
 test('layered survives cycles and self edges', () => {
   const nodes = [node('a'), node('b', 1)]
   const edges = [
