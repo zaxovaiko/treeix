@@ -1,169 +1,145 @@
 <div align="center">
 
-<img src="apps/desktop/resources/icon.png" alt="Treeix" width="120" />
+<img src="apps/desktop/resources/icon.png" alt="Treeix" width="110" />
 
 # Treeix
 
 **Your AI workspace. Everything you use daily, in one app.**
 
-Your own agents, worktrees, diffs, pull requests and tickets in one Mac app, and your review notes go back to the agent as its next prompt.
+Your own agents, worktrees, diffs, pull requests, tickets and meetings in one Mac app.<br />Your review notes go back to the agent as its next prompt.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)](#install)
-[![Electron](https://img.shields.io/badge/Electron-39-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://react.dev/)
-[![Bun](https://img.shields.io/badge/Bun-tests-000000.svg?logo=bun&logoColor=white)](https://bun.sh/)
-[![Plugins](https://img.shields.io/badge/plugins-14-8b5cf6.svg)](packages/README.md)
+[![Platform](https://img.shields.io/badge/macOS-14%2B%20Apple%20silicon-lightgrey.svg?logo=apple)](#install)
+[![Release](https://img.shields.io/github/v/release/zaxovaiko/treeix?label=release)](https://github.com/zaxovaiko/treeix/releases/latest)
+[![CI](https://github.com/zaxovaiko/treeix/actions/workflows/ci.yml/badge.svg)](https://github.com/zaxovaiko/treeix/actions/workflows/ci.yml)
+[![Plugins](https://img.shields.io/badge/plugins-19-8b5cf6.svg)](packages/README.md)
 
-[Download](https://treeix.dyvertex.com/download) · [Website](https://treeix.dyvertex.com) · [Plugin docs](packages/README.md) · [Architecture](docs/architecture.md)
+**[Download](https://treeix.dyvertex.com/download)** · [Website](https://treeix.dyvertex.com) · [80-second tour](https://youtu.be/Un4AvXgqtAM) · [Plugin docs](packages/README.md) · [Architecture](docs/architecture.md)
 
 <a href="https://youtu.be/Un4AvXgqtAM"><img src="apps/landing/assets/tour.webp" alt="Watch the 80-second Treeix tour on YouTube" width="900" /></a>
-
-[Watch the 80-second tour](https://youtu.be/Un4AvXgqtAM)
 
 </div>
 
 ## Why
 
-AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, its review comments, its pull request and the agent session that produced it on a single screen, and sends your comments straight back to the agent.
+AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts a worktree, its diff, its review comments, its pull request and the agent session that produced it on one screen, and sends your comments straight back to the agent.
 
-## What it does
+## Highlights
 
-- **AI Hub.** Your own agents on top of Claude Code, Codex, OpenRouter or Ollama: a name, a face, a model and its instructions. Chat with one, ask it a question, or chain several into a workflow on a canvas with conditions, approvals and cron schedules.
-- **Worktrees.** Every repository and checkout in your folders shows up in one sidebar, with the diff against the base branch, split or unified.
-- **Review in place.** Select lines, leave comments, then send them to a Claude or Codex session or copy them out.
-- **Sessions keep running.** Claude, Codex, a shell or any CLI agent you add survive a reload, docked next to the diff or in their own tab.
-- **Pull requests.** `gh` and `glab` bring GitHub and GitLab pull requests in with their review threads, viewed files, conflict and CI state.
-- **Tasks and pages.** The Atlassian CLI opens Jira work items and Confluence pages beside the branch, and a URL previews wherever you paste it.
-- **Browser.** A Chromium tab with DevTools for the app your agent is building. Comment on an element and the note joins the same queue as your code comments.
-- **Editor.** Fix a line yourself in the built-in editor. Every save keeps a snapshot you can go back to.
-- **Env.** Every `.env` file across your worktrees in one table: what is secret, what is exposed to the browser, what is missing or differs from `main`.
-- **Usage limits.** Claude and Codex 5-hour and weekly limits in the title bar, so a long run does not stop by surprise.
-- **History.** Closed sessions stay in History. Reopen one and the agent picks up the same conversation.
-- **Workspaces.** Group the folders of one job together and switch between them with a digit. Each keeps its own tabs, worktrees and sessions.
-- **Search everything.** One palette for commands, workspaces, files, pull requests, tickets and settings, plus `G` and a letter to jump from anywhere, terminals included.
-- **Agents can drive Treeix.** It serves its own MCP tools, so a session can open a page in the browser (once Settings > Browser allows it), start another session, save a workspace or run one of your workflows.
-- **Always a key away.** A global shortcut brings Treeix to the front over any other app, and it keeps the Mac awake while an agent works, with the lid closed if you ask.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/landing/assets/hero.webp" alt="The diff of a worktree with a comment being written on lines 6 to 10" />
+      <b>Review, then send it back.</b> Every worktree and its diff in one sidebar. Select lines, write a note, and the queue goes to the Claude Code or Codex session in that worktree.
+    </td>
+    <td width="50%" valign="top">
+      <img src="apps/landing/assets/hub.webp" alt="The AI Hub with a workflow on the canvas and a step open in the inspector" />
+      <b>Your own agents, chained.</b> Agents on Claude Code, Codex, OpenRouter or Ollama, wired into workflows with conditions, approvals, schedules and tool steps.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/landing/assets/meetings.webp" alt="The Meetings tab with a call's notes, action items and transcript with speakers" />
+      <b>Meetings become notes.</b> Meet, Slack huddles, Zoom and Teams record on their own and are transcribed with speakers, on the Mac. A workflow writes the notes and tasks.
+    </td>
+    <td width="50%" valign="top">
+      <img src="apps/landing/assets/dependencies.webp" alt="The Dependencies tab with a monorepo's packages laid out left to right" />
+      <b>See the architecture.</b> Packages, folder imports and Drizzle tables drawn as graphs, laid out to fit the screen with the fewest crossings.
+    </td>
+  </tr>
+</table>
+
+## Features
+
+- **AI Hub.** Your own agents with a name, a face, a model and instructions. Chat, ask one question, or chain them into workflows started by hand, by a cron schedule or by another plugin's event.
+- **Worktrees and review.** Every repository and checkout in one sidebar, split or unified diffs, line comments sent to an agent session.
+- **Sessions that keep running.** Claude, Codex, a shell or any CLI agent survive a reload, docked next to the diff or in their own tab. Closed ones reopen from History.
+- **Pull requests and tickets.** GitHub and GitLab through `gh` and `glab`, Jira and Confluence through `acli`, all beside the branch.
+- **Meetings, Slack and Notion.** Calls turn into transcripts, Slack messages into batches, and workflows write the results to any Notion database.
+- **Browser, editor, env.** Chromium with DevTools, a built-in editor with snapshots, and every `.env` file checked against `main`.
+
+<details>
+<summary><b>Everything else</b></summary>
+
+- **Dependency graph and schema.** Packages, folder imports and Drizzle tables as diagrams, arranged to fit, left to right, top to bottom or as a grid.
 - **Dictation.** Hold a key, speak, and the text lands in any app. Recognised on the Mac, optionally cleaned up by a local model.
-- **Meetings.** Google Meet, Slack huddles, Zoom and Teams calls record on their own and become transcripts with speakers, on the Mac. A workflow turns them into notes and tasks.
-- **Slack and Notion.** Slack messages collect in batches for a workflow to pick todos from, and any workflow can add pages to a Notion database.
+- **Usage limits.** Claude and Codex 5-hour and weekly limits in the title bar.
+- **Ports in the title bar.** The dev servers your worktrees run, with a button to stop one.
+- **Workspaces.** Group the folders of one job together and switch with a digit; each keeps its own tabs and sessions.
+- **Search everything.** One palette for commands, workspaces, files, pull requests, tickets and settings, plus `G` and a letter to jump from anywhere.
+- **Agents can drive Treeix.** Its own MCP server lets a session start another session, save a workspace, run a workflow or, once allowed in Settings, use the browser.
+- **Always a key away.** A global shortcut brings Treeix to the front, and it keeps the Mac awake while an agent works, with the lid closed if you ask.
+- **Local models.** Download Ollama models from a rated list in Settings, with a fit check against your Mac's memory.
 - **Themes.** Light and dark, after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized.
-- **Markdown.** Headings fold, mermaid blocks render, private uploads load their images, and full screen zooms.
-- **Everything is a plugin.** Switch any feature above off in Settings and it stops loading its code entirely.
+- **Markdown.** Foldable headings, mermaid diagrams, private images and full screen zoom.
+- **Everything is a plugin.** Switch a feature off in Settings and its code stops loading.
 
-## Before and after
+</details>
 
-| | Before | With Treeix |
-| --- | --- | --- |
-| Read the ticket | Jira in a browser tab | Tasks page, grouped by whose move it is |
-| Find the spec | Search Confluence, keep the tab open all day | The page beside the branch, one keystroke to an agent |
-| See what changed | `cd` into the worktree, `git diff`, scroll | Every worktree in one sidebar, diff already open |
-| Leave feedback | Copy the file and the line numbers into a prompt | Drag across the lines, write the note, send the queue |
-| Reviewer's comment | GitHub or GitLab tab, then retype it for the agent | Add to agent comments, one click |
-| Closed a session | The conversation is gone, start a new one | History reopens it and the agent resumes |
-| Switch agents | `git checkout`, hope nothing is dirty | Click the group, its worktree is already there |
+<details>
+<summary><b>More screenshots</b></summary>
+<br />
 
-## Screenshots
+| | |
+| --- | --- |
+| <img src="apps/landing/assets/automation.webp" alt="A Meeting notes workflow started by a transcript, with Notion tool steps" /> A transcript starts a workflow; tool steps save the notes and add Notion tasks | <img src="apps/landing/assets/schema.webp" alt="Drizzle tables and their foreign keys arranged as a grid" /> Drizzle tables and foreign keys, read from the schema files |
+| <img src="apps/landing/assets/terminal.webp" alt="Terminal page with agent groups and a badge on the one waiting" /> A group per agent, with a badge when it waits for you | <img src="apps/landing/assets/pr.webp" alt="A pull request with review threads" /> A reviewer's comment becomes an agent task in one click |
+| <img src="apps/landing/assets/drawer.webp" alt="The agent comments drawer with three comments" /> Notes stack up, then go over as one prompt | <img src="apps/landing/assets/browser.webp" alt="The built-in browser beside the branch" /> Comment on an element of the app your agent builds |
+| <img src="apps/landing/assets/agent.webp" alt="The agent editor" /> An agent is a name, a model and its instructions | <img src="apps/landing/assets/env.webp" alt="The Env tab flagging an exposed secret" /> Env files across worktrees, checked against main |
 
-**Your own agents, chained on a canvas.** The AI Hub runs a workflow in the background: an agent builds, another reviews with your repo's own subagent, a condition picks the branch and an approval waits for you.
-
-<img src="apps/landing/assets/hub.webp" alt="The AI Hub with a Ship a ticket workflow on the canvas and the review step open in the inspector" width="900" />
-
-**An agent is a name, a model and its instructions.** Put it on Claude Code, Codex, OpenRouter or Ollama, point it at the folders it may work in, and it shows up everywhere an agent can be picked.
-
-<img src="apps/landing/assets/agent.webp" alt="The agent editor with a colour, a face, Claude as the runtime, a model and its instructions" width="900" />
-
-**Every worktree, its diff and your comments on one screen.** Split or unified, comments sit on the lines they belong to.
-
-<img src="apps/landing/assets/hero.webp" alt="The diff of the feat/usage-invoices worktree with a comment being written on lines 6 to 10" width="900" />
-
-**Comments go back to the agent.** Select the lines that need another pass and write your note. The whole queue then goes to the Claude Code or Codex session running in that worktree as its next prompt.
-
-<img src="apps/landing/assets/drawer.webp" alt="The agent comments drawer with three comments ready to send to the Billing invoices session" width="900" />
-
-**A group per agent.** A group holds one agent's worktree, terminals and plan, and it gets a badge the moment that agent waits for an answer.
-
-<img src="apps/landing/assets/terminal.webp" alt="Terminal page with three agent groups, a Claude session asking to run the tests, and a badge on its group" width="900" />
-
-**Pull requests, tickets and specs in the same window.** A reviewer's comment becomes an agent task with one click.
-
-<img src="apps/landing/assets/pr.webp" alt="A pull request with review threads and the Add to agent comments button" width="900" />
-
-**A browser beside the branch.** Open the app your agent is building, with DevTools, console and network capture. Comments on elements go to the agent like comments on code.
-
-<img src="apps/landing/assets/browser.webp" alt="The built-in browser showing a billing page, with the Send 3 comments to Billing invoices button in the toolbar" width="900" />
-
-**Quick fixes without leaving the review.** The editor opens the file straight from the worktree, one click from its diff.
-
-<img src="apps/landing/assets/editor.webp" alt="The built-in editor with portal.ts open from the feat/usage-invoices worktree and the file explorer on the right" width="900" />
-
-**Env files, checked.** Secrets, public variables, values exposed to the browser and keys that are missing compared to main.
-
-<img src="apps/landing/assets/env.webp" alt="The Env tab listing variables of feat/usage-invoices, with one exposed secret and one missing webhook secret flagged" width="900" />
-
-**Every feature is a plugin.** Switch off what you don't use and its code never loads.
-
-<img src="apps/landing/assets/plugins.webp" alt="Settings, Plugins page with a toggle for each plugin" width="900" />
+</details>
 
 ## Install
 
-Download the DMG from [treeix.dyvertex.com/download](https://treeix.dyvertex.com/download). Apple silicon, macOS 14 or newer, signed and notarized by Apple.
+Download the DMG from **[treeix.dyvertex.com/download](https://treeix.dyvertex.com/download)**. Apple silicon, macOS 14 or newer, signed and notarized by Apple.
 
-Build it yourself:
-
-```sh
-bun install
-bun run dev
-```
-
-Optional command line tools, each feature degrades without its own: `gh`, `glab`, `acli`, `claude`, `codex`.
+Optional command line tools, each feature stays quiet without its own: `gh`, `glab`, `acli`, `claude`, `codex`, `ollama`.
 
 ## Plugins
 
-The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, comments and settings. Everything else ships as a plugin in [`packages/plugins`](packages/plugins).
+The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, comments and settings. Everything else is a plugin in [`packages/plugins`](packages/plugins); writing one takes a `package.json` and a `renderer/index.tsx` ([guide](packages/README.md)).
+
+<details>
+<summary><b>All 19 plugins</b></summary>
 
 | Plugin | Default | What it adds |
 | --- | --- | --- |
-| [`hub`](packages/plugins/hub) | on | AI Hub tab: your own agents on Claude, Codex, OpenRouter or Ollama, workflows on a canvas started by hand, schedules or other plugins' events, local model downloads and an MCP server |
-| [`terminal`](packages/plugins/terminal) | on | Terminal tab, docked panel, sessions for Claude, Codex, a shell or any agent you configure, surviving reloads |
-| [`chat`](packages/plugins/chat) | on | Chat view for Claude, Codex and any agent with a chat command, next to their terminals |
+| [`hub`](packages/plugins/hub) | on | Your own agents, workflows on a canvas started by hand, schedules or events, local model downloads, an MCP server |
+| [`terminal`](packages/plugins/terminal) | on | Terminal tab and docked panel; Claude, Codex, shell and custom agent sessions that survive reloads |
+| [`chat`](packages/plugins/chat) | on | Chat view for any agent with a chat command, next to its terminal |
 | [`pull-requests`](packages/plugins/pull-requests) | on | GitHub and GitLab pull requests, review threads, viewed files, conflicts |
-| [`browser`](packages/plugins/browser) | on | Chromium tab and panel with DevTools, element comments, console and network capture, cookie import |
-| [`env`](packages/plugins/env) | on | Every `.env` file across worktrees: secret, public or exposed, missing or different from main, inline editing |
+| [`browser`](packages/plugins/browser) | on | Chromium with DevTools, element comments, console and network capture |
+| [`env`](packages/plugins/env) | on | Every `.env` across worktrees: secret, public or exposed, missing or different from main |
+| [`dependencies`](packages/plugins/dependencies) | on | Package and folder import graphs of a worktree |
+| [`schema`](packages/plugins/schema) | on | Drizzle tables, columns and foreign keys as a diagram |
 | [`plans`](packages/plugins/plans) | on | Claude plans in the palette and on sessions |
-| [`usage-limits`](packages/plugins/usage-limits) | on | Claude and Codex 5-hour and weekly limits in the title bar |
-| [`themes`](packages/plugins/themes) | on | Light and dark themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized |
+| [`usage-limits`](packages/plugins/usage-limits) | on | Claude and Codex limits in the title bar |
+| [`themes`](packages/plugins/themes) | on | Light and dark themes after popular editors |
 | [`diagrams`](packages/plugins/diagrams) | on | Mermaid code blocks, loaded on the first diagram |
-| [`keep-awake`](packages/plugins/keep-awake) | on | Keeps the Mac awake while an agent is working, optionally with the lid closed |
-| [`meetings`](packages/plugins/meetings) | off | Records calls when they start, transcribes them with speakers on the Mac, lists them with today's calendar, and hands transcripts to workflows |
-| [`slack`](packages/plugins/slack) | off | Collects Slack messages over Socket Mode and hands them to workflows in batches |
-| [`notion`](packages/plugins/notion) | off | A `notion_create_pages` tool that adds pages to any database, for agents and workflow steps |
-| [`dictation`](packages/plugins/dictation) | off | Hold a key, speak, and the text is pasted into any app; speech recognised on the Mac, optional cleanup by a local model |
-| [`jira`](packages/plugins/jira) | off | Jira work items, status changes, worktree per item, sending items to agents |
+| [`keep-awake`](packages/plugins/keep-awake) | on | Keeps the Mac awake while an agent works |
+| [`meetings`](packages/plugins/meetings) | off | Records calls, transcribes them with speakers on the Mac, hands transcripts to workflows |
+| [`slack`](packages/plugins/slack) | off | Collects Slack messages over Socket Mode for workflows, in batches |
+| [`notion`](packages/plugins/notion) | off | `notion_create_pages` for agents and workflow steps, with a personal access token |
+| [`dictation`](packages/plugins/dictation) | off | Hold a key, speak, paste into any app |
+| [`jira`](packages/plugins/jira) | off | Jira work items, status changes, a worktree per item |
 | [`confluence`](packages/plugins/confluence) | off | Confluence pages, search, page trees, link previews |
 
-Writing one takes a `package.json` and a `renderer/index.tsx`: see [packages/README.md](packages/README.md).
+</details>
 
 ## Roadmap
 
-- **Mobile app.** Keep an eye on your agents when you're away from the Mac.
-- **A proper UI.** A design pass over every screen, so the whole app feels like one product.
-- **History archive.** Past agent sessions kept, searchable and one click from reopening.
+- **Mobile app.** Keep an eye on your agents away from the Mac.
+- **A proper UI.** A design pass so every screen feels like one product.
+- **History archive.** Past sessions kept, searchable and one click from reopening.
 
-Missing something you need? [Open an issue](https://github.com/zaxovaiko/treeix/issues/new) and say what you'd use it for.
+Missing something? [Open an issue](https://github.com/zaxovaiko/treeix/issues/new) and say what you'd use it for.
 
 ## Contributing
 
-Treeix is young and built in the open, so a contribution of any size shows up in the next release.
+Pick a roadmap item, write a plugin, or tell us where it breaks: your agents and repos are the best test suite Treeix has. Setup, checks and house style are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- **Pick a roadmap item.** Open an issue saying you're on it, so nobody doubles the work.
-- **Write a plugin.** A `package.json` and a `renderer/index.tsx`, see [packages/README.md](packages/README.md).
-- **Tell us where it breaks.** Your agents, your repos and your setup are the best test suite Treeix has.
-- **Star the repo.** It's how other people find it.
-
-Setup, checks and house style are in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development
+<details>
+<summary><b>Development</b></summary>
 
 ```sh
 bun install        # installs both apps and links packages/node_modules
@@ -172,21 +148,21 @@ bun run typecheck  # tsc, both projects
 bun run test       # bun test, app and packages
 ```
 
-Repository layout:
-
 ```
-apps/desktop    the Electron app (main, preload, renderer)
-apps/landing    static landing page for treeix.dyvertex.com
-packages/sdk    the plugin contract
-packages/plugins  the plugins
+apps/desktop        the Electron app (main, preload, renderer)
+apps/landing        static site for treeix.dyvertex.com
+packages/sdk        the plugin contract
+packages/plugins    the plugins
 packages/atlassian  shared acli, Atlassian Document Format, credentials
 ```
 
-More: [architecture](docs/architecture.md) · [releasing](docs/releasing.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md)
+More: [architecture](docs/architecture.md) · [releasing](docs/releasing.md) · [security](SECURITY.md)
+
+</details>
 
 ## License
 
-[Apache License 2.0](LICENSE). You may use, modify and redistribute Treeix, including commercially, as long as you keep the license and the [NOTICE](NOTICE) file and state your changes. Forks and derivative works must credit Treeix:
+[Apache License 2.0](LICENSE). Use, modify and redistribute Treeix, commercially too, as long as you keep the license and the [NOTICE](NOTICE) file and state your changes. Forks and derivative works must credit Treeix:
 
 > Built on Treeix (https://treeix.dyvertex.com), Copyright 2026 Treeix contributors, licensed under the Apache License 2.0.
 

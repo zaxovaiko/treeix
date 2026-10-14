@@ -563,11 +563,171 @@ export async function writeHubFixtures(home: string, repo: string): Promise<void
       [
         hubAgent('ticket', 'Ticket', '#d9823b', 'You pick up a ticket, ship the change and report back on the branch you pushed.'),
         hubAgent('triage', 'Triage', '#5b8def', 'You read new issues, label them and say who should take them.'),
-        hubAgent('release', 'Release', '#4caf7d', 'You cut releases and write the notes from the commits.')
+        hubAgent('release', 'Release', '#4caf7d', 'You cut releases and write the notes from the commits.'),
+        hubAgent('notes', 'Note taker', '#a274d9', 'You turn meeting transcripts into short notes, decisions and action items with owners.')
       ],
       null,
       2
     )
   )
-  await Bun.write(`${hub}/workflows.json`, JSON.stringify([SHIP, ...IDLE], null, 2))
+  await Bun.write(`${hub}/workflows.json`, JSON.stringify([SHIP, MEETING_WORKFLOW, ...IDLE], null, 2))
+}
+
+/** AI Hub: a finished call becomes notes, saved beside the transcript and in Notion, with no agent session in between */
+export const MEETING_WORKFLOW = {
+  id: 'meeting',
+  name: 'Meeting notes',
+  nodes: [
+    { id: 'input', kind: 'input', events: ['meetings.transcribed'] },
+    step('notes', 'Turn this transcript of {{input.title}} into notes with decisions and action items, as JSON.\n\n{{input.transcript}}', { agent: 'notes' }),
+    { id: 'save', kind: 'tool', tool: 'meetings_save_notes', args: JSON.stringify({ id: '{{input.id}}', markdown: '{{nodes.notes.output.markdown}}' }) },
+    {
+      id: 'tasks',
+      kind: 'tool',
+      tool: 'notion_create_pages',
+      args: JSON.stringify({ dataSource: 'tasks', pages: '{{nodes.notes.output.tasks}}', defaults: { Status: 'Not started' } })
+    },
+    { id: 'output', kind: 'output', template: '{{nodes.tasks.output}}' }
+  ],
+  edges: [
+    { id: 'e1', from: 'input', to: 'notes', branch: null },
+    { id: 'e2', from: 'notes', to: 'save', branch: null },
+    { id: 'e3', from: 'notes', to: 'tasks', branch: null },
+    { id: 'e5', from: 'save', to: 'output', branch: null },
+    { id: 'e4', from: 'tasks', to: 'output', branch: null }
+  ],
+  layout: { input: { x: 0, y: 0 }, notes: { x: 260, y: 0 }, save: { x: 520, y: -170 }, tasks: { x: 520, y: 170 }, output: { x: 780, y: 0 } },
+  updatedAt: Date.now() + 1
+}
+
+const MEETING_TRANSCRIPT = [
+  ['Me', 0, 'Morning. Two things today: the invoice export and the Stripe webhook retries.'],
+  ['Speaker 2', 9, 'The export works for single accounts. For orgs with more than a thousand invoices it times out after thirty seconds.'],
+  ['Me', 21, 'Then we stream it. Can you move the CSV to a background job and email the link?'],
+  ['Speaker 2', 28, 'Yes, I can have that by Thursday.'],
+  ['Speaker 3', 34, 'On webhooks: we drop events when Stripe retries during a deploy. I want an idempotency table keyed by the event id.'],
+  ['Me', 47, 'Agreed. I will write the migration today, you wire the handler.'],
+  ['Speaker 3', 55, 'Works for me. Let’s also alert when a webhook fails three times in a row.']
+] as const
+
+const MEETING_NOTES = `Invoice export moves to a background job and webhook events get an idempotency table.
+
+## Decisions
+- Large invoice exports run as a background job and email a download link
+- Stripe webhook events are stored by event id so retries are safe
+
+## Action items
+- [ ] Background CSV export with an emailed link (Speaker 2, Thursday)
+- [ ] Migration for the webhook events table (Me, today)
+- [ ] Alert after three failed webhooks in a row (Speaker 3)
+`
+
+/** Meetings: three recorded calls, the newest with its transcript and the notes a workflow wrote */
+export async function writeMeetingFixtures(home: string): Promise<void> {
+  const root = `${home}/Library/Application Support/Treeix/plugins/meetings/meetings`
+  const today = new Date()
+  const at = (daysAgo: number, hour: number): Date => new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysAgo, hour, 0)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const calls: [string, Date, string, string[]][] = [
+    ['Billing sync', at(0, 10), 'Google Meet', ['anna@orbit.dev', 'mark@orbit.dev']],
+    ['Design review', at(0, 8), 'Slack', ['lea@orbit.dev']],
+    ['Sprint planning', at(1, 11), 'Zoom', ['anna@orbit.dev', 'mark@orbit.dev', 'lea@orbit.dev']]
+  ]
+  for (const [title, start, app, invitees] of calls) {
+    const id = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())} ${pad(start.getHours())}00 ${title}`
+    const end = new Date(start.getTime() + 32 * 60_000)
+    await Bun.write(`${root}/${id}/meeting.json`, JSON.stringify({ title, start: start.toISOString(), end: end.toISOString(), app, url: null, invitees, status: 'done' }, null, 2))
+    const lines = MEETING_TRANSCRIPT.map(([speaker, seconds, said]) => `**[00:${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}] ${speaker}:** ${said}`)
+    await Bun.write(`${root}/${id}/transcript.md`, `# ${title}\n\nInvitees: ${invitees.join(', ')}\n\n${lines.join('\n\n')}\n`)
+    await Bun.write(`${root}/${id}/notes.md`, MEETING_NOTES)
+  }
+}
+
+const ORBIT_PACKAGES: [string, string, string[]][] = [
+  ['apps/web', '@orbit/web', ['@orbit/ui', '@orbit/billing', '@orbit/auth']],
+  ['apps/admin', '@orbit/admin', ['@orbit/ui', '@orbit/auth']],
+  ['apps/api', '@orbit/api', ['@orbit/billing', '@orbit/auth', '@orbit/emails']],
+  ['apps/worker', '@orbit/worker', ['@orbit/emails', '@orbit/billing']],
+  ['packages/ui', '@orbit/ui', ['@orbit/config']],
+  ['packages/billing', '@orbit/billing', ['@orbit/db']],
+  ['packages/auth', '@orbit/auth', ['@orbit/db']],
+  ['packages/emails', '@orbit/emails', ['@orbit/ui']],
+  ['packages/db', '@orbit/db', ['@orbit/config']],
+  ['packages/config', '@orbit/config', []]
+]
+
+const ORBIT_SCHEMA = `import { boolean, integer, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+
+export const plan = pgEnum('plan', ['free', 'team', 'enterprise'])
+
+export const orgs = pgTable('orgs', {
+  id: uuid().defaultRandom().primaryKey(),
+  name: text().notNull(),
+  plan: plan().default('free')
+})
+
+export const users = pgTable('users', {
+  id: uuid().defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => orgs.id),
+  email: text().notNull().unique(),
+  admin: boolean().default(false)
+})
+
+export const sessions = pgTable('sessions', {
+  id: text().primaryKey(),
+  userId: uuid('user_id').references(() => users.id),
+  expiresAt: timestamp('expires_at').notNull()
+})
+
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid().defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => orgs.id),
+  stripeId: text('stripe_id').notNull(),
+  renewsAt: timestamp('renews_at')
+})
+
+export const invoices = pgTable('invoices', {
+  id: uuid().defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => orgs.id),
+  subscriptionId: uuid('subscription_id').references(() => subscriptions.id),
+  amount: integer().notNull(),
+  paidAt: timestamp('paid_at')
+})
+
+export const invoiceLines = pgTable('invoice_lines', {
+  id: uuid().defaultRandom().primaryKey(),
+  invoiceId: uuid('invoice_id').references(() => invoices.id),
+  description: text().notNull(),
+  amount: integer().notNull()
+})
+
+export const payments = pgTable('payments', {
+  id: uuid().defaultRandom().primaryKey(),
+  invoiceId: uuid('invoice_id').references(() => invoices.id),
+  userId: uuid('user_id').references(() => users.id),
+  amount: integer().notNull()
+})
+
+export const webhookEvents = pgTable('webhook_events', {
+  id: text().primaryKey(),
+  subscriptionId: uuid('subscription_id').references(() => subscriptions.id),
+  receivedAt: timestamp('received_at').defaultNow()
+})
+
+export const auditLog = pgTable('audit_log', {
+  id: uuid().defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => orgs.id),
+  userId: uuid('user_id').references(() => users.id),
+  action: text().notNull()
+})
+`
+
+/** Schema and Dependencies: a monorepo's packages and its Drizzle tables, untracked in the worktree, which both scans read */
+export async function writeGraphFixtures(worktree: string): Promise<void> {
+  for (const [folder, name, dependencies] of ORBIT_PACKAGES)
+    await Bun.write(
+      `${worktree}/${folder}/package.json`,
+      JSON.stringify({ name, private: true, dependencies: Object.fromEntries(dependencies.map((each) => [each, 'workspace:*'])) }, null, 2)
+    )
+  await Bun.write(`${worktree}/packages/db/src/schema.ts`, ORBIT_SCHEMA)
 }

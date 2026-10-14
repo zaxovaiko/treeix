@@ -19,6 +19,8 @@ import {
   writeEnvFixtures,
   writeHubFixtures,
   writeLimitFixtures,
+  writeGraphFixtures,
+  writeMeetingFixtures,
   writePullRequestFixtures
 } from './shot-fixtures'
 
@@ -253,6 +255,8 @@ async function main(): Promise<void> {
   }
   const devServer =
     only.length && !only.includes('browser') ? null : Bun.serve({ port: WEB_PORT, fetch: () => new Response(ORBIT_BILLING_PAGE, { headers: { 'content-type': 'text/html' } }) })
+  // Hub reads its files once, when it starts with the app
+  await writeHubFixtures(home, repo)
   const child = Bun.spawn([await electronBinary(), appDir, `--remote-debugging-port=${port}`], {
     cwd: appDir,
     // macOS resolves appData from the real user, not HOME, so without this the demo run reads and writes your own data
@@ -295,7 +299,10 @@ async function main(): Promise<void> {
         if (await evaluate(expression).catch(() => false)) return
         await sleep(200)
       }
-      throw new Error(`timed out waiting for ${expression}`)
+      const shown = await evaluate(
+        `JSON.stringify({ href: location.href.slice(-40), zones: document.querySelectorAll("[data-zone]").length, html: document.body.innerHTML.length, text: document.body.innerText.slice(-300) })`
+      ).catch(() => '')
+      throw new Error(`timed out waiting for ${expression}; the page shows: ${String(shown)}`)
     }
     const settle = async (ms = 400): Promise<void> => {
       await evaluate(`new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))`)
@@ -359,6 +366,10 @@ async function main(): Promise<void> {
 
     // Each scene seeds its own state and reloads, so any one of them can be re-shot on its own
     const page = (appTab: string): Record<string, unknown> => ({ ...baseState(), ...terminalState(), 'app.place@all': { appTab, selected: invoices, viewer: null } })
+    const withPlugins = (...ids: string[]): Json => {
+      const settings = object(baseState().settings)
+      return { ...settings, plugins: { ...object(settings.plugins), ...Object.fromEntries(ids.map((id) => [id, true])) } }
+    }
     const scenes: { name: string; run: () => Promise<void> }[] = [
       {
         name: 'hero',
@@ -468,7 +479,6 @@ async function main(): Promise<void> {
       {
         name: 'hub',
         run: async () => {
-          await writeHubFixtures(home, repo)
           await seed({
             ...baseState(),
             settings: { ...object(baseState().settings), plugins: { ...object(object(baseState().settings).plugins), hub: true } },
@@ -514,6 +524,53 @@ async function main(): Promise<void> {
           await until(`!!document.body.innerText.includes('Appearance')`)
           await clickText('button', 'Appearance')
           await settle(600)
+        }
+      },
+      {
+        name: 'meetings',
+        run: async () => {
+          await writeMeetingFixtures(home)
+          await seed({ ...page('meetings'), settings: withPlugins('hub', 'meetings'), 'plugin.meetings.settings': { calendar: false } })
+          await until(`!!document.body.textContent?.includes('Action items')`)
+          await settle(1000)
+        }
+      },
+      {
+        name: 'automation',
+        run: async () => {
+          await seed({ ...page('hub'), settings: withPlugins('hub', 'meetings', 'notion'), 'hub.selected': 'workflow:meeting' })
+          await until(`!!document.querySelector('.react-flow__node[data-id="tasks"]')`, 30_000)
+          const [x, y] = (await evaluate(
+            `(() => { const box = document.querySelector('.react-flow__node[data-id="tasks"]')?.getBoundingClientRect(); return box ? [box.x + box.width / 2, box.y + box.height / 2] : [0, 0] })()`
+          )) as [number, number]
+          await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 })
+          await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
+          await settle(600)
+          await evaluate(`document.querySelector('[title="Fit view"]')?.click()`)
+          await settle(1200)
+        }
+      },
+      // Last: the graph fixtures are untracked files in the worktree, which every later diff would list
+      {
+        name: 'schema',
+        run: async () => {
+          await writeGraphFixtures(invoices)
+          await seed(page('schema'))
+          await until(`!!document.querySelector('.react-flow__node')`, 30_000)
+          await clickText('button', 'Prettify')
+          await clickText('button', 'Grid')
+          await settle(1200)
+        }
+      },
+      {
+        name: 'dependencies',
+        run: async () => {
+          await writeGraphFixtures(invoices)
+          await seed({ ...page('dependencies'), 'dependencies.view': 'packages' })
+          await until(`!!document.querySelector('.react-flow__node')`, 30_000)
+          await clickText('button', 'Prettify')
+          await clickText('button', 'Left to right')
+          await settle(1200)
         }
       }
     ]

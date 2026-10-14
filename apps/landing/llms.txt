@@ -18,6 +18,11 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## Features
 
+- AI Hub: your own agents (a name, a model and instructions on Claude Code, Codex, OpenRouter or Ollama) chained into workflows with conditions, approvals, cron schedules, events from other plugins and tool steps that call any MCP tool Treeix serves.
+- Meetings (off by default): Meet, Slack huddles, Zoom and Teams record on their own and are transcribed with speakers on the Mac. A workflow turns the transcript into notes and tasks.
+- Slack and Notion (off by default): Slack messages arrive in batches for workflows; workflow steps and agents write pages to any Notion database.
+- Dependency graph and Drizzle schema diagrams of a worktree, laid out to fit, left to right, top to bottom or as a grid with the fewest crossings.
+- Dictation: hold a key, speak, and the text lands in any app.
 - Agent groups: one group per agent holding its worktree, terminal panes and plan. A badge appears the moment a session waits for an answer.
 - Sessions survive reloads. Closed sessions stay in History; reopening one resumes the same agent conversation.
 - Chat view for Claude, Codex and any agent with a chat command, next to their terminals.
