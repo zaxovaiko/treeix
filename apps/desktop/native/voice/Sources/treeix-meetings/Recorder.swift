@@ -116,6 +116,8 @@ final class ProcessTapRecorder {
             var description = AudioStreamBasicDescription()
             var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
             try check(AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &description), "Reading the tap format")
+            // The tap reports the app's rate, but buffers come at the device's: 24 kHz for AirPods while a call holds their mic
+            description.mSampleRate = try Self.nominalSampleRate(of: aggregateID)
             guard let format = AVAudioFormat(streamDescription: &description) else { throw RecorderError("Unknown tap format") }
 
             let writer = try TrackWriter(output: output, input: format)
@@ -141,6 +143,14 @@ final class ProcessTapRecorder {
         if tapID != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tapID) }
         aggregateID = AudioObjectID(kAudioObjectUnknown)
         tapID = AudioObjectID(kAudioObjectUnknown)
+    }
+
+    private static func nominalSampleRate(of device: AudioObjectID) throws -> Float64 {
+        var address = globalAddress(kAudioDevicePropertyNominalSampleRate)
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        try check(AudioObjectGetPropertyData(device, &address, 0, nil, &size, &rate), "Reading the tap device's sample rate")
+        return rate
     }
 
     private static func defaultOutputDeviceUID() throws -> String {
