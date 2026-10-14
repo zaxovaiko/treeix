@@ -159,7 +159,7 @@ function NewSessionMenu({ label, entries }: { label: string; entries: MenuAction
         <Icon name="plus" className="size-3.5" />
       </IconButton>
       {open && (
-        <Popup anchor={anchor} align="end" role="menu" className="w-44 rounded-lg border border-input bg-popover p-1">
+        <Popup anchor={anchor} align="beside" role="menu" className="w-44 rounded-lg border border-input bg-popover p-1">
           {entries.map((entry) => (
             <button key={entry.label} role="menuitem" onClick={() => run(entry)} className="flex h-7 w-full items-center rounded-md px-2 text-left text-xs hover:bg-accent">
               {entry.label}

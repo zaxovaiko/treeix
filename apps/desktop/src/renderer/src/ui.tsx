@@ -203,13 +203,14 @@ function fitInWindow(element: HTMLDivElement | null): void {
 }
 
 type Box = { left: number; top: number; right: number; bottom: number }
-export type PopupAlign = 'start' | 'end' | 'stretch'
+export type PopupAlign = 'start' | 'end' | 'stretch' | 'beside'
 export type PopupSide = 'below' | 'above'
 const POPUP_GAP = 4
 
 /**
  * Where a fixed popup of `size` goes next to `trigger`: below unless only above has room, keeping `side` while it still
- * fits so a list that changes as you type doesn't jump; always 8px inside the window, capped to the room on its side
+ * fits so a list that changes as you type doesn't jump; always 8px inside the window, capped to the room on its side.
+ * `beside` puts it right of the trigger, top edges level, or left of it when the right has no room
  */
 export function placePopup(
   trigger: Box,
@@ -220,6 +221,12 @@ export function placePopup(
 ): { side: PopupSide; left: number; top: number | null; bottom: number | null; maxHeight: number } {
   const room = { below: viewport.height - trigger.bottom - POPUP_GAP - EDGE_GAP, above: trigger.top - POPUP_GAP - EDGE_GAP }
   const fits = (candidate: PopupSide): boolean => size.height <= room[candidate]
+  if (align === 'beside') {
+    const right = trigger.right + POPUP_GAP
+    const left = right + size.width <= viewport.width - EDGE_GAP ? right : Math.max(EDGE_GAP, trigger.left - POPUP_GAP - size.width)
+    const top = Math.max(EDGE_GAP, Math.min(trigger.top, viewport.height - EDGE_GAP - size.height))
+    return { side: 'below', left, top, bottom: null, maxHeight: viewport.height - top - EDGE_GAP }
+  }
   const next: PopupSide = side && fits(side) ? side : fits('below') || room.below >= room.above ? 'below' : 'above'
   const x = align === 'end' ? trigger.right - size.width : trigger.left
   return {

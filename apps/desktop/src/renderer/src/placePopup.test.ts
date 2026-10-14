@@ -23,3 +23,8 @@ test('stays 8px inside both window edges', () => {
   expect(placePopup({ left: 2, right: 40, top: 10, bottom: 30 }, size, viewport, 'end', null).left).toBe(8)
   expect(placePopup({ left: 500, right: 700, top: 10, bottom: 30 }, size, viewport, 'end', null).left).toBe(444)
 })
+
+test('beside sits right of the trigger, or left when the right has no room', () => {
+  expect(placePopup({ left: 100, right: 200, top: 100, bottom: 120 }, size, viewport, 'beside', null)).toMatchObject({ left: 204, top: 100 })
+  expect(placePopup({ left: 700, right: 800, top: 600, bottom: 620 }, size, viewport, 'beside', null)).toMatchObject({ left: 440, top: 392 })
+})
