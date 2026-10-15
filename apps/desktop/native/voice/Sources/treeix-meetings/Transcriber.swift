@@ -21,7 +21,10 @@ struct Utterance {
     var json: [String: Any] { ["speaker": speaker, "start": start, "text": text] }
 }
 
-/// Each token goes to the turn covering its midpoint, else the nearest turn; runs of one speaker are joined
+/// A pause this long ends an utterance, so another track's speaker can be slotted in between
+let utterancePause = 1.0
+
+/// Each token goes to the turn covering its midpoint, else the nearest turn; runs of one speaker are joined until a pause
 func utterances(tokens: [TimedToken], turns: [SpeakerTurn], fallbackSpeaker: String) -> [Utterance] {
     func distance(_ turn: SpeakerTurn, _ time: Double) -> Double { max(turn.start - time, time - turn.end, 0) }
     func speaker(at time: Double) -> String {
@@ -30,18 +33,33 @@ func utterances(tokens: [TimedToken], turns: [SpeakerTurn], fallbackSpeaker: Str
     }
 
     var runs: [(speaker: String, start: Double, text: String)] = []
+    var previousEnd = -Double.infinity
     for token in tokens {
         let who = speaker(at: (token.start + token.end) / 2)
-        if runs.last?.speaker == who {
+        if runs.last?.speaker == who && token.start - previousEnd < utterancePause {
             runs[runs.count - 1].text += token.text
         } else {
             runs.append((who, token.start, token.text))
         }
+        previousEnd = token.end
     }
     return runs.compactMap { run in
         let text = run.text.replacingOccurrences(of: "▁", with: " ").replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
         return text.isEmpty ? nil : Utterance(speaker: run.speaker, start: run.start, text: text)
     }
+}
+
+/// Every track's utterances in time order, consecutive ones of the same speaker joined back together
+func interleaved(_ utterances: [Utterance]) -> [Utterance] {
+    var merged: [Utterance] = []
+    for utterance in utterances.sorted(by: { $0.start < $1.start }) {
+        if let last = merged.last, last.speaker == utterance.speaker {
+            merged[merged.count - 1] = Utterance(speaker: last.speaker, start: last.start, text: last.text + " " + utterance.text)
+        } else {
+            merged.append(utterance)
+        }
+    }
+    return merged
 }
 
 /// Microphone: whoever talks most is you, anyone else is in the room with you
@@ -91,7 +109,7 @@ actor Transcriber {
             let turns = raw.map { SpeakerTurn(speaker: names[$0.speaker] ?? $0.speaker, start: $0.start, end: $0.end) }
             all += utterances(tokens: tokens, turns: turns, fallbackSpeaker: track.fallback)
         }
-        return all.sorted { $0.start < $1.start }
+        return interleaved(all)
     }
 
     /// Frees the models' memory for the LLM that usually runs next
