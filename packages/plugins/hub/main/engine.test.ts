@@ -9,11 +9,15 @@ import { createRuns } from './runs'
 
 const dir = mkdtempSync(join(tmpdir(), 'hub-runs-'))
 
+/** Each connection's `resume`, in order */
+const resumed: (string | null)[] = []
+
 /** Thinks, calls a tool, then answers `<agent>: <prompt>`; a prompt saying "hang" never answers, one saying "permission" answers with the option picked */
 const adapter: ChatAdapter = {
   id: 'fake',
   label: 'Fake',
-  connect: async ({ command }) => {
+  connect: async ({ command, resume }) => {
+    resumed.push(resume ?? null)
     const listeners = new Set<(event: ChatEvent) => void>()
     const emit = (event: ChatEvent): void => listeners.forEach((listener) => listener(event))
     let picked: (optionId: string | null) => void = () => undefined
@@ -173,6 +177,23 @@ test('an approval waits on across a relaunch, while a run cut short by it is int
   )
   after.decide(waiting.id, 'gate', true)
   expect(await after.wait(waiting.id)).toMatchObject({ status: 'done', output: 'Shipped v4' })
+})
+
+test('resuming an interrupted run picks the cut-short agent back up in its conversation', async () => {
+  const store = createRuns(join(dir, 'resume'))
+  const before = engineOver(store)
+  const hung = before.ask('scout', 'hang', null, false)
+  await tick()
+  before.dispose()
+
+  const after = engineOver(store)
+  await after.recover()
+  resumed.length = 0
+  await after.resume(hung.id)
+  await tick()
+  expect(resumed).toEqual(['s'])
+  expect((await after.list()).find((run) => run.id === hung.id)?.nodes.agent).toMatchObject({ status: 'running', prompt: expect.stringContaining('Continue where you stopped') })
+  after.cancel(hung.id)
 })
 
 test('permissions wait for an answer, unless the agent allows everything', async () => {

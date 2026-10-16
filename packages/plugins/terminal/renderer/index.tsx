@@ -54,6 +54,7 @@ import {
   splitSession,
   type Session,
   type SessionView,
+  restoreDormant,
   sendText,
   setFileLinkHandler,
   setSessionRevealer,
@@ -633,6 +634,7 @@ const plugin: RendererPlugin = {
       start: createSession,
       whenReady,
       sendText,
+      restoreDormant,
       runCommand: (cwd, command) => createSession(cwd, 'shell', command),
       active: () => activeSession()?.id ?? null,
       reveal: (id) => {

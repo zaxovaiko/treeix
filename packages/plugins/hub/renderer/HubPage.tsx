@@ -5,7 +5,9 @@ import { Icon } from '@treeix/app/Icon'
 import { EmptyState, IconButton } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
+import { Board } from './Board'
 import { RunView } from './RunView'
+import { AgentsSection, HistorySection, NewAgentButton, NewWorkflowButton, WorkflowsSection } from './Sections'
 import { asking, chatIdOf, deleteAgent, hubAgents, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel, setConversation, TAB_ID } from './store'
 
 // The canvas library is big and only workflows need it
@@ -21,7 +23,12 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
 
   const open = (resume: string | null): void => {
     if (!chat || !persona?.chat) return
-    const options = { agent: persona.id, ...persona.chat, cwd: agent.folder ?? host.defaultCwd, resume }
+    const options = {
+      agent: persona.id,
+      ...persona.chat,
+      cwd: agent.folder ?? host.defaultCwd,
+      resume
+    }
     // The chat shows a failed start itself
     chat.start(chatId, options).then(
       (sessionId) => setConversation(agent.id, sessionId),
@@ -83,7 +90,34 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
   )
 }
 
-/** The hub's page: whatever the sidebar picked, full width. The lists live in the sidebar's own sections */
+/** The tab's own column: the board, then agents, workflows and history */
+function Rail({ selection }: { selection: string | null }): React.JSX.Element {
+  const group = (label: string, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
+    <section className="flex flex-col gap-0.5">
+      <h3 className="flex h-7 items-center justify-between pr-0.5 pl-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+        {actions}
+      </h3>
+      {list}
+    </section>
+  )
+  return (
+    <nav className="flex w-60 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border p-2">
+      <button
+        onClick={() => hubSelection.set(null)}
+        className={`flex h-8 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${selection === null ? 'bg-accent' : ''}`}
+      >
+        <Icon name="layers" className="size-3.5 text-muted-foreground" />
+        Board
+      </button>
+      {group('Agents', <NewAgentButton />, <AgentsSection />)}
+      {group('Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
+      {group('History', null, <HistorySection />)}
+    </nav>
+  )
+}
+
+/** The Agents tab: its column of lists, and the board or whatever the column picked */
 export function HubPage(): React.JSX.Element {
   const host = useHost()
   const agents = hubAgents.use()
@@ -97,28 +131,27 @@ export function HubPage(): React.JSX.Element {
   const run = runs.find((candidate) => `run:${candidate.id}` === selection) ?? null
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {run ? (
-        <RunView key={run.id} run={run} />
-      ) : workflow ? (
-        <Suspense fallback={<div className="flex-1" />}>
-          <WorkflowView key={workflow.id} workflow={workflow} />
-        </Suspense>
-      ) : agent ? (
-        <AgentChat
-          key={agent.id}
-          agent={agent}
-          conversation={chat?.sessionId ?? conversations[agent.id] ?? null}
-          onEdit={() => hubEditing.set(agent)}
-          onDelete={() => deleteAgent(host, agent)}
-        />
-      ) : (
-        <EmptyState fill icon="star" title="Your own agents: a name, a look and instructions on top of Claude, Codex or any chat agent">
-          <button onClick={() => hubEditing.set('new')} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
-            Create an agent
-          </button>
-        </EmptyState>
-      )}
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <Rail selection={run || workflow || agent ? selection : null} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {run ? (
+          <RunView key={run.id} run={run} />
+        ) : workflow ? (
+          <Suspense fallback={<div className="flex-1" />}>
+            <WorkflowView key={workflow.id} workflow={workflow} />
+          </Suspense>
+        ) : agent ? (
+          <AgentChat
+            key={agent.id}
+            agent={agent}
+            conversation={chat?.sessionId ?? conversations[agent.id] ?? null}
+            onEdit={() => hubEditing.set(agent)}
+            onDelete={() => deleteAgent(host, agent)}
+          />
+        ) : (
+          <Board />
+        )}
+      </div>
     </div>
   )
 }

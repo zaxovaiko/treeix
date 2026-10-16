@@ -130,6 +130,8 @@ export type SessionsService = {
   whenReady: (id: string) => Promise<void>
   /** Bracketed paste, optionally followed by Enter */
   sendText: (id: string, text: string, submit: boolean) => void
+  /** Starts every session left dormant by a relaunch; agents cut short mid-turn carry on */
+  restoreDormant: () => Promise<void>
   /** Runs a command in a new shell session, so its output is visible */
   runCommand: (cwd: string, command: string) => Promise<string>
   /** The pane with the keyboard, else the one last focused in the shown tab */

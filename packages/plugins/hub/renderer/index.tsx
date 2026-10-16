@@ -6,13 +6,13 @@ import { notify } from '@treeix/app/notifications'
 import { type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
 import { HubSettings } from './Settings'
-import { AgentsSection, HistorySection, NewAgentButton, NewWorkflowButton, WorkflowsSection } from './Sections'
 import {
   asAgent,
   asking,
   followAgents,
   followChats,
   followRuns,
+  followTicketRuns,
   followWorkflows,
   hubAgents,
   hubApi,
@@ -76,7 +76,7 @@ function useRunNotifications(): void {
         if (!previous || previous === state || !NOTICE[state]) continue
         notify({
           title: `${run.title} ${NOTICE[state]}`,
-          body: 'AI Hub',
+          body: 'Agents',
           // Main shows how a scheduled run ended itself, as the schedule asks
           system: !(run.kind === 'schedule' && state !== 'waiting'),
           failed: state === 'failed',
@@ -98,6 +98,7 @@ function Root(): React.JSX.Element {
   useEffect(() => (chat ? followChats(chat) : undefined), [chat])
   useEffect(followWorkflows, [])
   useEffect(followRuns, [])
+  useEffect(followTicketRuns, [])
   useRuntimes()
   useRunNotifications()
   return (
@@ -116,18 +117,11 @@ const plugin: RendererPlugin = {
   tabs: [
     {
       id: TAB_ID,
-      label: 'AI Hub',
+      label: 'Agents',
       icon: 'sparkles',
       order: 30,
-      render: Tab,
-      // The sidebar's sections pick what the page shows, so it needs no tab of its own
-      hidden: true
+      render: Tab
     }
-  ],
-  sidebar: [
-    { id: 'hub.agents', label: 'Agents', order: 1, render: AgentsSection, Actions: NewAgentButton },
-    { id: 'hub.workflows', label: 'Workflows', order: 2, render: WorkflowsSection, Actions: NewWorkflowButton },
-    { id: 'hub.history', label: 'History', order: 3, render: HistorySection }
   ],
   Root,
   Settings: HubSettings,

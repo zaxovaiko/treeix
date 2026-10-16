@@ -659,7 +659,8 @@ function resumeCommand(meta: SessionMeta): string | undefined {
 }
 
 const SAVED_KEY = 'terminals.saved'
-type Saved = { sessions: (SessionMeta & { id: string })[]; selected: Record<string, string>; splits: Record<string, PaneLayout>; paneGrow: Record<string, number> }
+/** `busy`: its agent was mid-turn when the app quit */
+type Saved = { sessions: (SessionMeta & { id: string; busy?: boolean })[]; selected: Record<string, string>; splits: Record<string, PaneLayout>; paneGrow: Record<string, number> }
 
 // Groups are gone; the key only takes up room in old installs
 localStorage.removeItem('terminals.tasks')
@@ -818,8 +819,9 @@ async function restoreSessions(): Promise<void> {
     if (meta.kind === 'codex' && !meta.agentSessionId) void learnCodexConversation(terminal.id)
   }
   const eager = live.length === 0 ? [saved.selected[getCurrentWorkspaceId()] ?? ''] : []
-  for (const { id, ...savedMeta } of saved.sessions) {
+  for (const { id, busy, ...savedMeta } of saved.sessions) {
     if (findSession(id)) continue
+    if (busy) cutShort.add(id)
     const meta = openable(savedMeta)
     // Chats connect once shown, from their view
     if (meta.view === 'chat') {
@@ -857,7 +859,9 @@ function store(key: string, json: string): void {
 subscribe(() => {
   if (!restored) return
   // A chat that lost its agent keeps its tab: it resumes with Retry or on the next launch
-  const sessions = state.sessions.filter((session) => session.view === 'chat' || session.status !== 'exited').map((session) => ({ id: session.id, ...metaOf(session) }))
+  const sessions = state.sessions
+    .filter((session) => session.view === 'chat' || session.status !== 'exited')
+    .map((session) => ({ id: session.id, ...metaOf(session), busy: session.status === 'running' || cutShort.has(session.id) || undefined }))
   // Sizes of panes no longer split are dropped
   const split = new Set(Object.values(state.splits).flat(2))
   const paneGrow = Object.fromEntries(Object.entries(state.paneGrow).filter(([key]) => split.has(key.replace(/^column:/, ''))))
@@ -1074,18 +1078,40 @@ export function whenReady(id: string): Promise<void> {
   })
 }
 
+/** Bracketed paste into a running terminal, optionally followed by Enter */
+function typeText(id: string, text: string, submit: boolean): void {
+  userInput(id, text)
+  const bracketed = findTerminal(id)?.terminal.modes.bracketedPasteMode ?? true
+  bridge.send('write', id, bracketed ? `\x1b[200~${text}\x1b[201~` : text)
+  if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
+}
+
+/** Sessions whose agent was mid-turn when the app last quit, until they start again */
+const cutShort = new Set<string>()
+const CONTINUE_PROMPT = 'The app quit while you were working. Continue where you left off.'
+
+/** Starts every session still dormant after a relaunch; agents cut short mid-turn are told to carry on, without taking the screen */
+export async function restoreDormant(): Promise<void> {
+  const dormant = state.sessions.filter((session) => session.status === 'dormant')
+  await Promise.all(
+    dormant.map(async ({ id, view }) => {
+      const resumeTurn = cutShort.delete(id) && view === 'terminal' && getAgent(findSession(id)?.kind ?? 'shell') !== undefined
+      const ready = resumeTurn ? whenReady(id) : null
+      await wakeSession(id)
+      if (!ready) return
+      await ready
+      typeText(id, CONTINUE_PROMPT, true)
+    })
+  )
+}
+
 /** A chat gets the text as its draft, which the user sends; `submit` is for terminals */
 export function sendText(id: string, text: string, submit: boolean): void {
   if (findSession(id)?.view === 'chat') {
     findService('chat')?.draft(id, text)
     return revealSession(id)
   }
-  const write = (): void => {
-    userInput(id, text)
-    const bracketed = findTerminal(id)?.terminal.modes.bracketedPasteMode ?? true
-    bridge.send('write', id, bracketed ? `\x1b[200~${text}\x1b[201~` : text)
-    if (submit) setTimeout(() => bridge.send('write', id, '\r'), 150)
-  }
+  const write = (): void => typeText(id, text, submit)
   if (findSession(id)?.status === 'dormant') {
     // Listening before the process starts, so its first output counts
     const ready = whenReady(id)

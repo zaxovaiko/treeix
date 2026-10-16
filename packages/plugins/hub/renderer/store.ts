@@ -2,7 +2,7 @@ import { type ChatOption, type ChatService, type ChatSpec, createBridge, createS
 import { errorMessage } from '@treeix/app/ui'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
-import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
+import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, isTicketRun, type Runtime, type TicketRun } from '../shared/types'
 import type { LocalModelsState } from '../shared/catalog'
 import type { Subagent } from '../shared/subagents'
 import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type Workflow } from '../shared/workflow'
@@ -38,6 +38,8 @@ export const hubApi = {
   decide: (runId: string, node: string, approved: boolean) => bridge.send('decide', runId, node, approved),
   /** Runs an ended run again from the step */
   retry: (runId: string, node: string) => bridge.invoke<void>('retryRun', runId, node),
+  resume: (runId: string) => bridge.invoke<void>('resumeRun', runId),
+  ticketRuns: () => bridge.invoke<TicketRun[]>('ticketRuns'),
   localModels: () => bridge.invoke<LocalModelsState>('localModels'),
   pullModel: (id: string) => bridge.invoke<void>('pullModel', id),
   cancelPull: (id: string) => bridge.invoke<void>('cancelPull', id),
@@ -72,6 +74,14 @@ export function followRuns(): () => void {
   const unfollowRun = bridge.on('run', (run) => isRun(run) && hubRuns.set([run, ...hubRuns.get().filter((entry) => entry.id !== run.id)].sort((a, b) => b.startedAt - a.startedAt)))
   const unfollowRemoved = bridge.on('runRemoved', (id) => hubRuns.set(hubRuns.get().filter((run) => run.id !== id)))
   return () => (unfollowRun(), unfollowRemoved())
+}
+
+/** Runs of the launchd ticket runner, which the board shows next to the hub's */
+export const hubTicketRuns = createStore<TicketRun[]>([])
+
+export function followTicketRuns(): () => void {
+  void hubApi.ticketRuns().then(hubTicketRuns.set)
+  return bridge.on('ticketRuns', (runs) => Array.isArray(runs) && hubTicketRuns.set(runs.filter(isTicketRun)))
 }
 
 /** A run's events so far, then each batch as it streams; batches that arrive before the load are already in it */

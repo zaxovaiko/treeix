@@ -11,6 +11,7 @@ import { KEEP_RUNS, mergeChunks, type Runs } from './runs'
 const MAX_AGENTS = 3
 const EVENTS_DELAY_MS = 250
 const TITLE_CHARS = 80
+const RESUME_PROMPT = 'The app quit while you were on this. Continue where you stopped. In case the conversation is gone, the task was:'
 // Options, commands and usage are session state, not part of what the agent did
 const LOGGED = new Set<ChatEvent['type']>([
   'message_chunk',
@@ -39,6 +40,8 @@ type Active = {
   stop: (reason: Error) => void
   finished: Promise<Run>
   finish: (run: Run) => void
+  /** Steps that pick their conversation back up instead of starting one, by node id */
+  resumes: Map<string, string>
 }
 
 /** Hands out at most `size` slots; a released slot goes straight to the longest waiter */
@@ -102,6 +105,9 @@ export function createEngine(deps: {
 
   /** One session, one prompt; the reply is the text after the agent's last tool call, the part that answers */
   async function attempt(entry: Active, node: AgentNode, prompt: string): Promise<string> {
+    // Only the first attempt resumes; a retry after it starts clean
+    const resume = entry.resumes.get(node.id) ?? null
+    entry.resumes.delete(node.id)
     const runtime = await deps.runtime(node.agent)
     if (!runtime) throw new Error('The agent is gone, or its runtime is')
     const adapter = deps.adapter(runtime.adapter)
@@ -119,7 +125,7 @@ export function createEngine(deps: {
       directories: runtime.directories,
       cwd: node.folder ?? runtime.cwd,
       env: entry.delegated ? {} : await deps.sessionEnv(),
-      resume: null
+      resume
     })
     const connection = await Promise.race([connecting, entry.stopped]).catch((error: unknown) => {
       // Stopped while the agent was starting: close it once it's up
@@ -253,7 +259,8 @@ export function createEngine(deps: {
         set(entry, id, { status: 'running', startedAt: now })
         return void runTool(entry, node, scope)
       case 'agent': {
-        const prompt = render(node.prompt, scope)
+        const task = render(node.prompt, scope)
+        const prompt = entry.resumes.has(id) ? `${RESUME_PROMPT}\n\n${task}` : task
         set(entry, id, { status: 'running', prompt })
         void runAgent(entry, node, prompt)
       }
@@ -273,7 +280,7 @@ export function createEngine(deps: {
       void deps.runs.append(run.id, merged)
       deps.onEvents(run.id, merged)
     }, EVENTS_DELAY_MS)
-    const entry: Active = { run, delegated, connections: new Map(), events, log: batcher.push, flush: batcher.flush, stopped, stop, finished, finish }
+    const entry: Active = { run, delegated, connections: new Map(), events, log: batcher.push, flush: batcher.flush, stopped, stop, finished, finish, resumes: new Map() }
     active.set(run.id, entry)
     return entry
   }
@@ -299,6 +306,23 @@ export function createEngine(deps: {
     void deps.runs.list().then((runs) => deps.runs.remove(runs.slice(KEEP_RUNS).map((old) => old.id)))
     step(entry)
     return entry.run
+  }
+
+  /** Runs an ended run again from `node` and every step the end cut short; with `resuming`, cut-short agents keep their conversation */
+  async function rerun(id: string, node: string | null, resuming: boolean): Promise<void> {
+    if (active.has(id)) throw new Error('The run is still going')
+    const run = (await deps.runs.list()).find((candidate) => candidate.id === id)
+    if (!run || (node !== null && !run.nodes[node])) throw new Error('The run is gone')
+    const cut = Object.keys(run.nodes).filter((key) => key === node || run.nodes[key].status === 'cancelled')
+    const reset = new Set(cut.flatMap((key) => [key, ...descendants(run.workflow, key)]))
+    const nodes = Object.fromEntries(Object.entries(run.nodes).map(([key, value]) => [key, reset.has(key) ? freshNode() : value]))
+    const entry = track({ ...run, status: 'running', endedAt: null, output: null, nodes }, await deps.runs.events(id), false)
+    for (const key of resuming ? cut : []) {
+      const sessionId = run.nodes[key].sessionId
+      if (sessionId) entry.resumes.set(key, sessionId)
+    }
+    publish(entry.run)
+    step(entry)
   }
 
   return {
@@ -337,17 +361,9 @@ export function createEngine(deps: {
       step(entry)
     },
     /** Runs an ended run again from `node`: it, everything after it and every step the end cut short start over */
-    retry: async (id: string, node: string): Promise<void> => {
-      if (active.has(id)) throw new Error('The run is still going')
-      const run = (await deps.runs.list()).find((candidate) => candidate.id === id)
-      if (!run?.nodes[node]) throw new Error('The run is gone')
-      const cut = Object.keys(run.nodes).filter((key) => key === node || run.nodes[key].status === 'cancelled')
-      const reset = new Set(cut.flatMap((key) => [key, ...descendants(run.workflow, key)]))
-      const nodes = Object.fromEntries(Object.entries(run.nodes).map(([key, value]) => [key, reset.has(key) ? freshNode() : value]))
-      const entry = track({ ...run, status: 'running', endedAt: null, output: null, nodes }, await deps.runs.events(id), false)
-      publish(entry.run)
-      step(entry)
-    },
+    retry: (id: string, node: string): Promise<void> => rerun(id, node, false),
+    /** Continues a run the app quit under: steps it cut short pick their conversations back up, the rest start over */
+    resume: (id: string): Promise<void> => rerun(id, null, true),
     /** Runs that were going when the app last quit: those held only by approvals wait on, the rest can't continue */
     recover: async (): Promise<void> => {
       const runs = await deps.runs.list()

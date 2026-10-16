@@ -14,7 +14,7 @@ const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md px
 
 /** A run started by a command schedule is titled `jira:BF-7 BF-7 Fix it` or `notion:<id>`: the source becomes an icon, the key is not repeated */
 const SOURCE = { jira: 'ticket', notion: 'bookOpen' } as const
-function runTitle(title: string): React.JSX.Element {
+export function runTitle(title: string): React.JSX.Element {
   const [, source, key, rest] = /^(jira|notion):(\S+)\s*(.*)$/.exec(title) ?? []
   if (!source) return <span className="min-w-0 flex-1 truncate">{title}</span>
   return (
