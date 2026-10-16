@@ -5,7 +5,7 @@
   "treeix": {
     "id": "keep-awake",
     "name": "Keep awake",
-    "description": "Stops the Mac from sleeping while a Claude or Codex session is working, optionally even with the lid closed.",
+    "description": "Stops the Mac from sleeping while a Claude or Codex session or an Agents workflow run is working, optionally even with the lid closed.",
     "enabledByDefault": true,
     "requires": [
       "terminal"

@@ -44,13 +44,13 @@ function KeepAwake(): null {
 
   useEffect(() => {
     status.update({ awake: keepAwake, lidClosed: keepAwake && keepAwakeLidClosed })
-    bridge.invoke<boolean>('set', keepAwake, keepAwakeLidClosed).then((ok) => {
+    bridge.invoke<boolean>('set', keepAwake, keepAwakeLidClosed, keepAwakeEnabled).then((ok) => {
       if (ok || !keepAwake) return
       // Cancelled prompt: don't ask again until agents stop and start again
       declined.current = true
       setKeepAwake(false)
     })
-  }, [keepAwake, keepAwakeLidClosed])
+  }, [keepAwake, keepAwakeLidClosed, keepAwakeEnabled])
 
   return null
 }

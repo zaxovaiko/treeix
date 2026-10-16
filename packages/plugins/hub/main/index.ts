@@ -4,7 +4,7 @@ import { rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { Notification } from 'electron'
+import { BrowserWindow, Notification } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { userShell } from '@treeix/host/env'
 import { readJsonFile } from '@treeix/host/paths'
@@ -13,7 +13,8 @@ import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, isPullRequestCard, isWorkflow, onCard, type Run, type TicketDetail, type Workflow } from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, askWorkflow, isPullRequestCard, isWorkflow, onCard, type TicketDetail, type Workflow } from '../shared/workflow'
+import { createAttention } from './attention'
 import { readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
@@ -103,6 +104,31 @@ const plugin: MainPlugin = {
     const runtimes = jsonList(join(context.dataPath, 'runtimes.json'), isAgentRuntime)
     context.handle('setRuntimes', (_, next: unknown) => runtimes.set(Array.isArray(next) ? next.filter(isAgentRuntime) : []))
 
+    // Shown notifications are kept until clicked or closed, else Electron collects them and the click goes nowhere
+    const notices = new Set<Notification>()
+    const show = (title: string, body: string, runId: string | null): void => {
+      if (!Notification.isSupported()) return
+      const notice = new Notification({ title, body: body.slice(0, NOTICE_CHARS) })
+      notices.add(notice)
+      notice.on('click', () => (notices.delete(notice), runId && context.broadcast('openRun', runId)))
+      notice.on('close', () => notices.delete(notice))
+      notice.show()
+    }
+    // A failed run says so, since often nobody watched it start; a waiting one only when no window is in front to show it
+    const attend = createAttention(
+      ({ run, ...attention }) => {
+        if (attention.kind === 'ended') {
+          if (run.status === 'failed' && run.kind !== 'ask') show(`${run.title} failed`, Object.values(run.nodes).find((node) => node.error)?.error ?? '', run.id)
+          return
+        }
+        if (BrowserWindow.getFocusedWindow()) return
+        const node = run.nodes[attention.node]
+        show(`${run.title} needs you`, node.waiting === 'approval' ? (node.prompt ?? 'Approve to go on') : 'An agent asks for permission', run.id)
+      },
+      // Keep awake holds the Mac up while a run goes, waits included: a reply may come from another device
+      (busy) => void context.emit('busy', { busy })
+    )
+
     const engine = createEngine({
       adapter: context.chatAdapter,
       runtime: async (agent) => (await runtimes.get()).find((entry) => entry.agent === agent) ?? null,
@@ -110,7 +136,7 @@ const plugin: MainPlugin = {
       sessionEnv: context.sessionEnv,
       callTool: context.callTool,
       runs: createRuns(join(context.dataPath, 'runs')),
-      onRun: (run) => context.broadcast('run', run),
+      onRun: (run) => (context.broadcast('run', run), attend(run)),
       onEvents: (runId, events) => context.broadcast('events', runId, events)
     })
     // The setting lives here, not in the renderer's storage, so runs resume once at launch whatever windows open
@@ -121,6 +147,8 @@ const plugin: MainPlugin = {
     const atQuitFile = join(context.dataPath, 'interruptedAtQuit.json')
     void Promise.all([engine.recover(), readJsonFile(atQuitFile)]).then(async ([crashed, atQuit]) => {
       await rm(atQuitFile, { force: true })
+      // Approvals wait on across a relaunch: they keep the Mac up and are told again
+      for (const run of await engine.list()) if (run.status === 'running') attend(run)
       if ((await readJsonFile(autoResumeFile)) !== true) return
       for (const id of [...crashed, ...list(atQuit, isString)]) await engine.resume(id).catch((error: unknown) => console.error('[hub] Resuming a run failed', error))
     })
@@ -177,24 +205,9 @@ const plugin: MainPlugin = {
       }
     })
 
-    // Shown notifications are kept until clicked or closed, else Electron collects them and the click goes nowhere
-    const notices = new Set<Notification>()
-    const show = (title: string, body: string, runId: string | null): void => {
-      if (!Notification.isSupported()) return
-      const notice = new Notification({ title, body: body.slice(0, NOTICE_CHARS) })
-      notices.add(notice)
-      notice.on('click', () => (notices.delete(notice), runId && context.broadcast('openRun', runId)))
-      notice.on('close', () => notices.delete(notice))
-      notice.show()
-    }
-    const notify = (agent: HubAgent, run: Run): void => {
-      const failed = run.status !== 'done'
-      show(failed ? `${agent.name}'s scheduled run ${run.status}` : agent.name, (failed ? run.nodes.agent?.error : run.output) ?? '', run.id)
-    }
-
     const launchScheduled = (agent: HubAgent, schedule: Schedule, title: string, prompt: string): void => {
       const run = engine.launch('schedule', title, askWorkflow(agent.id, null, schedule.timeoutMin), prompt)
-      if (schedule.notify) void engine.wait(run.id).then((ended) => ended && notify(agent, ended))
+      if (schedule.notify) void engine.wait(run.id).then((ended) => ended?.status === 'done' && show(agent.name, ended.output ?? '', ended.id))
     }
     const launchWorkflow = async (workflow: Workflow, schedule: Schedule, title: string, input: string): Promise<void> => {
       const problem = validate(
@@ -205,10 +218,7 @@ const plugin: MainPlugin = {
       const run = engine.launch('workflow', title, workflow, input)
       if (!schedule.notify) return
       const ended = await engine.wait(run.id)
-      if (!ended) return
-      const failed = ended.status !== 'done'
-      const error = Object.values(ended.nodes).find((node) => node.error)?.error
-      show(failed ? `${workflow.name} ${ended.status}` : workflow.name, (failed ? error : ended.output) ?? '', ended.id)
+      if (ended?.status === 'done') show(workflow.name, ended.output ?? '', ended.id)
     }
     /** Where a workflow's schedule command runs: its first agent step's folder */
     const workflowFolder = async (workflow: Workflow): Promise<string | null> => {
@@ -256,7 +266,7 @@ const plugin: MainPlugin = {
               (title, input) => void launchWorkflow(workflow, schedule, title, input)
             )
     }
-    // A watched item starts its own run; one that fails says so, since nobody watched it start
+    // A watched item starts its own run
     const checkWatches = createWatches({
       file: join(context.dataPath, 'watches.json'),
       workflows: workflows.get,
@@ -269,11 +279,7 @@ const plugin: MainPlugin = {
         )[0]
         if (problem) throw new Error(problem.message)
         const title = `${workflow.name}: ${item.key} ${item.title}`.trim().slice(0, TITLE_CHARS)
-        const run = engine.launch('workflow', title, workflow, JSON.stringify(item), false, { ticket: { key: item.key, url: item.url } })
-        void engine.wait(run.id).then((ended) => {
-          if (!ended || ended.status === 'done') return
-          show(`${workflow.name} ${ended.status} on ${item.key}`, Object.values(ended.nodes).find((node) => node.error)?.error ?? '', ended.id)
-        })
+        engine.launch('workflow', title, workflow, JSON.stringify(item), false, { ticket: { key: item.key, url: item.url } })
       },
       failed: (workflow, message) => show(`${workflow.name} can't check its watch`, message, null)
     })
@@ -294,7 +300,7 @@ const plugin: MainPlugin = {
     tick()
     context.onDispose(() => clearTimeout(timer))
 
-    // A workflow whose input lists an event starts on it; a failed run says so, since nobody watched it start
+    // A workflow whose input lists an event starts on it
     context.onEvent(async (name, payload) => {
       const triggered = (await workflows.get()).filter((workflow) => workflow.nodes.some((node) => node.kind === 'input' && node.events?.includes(name)))
       const ids = (await agents.get()).map((agent) => agent.id)
@@ -306,12 +312,8 @@ const plugin: MainPlugin = {
           continue
         }
         const title = isString(payload.title) && payload.title.trim() ? `${workflow.name}: ${payload.title.trim()}`.slice(0, TITLE_CHARS) : workflow.name
-        const run = engine.launch('workflow', title, workflow, JSON.stringify(payload))
+        engine.launch('workflow', title, workflow, JSON.stringify(payload))
         started = true
-        void engine.wait(run.id).then((ended) => {
-          if (!ended || ended.status === 'done') return
-          show(`${workflow.name} ${ended.status}`, Object.values(ended.nodes).find((node) => node.error)?.error ?? '', ended.id)
-        })
       }
       return started
     })
