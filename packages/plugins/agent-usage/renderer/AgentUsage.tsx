@@ -103,7 +103,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
     <div className="min-w-0 rounded-lg px-3 py-2.5 ring-1 ring-border">
       <div className="truncate text-[11px] text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate text-lg tabular-nums">{value}</div>
-      {note && <div className="truncate text-[10.5px] text-muted-foreground">{note}</div>}
+      {note && <div className="text-[10.5px] text-muted-foreground">{note}</div>}
     </div>
   )
 }
