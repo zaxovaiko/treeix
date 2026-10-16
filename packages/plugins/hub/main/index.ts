@@ -1,11 +1,14 @@
 import { execFile } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { Notification } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { userShell } from '@treeix/host/env'
-import { isJson, isString } from '@treeix/shared/json'
+import { readJsonFile } from '@treeix/host/paths'
+import { isJson, isString, list } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
@@ -98,8 +101,18 @@ const plugin: MainPlugin = {
       onRun: (run) => context.broadcast('run', run),
       onEvents: (runId, events) => context.broadcast('events', runId, events)
     })
-    void engine.recover()
-    context.onDispose(engine.dispose)
+    // The setting lives here, not in the renderer's storage, so runs resume once at launch whatever windows open
+    const autoResumeFile = join(context.dataPath, 'autoResume.json')
+    context.handle('autoResume', async () => (await readJsonFile(autoResumeFile)) === true)
+    context.handle('setAutoResume', (_, on: unknown) => writeFile(autoResumeFile, JSON.stringify(on === true)))
+    // Quitting interrupts runs itself; recover() catches the ones a crash left running
+    const atQuitFile = join(context.dataPath, 'interruptedAtQuit.json')
+    void Promise.all([engine.recover(), readJsonFile(atQuitFile)]).then(async ([crashed, atQuit]) => {
+      await rm(atQuitFile, { force: true })
+      if ((await readJsonFile(autoResumeFile)) !== true) return
+      for (const id of [...crashed, ...list(atQuit, isString)]) await engine.resume(id).catch((error: unknown) => console.error('[hub] Resuming a run failed', error))
+    })
+    context.onDispose(() => writeFileSync(atQuitFile, JSON.stringify(engine.dispose())))
 
     context.handle('runs', () => engine.list())
     context.handle('runEvents', (_, id: string) => engine.events(id))

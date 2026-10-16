@@ -165,10 +165,10 @@ test('an approval waits on across a relaunch, while a run cut short by it is int
   const waiting = before.launch('workflow', 'Gated', approval, 'v4')
   const hung = before.ask('scout', 'hang', null, false)
   await tick()
-  before.dispose()
+  expect(before.dispose()).toEqual([hung.id])
 
   const after = engineOver(store)
-  await after.recover()
+  expect(await after.recover()).toEqual([])
   expect((await after.list()).map((run) => [run.id, run.status])).toEqual(
     expect.arrayContaining([
       [waiting.id, 'running'],

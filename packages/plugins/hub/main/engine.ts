@@ -365,9 +365,10 @@ export function createEngine(deps: {
     retry: (id: string, node: string): Promise<void> => rerun(id, node, false),
     /** Continues a run the app quit under: steps it cut short pick their conversations back up, the rest start over */
     resume: (id: string): Promise<void> => rerun(id, null, true),
-    /** Runs that were going when the app last quit: those held only by approvals wait on, the rest can't continue */
-    recover: async (): Promise<void> => {
+    /** Runs that were going when the app last quit: those held only by approvals wait on, the rest are marked interrupted; resolves with those */
+    recover: async (): Promise<string[]> => {
       const runs = await deps.runs.list()
+      const interrupted: string[] = []
       for (const run of runs.filter((candidate) => candidate.status === 'running' && !active.has(candidate.id))) {
         if (onlyApprovals(run)) {
           track(run, await deps.runs.events(run.id), false)
@@ -377,13 +378,17 @@ export function createEngine(deps: {
           Object.entries(run.nodes).map(([id, node]) => [id, node.status === 'running' ? { ...node, status: 'cancelled' as const, waiting: null } : node])
         )
         void deps.runs.save({ ...run, status: 'interrupted', nodes })
+        interrupted.push(run.id)
       }
+      return interrupted
     },
-    dispose: (): void =>
-      [...active.values()].forEach((entry) => {
-        if (!onlyApprovals(entry.run)) return end(entry, 'interrupted', new Error('Interrupted'))
+    /** Stops every run, keeping approvals waiting; replies with the ids it interrupted */
+    dispose: (): string[] =>
+      [...active.values()].flatMap((entry) => {
+        if (!onlyApprovals(entry.run)) return (end(entry, 'interrupted', new Error('Interrupted')), [entry.run.id])
         entry.flush()
         active.delete(entry.run.id)
+        return []
       })
   }
 }

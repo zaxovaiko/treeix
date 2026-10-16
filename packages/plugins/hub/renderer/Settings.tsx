@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Row } from '@treeix/app/settingsUi'
+import { Card, Row, Switch } from '@treeix/app/settingsUi'
 import { errorMessage } from '@treeix/app/ui'
 import { fit, LOCAL_MODELS, type LocalModelsState, longContextId } from '../shared/catalog'
 import { hubApi } from './store'
@@ -10,8 +10,37 @@ const FIT_COLOR = { fits: 'text-emerald-400', tight: 'text-amber-400', 'too big'
 /** What a model is doing, or why its last action failed */
 type Job = { label: string; failed: boolean }
 
-/** Ollama models with ratings and whether they fit this Mac; agents and workflows pick them under the Ollama API */
 export function HubSettings(): React.JSX.Element {
+  return (
+    <>
+      <RunsCard />
+      <LocalModels />
+    </>
+  )
+}
+
+function RunsCard(): React.JSX.Element {
+  const [autoResume, setAutoResume] = useState(false)
+  useEffect(() => void hubApi.autoResume().then(setAutoResume), [])
+  const toggle = (): void => {
+    const next = !autoResume
+    setAutoResume(next)
+    void hubApi.setAutoResume(next)
+  }
+  return (
+    <Card title="Runs">
+      <Row
+        label="Resume interrupted runs on launch"
+        description="Workflow runs cut off by quitting Treeix pick up where they stopped when it opens again, continuing the agent sessions of their unfinished steps."
+      >
+        <Switch checked={autoResume} label="Resume interrupted runs on launch" onChange={toggle} />
+      </Row>
+    </Card>
+  )
+}
+
+/** Ollama models with ratings and whether they fit this Mac; agents and workflows pick them under the Ollama API */
+function LocalModels(): React.JSX.Element {
   const [local, setLocal] = useState<LocalModelsState | undefined>(undefined)
   const [jobs, setJobs] = useState<Record<string, Job>>({})
   const setJob = (id: string, job: Job | null): void =>

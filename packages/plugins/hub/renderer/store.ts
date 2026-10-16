@@ -41,6 +41,9 @@ export const hubApi = {
   /** Runs an ended run again from the step */
   retry: (runId: string, node: string) => bridge.invoke<void>('retryRun', runId, node),
   resume: (runId: string) => bridge.invoke<void>('resumeRun', runId),
+  /** Whether runs the last quit cut short resume on launch */
+  autoResume: () => bridge.invoke<boolean>('autoResume'),
+  setAutoResume: (on: boolean) => bridge.invoke<void>('setAutoResume', on),
   localModels: () => bridge.invoke<LocalModelsState>('localModels'),
   pullModel: (id: string) => bridge.invoke<void>('pullModel', id),
   cancelPull: (id: string) => bridge.invoke<void>('cancelPull', id),
