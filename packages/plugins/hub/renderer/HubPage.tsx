@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { useHost, PANE_HEADER } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { EmptyState, IconButton, usePersisted } from '@treeix/app/ui'
+import { EmptyState, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { Board } from './Board'
@@ -93,6 +93,7 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
 /** The tab's own column: the board, agents and workflows, with history at the bottom */
 function Rail({ selection }: { selection: string | null }): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = usePersisted<boolean>('hub.historyOpen', false)
+  const [width, setWidth] = usePersisted<number>('hub.rail.width', 240)
   const group = (label: React.ReactNode, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
     <section className="flex flex-col gap-0.5">
       <h3 className="flex h-7 items-center justify-between pr-0.5 pl-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -103,31 +104,34 @@ function Rail({ selection }: { selection: string | null }): React.JSX.Element {
     </section>
   )
   return (
-    <nav className="flex w-60 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border p-2">
-      <button
-        onClick={() => hubSelection.set(null)}
-        className={`flex h-8 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${selection === null ? 'bg-accent' : ''}`}
-      >
-        <Icon name="layers" className="size-3.5 text-muted-foreground" />
-        Board
-      </button>
-      {group('Agents', <NewAgentButton />, <AgentsSection />)}
-      {group('Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
-      <div className="mt-auto">
-        {group(
-          <button
-            onClick={() => setHistoryOpen(!historyOpen)}
-            aria-expanded={historyOpen}
-            className="flex h-full flex-1 items-center gap-1 text-left uppercase hover:text-foreground"
-          >
-            History
-            <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
-          </button>,
-          null,
-          historyOpen && <HistorySection />
-        )}
-      </div>
-    </nav>
+    <div className="relative flex shrink-0" style={{ width }}>
+      <nav className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto border-r border-border p-2">
+        <button
+          onClick={() => hubSelection.set(null)}
+          className={`flex h-8 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${selection === null ? 'bg-accent' : ''}`}
+        >
+          <Icon name="layers" className="size-3.5 text-muted-foreground" />
+          Board
+        </button>
+        {group('Agents', <NewAgentButton />, <AgentsSection />)}
+        {group('Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
+        <div className="mt-auto">
+          {group(
+            <button
+              onClick={() => setHistoryOpen(!historyOpen)}
+              aria-expanded={historyOpen}
+              className="flex h-full flex-1 items-center gap-1 text-left uppercase hover:text-foreground"
+            >
+              History
+              <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
+            </button>,
+            null,
+            historyOpen && <HistorySection />
+          )}
+        </div>
+      </nav>
+      <ResizeHandle edge="right" onResize={setWidth} />
+    </div>
   )
 }
 
