@@ -2,7 +2,7 @@ import { type ChatOption, type ChatService, type ChatSpec, createBridge, createS
 import { errorMessage } from '@treeix/app/ui'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
-import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
+import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, isRemoteStatus, type RemoteStatus, type Runtime } from '../shared/types'
 import type { LocalModelsState } from '../shared/catalog'
 import type { Subagent } from '../shared/subagents'
 import {
@@ -60,6 +60,12 @@ export const hubApi = {
   editTicket: (source: TicketSource, key: string, changes: { title?: string; body?: string }) => bridge.invoke<string>('editTicket', source, key, changes),
   /** Comments on the ticket itself, where its workflow's agents read it */
   commentTicket: (source: TicketSource, key: string, body: string) => bridge.invoke<string>('commentTicket', source, key, body),
+  remote: () => bridge.invoke<RemoteStatus>('remote'),
+  setRemote: (on: boolean) => bridge.invoke<void>('setRemote', on),
+  /** How many devices the test notification reached */
+  testPush: () => bridge.invoke<number>('testPush'),
+  forgetDevices: () => bridge.invoke<void>('forgetDevices'),
+  onRemote: (listener: (status: RemoteStatus) => void) => bridge.on('remote', (status) => isRemoteStatus(status) && listener(status)),
   localModels: () => bridge.invoke<LocalModelsState>('localModels'),
   pullModel: (id: string) => bridge.invoke<void>('pullModel', id),
   cancelPull: (id: string) => bridge.invoke<void>('cancelPull', id),

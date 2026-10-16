@@ -88,3 +88,11 @@ export const isHubAgent = (value: unknown): value is HubAgent =>
   (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
   (value.schedules === undefined || (Array.isArray(value.schedules) && value.schedules.every(isSchedule))) &&
   typeof value.updatedAt === 'number'
+
+/** Remote access as Settings shows it: `enableUrl` is the admin page that turns Serve on for the tailnet, while the CLI waits on it */
+export type RemoteStatus = { on: boolean; url: string | null; enableUrl: string | null; error: string | null; devices: number }
+
+const nullableString = (value: unknown): value is string | null => value === null || typeof value === 'string'
+
+export const isRemoteStatus = (value: unknown): value is RemoteStatus =>
+  isJson(value) && typeof value.on === 'boolean' && nullableString(value.url) && nullableString(value.enableUrl) && nullableString(value.error) && typeof value.devices === 'number'

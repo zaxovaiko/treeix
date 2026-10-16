@@ -4,10 +4,11 @@ import { rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { BrowserWindow, Notification } from 'electron'
+import { BrowserWindow, Notification, powerMonitor } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { userShell } from '@treeix/host/env'
 import { readJsonFile } from '@treeix/host/paths'
+import { createSecrets } from '@treeix/host/secrets'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
@@ -21,6 +22,7 @@ import { createKeys } from './keys'
 import { hubTools } from './mcp'
 import { createOpenAiAdapter } from './openaiAdapter'
 import { ollamaHandlers } from './ollama'
+import { createRemote, openAsks } from './remote'
 import { createRuns } from './runs'
 import { jsonList } from './store'
 import { createWatches } from './watch'
@@ -32,6 +34,8 @@ const TITLE_CHARS = 80
 const COMMAND_TIMEOUT_MS = 60_000
 /** How often watches ask Jira and Notion what matches */
 const WATCH_EVERY_MIN = 2
+/** Idle this long at the Mac counts as away, even with Treeix in front */
+const AWAY_S = 120
 
 const exec = promisify(execFile)
 
@@ -104,6 +108,30 @@ const plugin: MainPlugin = {
     const runtimes = jsonList(join(context.dataPath, 'runtimes.json'), isAgentRuntime)
     context.handle('setRuntimes', (_, next: unknown) => runtimes.set(Array.isArray(next) ? next.filter(isAgentRuntime) : []))
 
+    // The web app on the tailnet: what the phone can see and do, each call the same one a window's IPC makes
+    const remote = createRemote({
+      dataPath: context.dataPath,
+      secrets: createSecrets(join(context.dataPath, 'remote.bin')),
+      staticDir: join(__dirname, '../renderer'),
+      onStatus: (status) => context.broadcast('remote', status),
+      routes: {
+        'GET agents': async () => (await agents.get()).map(({ id, name }) => ({ id, name })),
+        'GET runs': () => engine.list(),
+        'GET runs/:id/asks': async ({ id }) => openAsks(await engine.events(id)),
+        'GET workflows': async () => (await workflows.get()).map(({ id, name }) => ({ id, name })),
+        'POST workflows/:id/run': ({ id }, body) => startWorkflow(id, text(body.input)),
+        'POST runs/:id/decide': ({ id }, body) => engine.decide(id, text(body.node), body.approved === true),
+        'POST runs/:id/answer': ({ id }, body) => engine.answer(id, text(body.node), text(body.requestId), isString(body.optionId) ? body.optionId : null),
+        'POST runs/:id/cancel': ({ id }) => engine.cancel(id),
+        'POST runs/:id/resume': ({ id }) => engine.resume(id)
+      }
+    })
+    context.onDispose(remote.dispose)
+    context.handle('remote', () => remote.status())
+    context.handle('setRemote', (_, on: unknown) => remote.setOn(on === true))
+    context.handle('forgetDevices', () => remote.forgetDevices())
+    context.handle('testPush', () => remote.notify({ title: 'Treeix', body: 'Notifications reach this device', url: '/' }))
+
     // Shown notifications are kept until clicked or closed, else Electron collects them and the click goes nowhere
     const notices = new Set<Notification>()
     const show = (title: string, body: string, runId: string | null): void => {
@@ -114,16 +142,25 @@ const plugin: MainPlugin = {
       notice.on('close', () => notices.delete(notice))
       notice.show()
     }
-    // A failed run says so, since often nobody watched it start; a waiting one only when no window is in front to show it
+    // The phone hears what the Mac would show, when nobody sits at it
+    const tell = (title: string, body: string, runId: string): void => {
+      show(title, body, runId)
+      void remote.notify({ title, body: body.slice(0, NOTICE_CHARS), url: `/#run=${runId}`, tag: runId })
+    }
+    const away = (): boolean => !BrowserWindow.getFocusedWindow() || powerMonitor.getSystemIdleTime() > AWAY_S
+    // A failed run says so, since often nobody watched it start; a waiting or finished one only to someone away
     const attend = createAttention(
       ({ run, ...attention }) => {
         if (attention.kind === 'ended') {
-          if (run.status === 'failed' && run.kind !== 'ask') show(`${run.title} failed`, Object.values(run.nodes).find((node) => node.error)?.error ?? '', run.id)
+          if (run.kind === 'ask') return
+          if (run.status === 'failed') tell(`${run.title} failed`, Object.values(run.nodes).find((node) => node.error)?.error ?? '', run.id)
+          else if (run.status === 'done' && away())
+            void remote.notify({ title: `${run.title} is done`, body: (run.output ?? '').slice(0, NOTICE_CHARS), url: `/#run=${run.id}`, tag: run.id })
           return
         }
-        if (BrowserWindow.getFocusedWindow()) return
+        if (!away()) return
         const node = run.nodes[attention.node]
-        show(`${run.title} needs you`, node.waiting === 'approval' ? (node.prompt ?? 'Approve to go on') : 'An agent asks for permission', run.id)
+        tell(`${run.title} needs you`, node.waiting === 'approval' ? (node.prompt ?? 'Approve to go on') : 'An agent asks for permission', run.id)
       },
       // Keep awake holds the Mac up while a run goes, waits included: a reply may come from another device
       (busy) => void context.emit('busy', { busy })
@@ -136,7 +173,7 @@ const plugin: MainPlugin = {
       sessionEnv: context.sessionEnv,
       callTool: context.callTool,
       runs: createRuns(join(context.dataPath, 'runs')),
-      onRun: (run) => (context.broadcast('run', run), attend(run)),
+      onRun: (run) => (context.broadcast('run', run), remote.publish({ type: 'run', run }), attend(run)),
       onEvents: (runId, events) => context.broadcast('events', runId, events)
     })
     // The setting lives here, not in the renderer's storage, so runs resume once at launch whatever windows open
@@ -156,7 +193,11 @@ const plugin: MainPlugin = {
 
     context.handle('runs', () => engine.list())
     context.handle('runEvents', (_, id: string) => engine.events(id))
-    context.handle('deleteRun', async (_, id: string) => (await engine.remove(id)) && context.broadcast('runRemoved', id))
+    context.handle('deleteRun', async (_, id: string) => {
+      if (!(await engine.remove(id))) return
+      context.broadcast('runRemoved', id)
+      remote.publish({ type: 'removed', id })
+    })
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
     context.handle('subagents', async (_, id: string) => {
       const agent = (await agents.get()).find((entry) => entry.id === id)
@@ -173,7 +214,7 @@ const plugin: MainPlugin = {
       await writeWorkflows(upsert(await workflows.get(), workflow))
     })
     context.handle('deleteWorkflow', async (_, id: string) => writeWorkflows((await workflows.get()).filter((entry) => entry.id !== id)))
-    context.handle('runWorkflow', async (_, id: string, input: string) => {
+    const startWorkflow = async (id: string, input: string): Promise<string> => {
       const workflow = (await workflows.get()).find((entry) => entry.id === id)
       if (!workflow) throw new Error('The workflow is gone')
       const problem = validate(
@@ -182,7 +223,8 @@ const plugin: MainPlugin = {
       )[0]
       if (problem) throw new Error(problem.message)
       return engine.launch('workflow', workflow.name, workflow, input).id
-    })
+    }
+    context.handle('runWorkflow', (_, id: string, input: string) => startWorkflow(id, input))
     // A pull request dropped on a board stage: one agent on it at a time, held from the first check so two quick drops can't both start
     const moving = new Set<string>()
     context.handle('moveCard', async (_, card: unknown, id: string) => {

@@ -42,7 +42,8 @@ export default defineConfig({
     plugins: [react(), tailwindcss()],
     worker: { format: 'es' },
     // electron-vite leaves renderer output unminified; main and preload stay readable for stack traces
-    build: { minify: true },
+    // remote.html is the hub's web app the phone opens over the tailnet; main serves it from the built files
+    build: { minify: true, rollupOptions: { input: { index: resolve(__dirname, 'src/renderer/index.html'), remote: resolve(__dirname, 'src/renderer/remote.html') } } },
     server: { fs: { allow: [root] } }
   }
 })
