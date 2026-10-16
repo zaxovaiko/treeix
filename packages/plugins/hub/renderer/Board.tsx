@@ -1,12 +1,14 @@
-import { type SessionSummary, useHost, PANE_HEADER } from '@treeix/sdk'
-import { isAgent } from '@treeix/app/agents'
+import { useState } from 'react'
+import { useHost, PANE_HEADER } from '@treeix/sdk'
 import { useSessions } from '@treeix/app/plugins'
+import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, usePersisted } from '@treeix/app/ui'
-import type { Run } from '../shared/workflow'
-import { BoardCard, type Card, runSummary } from './BoardCard'
+import { type Run, ticketOf } from '../shared/workflow'
+import { BoardCard, type Card, ListRow, runSummary } from './BoardCard'
 import { shownRun } from './RunView'
 import { runTitle } from './Sections'
+import { TicketDialog, type TicketMode } from './TicketDialog'
 import { Pipeline } from './Pipeline'
 import { hubApi, hubRuns, hubSelection } from './store'
 
@@ -31,15 +33,7 @@ function runColumn(run: Run): Column | null {
   return shown === 'done' && Date.now() - (run.endedAt ?? run.startedAt) < DAY_MS ? 'done' : null
 }
 
-function sessionColumn(session: SessionSummary): Column | null {
-  if (session.status === 'input') return 'needs'
-  if (session.status === 'running' || session.status === 'watching') return 'running'
-  return session.status === 'done' || session.status === 'idle' ? 'done' : null
-}
-
 const LAYOUTS = { board: 'Board', list: 'List', prs: 'Pull requests' } as const
-
-const SESSION_STATUS = { needs: 'waiting', running: 'running', done: 'done' } as const
 
 /** Runs cut short by a quit that a Restore can pick up: recent ones only, so an old one doesn't keep the button around */
 export const restorableRuns = (runs: Run[]): Run[] => runs.filter((run) => run.status === 'interrupted' && Date.now() - (run.endedAt ?? run.startedAt) < DAY_MS)
@@ -67,17 +61,17 @@ function RestoreButton(): React.JSX.Element | null {
   )
 }
 
-/** Every agent at work in one place: hub runs and agent sessions, by whether they need the user, run, or are done */
+/** Workflow runs and asks, by whether they need the user, run, or are done; terminal agents stay in their sessions */
 export function Board(): React.JSX.Element {
-  const host = useHost()
-  const sessionsService = host.service('sessions')
-  const sessions = useSessions()
   const runs = hubRuns.use()
   const [layout, setLayout] = usePersisted<keyof typeof LAYOUTS>('hub.board.layout', 'board')
+  // ponytail: one cutoff archives every Done card at once; per-card archive if someone needs to keep a few
+  const [archivedAt, setArchivedAt] = usePersisted<number>('hub.board.archivedAt', 0)
+  const [ticket, setTicket] = useState<{ source: 'jira' | 'notion'; ticketKey: string; mode: TicketMode } | null>(null)
 
-  const runCards = runs.flatMap((run): StatusCard[] => {
+  const cards = runs.flatMap((run): StatusCard[] => {
     const column = runColumn(run)
-    if (!column) return []
+    if (!column || (column === 'done' && (run.endedAt ?? run.startedAt) <= archivedAt)) return []
     const approval = Object.entries(run.nodes).find(([, node]) => node.waiting === 'approval')
     const pullRequest = run.output?.match(PULL_REQUEST)?.[0]
     const links = [
@@ -91,6 +85,7 @@ export function Board(): React.JSX.Element {
           ]
         : [])
     ]
+    const about = ticketOf(run)
     return [
       {
         id: `run:${run.id}`,
@@ -101,31 +96,20 @@ export function Board(): React.JSX.Element {
         status: shownRun(run),
         open: () => hubSelection.set(`run:${run.id}`),
         links,
-        decide: approval ? (approved) => hubApi.decide(run.id, approval[0], approved) : undefined
+        decide: approval ? (approved) => hubApi.decide(run.id, approval[0], approved) : undefined,
+        menu: about
+          ? (event) =>
+              openMenu(event, [
+                { label: 'Preview ticket', run: () => setTicket({ source: about.source, ticketKey: about.key, mode: 'preview' }) },
+                { label: 'Edit ticket…', run: () => setTicket({ source: about.source, ticketKey: about.key, mode: 'edit' }) },
+                { label: 'Comment for the agent…', run: () => setTicket({ source: about.source, ticketKey: about.key, mode: 'comment' }) }
+              ])
+          : undefined
       }
     ]
   })
-  const sessionCards = sessions.flatMap((session): StatusCard[] => {
-    const column = isAgent(session.kind) ? sessionColumn(session) : null
-    if (!column) return []
-    return [
-      {
-        id: `session:${session.id}`,
-        column,
-        title: (
-          <>
-            <Icon name={session.view === 'chat' ? 'comment' : 'terminal'} className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate">{session.title}</span>
-          </>
-        ),
-        summary: session.worktreePath.split('/').slice(-2).join('/'),
-        at: session.startedAt,
-        status: SESSION_STATUS[column],
-        open: () => sessionsService?.reveal(session.id)
-      }
-    ]
-  })
-  const cards = [...runCards, ...sessionCards].sort((a, b) => b.at - a.at)
+  cards.sort((a, b) => b.at - a.at)
+  const list = layout === 'list'
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -147,14 +131,35 @@ export function Board(): React.JSX.Element {
       {layout === 'prs' ? (
         <Pipeline />
       ) : (
-        <div className={`min-h-0 flex-1 overflow-auto p-3 ${layout === 'board' ? 'grid grid-cols-3 items-start gap-3' : 'flex flex-col gap-4'}`}>
+        <div className={`min-h-0 flex-1 overflow-auto ${list ? '' : 'grid grid-cols-3 items-start gap-3 p-3'}`}>
           {COLUMNS.map((column) => {
             const shown = cards.filter((card) => card.column === column.id)
-            return (
+            const archive = column.id === 'done' && shown.length > 0 && (
+              <button onClick={() => setArchivedAt(Date.now())} title="Clears the done runs from the board; they stay in History" className="normal-case hover:text-foreground">
+                Archive
+              </button>
+            )
+            const count = <span className="tabular-nums">{shown.length}</span>
+            return list ? (
+              <section key={column.id} className="flex flex-col">
+                <h3 className="sticky top-0 z-10 flex h-8 items-center gap-2 border-b border-border bg-muted/60 px-3 text-[11px] font-medium text-muted-foreground backdrop-blur">
+                  <span className="text-foreground">{column.label}</span>
+                  {count}
+                  <span className="flex-1" />
+                  {archive}
+                </h3>
+                <div className="flex flex-col divide-y divide-border/50">
+                  {shown.map((card) => (
+                    <ListRow key={card.id} card={card} />
+                  ))}
+                </div>
+              </section>
+            ) : (
               <section key={column.id} className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/40 p-2 ring-1 ring-border">
-                <h3 className="flex items-center justify-between px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  {column.label}
-                  <span className="tabular-nums">{shown.length}</span>
+                <h3 className="flex items-center gap-2 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <span className="flex-1">{column.label}</span>
+                  {archive}
+                  {count}
                 </h3>
                 {shown.map((card) => (
                   <BoardCard key={card.id} card={card} />
@@ -164,6 +169,7 @@ export function Board(): React.JSX.Element {
           })}
         </div>
       )}
+      {ticket && <TicketDialog {...ticket} onClose={() => setTicket(null)} />}
     </div>
   )
 }

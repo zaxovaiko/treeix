@@ -17,6 +17,8 @@ export type Card = {
   decide?: (approved: boolean) => void
   /** The board stages it can go to */
   moveTo?: (event: React.MouseEvent) => void
+  /** Its right-click menu */
+  menu?: (event: React.MouseEvent) => void
 }
 
 const firstLine = (text: string | null | undefined): string => text?.trim().split('\n')[0] ?? ''
@@ -44,7 +46,7 @@ export function BoardCard({ card }: { card: Card }): React.JSX.Element {
     </>
   )
   return (
-    <div className="relative rounded-lg bg-background ring-1 ring-border hover:ring-foreground/30">
+    <div onContextMenu={card.menu} className="relative rounded-lg bg-background ring-1 ring-border hover:ring-foreground/30">
       {card.open ? (
         <button onClick={card.open} className="flex w-full min-w-0 flex-col gap-1 p-2.5 text-left">
           {body}
@@ -76,6 +78,35 @@ export function BoardCard({ card }: { card: Card }): React.JSX.Element {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+/** The card as one compact line, for the List layout */
+export function ListRow({ card }: { card: Card }): React.JSX.Element {
+  return (
+    <div onContextMenu={card.menu} className="group flex h-8 min-w-0 items-center gap-2.5 px-3 text-xs hover:bg-accent/60">
+      {card.status && <StatusIcon status={card.status} className="size-3" />}
+      <button onClick={card.open} disabled={!card.open} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <span className="flex max-w-[50%] min-w-0 shrink-0 items-center gap-2 font-medium">{card.title}</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">{card.summary}</span>
+      </button>
+      {card.decide && (
+        <>
+          <button onClick={() => card.decide?.(false)} className="h-5 rounded px-1.5 text-[11px] ring-1 ring-border hover:bg-accent">
+            Reject
+          </button>
+          <button onClick={() => card.decide?.(true)} className="h-5 rounded bg-primary px-1.5 text-[11px] font-medium text-white">
+            Approve
+          </button>
+        </>
+      )}
+      {card.links?.map((link) => (
+        <button key={link.url} onClick={() => window.open(link.url, '_blank')} className="hidden text-[11px] text-primary group-hover:inline hover:underline">
+          {link.label}
+        </button>
+      ))}
+      <span className="w-8 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">{timeAgo(new Date(card.at).toISOString())}</span>
     </div>
   )
 }

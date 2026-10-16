@@ -123,7 +123,7 @@ const plugin: MainPlugin = {
     })
     context.mcpTool({
       name: 'notion_page',
-      description: 'One Notion page as JSON: url, its properties as plain values, and its body as Notion-flavored markdown.',
+      description: 'One Notion page as JSON: url, title, its properties as plain values, and its body as Notion-flavored markdown.',
       inputSchema: {
         type: 'object',
         properties: { page: { type: 'string', description: 'Page id or URL' } },
@@ -134,6 +134,7 @@ const plugin: MainPlugin = {
         const [page, body] = await Promise.all([call('GET', `/pages/${id}`), call('GET', `/pages/${id}/markdown`)])
         return JSON.stringify({
           url: text(page.url),
+          title: pageTitle(page.properties),
           properties: plainProperties(page.properties),
           markdown: text(body.markdown),
           truncated: body.truncated === true
@@ -182,6 +183,31 @@ const plugin: MainPlugin = {
         await call('PATCH', `/pages/${id}`, {
           properties: toProperties(await schemaOf(dataSource), isJson(args.properties) ? args.properties : {})
         })
+        return 'Updated'
+      }
+    })
+    context.mcpTool({
+      name: 'notion_edit_page',
+      description: 'Renames a page and/or replaces its whole body with Notion-flavored markdown. Omit what stays as it is.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          page: { type: 'string', description: 'Page id or URL' },
+          title: { type: 'string' },
+          markdown: { type: 'string', description: 'The new body, replacing all of it' }
+        },
+        required: ['page']
+      },
+      run: async (args) => {
+        const id = pageId(args)
+        const title = text(args.title).trim()
+        if (title) {
+          const properties = (await call('GET', `/pages/${id}`)).properties
+          const name = Object.entries(isJson(properties) ? properties : {}).find(([, property]) => isJson(property) && property.type === 'title')?.[0]
+          if (!name) throw new Error('The page has no title property')
+          await call('PATCH', `/pages/${id}`, { properties: { [name]: { title: [{ text: { content: title } }] } } })
+        }
+        if (typeof args.markdown === 'string') await call('PATCH', `/pages/${id}/markdown`, { type: 'replace_content', replace_content: { new_str: args.markdown } })
         return 'Updated'
       }
     })

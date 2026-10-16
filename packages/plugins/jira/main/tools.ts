@@ -1,6 +1,6 @@
 import type { McpTool } from '@treeix/sdk/main'
 import { isString, list, text } from '@treeix/shared/json'
-import { checkedKey, commentOnWorkItem, editWorkItem, searchWorkItems, transitionWorkItem, workItemDetail } from './acli'
+import { checkedKey, commentOnWorkItem, editDescription, editWorkItem, searchWorkItems, transitionWorkItem, workItemDetail } from './acli'
 
 const key = (args: Record<string, unknown>): string => checkedKey(text(args.key).trim())
 const keyArg = { key: { type: 'string', description: 'Work item key, such as ABC-123' } }
@@ -44,6 +44,17 @@ export const jiraTools: McpTool[] = [
       if (!status) throw new Error('status is required')
       await transitionWorkItem(key(args), status)
       return `Moved to ${status}`
+    }
+  },
+  {
+    name: 'jira_edit',
+    description: 'Renames a work item and/or replaces its description, given as markdown. Omit what stays as it is.',
+    inputSchema: { type: 'object', properties: { ...keyArg, summary: { type: 'string' }, description: { type: 'string' } }, required: ['key'] },
+    run: async (args) => {
+      const item = key(args)
+      await editWorkItem(item, { summary: text(args.summary) })
+      if (typeof args.description === 'string') await editDescription(item, (await workItemDetail(item)).description, args.description)
+      return 'Edited'
     }
   },
   {

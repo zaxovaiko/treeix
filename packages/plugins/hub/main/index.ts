@@ -8,12 +8,12 @@ import { Notification } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { userShell } from '@treeix/host/env'
 import { readJsonFile } from '@treeix/host/paths'
-import { isJson, isString, list } from '@treeix/shared/json'
+import { isJson, isString, list, text } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, isPullRequestCard, isWorkflow, onCard, type Run, type Workflow } from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, askWorkflow, isPullRequestCard, isWorkflow, onCard, type Run, type TicketDetail, type Workflow } from '../shared/workflow'
 import { readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
@@ -39,6 +39,18 @@ const isAgentRuntime = (value: unknown): value is AgentRuntime =>
 
 const upsert = <T extends { id: string }>(items: T[], item: T): T[] =>
   items.some((entry) => entry.id === item.id) ? items.map((entry) => (entry.id === item.id ? item : entry)) : [...items, item]
+
+/** A Jira work item or Notion page as the board's ticket dialog shows it */
+function toTicket(source: unknown, raw: unknown): TicketDetail {
+  const item = isJson(raw) ? raw : {}
+  const comments = Array.isArray(item.comments) ? item.comments.filter(isJson) : []
+  return {
+    title: text(source === 'jira' ? item.summary : item.title),
+    url: text(item.url) || null,
+    body: text(source === 'jira' ? item.description : item.markdown),
+    comments: comments.map((comment) => ({ author: text(comment.author), created: text(comment.created), body: text(comment.body) }))
+  }
+}
 
 let keys: ReturnType<typeof createKeys> | null = null
 
@@ -303,6 +315,23 @@ const plugin: MainPlugin = {
       }
       return started
     })
+
+    // A run's Jira work item or Notion page, through their plugins' tools, so the board can show, edit and comment on it
+    const ticketTool = (source: unknown, action: 'read' | 'edit' | 'comment'): string => {
+      if (source !== 'jira' && source !== 'notion') throw new Error('Unknown ticket source')
+      return { jira: { read: 'jira_work_item', edit: 'jira_edit', comment: 'jira_comment' }, notion: { read: 'notion_page', edit: 'notion_edit_page', comment: 'notion_comment' } }[
+        source
+      ][action]
+    }
+    const ticketArgs = (source: unknown, key: string): Record<string, string> => (source === 'jira' ? { key } : { page: key })
+    context.handle('ticket', async (_, source: unknown, key: string) => toTicket(source, JSON.parse(await context.callTool(ticketTool(source, 'read'), ticketArgs(source, key)))))
+    context.handle('editTicket', (_, source: unknown, key: string, changes: { title?: string; body?: string }) =>
+      context.callTool(ticketTool(source, 'edit'), {
+        ...ticketArgs(source, key),
+        ...(source === 'jira' ? { summary: changes.title, description: changes.body } : { title: changes.title, markdown: changes.body })
+      })
+    )
+    context.handle('commentTicket', (_, source: unknown, key: string, body: string) => context.callTool(ticketTool(source, 'comment'), { ...ticketArgs(source, key), body }))
 
     context.on('cancelRun', (_, id: string) => engine.cancel(id))
     context.on('decide', (_, runId: string, node: string, approved: boolean) => engine.decide(runId, node, approved))

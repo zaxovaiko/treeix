@@ -51,6 +51,23 @@ export const isWatch = (value: unknown): value is Watch =>
 /** The ticket a watch started a run for */
 export type Ticket = { key: string; url: string | null }
 
+/** A ticket's text and comments, as the board's ticket dialog shows them */
+export type TicketSource = 'jira' | 'notion'
+
+/** A run started by a command schedule is titled `jira:BF-7 BF-7 Fix it` or `notion:<id> Title`: source, key, then the rest */
+export const SOURCED_TITLE = /^(jira|notion):(\S+)\s*(.*)$/
+const JIRA_KEY = /^[A-Z][A-Z0-9]+-\d+$/
+
+/** The Jira work item or Notion page a run is about: from a command schedule's title, else the ticket a watch started it for */
+export function ticketOf(run: Pick<Run, 'title' | 'ticket'>): { source: TicketSource; key: string } | null {
+  const [, source, key] = SOURCED_TITLE.exec(run.title) ?? []
+  if (source === 'jira' || source === 'notion') return { source, key }
+  if (!run.ticket) return null
+  return { source: JIRA_KEY.test(run.ticket.key) ? 'jira' : 'notion', key: run.ticket.key }
+}
+
+export type TicketDetail = { title: string; url: string | null; body: string; comments: { author: string; created: string; body: string }[] }
+
 /** A pull request (or merge request) the board runs a stage on; it is the run's input as JSON */
 export type PullRequestCard = { url: string; title: string; number: number; repoPath: string; sourceBranch: string; targetBranch: string }
 

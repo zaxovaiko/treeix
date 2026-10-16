@@ -5,7 +5,18 @@ import { parseJson, stringValues } from '@treeix/shared/json'
 import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, type Runtime } from '../shared/types'
 import type { LocalModelsState } from '../shared/catalog'
 import type { Subagent } from '../shared/subagents'
-import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type PullRequestCard, type Run, type RunEvent, type Workflow } from '../shared/workflow'
+import {
+  type AgentRuntime,
+  isRun,
+  isRunEvent,
+  isWorkflow,
+  type PullRequestCard,
+  type Run,
+  type RunEvent,
+  type TicketDetail,
+  type TicketSource,
+  type Workflow
+} from '../shared/workflow'
 
 export const TAB_ID = 'hub'
 
@@ -44,6 +55,11 @@ export const hubApi = {
   /** Whether runs the last quit cut short resume on launch */
   autoResume: () => bridge.invoke<boolean>('autoResume'),
   setAutoResume: (on: boolean) => bridge.invoke<void>('setAutoResume', on),
+  ticket: (source: TicketSource, key: string) => bridge.invoke<TicketDetail>('ticket', source, key),
+  /** Changes only what is given */
+  editTicket: (source: TicketSource, key: string, changes: { title?: string; body?: string }) => bridge.invoke<string>('editTicket', source, key, changes),
+  /** Comments on the ticket itself, where its workflow's agents read it */
+  commentTicket: (source: TicketSource, key: string, body: string) => bridge.invoke<string>('commentTicket', source, key, body),
   localModels: () => bridge.invoke<LocalModelsState>('localModels'),
   pullModel: (id: string) => bridge.invoke<void>('pullModel', id),
   cancelPull: (id: string) => bridge.invoke<void>('cancelPull', id),

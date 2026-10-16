@@ -3,7 +3,7 @@ import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, IconButton } from '@treeix/app/ui'
 import { addTestsWorkflow, shipWorkflow } from '../shared/templates'
-import type { Workflow } from '../shared/workflow'
+import { SOURCED_TITLE, type Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { historyGroup, historyTime } from './historyGroups'
 import { shownRun, StatusIcon } from './RunView'
@@ -13,10 +13,11 @@ import { asking, deleteAgent, type HubChat, hubAgents, hubApi, hubEditing, hubRu
 const LEAD = 'flex w-[26px] shrink-0 justify-center'
 const ROW = 'group relative flex w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent'
 
-/** A run started by a command schedule is titled `jira:BF-7 BF-7 Fix it` or `notion:<id>`: the source becomes an icon, the key is not repeated */
+/** A sourced run title's source becomes an icon, the key is not repeated */
 const SOURCE = { jira: 'ticket', notion: 'bookOpen' } as const
+
 export function runTitle(title: string): React.JSX.Element {
-  const [, source, key, rest] = /^(jira|notion):(\S+)\s*(.*)$/.exec(title) ?? []
+  const [, source, key, rest] = SOURCED_TITLE.exec(title) ?? []
   if (!source) return <span className="min-w-0 flex-1 truncate">{title}</span>
   return (
     <>
