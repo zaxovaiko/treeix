@@ -25,10 +25,10 @@ import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/ap
 import { Picker, Select } from '@treeix/app/Picker'
 import type { Subagent } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
-import { ASK_TIMEOUT_MIN, type NodeRun, type Watch, WATCH_QUERY, type Workflow, type WorkflowNode } from '../shared/workflow'
+import { ASK_TIMEOUT_MIN, KIND_LABEL, MAX_ROUNDS, MAX_SCORE, type NodeRun, type Watch, WATCH_QUERY, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
 import { MAX_TIMEOUT_MIN } from '../shared/types'
-import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
+import { shownNode, StatusIcon } from './RunView'
 import { asking, hubAgents, hubApi, hubRunStep, hubRuns, hubSelection } from './store'
 import { keysText } from '@treeix/shared/shortcut'
 
@@ -39,7 +39,16 @@ const COLUMN = 260
 const ROW = 120
 const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 const LABEL = 'flex flex-col gap-1.5 text-xs text-muted-foreground'
-const KIND_ICON: Record<WorkflowNode['kind'], IconName> = { input: 'pointer', agent: 'user', merge: 'layers', condition: 'branch', approval: 'lock', tool: 'plug', output: 'check' }
+const KIND_ICON: Record<WorkflowNode['kind'], IconName> = {
+  input: 'pointer',
+  agent: 'user',
+  merge: 'layers',
+  condition: 'branch',
+  approval: 'lock',
+  tool: 'plug',
+  judge: 'star',
+  output: 'check'
+}
 const TESTS = { contains: 'contains', equals: 'equals', regex: 'matches the pattern', empty: 'is empty' } as const satisfies Record<
   Extract<WorkflowNode, { kind: 'condition' }>['test'],
   string
@@ -82,6 +91,8 @@ function blankStep(kind: Exclude<WorkflowNode['kind'], 'input'>, id: string, age
       return { id, kind, message: 'Go on with {{prev}}?' }
     case 'tool':
       return { id, kind, tool: '', args: '{}' }
+    case 'judge':
+      return { id, kind, agent, source: '{{prev}}', rubric: '', minScore: 8, retryStep: null, rounds: 2, onError: 'stop' }
     case 'merge':
     case 'output':
       return { id, kind, template: '{{prev}}' }
@@ -109,7 +120,9 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
             ? step.message
             : step.kind === 'tool'
               ? step.args
-              : step.template
+              : step.kind === 'judge'
+                ? step.rubric
+                : step.template
 
   return (
     <div
@@ -309,7 +322,7 @@ function Inspector({
   onDelete
 }: {
   step: WorkflowNode
-  sources: { id: string; label: string }[]
+  sources: { id: string; label: string; kind: WorkflowNode['kind'] }[]
   onChange: (step: WorkflowNode) => void
   onDelete: () => void
 }): React.JSX.Element {
@@ -438,6 +451,65 @@ function Inspector({
           </p>
         </>
       )}
+      {step.kind === 'judge' && (
+        <>
+          <div className={LABEL}>
+            Agent
+            <Select
+              title="The agent that scores the work; another model judges more freshly"
+              value={agents.some((agent) => agent.id === step.agent) ? step.agent : null}
+              placeholder="Pick an agent"
+              options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+              onChange={(agent) => onChange({ ...step, agent })}
+            />
+          </div>
+          <label className={LABEL}>
+            Model
+            <input
+              value={step.model ?? ''}
+              onChange={(event) => onChange({ ...step, model: event.target.value.trim() || null })}
+              placeholder="The agent's own"
+              className={`${FIELD} h-8 font-mono text-xs`}
+            />
+          </label>
+          <TemplateField label="Work to judge" value={step.source} sources={sources} onChange={(source) => onChange({ ...step, source })} />
+          <TemplateField label="Judge it by" value={step.rubric} sources={sources} onChange={(rubric) => onChange({ ...step, rubric })} />
+          <label className={LABEL}>
+            Passes at, out of {MAX_SCORE}
+            <WholeNumber min={1} max={MAX_SCORE} value={step.minScore} onChange={(minScore) => onChange({ ...step, minScore })} className={`${FIELD} h-8`} />
+          </label>
+          <div className="flex gap-2">
+            <div className={`${LABEL} flex-1`}>
+              Below it, send back to
+              <Select
+                title="The step that gets the issues to fix, in its own conversation"
+                value={step.retryStep ?? ''}
+                options={[{ value: '', label: 'Nobody' }, ...sources.filter((source) => source.kind === 'agent').map((source) => ({ value: source.id, label: source.label }))]}
+                onChange={(retryStep) => onChange({ ...step, retryStep: retryStep || null })}
+              />
+            </div>
+            {step.retryStep && (
+              <label className={`${LABEL} w-24`}>
+                Times
+                <WholeNumber min={1} max={MAX_ROUNDS} value={step.rounds} onChange={(rounds) => onChange({ ...step, rounds })} className={`${FIELD} h-8`} />
+              </label>
+            )}
+          </div>
+          <div className={LABEL}>
+            If it still scores lower
+            <Select
+              title="If it still scores lower"
+              value={step.onError}
+              options={[
+                { value: 'stop', label: 'Stop the run' },
+                { value: 'continue', label: 'Go on with the work anyway' }
+              ]}
+              onChange={(onError) => onChange({ ...step, onError: onError === 'continue' ? 'continue' : 'stop' })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">The agent scores the work 1 to {MAX_SCORE} and lists what to fix. It passes the work on at the score above or more.</p>
+        </>
+      )}
       {(step.kind === 'merge' || step.kind === 'output') && (
         <TemplateField label="Template" value={step.template} sources={sources} onChange={(template) => onChange({ ...step, template })} />
       )}
@@ -487,7 +559,7 @@ function Inspector({
 }
 
 const DECIDE_AFTER_MIN = [5, 15, 30, 60, 120, 240, 480]
-const STEP_KINDS = ['agent', 'tool', 'merge', 'condition', 'approval', 'output'] as const
+const STEP_KINDS = ['agent', 'tool', 'merge', 'condition', 'approval', 'judge', 'output'] as const
 const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
 
 /** Steps to add and the view's controls, one island at the bottom of the canvas */
@@ -643,7 +715,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
   const sources = selected
     ? [...ancestors(draft, selected.id)].flatMap((id) => {
         const step = draft.nodes.find((node) => node.id === id)
-        return step && step.kind !== 'input' ? [{ id, label: labelOf(step) }] : []
+        return step && step.kind !== 'input' ? [{ id, label: labelOf(step), kind: step.kind }] : []
       })
     : []
 

@@ -1,6 +1,6 @@
 import { isJson, list, text } from '@treeix/shared/json'
 import type { DecisionSettings } from '../shared/types'
-import { type AgentNode, type Decider, type Decision, decisionText, type Run, ticketOf, type TicketSource } from '../shared/workflow'
+import { type AgentNode, type Decider, type JudgeNode, type Decision, decisionText, type Run, ticketOf, type TicketSource } from '../shared/workflow'
 import type { createEngine } from './engine'
 
 type Engine = Pick<ReturnType<typeof createEngine>, 'ask' | 'wait' | 'decide' | 'answer' | 'questions' | 'events'>
@@ -48,7 +48,7 @@ export function parseVerdict(reply: string): Reply {
 /** Who decides for a step: the hub's pick, else the step's own agent, the agent feeding it, or the workflow's first */
 export function deciderOf(run: Run, node: string, picked: string | null): string | null {
   if (picked) return picked
-  const agents = run.workflow.nodes.filter((step): step is AgentNode => step.kind === 'agent')
+  const agents = run.workflow.nodes.filter((step): step is AgentNode | JudgeNode => step.kind === 'agent' || step.kind === 'judge')
   return (
     agents.find((step) => step.id === node)?.agent ??
     agents.find((step) => run.workflow.edges.some((edge) => edge.from === step.id && edge.to === node))?.agent ??

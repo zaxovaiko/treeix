@@ -5,7 +5,7 @@ import { applyTheme, THEMES } from '@treeix/app/themes'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { sseReader } from '../../main/sse'
 import { BOARD_COLUMNS, boardColumn, runLinks, runSummary } from '../../shared/board'
-import { decisionText, isRun, isWaiting, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
+import { decisionText, isRun, isWaiting, KIND_LABEL, reviewText, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
 
 /** The hub's web app on the tailnet, phone first: what needs you, what runs, and starting a workflow */
 
@@ -315,8 +315,7 @@ function RunDetail({ run, agents }: { run: Run; agents: Named[] }): React.JSX.El
       .finally(() => setBusy(false))
   }
   const steps = run.workflow.nodes.filter((step) => run.nodes[step.id] && step.kind !== 'input')
-  const labelOf = (step: WorkflowNode): string =>
-    step.kind === 'agent' ? (agents.find((agent) => agent.id === step.agent)?.name ?? 'Agent') : step.kind[0].toUpperCase() + step.kind.slice(1)
+  const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agents.find((agent) => agent.id === step.agent)?.name ?? 'Agent') : KIND_LABEL[step.kind])
   return (
     <>
       <div className="flex flex-col gap-1">
@@ -373,6 +372,7 @@ function RunDetail({ run, agents }: { run: Run; agents: Named[] }): React.JSX.El
                   <span className="min-w-0 flex-1 truncate text-[15px]">{labelOf(step)}</span>
                   <span className="text-xs text-muted-foreground">{STATUS_LABEL[state.waiting ? 'waiting' : state.status]}</span>
                 </button>
+                {state.review && <p className="mt-1 pl-5 text-sm text-muted-foreground select-text">{reviewText(state.review)}</p>}
                 {state.decision && <p className="mt-1 pl-5 text-sm text-muted-foreground select-text">{decisionText(state.decision)}</p>}
                 {open === step.id && detail && (
                   <div className="mt-2">

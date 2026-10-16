@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ChatAdapter, ChatConnection, ChatEvent } from '@treeix/sdk/main'
 import { createBatcher } from '@treeix/host/batcher'
+import { isJson, isString } from '@treeix/shared/json'
 import { render, renderArgs, type TemplateScope } from '../shared/template'
 import { descendants } from '../shared/validate'
 import {
@@ -10,7 +11,10 @@ import {
   type Decider,
   FROM_APP,
   freshNode,
+  type JudgeNode,
+  MAX_SCORE,
   type NodeRun,
+  type Review,
   type Run,
   type RunEvent,
   type RunStatus,
@@ -25,6 +29,38 @@ const MAX_AGENTS = 3
 const EVENTS_DELAY_MS = 250
 const TITLE_CHARS = 80
 const RESUME_PROMPT = 'The app quit while you were on this. Continue where you stopped. In case the conversation is gone, the task was:'
+const JUDGE_TIMEOUT_MIN = 30
+const REPLY_JSON = /\{[\s\S]*\}/
+
+/** A judge's score from its reply; anything but a 1 to 10 score throws */
+export function parseReview(reply: string): Omit<Review, 'round'> {
+  let review: unknown = null
+  try {
+    review = JSON.parse(REPLY_JSON.exec(reply)?.[0] ?? '')
+  } catch {
+    // No JSON: thrown below
+  }
+  const score = isJson(review) ? Number(review.score) : NaN
+  if (!isJson(review) || !(score >= 1 && score <= MAX_SCORE)) throw new Error(`The judge gave no score: ${reply.slice(0, 200)}`)
+  return { score, issues: Array.isArray(review.issues) ? review.issues.filter(isString) : [] }
+}
+
+type Fix = Omit<Review, 'round'> & { minScore: number }
+
+const judgePrompt = (work: string, rubric: string): string =>
+  [
+    "You review another agent's work. Change no code: read what you need, run the checks asked for, and score it.",
+    `The work:\n${work}`,
+    `Judge it by:\n${rubric}`,
+    `Reply with only a JSON object: {"score": 1 to ${MAX_SCORE}, "issues": ["one thing to fix per item"]}. ${MAX_SCORE} means ready to ship as is; list everything that keeps it from that.`
+  ].join('\n\n')
+
+const fixPrompt = ({ score, issues, minScore }: Fix, task: string): string =>
+  [
+    `A reviewer scored your work ${score}/${MAX_SCORE}; it needs ${minScore}. Fix these, then reply as the task asks:`,
+    issues.map((issue) => `- ${issue}`).join('\n') || '- (no details given) Check the work against the task again.',
+    `The task, for reference:\n${task}`
+  ].join('\n\n')
 // Options, commands and usage are session state, not part of what the agent did
 const LOGGED = new Set<ChatEvent['type']>([
   'message_chunk',
@@ -57,6 +93,8 @@ type Active = {
   resumes: Map<string, string>
   /** Open permission questions, by `<node>:<requestId>` */
   permissions: Map<string, Question>
+  /** What a judge step sends back for a step to fix, by node id; used instead of the task once */
+  fixes: Map<string, Fix>
 }
 
 /** A permission question an agent step waits on */
@@ -215,6 +253,56 @@ export function createEngine(deps: {
     step(entry)
   }
 
+  /** Scores the work; below the bar it sends `retryStep` back with the issues while rounds are left, else fails like an agent step */
+  async function runJudge(entry: Active, node: JudgeNode, work: string, prompt: string): Promise<void> {
+    const retry = entry.run.workflow.nodes.find((candidate): candidate is AgentNode => candidate.kind === 'agent' && candidate.id === node.retryStep)
+    const judge: AgentNode = {
+      id: node.id,
+      kind: 'agent',
+      agent: node.agent,
+      model: node.model,
+      prompt,
+      // Where the work it judges was done
+      folder: retry?.folder ?? null,
+      retries: 0,
+      onError: 'stop',
+      timeoutMin: JUDGE_TIMEOUT_MIN
+    }
+    const pool = entry.delegated ? delegatedSlots : slots
+    await pool.acquire()
+    let review: Review
+    try {
+      review = { ...parseReview(await attempt(entry, judge, prompt)), round: (entry.run.nodes[node.id].review?.round ?? 0) + 1 }
+    } catch (error) {
+      if (entry.run.status !== 'running') return
+      set(entry, node.id, { status: 'failed', output: work, error: error instanceof Error ? error.message : String(error), endedAt: Date.now() })
+      if (node.onError === 'stop') end(entry, 'failed')
+      return step(entry)
+    } finally {
+      pool.release()
+    }
+    if (entry.run.status !== 'running') return
+    if (review.score >= node.minScore) set(entry, node.id, { status: 'done', output: work, endedAt: Date.now(), review })
+    else if (retry && review.round <= node.rounds) sendBack(entry, node, retry, review)
+    else {
+      set(entry, node.id, { status: 'failed', output: work, error: `Scored ${review.score}/${MAX_SCORE}, needs ${node.minScore}`, endedAt: Date.now(), review })
+      if (node.onError === 'stop') end(entry, 'failed')
+    }
+    step(entry)
+  }
+
+  /** Starts `retry` and what follows it over, the step resuming its conversation with the issues; the judge keeps its review to count rounds */
+  function sendBack(entry: Active, node: JudgeNode, retry: AgentNode, review: Review): void {
+    const { run } = entry
+    const sessionId = run.nodes[retry.id].sessionId
+    if (sessionId) entry.resumes.set(retry.id, sessionId)
+    entry.fixes.set(retry.id, { ...review, minScore: node.minScore })
+    // A parallel branch still going finishes on its own
+    const reset = [retry.id, ...descendants(run.workflow, retry.id)].filter((id) => id === node.id || run.nodes[id].status !== 'running')
+    entry.run = { ...run, nodes: { ...run.nodes, ...Object.fromEntries(reset.map((id) => [id, freshNode()])), [node.id]: { ...freshNode(), review } } }
+    publish(entry.run)
+  }
+
   /** A failed call ends the run, so a retry from this step redoes only what didn't happen */
   async function runTool(entry: Active, node: ToolNode, scope: TemplateScope): Promise<void> {
     try {
@@ -280,9 +368,17 @@ export function createEngine(deps: {
         return void runTool(entry, node, scope)
       case 'agent': {
         const task = render(node.prompt, scope)
-        const prompt = entry.resumes.has(id) ? `${RESUME_PROMPT}\n\n${task}` : task
+        const fix = entry.fixes.get(id)
+        entry.fixes.delete(id)
+        const prompt = fix ? fixPrompt(fix, task) : entry.resumes.has(id) ? `${RESUME_PROMPT}\n\n${task}` : task
         set(entry, id, { status: 'running', prompt })
-        void runAgent(entry, node, prompt)
+        return void runAgent(entry, node, prompt)
+      }
+      case 'judge': {
+        const work = render(node.source, scope)
+        const prompt = judgePrompt(work, render(node.rubric, scope))
+        set(entry, id, { status: 'running', prompt, startedAt: now })
+        void runJudge(entry, node, work, prompt)
       }
     }
   }
@@ -312,7 +408,8 @@ export function createEngine(deps: {
       finished,
       finish,
       resumes: new Map(),
-      permissions: new Map()
+      permissions: new Map(),
+      fixes: new Map()
     }
     active.set(run.id, entry)
     return entry

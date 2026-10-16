@@ -4,7 +4,19 @@ import { useAgents } from '@treeix/app/agents'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
-import { decisionText, isWaiting, SOURCED_TITLE, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
+import {
+  decisionText,
+  isWaiting,
+  KIND_LABEL,
+  reviewText,
+  SOURCED_TITLE,
+  type NodeRun,
+  type NodeStatus,
+  type Run,
+  type RunEvent,
+  type RunStatus,
+  type WorkflowNode
+} from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { followRunEvents, hubAgents, hubApi, hubBack, hubRunStep, registryId } from './store'
 
@@ -24,16 +36,6 @@ const STATUS: Record<Shown, { icon: IconName; className: string; label: string }
 /** A step or run held up by the user shows as waiting on them */
 export const shownNode = (node: NodeRun): Shown => (node.waiting ? 'waiting' : node.status)
 export const shownRun = (run: Run): Shown => (isWaiting(run) ? 'waiting' : run.status)
-
-export const KIND_LABEL: Record<WorkflowNode['kind'], string> = {
-  input: 'Input',
-  agent: 'Agent',
-  merge: 'Merge',
-  condition: 'Condition',
-  approval: 'Approval',
-  tool: 'Tool',
-  output: 'Output'
-}
 
 export function StatusIcon({ status, className = 'size-3.5' }: { status: Shown; className?: string }): React.JSX.Element {
   return (
@@ -220,6 +222,12 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
                   Reject
                 </button>
               </div>
+            )}
+            {state?.review && (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground select-text">
+                <Icon name="star" className="mt-px size-3.5 shrink-0" />
+                {reviewText(state.review)}
+              </p>
             )}
             {state?.decision && (
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground select-text">

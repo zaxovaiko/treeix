@@ -49,3 +49,26 @@ test('names loops, loose steps, gone agents, later references and the missing ou
     { node: 'if', message: 'The pattern is not a valid regular expression' }
   ])
 })
+
+test('a review step needs a rubric and sends fixes only to an agent step before it', () => {
+  const judge = (retryStep: string | null, rubric: string) => ({
+    id: 'review',
+    kind: 'judge' as const,
+    agent: 'scout',
+    source: '{{prev}}',
+    rubric,
+    minScore: 8,
+    retryStep,
+    rounds: 2,
+    onError: 'stop' as const
+  })
+  const reviewed = (retryStep: string | null, rubric: string): Workflow => ({
+    ...workflow,
+    nodes: [...workflow.nodes, judge(retryStep, rubric)],
+    edges: [...workflow.edges.slice(0, 2), { id: '3', from: 'b', to: 'review', branch: null }, { id: '4', from: 'review', to: 'output', branch: null }]
+  })
+  expect(validate(reviewed('a', 'Has tests'), ['scout'])).toEqual([])
+  expect(validate(reviewed(null, ' '), ['scout'])).toEqual([{ node: 'review', message: 'Say what to judge it by' }])
+  for (const retry of ['output', 'input', 'gone'])
+    expect(validate(reviewed(retry, 'Has tests'), ['scout'])).toEqual([{ node: 'review', message: 'Send fixes back to an agent step before this one' }])
+})

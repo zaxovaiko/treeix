@@ -6,7 +6,7 @@ import type { ChatAdapter, ChatEvent } from '@treeix/sdk/main'
 import { DECISION_DEFAULTS, type DecisionSettings } from '../shared/types'
 import type { Run, Workflow } from '../shared/workflow'
 import { createDecisions } from './decisions'
-import { createEngine } from './engine'
+import { createEngine, parseReview } from './engine'
 import { createRuns } from './runs'
 
 const dir = mkdtempSync(join(tmpdir(), 'hub-runs-'))
@@ -34,6 +34,13 @@ const adapter: ChatAdapter = {
         const text = content[0].type === 'text' ? content[0].text : ''
         if (text.includes('You decide in place')) {
           emit({ type: 'message_chunk', role: 'agent', content: { type: 'text', text: `{"approve": ${command !== 'naysayer'}, "reason": "${command} checked it"}` } })
+          return { stopReason: 'end_turn' }
+        }
+        if (text.includes("You review another agent's work")) {
+          // The critic passes work that was sent back once; the harsh one never does
+          const score = command === 'garbled' ? null : command === 'critic' && text.includes('A reviewer scored') ? 9 : 3
+          const reply = score === null ? 'Looks fine to me' : JSON.stringify({ score, issues: score < 8 ? ['add a test', 7] : [] })
+          emit({ type: 'message_chunk', role: 'agent', content: { type: 'text', text: reply } })
           return { stopReason: 'end_turn' }
         }
         if (text.includes('hang')) return new Promise(() => undefined)
@@ -315,4 +322,54 @@ test('a reply on the ticket decides: Treeix asks once, takes the first approve o
   await tick()
   expect(comments.at(-1)?.body).toBe(`Treeix decision [treeix:${run.id}:gate]: Rejected by you in Jira: not before the release.`)
   expect(told).toEqual(['Ticketed: rejected: Rejected by you in Jira: not before the release'])
+})
+
+const reviewed = (judge: string, rounds: number, onError: 'stop' | 'continue' = 'stop'): Workflow => ({
+  id: 'reviewed',
+  name: 'Reviewed',
+  updatedAt: 0,
+  layout: {},
+  nodes: [
+    { id: 'input', kind: 'input' },
+    agentNode('builder', 'Build {{input}}'),
+    { id: 'review', kind: 'judge', agent: judge, source: '{{prev}}', rubric: 'It has tests', minScore: 8, retryStep: 'builder', rounds, onError },
+    { id: 'output', kind: 'output', template: 'Shipped: {{prev}}' }
+  ],
+  edges: [
+    { id: '1', from: 'input', to: 'builder', branch: null },
+    { id: '2', from: 'builder', to: 'review', branch: null },
+    { id: '3', from: 'review', to: 'output', branch: null }
+  ]
+})
+
+test('a judge reads the score from the reply, prose around the JSON or not', () => {
+  expect(parseReview('Here: {"score": 7, "issues": ["a", 2, "b"]} done')).toEqual({ score: 7, issues: ['a', 'b'] })
+  expect(parseReview('{"score": "10"}')).toEqual({ score: 10, issues: [] })
+  for (const reply of ['{"score": 11}', '{"score": 0}', '{"issues": []}', 'Fine']) expect(() => parseReview(reply)).toThrow('The judge gave no score')
+})
+
+test('a low score sends the work back to its step, which resumes with the issues, until it passes', async () => {
+  resumed.length = 0
+  const run = await engine.wait(engine.launch('workflow', 'Reviewed', reviewed('critic', 2), 'the login').id)
+  expect(run?.status).toBe('done')
+  expect(run?.nodes.review).toMatchObject({ status: 'done', review: { score: 9, issues: [], round: 2 } })
+  expect(run?.nodes.review.prompt).toContain('It has tests')
+  expect(run?.nodes.builder.prompt).toStartWith('A reviewer scored your work 3/10; it needs 8. Fix these, then reply as the task asks:\n\n- add a test')
+  expect(run?.nodes.builder.prompt).toEndWith('The task, for reference:\nBuild the login')
+  // The judge passes the reworked work on, not its verdict
+  expect(run?.output).toStartWith('Shipped: builder: A reviewer scored')
+  // Builder, critic, the builder again in its own conversation, critic
+  expect(resumed).toEqual([null, null, 's', null])
+})
+
+test('work that never passes fails the run after its rounds, or goes on when the judge allows it', async () => {
+  const failed = await engine.wait(engine.launch('workflow', 'Reviewed', reviewed('harsh', 1), 'the login').id)
+  expect(failed).toMatchObject({ status: 'failed', nodes: { review: { status: 'failed', error: 'Scored 3/10, needs 8', review: { score: 3, issues: ['add a test'], round: 2 } } } })
+
+  const went = await engine.wait(engine.launch('workflow', 'Reviewed', reviewed('harsh', 0, 'continue'), 'the login').id)
+  expect(went).toMatchObject({ status: 'done', output: 'Shipped: builder: Build the login', nodes: { review: { status: 'failed', review: { round: 1 } } } })
+
+  const garbled = await engine.wait(engine.launch('workflow', 'Reviewed', reviewed('garbled', 2), 'the login').id)
+  expect(garbled?.status).toBe('failed')
+  expect(garbled?.nodes.review.error).toStartWith('The judge gave no score: Looks fine to me')
 })

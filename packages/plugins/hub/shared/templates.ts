@@ -1,5 +1,5 @@
 import { MAX_TIMEOUT_MIN } from './types'
-import { WATCH_QUERY, type Watch, type Workflow } from './workflow'
+import { MAX_SCORE, WATCH_QUERY, type Watch, type Workflow } from './workflow'
 
 /** How the agent reads, answers and hands back each kind of item, through the Treeix tools */
 const TOOLS: Record<Watch['source'], { read: string; comment: string; unmark: string; handOff: string }> = {
@@ -31,28 +31,38 @@ Link: {{input.url}}
 End your reply with the pull request URL on its own line.`
 }
 
+const shipRubric = (source: Watch['source']): string => `The work is a pull request for {{input.key}} {{input.title}} ({{input.url}}), or questions asked on the item instead.
+
+1. Read the item in full with the ${TOOLS[source].read} tool (Treeix), and the pull request with its diff.
+2. Every acceptance criterion is met; a bug has a test that fails without the fix; nothing outside the item changed; a visible change has screenshots in the pull request; no AI attribution in commits or the pull request.
+3. In a git worktree of the branch, run the repo's CI commands. Any failure is an issue.
+
+If the agent asked questions instead: score ${MAX_SCORE} when only a person could answer them, 1 when the item was clear enough to build.`
+
 const NAME: Record<Watch['source'], string> = { jira: 'Ship Jira tickets', notion: 'Ship Notion tasks' }
 
-/** Input, one agent step with the prompt, output */
-const oneStep = (name: string, agent: string, prompt: string, input: Extract<Workflow['nodes'][number], { kind: 'input' }>): Workflow => ({
+/** Input, one agent step with the prompt, a review that sends it back twice at most, output */
+const reviewedStep = (name: string, agent: string, prompt: string, rubric: string, input: Extract<Workflow['nodes'][number], { kind: 'input' }>): Workflow => ({
   id: crypto.randomUUID(),
   name,
   nodes: [
     input,
     { id: 'agent', kind: 'agent', agent, prompt, folder: null, retries: 0, onError: 'stop', timeoutMin: MAX_TIMEOUT_MIN },
+    { id: 'review', kind: 'judge', agent, source: '{{prev}}', rubric, minScore: 8, retryStep: 'agent', rounds: 2, onError: 'stop' },
     { id: 'output', kind: 'output', template: '{{prev}}' }
   ],
   edges: [
     { id: 'input-agent', from: 'input', to: 'agent', branch: null },
-    { id: 'agent-output', from: 'agent', to: 'output', branch: null }
+    { id: 'agent-review', from: 'agent', to: 'review', branch: null },
+    { id: 'review-output', from: 'review', to: 'output', branch: null }
   ],
-  layout: { input: { x: 0, y: 0 }, agent: { x: 260, y: 0 }, output: { x: 520, y: 0 } },
+  layout: { input: { x: 0, y: 0 }, agent: { x: 260, y: 0 }, review: { x: 520, y: 0 }, output: { x: 780, y: 0 } },
   updatedAt: Date.now()
 })
 
 /** A workflow that watches Jira or Notion and has an agent take each new item to a pull request; its watch starts off, so nothing runs before the agent and folder are checked */
 export const shipWorkflow = (source: Watch['source'], agent: string): Workflow =>
-  oneStep(NAME[source], agent, shipPrompt(source), {
+  reviewedStep(NAME[source], agent, shipPrompt(source), shipRubric(source), {
     id: 'input',
     kind: 'input',
     watches: [{ id: crypto.randomUUID(), source, query: WATCH_QUERY[source], ...(source === 'notion' && { dataSource: '' }), enabled: false }]
@@ -71,5 +81,13 @@ Branch: {{input.sourceBranch}}, into {{input.targetBranch}}
 
 End your reply with what the new tests cover, in one line.`
 
+const ADD_TESTS_RUBRIC = `The work is new tests pushed to {{input.sourceBranch}} of {{input.url}}.
+
+1. Read what the pull request changes against {{input.targetBranch}}, and the new tests.
+2. The tests cover what it changes, failure paths and edge cases included; they check behaviour, not implementation details; they follow the repo's own test style; nothing else changed.
+3. In a git worktree of {{input.sourceBranch}}, run the repo's CI commands. Any failure is an issue.
+
+If the agent said the repo has no tests: score ${MAX_SCORE} when that is true, 1 when it is not.`
+
 /** A board stage: a pull request dropped on it gets tests for what it changes */
-export const addTestsWorkflow = (agent: string): Workflow => oneStep('Add tests', agent, ADD_TESTS_PROMPT, { id: 'input', kind: 'input' })
+export const addTestsWorkflow = (agent: string): Workflow => reviewedStep('Add tests', agent, ADD_TESTS_PROMPT, ADD_TESTS_RUBRIC, { id: 'input', kind: 'input' })

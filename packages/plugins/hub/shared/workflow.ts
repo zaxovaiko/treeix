@@ -18,6 +18,26 @@ export type AgentNode = {
   subagent?: string | null
 }
 
+/**
+ * Has `agent` score what came in (`source`) against `rubric`, 1 to 10, and passes it on at `minScore` or more. Below it, `retryStep`
+ * picks its conversation back up with the issues to fix, at most `rounds` times; after that it fails like an agent step
+ */
+export type JudgeNode = {
+  id: string
+  kind: 'judge'
+  agent: string
+  model?: string | null
+  source: string
+  rubric: string
+  minScore: number
+  retryStep: string | null
+  rounds: number
+  onError: 'stop' | 'continue'
+}
+
+export const MAX_SCORE = 10
+export const MAX_ROUNDS = 5
+
 export type ToolNode = { id: string; kind: 'tool'; tool: string; args: string }
 
 export const WATCH_SOURCES = ['jira', 'notion'] as const
@@ -99,6 +119,18 @@ export type WorkflowNode =
   | { id: string; kind: 'approval'; message: string; timeoutMin?: number | null }
   /** Calls a tool an enabled plugin offers; `args` is a JSON object template, its text reply is the output */
   | ToolNode
+  | JudgeNode
+
+export const KIND_LABEL: Record<WorkflowNode['kind'], string> = {
+  input: 'Input',
+  agent: 'Agent',
+  merge: 'Merge',
+  condition: 'Condition',
+  approval: 'Approval',
+  tool: 'Tool',
+  judge: 'Review',
+  output: 'Output'
+}
 
 /** `branch` is set on edges leaving a condition: only the side that matched runs */
 export type Edge = { id: string; from: string; to: string; branch: 'true' | 'false' | null }
@@ -108,7 +140,7 @@ type Point = { x: number; y: number }
 /** `layout` is where each step sits on the canvas; runs ignore it */
 export type Workflow = { id: string; name: string; nodes: WorkflowNode[]; edges: Edge[]; layout: Record<string, Point>; updatedAt: number }
 
-const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'approval', 'tool', 'output'] satisfies WorkflowNode['kind'][]
+const KINDS: string[] = ['input', 'agent', 'merge', 'condition', 'approval', 'tool', 'judge', 'output'] satisfies WorkflowNode['kind'][]
 
 /** Saved workflows come from the renderer; this keeps a malformed one out of the file */
 export const isWorkflow = (value: unknown): value is Workflow =>
@@ -149,7 +181,15 @@ export type NodeRun = {
   sessionId?: string | null
   /** The last approval or permission answer, and who gave it where */
   decision?: Decision | null
+  /** A judge step's last score, and which round of fixes it was */
+  review?: Review | null
 }
+
+export type Review = { score: number; issues: string[]; round: number }
+
+/** `Scored 6/10 in round 2: <issue>; <issue>` */
+export const reviewText = (review: Review): string =>
+  `Scored ${review.score}/${MAX_SCORE}${review.round > 1 ? ` in round ${review.round}` : ''}${review.issues.length ? `: ${review.issues.join('; ')}` : ''}`
 
 /** An answer to an approval or a permission: the user's from somewhere, or an agent's once nobody replied in time */
 export type Decision = { approved: boolean; by: 'you' | 'agent'; via: 'app' | 'web' | TicketSource; reason: string | null; at: number }
@@ -222,7 +262,11 @@ export const activeAgents = (runs: Run[]): Set<string> =>
   new Set(
     runs
       .filter((run) => run.status === 'running')
-      .flatMap((run) => run.workflow.nodes.filter((node): node is AgentNode => node.kind === 'agent' && run.nodes[node.id]?.status === 'running').map((node) => node.agent))
+      .flatMap((run) =>
+        run.workflow.nodes
+          .filter((node): node is AgentNode | JudgeNode => (node.kind === 'agent' || node.kind === 'judge') && run.nodes[node.id]?.status === 'running')
+          .map((node) => node.agent)
+      )
   )
 
 /** Runs are written by the app; this only keeps a damaged file from reaching the UI */
