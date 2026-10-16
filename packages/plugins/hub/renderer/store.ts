@@ -4,6 +4,7 @@ import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
 import { AGENT_PREFIX, API_PRESETS, type DecisionSettings, type HubAgent, isHubAgent, isRemoteStatus, type RemoteStatus, type Runtime } from '../shared/types'
 import type { LocalModelsState } from '../shared/catalog'
+import { type EvalResult, type EvalSuite, isEvalResult, isEvalSuite } from '../shared/evals'
 import type { Subagent } from '../shared/subagents'
 import {
   type AgentRuntime,
@@ -74,6 +75,17 @@ export const hubApi = {
   cancelPull: (id: string) => bridge.invoke<void>('cancelPull', id),
   deleteModel: (id: string) => bridge.invoke<void>('deleteModel', id),
   longContext: (id: string) => bridge.invoke<void>('longContext', id),
+  evalSuites: () => bridge.invoke<EvalSuite[]>('evalSuites'),
+  saveEvalSuite: (suite: EvalSuite) => bridge.invoke<void>('saveEvalSuite', suite),
+  removeEvalSuite: (id: string) => bridge.invoke<void>('deleteEvalSuite', id),
+  evalResults: (id: string) => bridge.invoke<EvalResult[]>('evalResults', id),
+  /** Starts every case; rejects when the suite can't start */
+  runEvalSuite: (id: string) => bridge.invoke<void>('runEvalSuite', id),
+  /** Adds the finished run as a case of its workflow's or agent's suite; resolves with the suite id */
+  saveEvalCase: (runId: string) => bridge.invoke<string>('saveEvalCase', runId),
+  /** Each case's result as it comes in */
+  onEvalResult: (listener: (suite: string, result: EvalResult) => void) =>
+    bridge.on('evalResult', (suite, result) => typeof suite === 'string' && isEvalResult(result) && listener(suite, result)),
   /** Download progress of a model, in percent */
   onPull: (listener: (id: string, percent: number) => void) => bridge.on('pull', (id, percent) => typeof id === 'string' && typeof percent === 'number' && listener(id, percent))
 }
@@ -91,6 +103,18 @@ export const hubWorkflows = createStore<Workflow[]>([])
 export function followWorkflows(): () => void {
   void hubApi.workflows().then(hubWorkflows.set)
   return bridge.on('workflows', (workflows) => Array.isArray(workflows) && hubWorkflows.set(workflows.filter(isWorkflow)))
+}
+
+export const hubSuites = createStore<EvalSuite[]>([])
+/** Ids of the suites running now */
+export const hubEvalsRunning = createStore<string[]>([])
+
+export function followEvals(): () => void {
+  void hubApi.evalSuites().then(hubSuites.set)
+  void bridge.invoke<string[]>('evalsRunning').then(hubEvalsRunning.set)
+  const unfollowSuites = bridge.on('evalSuites', (suites) => Array.isArray(suites) && hubSuites.set(suites.filter(isEvalSuite)))
+  const unfollowRunning = bridge.on('evalsRunning', (ids) => Array.isArray(ids) && hubEvalsRunning.set(ids.filter((id): id is string => typeof id === 'string')))
+  return () => (unfollowSuites(), unfollowRunning())
 }
 
 export const hubRuns = createStore<Run[]>([])

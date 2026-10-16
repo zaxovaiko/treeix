@@ -1,13 +1,29 @@
 import { useHost } from '@treeix/sdk'
-import { openMenu } from '@treeix/app/contextMenu'
+import { type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, IconButton } from '@treeix/app/ui'
 import { addTestsWorkflow, shipWorkflow } from '../shared/templates'
+import type { EvalSuite } from '../shared/evals'
 import { SOURCED_TITLE, type Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { historyGroup, historyTime } from './historyGroups'
 import { shownRun, StatusIcon } from './RunView'
-import { asking, deleteAgent, type HubChat, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, setConversation, TAB_ID } from './store'
+import {
+  asking,
+  deleteAgent,
+  type HubChat,
+  hubAgents,
+  hubApi,
+  hubEditing,
+  hubEvalsRunning,
+  hubRuns,
+  hubSelection,
+  hubSettings,
+  hubSuites,
+  hubWorkflows,
+  setConversation,
+  TAB_ID
+} from './store'
 
 /** One leading column for avatars and icons, so every label in the sidebar starts on the same line */
 const LEAD = 'flex w-[26px] shrink-0 justify-center'
@@ -231,22 +247,24 @@ export function HistorySection(): React.JSX.Element {
     )
     return [{ at: entry.updatedAt, row }]
   })
-  const runRows = runs.map((run) => ({
-    at: run.startedAt,
-    row: historyRow(
-      `run:${run.id}`,
-      run.title.replace(/^(jira|notion):/, ''),
-      'Remove the run',
-      run.endedAt === null ? null : () => void hubApi.removeRun(run.id).catch((reason: unknown) => host.flash(errorMessage(reason))),
-      run.startedAt,
-      <>
-        <span className={LEAD}>
-          <StatusIcon status={shownRun(run)} />
-        </span>
-        {runTitle(run.title)}
-      </>
-    )
-  }))
+  const runRows = runs
+    .filter((run) => run.kind !== 'eval')
+    .map((run) => ({
+      at: run.startedAt,
+      row: historyRow(
+        `run:${run.id}`,
+        run.title.replace(/^(jira|notion):/, ''),
+        'Remove the run',
+        run.endedAt === null ? null : () => void hubApi.removeRun(run.id).catch((reason: unknown) => host.flash(errorMessage(reason))),
+        run.startedAt,
+        <>
+          <span className={LEAD}>
+            <StatusIcon status={shownRun(run)} />
+          </span>
+          {runTitle(run.title)}
+        </>
+      )
+    }))
 
   return (
     <>
@@ -262,6 +280,77 @@ export function HistorySection(): React.JSX.Element {
             row
           ]
         })}
+    </>
+  )
+}
+
+export function NewSuiteButton(): React.JSX.Element {
+  const host = useHost()
+  const open = useOpen()
+  const create = (target: EvalSuite['target'], name: string): void => {
+    const suite: EvalSuite = { id: crypto.randomUUID(), name: `${name} evals`, target, cases: [], cron: null, updatedAt: Date.now() }
+    void hubApi.saveEvalSuite(suite).then(
+      () => open(`eval:${suite.id}`),
+      (reason: unknown) => host.flash(errorMessage(reason))
+    )
+  }
+  const heading = (label: string): MenuEntry => ({ label, run: () => undefined, enabled: false })
+  return (
+    <IconButton
+      label="New eval suite"
+      onClick={(event) => {
+        const workflows = hubWorkflows.get()
+        const agents = hubAgents.get()
+        if (workflows.length + agents.length === 0) return host.flash('Make an agent or a workflow to test first')
+        openMenu(event, [
+          workflows.length > 0 && heading('Test a workflow'),
+          ...workflows.map((workflow) => ({ label: workflow.name, run: () => create({ kind: 'workflow', id: workflow.id }, workflow.name) })),
+          null,
+          agents.length > 0 && heading('Test an agent alone'),
+          ...agents.map((agent) => ({ label: agent.name, run: () => create({ kind: 'agent', id: agent.id }, agent.name) }))
+        ])
+      }}
+    >
+      <Icon name="plus" className="size-3.5" />
+    </IconButton>
+  )
+}
+
+export function EvalsSection(): React.JSX.Element {
+  const host = useHost()
+  const suites = hubSuites.use()
+  const running = hubEvalsRunning.use()
+  const selection = useShownRow()
+  const open = useOpen()
+  const run = (suite: EvalSuite): void => void hubApi.runEvalSuite(suite.id).catch((reason: unknown) => host.flash(errorMessage(reason)))
+  return (
+    <>
+      {suites.map((suite) => (
+        <div key={suite.id} className="group relative">
+          <button
+            onClick={() => open(`eval:${suite.id}`)}
+            onContextMenu={(event) =>
+              openMenu(event, [
+                { label: 'Open', run: () => open(`eval:${suite.id}`) },
+                { label: 'Run', run: () => run(suite), enabled: !running.includes(suite.id) }
+              ])
+            }
+            className={`${ROW} h-8 ${selection === `eval:${suite.id}` ? 'bg-accent' : ''}`}
+          >
+            <span className={LEAD}>
+              <Icon name={running.includes(suite.id) ? 'loader' : 'check'} className={`size-3.5 text-muted-foreground ${running.includes(suite.id) ? 'animate-spin' : ''}`} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{suite.name}</span>
+          </button>
+          {!running.includes(suite.id) && (
+            <span className="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex">
+              <IconButton label={`Run ${suite.name}`} onClick={() => run(suite)}>
+                <Icon name="play" className="size-3" />
+              </IconButton>
+            </span>
+          )}
+        </div>
+      ))}
     </>
   )
 }

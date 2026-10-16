@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -11,14 +12,28 @@ import { readJsonFile } from '@treeix/host/paths'
 import { createSecrets } from '@treeix/host/secrets'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
+import { type EvalSuite, isEvalSuite } from '../shared/evals'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule, toDecisionSettings } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, type Decider, isPullRequestCard, isWorkflow, onCard, type TicketDetail, type Workflow } from '../shared/workflow'
+import {
+  type AgentNode,
+  type AgentRuntime,
+  ASK_TIMEOUT_MIN,
+  askWorkflow,
+  type Decider,
+  isPullRequestCard,
+  isWorkflow,
+  onCard,
+  type Run,
+  type TicketDetail,
+  type Workflow
+} from '../shared/workflow'
 import { createAttention } from './attention'
 import { createDecisions } from './decisions'
 import { readSubagents } from './subagents'
 import { createEngine } from './engine'
+import { createEvals } from './evals'
 import { createKeys } from './keys'
 import { hubTools } from './mcp'
 import { createOpenAiAdapter } from './openaiAdapter'
@@ -32,6 +47,7 @@ const DETECT_TIMEOUT_MS = 60_000
 const MINUTE_MS = 60_000
 const NOTICE_CHARS = 300
 const TITLE_CHARS = 80
+const CASE_NAME_CHARS = 60
 const COMMAND_TIMEOUT_MS = 60_000
 /** How often watches ask Jira and Notion what matches */
 const WATCH_EVERY_MIN = 2
@@ -118,7 +134,7 @@ const plugin: MainPlugin = {
       onStatus: (status) => context.broadcast('remote', status),
       routes: {
         'GET agents': async () => (await agents.get()).map(({ id, name }) => ({ id, name })),
-        'GET runs': () => engine.list(),
+        'GET runs': async () => (await engine.list()).filter((run) => run.kind !== 'eval'),
         'GET runs/:id/asks': async ({ id }) => openAsks(await engine.events(id)),
         'GET workflows': async () => (await workflows.get()).map(({ id, name }) => ({ id, name })),
         'POST workflows/:id/run': ({ id }, body) => startWorkflow(id, text(body.input)),
@@ -153,6 +169,8 @@ const plugin: MainPlugin = {
     // A failed run says so, since often nobody watched it start; a waiting or finished one only to someone away
     const attend = createAttention(
       ({ run, ...attention }) => {
+        // A suite tells how it went as a whole
+        if (run.kind === 'eval') return
         if (attention.kind === 'ended') {
           if (run.kind === 'ask') return
           if (run.status === 'failed') tell(`${run.title} failed`, Object.values(run.nodes).find((node) => node.error)?.error ?? '', run.id)
@@ -176,7 +194,7 @@ const plugin: MainPlugin = {
       sessionEnv: context.sessionEnv,
       callTool: context.callTool,
       runs: createRuns(join(context.dataPath, 'runs')),
-      onRun: (run) => (context.broadcast('run', run), remote.publish({ type: 'run', run }), attend(run), decisions.watch(run)),
+      onRun: (run) => (context.broadcast('run', run), run.kind !== 'eval' && remote.publish({ type: 'run', run }), attend(run), follow(run)),
       onEvents: (runId, events) => context.broadcast('events', runId, events)
     })
     // Who answers a waiting step when the user doesn't, and when
@@ -186,6 +204,8 @@ const plugin: MainPlugin = {
     context.handle('setDecisionSettings', (_, next: unknown) => writeFile(decisionsFile, JSON.stringify(toDecisionSettings(next))))
     const decisions = createDecisions({ engine, settings: decisionSettings, callTool: context.callTool, notify: (run, title, body) => tell(title, body, run.id) })
     context.onDispose(decisions.dispose)
+    // Eval runs answer their own waits; the user's wait for the user, then a decider
+    const follow = (run: Run): void => (run.kind === 'eval' ? evals.onRun(run) : decisions.watch(run))
     // The setting lives here, not in the renderer's storage, so runs resume once at launch whatever windows open
     const autoResumeFile = join(context.dataPath, 'autoResume.json')
     context.handle('autoResume', async () => (await readJsonFile(autoResumeFile)) === true)
@@ -195,12 +215,16 @@ const plugin: MainPlugin = {
     void Promise.all([engine.recover(), readJsonFile(atQuitFile)]).then(async ([crashed, atQuit]) => {
       await rm(atQuitFile, { force: true })
       // Approvals wait on across a relaunch: they keep the Mac up and are told again
-      for (const run of (await engine.list()).filter((candidate) => candidate.status === 'running')) {
+      const runs = await engine.list()
+      for (const run of runs.filter((candidate) => candidate.status === 'running')) {
         attend(run)
-        decisions.watch(run)
+        follow(run)
       }
       if ((await readJsonFile(autoResumeFile)) !== true) return
-      for (const id of [...crashed, ...list(atQuit, isString)]) await engine.resume(id).catch((error: unknown) => console.error('[hub] Resuming a run failed', error))
+      // An eval run resumed alone has no suite waiting on it
+      const evalRuns = new Set(runs.filter((run) => run.kind === 'eval').map((run) => run.id))
+      for (const id of [...crashed, ...list(atQuit, isString)].filter((candidate) => !evalRuns.has(candidate)))
+        await engine.resume(id).catch((error: unknown) => console.error('[hub] Resuming a run failed', error))
     })
     context.onDispose(() => writeFileSync(atQuitFile, JSON.stringify(engine.dispose())))
 
@@ -346,6 +370,7 @@ const plugin: MainPlugin = {
         () => {
           const now = new Date()
           void fireSchedules(now)
+          void evals.fire(now)
           if (now.getMinutes() % WATCH_EVERY_MIN === 0) void checkWatches().then(decisions.poll)
           tick()
         },
@@ -354,6 +379,81 @@ const plugin: MainPlugin = {
     }
     tick()
     context.onDispose(() => clearTimeout(timer))
+
+    // Suites of cases that check what a workflow or agent turns out
+    const suites = jsonList(join(context.dataPath, 'evals.json'), isEvalSuite)
+    const writeSuites = async (next: EvalSuite[]): Promise<void> => {
+      await suites.set(next)
+      context.broadcast('evalSuites', next)
+    }
+    const targetAgent = async (suite: EvalSuite): Promise<HubAgent | null> =>
+      suite.target.kind === 'agent' ? ((await agents.get()).find((agent) => agent.id === suite.target.id) ?? null) : null
+    const targetWorkflow = async (suite: EvalSuite): Promise<Workflow | null> =>
+      suite.target.kind === 'workflow' ? ((await workflows.get()).find((workflow) => workflow.id === suite.target.id) ?? null) : null
+    const evals = createEvals({
+      engine,
+      suites: suites.get,
+      workflowOf: async (suite) => {
+        const agent = await targetAgent(suite)
+        if (agent) return askWorkflow(agent.id, agent.folder, ASK_TIMEOUT_MIN)
+        const workflow = await targetWorkflow(suite)
+        if (!workflow) throw new Error(`The ${suite.target.kind} it tests is gone`)
+        const problem = validate(
+          workflow,
+          (await agents.get()).map((entry) => entry.id)
+        )[0]
+        if (problem) throw new Error(problem.message)
+        return workflow
+      },
+      folderOf: async (suite) => {
+        const workflow = await targetWorkflow(suite)
+        return workflow ? workflowFolder(workflow) : ((await targetAgent(suite))?.folder ?? null)
+      },
+      dir: join(context.dataPath, 'evals'),
+      shell: userShell(),
+      onResult: (suite, result) => context.broadcast('evalResult', suite, result),
+      onBusy: (running) => context.broadcast('evalsRunning', running),
+      notify: (title, body, runId) => (runId ? tell(title, body, runId) : show(title, body, null))
+    })
+    context.handle('evalSuites', () => suites.get())
+    context.handle('saveEvalSuite', async (_, suite: unknown) => {
+      if (!isEvalSuite(suite)) throw new Error('Invalid suite')
+      await writeSuites(upsert(await suites.get(), suite))
+    })
+    context.handle('deleteEvalSuite', async (_, id: string) => {
+      await writeSuites((await suites.get()).filter((entry) => entry.id !== id))
+      await evals.remove(id)
+    })
+    context.handle('evalResults', (_, id: string) => evals.results(id))
+    context.handle('evalsRunning', () => evals.running())
+    context.handle('runEvalSuite', (_, id: string) => evals.start(id))
+    // A real run becomes a case of its workflow's or agent's suite: its input, and its output as the bar to meet
+    context.handle('saveEvalCase', async (_, runId: string): Promise<string> => {
+      const run = (await engine.list()).find((entry) => entry.id === runId)
+      if (!run || run.status !== 'done') throw new Error('Only a finished run can become a case')
+      const steps = run.workflow.nodes.filter((node): node is AgentNode => node.kind === 'agent')
+      const target: EvalSuite['target'] = run.kind === 'workflow' ? { kind: 'workflow', id: run.workflow.id } : { kind: 'agent', id: steps[0]?.agent ?? '' }
+      const name = target.kind === 'workflow' ? run.workflow.name : ((await agents.get()).find((agent) => agent.id === target.id)?.name ?? 'Agent')
+      const all = await suites.get()
+      const suite = all.find((entry) => entry.target.kind === target.kind && entry.target.id === target.id) ?? {
+        id: randomUUID(),
+        name: `${name} evals`,
+        target,
+        cases: [],
+        cron: null,
+        updatedAt: 0
+      }
+      const check = {
+        id: randomUUID(),
+        kind: 'judge' as const,
+        agent: steps[0]?.agent ?? '',
+        rubric: 'As good as the reference or better: as correct, as complete and as clear.',
+        minScore: 7
+      }
+      const item = { id: randomUUID(), name: run.input.split('\n')[0].trim().slice(0, CASE_NAME_CHARS) || run.title, input: run.input, reference: run.output, checks: [check] }
+      await writeSuites(upsert(all, { ...suite, cases: [...suite.cases, item], updatedAt: Date.now() }))
+      return suite.id
+    })
 
     // A workflow whose input lists an event starts on it
     context.onEvent(async (name, payload) => {

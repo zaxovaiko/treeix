@@ -192,7 +192,7 @@ export const reviewText = (review: Review): string =>
   `Scored ${review.score}/${MAX_SCORE}${review.round > 1 ? ` in round ${review.round}` : ''}${review.issues.length ? `: ${review.issues.join('; ')}` : ''}`
 
 /** An answer to an approval or a permission: the user's from somewhere, or an agent's once nobody replied in time */
-export type Decision = { approved: boolean; by: 'you' | 'agent'; via: 'app' | 'web' | TicketSource; reason: string | null; at: number }
+export type Decision = { approved: boolean; by: 'you' | 'agent' | 'eval'; via: 'app' | 'web' | TicketSource; reason: string | null; at: number }
 
 export type Decider = Pick<Decision, 'by' | 'via' | 'reason'>
 
@@ -202,14 +202,14 @@ const VIA: Record<Decision['via'], string> = { app: 'in Treeix', web: 'from your
 
 /** `Approved by you in Jira`, `Rejected by an agent, as nobody replied in time: <why>` */
 export const decisionText = (decision: Decision): string =>
-  `${decision.approved ? 'Approved' : 'Rejected'} ${decision.by === 'agent' ? 'by an agent, as nobody replied in time' : `by you ${VIA[decision.via]}`}${decision.reason ? `: ${decision.reason}` : ''}`
+  `${decision.approved ? 'Approved' : 'Rejected'} ${{ agent: 'by an agent, as nobody replied in time', eval: 'by the eval', you: `by you ${VIA[decision.via]}` }[decision.by]}${decision.reason ? `: ${decision.reason}` : ''}`
 
 export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
 
 export type Run = {
   id: string
-  /** `schedule` is an ask an agent's schedule started */
-  kind: 'workflow' | 'ask' | 'schedule'
+  /** `schedule` is an ask an agent's schedule started, `eval` a case of an eval suite, kept off the board */
+  kind: 'workflow' | 'ask' | 'schedule' | 'eval'
   title: string
   workflow: Workflow
   input: string

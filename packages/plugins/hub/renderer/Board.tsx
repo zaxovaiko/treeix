@@ -18,7 +18,8 @@ type StatusCard = Card & { column: BoardColumn }
 const LAYOUTS = { board: 'Board', list: 'List', prs: 'Pull requests' } as const
 
 /** Runs cut short by a quit that a Restore can pick up: recent ones only, so an old one doesn't keep the button around */
-export const restorableRuns = (runs: Run[]): Run[] => runs.filter((run) => run.status === 'interrupted' && Date.now() - (run.endedAt ?? run.startedAt) < DAY_MS)
+export const restorableRuns = (runs: Run[]): Run[] =>
+  runs.filter((run) => run.kind !== 'eval' && run.status === 'interrupted' && Date.now() - (run.endedAt ?? run.startedAt) < DAY_MS)
 
 /** Starts the sessions a relaunch left dormant and resumes interrupted runs, each agent in its own conversation */
 function RestoreButton(): React.JSX.Element | null {

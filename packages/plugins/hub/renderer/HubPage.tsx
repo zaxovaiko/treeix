@@ -7,8 +7,24 @@ import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { Board } from './Board'
 import { RunView } from './RunView'
-import { AgentsSection, HistorySection, NewAgentButton, NewWorkflowButton, WorkflowsSection } from './Sections'
-import { asking, chatIdOf, deleteAgent, hubAgents, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, registryId, runtimeLabel, setConversation, TAB_ID } from './store'
+import { EvalView } from './EvalView'
+import { AgentsSection, EvalsSection, HistorySection, NewAgentButton, NewSuiteButton, NewWorkflowButton, WorkflowsSection } from './Sections'
+import {
+  asking,
+  chatIdOf,
+  deleteAgent,
+  hubAgents,
+  hubEditing,
+  hubRuns,
+  hubSelection,
+  hubSettings,
+  hubSuites,
+  hubWorkflows,
+  registryId,
+  runtimeLabel,
+  setConversation,
+  TAB_ID
+} from './store'
 
 // The canvas library is big and only workflows need it
 const WorkflowView = lazy(() => import('./WorkflowView').then((module) => ({ default: module.WorkflowView })))
@@ -115,6 +131,7 @@ function Rail({ selection }: { selection: string | null }): React.JSX.Element {
         </button>
         {group('agents', 'Agents', <NewAgentButton />, <AgentsSection />)}
         {group('workflows', 'Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
+        {group('evals', 'Evals', <NewSuiteButton />, <EvalsSection />)}
         <div className="mt-auto">
           {group(
             'history',
@@ -148,13 +165,16 @@ export function HubPage(): React.JSX.Element {
   const agent = agents.find((candidate) => `agent:${candidate.id}` === selection || candidate.id === chat?.agentId) ?? null
   const workflow = workflows.find((candidate) => `workflow:${candidate.id}` === selection) ?? null
   const run = runs.find((candidate) => `run:${candidate.id}` === selection) ?? null
+  const suite = hubSuites.use().find((candidate) => `eval:${candidate.id}` === selection) ?? null
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
-      <Rail selection={run || workflow || agent ? selection : null} />
+      <Rail selection={run || workflow || agent || suite ? selection : null} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {run ? (
           <RunView key={run.id} run={run} />
+        ) : suite ? (
+          <EvalView key={suite.id} suite={suite} />
         ) : workflow ? (
           <Suspense fallback={<div className="flex-1" />}>
             <WorkflowView key={workflow.id} workflow={workflow} />

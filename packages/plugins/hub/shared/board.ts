@@ -11,6 +11,8 @@ export type BoardColumn = (typeof BOARD_COLUMNS)[number]['id']
 export const DAY_MS = 24 * 60 * 60 * 1000
 
 export function boardColumn(run: Run, now = Date.now()): BoardColumn | null {
+  // Eval runs show in their suite
+  if (run.kind === 'eval') return null
   if (isWaiting(run) || run.status === 'failed' || run.status === 'interrupted') return 'needs'
   if (run.status === 'running') return 'running'
   // Old runs stay in the history, not on the board

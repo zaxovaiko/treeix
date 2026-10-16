@@ -18,7 +18,7 @@ import {
   type WorkflowNode
 } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
-import { followRunEvents, hubAgents, hubApi, hubBack, hubRunStep, registryId } from './store'
+import { followRunEvents, hubAgents, hubApi, hubBack, hubRunStep, hubSelection, registryId } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
 
@@ -173,6 +173,14 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           <button onClick={() => hubApi.cancelRun(run.id)} className="h-7 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
             Cancel
           </button>
+        )}
+        {run.status === 'done' && run.kind !== 'eval' && (
+          <IconButton
+            label="Save as an eval case: this input, with this output as the bar to meet"
+            onClick={() => report(hubApi.saveEvalCase(run.id).then((suite) => hubSelection.set(`eval:${suite}`)))}
+          >
+            <Icon name="star" className="size-3.5" />
+          </IconButton>
         )}
         {sidebar && !openSteps && (
           <IconButton label="Show the steps" onClick={() => setOpenSteps(true)}>

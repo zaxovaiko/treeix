@@ -434,7 +434,17 @@ export function createEngine(deps: {
     }
     const entry = track(run, [], delegated)
     publish(run)
-    void deps.runs.list().then((runs) => deps.runs.remove(runs.slice(KEEP_RUNS).map((old) => old.id)))
+    // Eval runs keep their own count, so a suite's runs never push the user's out
+    void deps.runs.list().then((runs) =>
+      deps.runs.remove(
+        [false, true].flatMap((evals) =>
+          runs
+            .filter((old) => (old.kind === 'eval') === evals)
+            .slice(KEEP_RUNS)
+            .map((old) => old.id)
+        )
+      )
+    )
     step(entry)
     return entry.run
   }

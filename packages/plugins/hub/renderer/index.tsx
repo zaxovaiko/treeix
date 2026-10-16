@@ -17,6 +17,7 @@ import {
   hubApi,
   hubEditing,
   hubRuns,
+  followEvals,
   hubSelection,
   hubWorkflows,
   onOpenRun,
@@ -72,7 +73,7 @@ function useRunNotifications(): void {
       for (const run of hubRuns.get()) {
         const state = stateOf(run)
         const previous = seen.get(run.id)
-        if (!previous || previous === state || !NOTICE[state]) continue
+        if (!previous || previous === state || !NOTICE[state] || run.kind === 'eval') continue
         notify({
           title: `${run.title} ${NOTICE[state]}`,
           body: 'Agents',
@@ -97,6 +98,7 @@ function Root(): React.JSX.Element {
   useEffect(() => (chat ? followChats(chat) : undefined), [chat])
   useEffect(followWorkflows, [])
   useEffect(followRuns, [])
+  useEffect(followEvals, [])
   useRuntimes()
   useRunNotifications()
   return (
