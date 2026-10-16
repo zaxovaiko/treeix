@@ -309,6 +309,7 @@ function toggle(
     | 'menuBarIcon'
     | 'claudeSkipPermissions'
     | 'codexSkipPermissions'
+    | 'terminalAutoRestore'
     | 'agentNotifications',
   label: string
 ): ComponentType {
@@ -630,6 +631,14 @@ const SETTINGS: SettingSpec[] = [
     description:
       'Starts Codex terminal sessions with --dangerously-bypass-approvals-and-sandbox, so it runs every command without asking or sandboxing. Applies to sessions started after the change.',
     Control: toggle('codexSkipPermissions', 'Skip Codex approvals and sandbox')
+  },
+  {
+    section: 'Terminal',
+    card: 'Agent sessions',
+    label: 'Restore sessions on launch',
+    description:
+      'Starts every terminal open at quit again, resumes agent conversations and asks agents cut off mid-turn to continue. Off, only the shown terminal starts and the rest wait for a click.',
+    Control: toggle('terminalAutoRestore', 'Restore sessions on launch')
   },
   {
     section: 'Terminal',

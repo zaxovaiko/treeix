@@ -849,6 +849,7 @@ async function restoreSessions(): Promise<void> {
     paneGrow: { ...saved.paneGrow, ...state.paneGrow }
   })
   restored = true
+  if (live.length === 0 && getSettings().terminalAutoRestore) await restoreDormant()
 }
 
 // Most updates (statuses, titles) change nothing saved, and localStorage writes are synchronous

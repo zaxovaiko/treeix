@@ -46,6 +46,8 @@ export type Settings = {
   claudeSkipPermissions: boolean
   /** Starts Codex sessions with --dangerously-bypass-approvals-and-sandbox */
   codexSkipPermissions: boolean
+  /** Wakes every session saved at quit on launch, resuming agent conversations and turns cut short */
+  terminalAutoRestore: boolean
   /** A macOS notification when an agent finishes or needs an answer while the window is in the background */
   agentNotifications: boolean
   /** Local and remote branches without a worktree, listed under each project in the sidebar */
@@ -229,6 +231,7 @@ const DEFAULTS: Settings = {
   editorWordWrap: false,
   claudeSkipPermissions: false,
   codexSkipPermissions: false,
+  terminalAutoRestore: false,
   agentNotifications: true,
   sidebarBranches: false,
   opacity: 100,
@@ -316,6 +319,7 @@ function load(): Settings {
       editorWordWrap: flag('editorWordWrap'),
       claudeSkipPermissions: candidate.claudeSkipPermissions === true,
       codexSkipPermissions: candidate.codexSkipPermissions === true,
+      terminalAutoRestore: candidate.terminalAutoRestore === true,
       agentNotifications: candidate.agentNotifications !== false,
       sidebarBranches: candidate.sidebarBranches === true,
       opacity: clampOpacity(candidate.opacity),
