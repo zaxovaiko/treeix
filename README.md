@@ -114,6 +114,7 @@ The host in `apps/desktop` owns workspaces, worktrees, diffs, the editor, commen
 | [`schema`](packages/plugins/schema) | on | Drizzle tables, columns and foreign keys as a diagram |
 | [`plans`](packages/plugins/plans) | on | Claude plans in the palette and on sessions |
 | [`usage-limits`](packages/plugins/usage-limits) | on | Claude and Codex limits in the title bar |
+| [`agent-usage`](packages/plugins/agent-usage) | on | Tokens and estimated cost per day, model and project, from Claude, Codex and Ollama session logs |
 | [`themes`](packages/plugins/themes) | on | Light and dark themes after popular editors |
 | [`diagrams`](packages/plugins/diagrams) | on | Mermaid code blocks, loaded on the first diagram |
 | [`keep-awake`](packages/plugins/keep-awake) | on | Keeps the Mac awake while an agent works |

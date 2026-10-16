@@ -1,0 +1,11 @@
+{
+  "name": "@treeix/plugin-agent-usage",
+  "version": "0.1.0",
+  "private": true,
+  "treeix": {
+    "id": "agent-usage",
+    "name": "Agent usage",
+    "description": "Tokens and estimated cost per day, model and project, counted from Claude, Codex and Ollama session logs.",
+    "enabledByDefault": true
+  }
+}
