@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ISLAND, useHost, PANE_HEADER } from '@treeix/sdk'
+import { useAgents } from '@treeix/app/agents'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
-import { chatIdOf, followRunEvents, hubAgents, hubApi, hubSelection, setConversation, hubRunStep } from './store'
+import { followRunEvents, hubAgents, hubApi, hubRunStep, registryId } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
 
@@ -50,6 +51,38 @@ const duration = (ms: number): string => {
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
+/** Where a finished step's conversation goes on; the first message resumes it as a live chat */
+function ReplyBox({ name, inset, onSend }: { name: string; inset: boolean; onSend: (message: string) => void }): React.JSX.Element {
+  const [draft, setDraft] = useState('')
+  const send = (): void => {
+    if (!draft.trim()) return
+    onSend(draft.trim())
+    setDraft('')
+  }
+  return (
+    <div className={`shrink-0 px-4 pb-3 ${inset ? 'pr-60' : ''}`}>
+      <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl bg-muted/40 p-2 ring-1 ring-border focus-within:ring-primary">
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+            event.preventDefault()
+            send()
+          }}
+          rows={1}
+          aria-label={`Reply to ${name}`}
+          placeholder={`Reply to ${name} to keep going`}
+          className="max-h-40 min-h-7 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] outline-none placeholder:text-muted-foreground/60"
+        />
+        <IconButton label="Send" disabled={!draft.trim()} onClick={send}>
+          <Icon name="arrowRight" className="size-3.5" />
+        </IconButton>
+      </div>
+    </div>
+  )
+}
+
 /** A run: its steps, and for the selected one what the agent did or what the step produced */
 export function RunView({ run }: { run: Run }): React.JSX.Element {
   const host = useHost()
@@ -83,14 +116,19 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   const retryable =
     node && state && (run.status === 'failed' || run.status === 'cancelled' || run.status === 'interrupted') && (state.status === 'failed' || state.status === 'cancelled')
   const stepAgent = agentOf(node ?? undefined)
-  // The agent's chat opens in its own folder, so a step that ran elsewhere can't be resumed there
-  const resumable = stepAgent && state?.sessionId && state.status !== 'running' && node?.kind === 'agent' && (!node.folder || node.folder === stepAgent.folder)
-  const continueInChat = (): void => {
-    if (!stepAgent || !state?.sessionId) return
-    chat?.stop(chatIdOf(stepAgent))
-    chat?.forget(chatIdOf(stepAgent))
-    setConversation(stepAgent.id, state.sessionId)
-    hubSelection.set(`agent:${stepAgent.id}`)
+  const persona = useAgents().find((entry) => stepAgent && entry.id === registryId(stepAgent))
+  // A finished step's conversation carries on as a chat of its own, so the agent's own chat is left alone
+  const chatId = `run:${run.id}:${node?.id ?? ''}`
+  const chatting = useSyncExternalStore(chat?.subscribe ?? (() => () => undefined), () => chat?.agent(chatId) != null)
+  const continuable = node?.kind === 'agent' && stepAgent && persona?.chat && state?.sessionId && state.status !== 'running'
+  const reply = (message: string): void => {
+    if (!chat || !continuable || !persona.chat || !state.sessionId) return
+    const cwd = node.folder ?? stepAgent.folder ?? host.defaultCwd
+    // The chat shows a failed start itself
+    chat.start(chatId, { agent: persona.id, ...persona.chat, cwd, resume: state.sessionId }).then(
+      () => chat.send(chatId, message),
+      () => undefined
+    )
   }
   const report = (action: Promise<unknown>): void => void action.catch((error: unknown) => host.flash(errorMessage(error)))
 
@@ -137,68 +175,70 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           </IconButton>
         )}
       </header>
-      <div
-        ref={scroller}
-        onScroll={(event) => {
-          const element = event.currentTarget
-          atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
-        }}
-        className={`min-h-0 flex-1 overflow-y-auto ${sidebar && openSteps ? 'pr-60' : ''}`}
-      >
-        <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
-          {node?.kind === 'agent' && chat ? (
-            <chat.Transcript
-              events={nodeEvents}
-              cwd={node.folder ?? host.defaultCwd}
-              live={state?.status === 'running'}
-              onAnswer={(requestId, optionId) => hubApi.answer(run.id, node.id, requestId, optionId)}
-            />
-          ) : (
-            state?.output && (
-              <div className="text-sm select-text">
-                <LazyMarkdown>{state.output}</LazyMarkdown>
-              </div>
-            )
-          )}
-          {node?.kind === 'approval' && state?.prompt && (
-            <div className="text-sm select-text">
-              <LazyMarkdown>{state.prompt}</LazyMarkdown>
-            </div>
-          )}
-          {node && state?.waiting === 'approval' && (
-            <div className="flex gap-2">
-              <button onClick={() => hubApi.decide(run.id, node.id, true)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
-                Approve
-              </button>
-              <button onClick={() => hubApi.decide(run.id, node.id, false)} className="h-7 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">
-                Reject
-              </button>
-            </div>
-          )}
-          {state?.status === 'running' && !state.waiting && (
-            <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
-              Working…
-            </div>
-          )}
-          {state?.error && !logged && <div className="rounded-lg bg-red-400/5 px-3 py-2 text-xs text-red-300 ring-1 ring-red-400/30 select-text">{state.error}</div>}
-          {resumable && (
-            <button onClick={continueInChat} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
-              Continue in chat
-            </button>
-          )}
-          {retryable && (
-            <button onClick={() => report(hubApi.retry(run.id, node.id))} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
-              Retry from this step
-            </button>
-          )}
-          {state?.usage && (
-            <div className="text-[11px] text-muted-foreground">
-              {state.usage.used.toLocaleString()} tokens{state.usage.cost !== null && ` · $${state.usage.cost.toFixed(4)}`}
-            </div>
-          )}
+      {chat && chatting ? (
+        <div className={`flex min-h-0 flex-1 flex-col ${sidebar && openSteps ? 'pr-60' : ''}`}>
+          <chat.View chatId={chatId} />
         </div>
-      </div>
+      ) : (
+        <div
+          ref={scroller}
+          onScroll={(event) => {
+            const element = event.currentTarget
+            atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+          }}
+          className={`min-h-0 flex-1 overflow-y-auto ${sidebar && openSteps ? 'pr-60' : ''}`}
+        >
+          <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
+            {node?.kind === 'agent' && chat ? (
+              <chat.Transcript
+                events={nodeEvents}
+                cwd={node.folder ?? host.defaultCwd}
+                live={state?.status === 'running'}
+                onAnswer={(requestId, optionId) => hubApi.answer(run.id, node.id, requestId, optionId)}
+              />
+            ) : (
+              state?.output && (
+                <div className="text-sm select-text">
+                  <LazyMarkdown>{state.output}</LazyMarkdown>
+                </div>
+              )
+            )}
+            {node?.kind === 'approval' && state?.prompt && (
+              <div className="text-sm select-text">
+                <LazyMarkdown>{state.prompt}</LazyMarkdown>
+              </div>
+            )}
+            {node && state?.waiting === 'approval' && (
+              <div className="flex gap-2">
+                <button onClick={() => hubApi.decide(run.id, node.id, true)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+                  Approve
+                </button>
+                <button onClick={() => hubApi.decide(run.id, node.id, false)} className="h-7 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">
+                  Reject
+                </button>
+              </div>
+            )}
+            {state?.status === 'running' && !state.waiting && (
+              <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
+                Working…
+              </div>
+            )}
+            {state?.error && !logged && <div className="rounded-lg bg-red-400/5 px-3 py-2 text-xs text-red-300 ring-1 ring-red-400/30 select-text">{state.error}</div>}
+            {retryable && (
+              <button onClick={() => report(hubApi.retry(run.id, node.id))} className="h-7 self-start rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent">
+                Retry from this step
+              </button>
+            )}
+            {state?.usage && (
+              <div className="text-[11px] text-muted-foreground">
+                {state.usage.used.toLocaleString()} tokens{state.usage.cost !== null && ` · $${state.usage.cost.toFixed(4)}`}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {continuable && !chatting && <ReplyBox name={stepAgent.name} inset={sidebar && openSteps} onSend={reply} />}
       {/* An ask is one agent and its output; the step list earns its own island in workflows */}
       {sidebar && openSteps && (
         <aside className={`absolute top-2 right-2 bottom-2 z-20 flex w-56 flex-col ${ISLAND}`}>

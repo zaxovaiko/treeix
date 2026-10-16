@@ -192,7 +192,9 @@ async function connect(chatId: string, options: ChatStartOptions, fresh: boolean
     const result = await bridge.invoke<StartResult>('start', chatId, startOptions)
     // An older connect still waiting gives way to this one
     replayed(chatId)
-    const replay = fresh ? new Promise<void>((resolve) => replayWaits.set(chatId, resolve)) : null
+    // A resumed session replays too, so whatever is sent after the start lands below its history
+    const replays = fresh || (options.resume !== null && result.capabilities.load === true)
+    const replay = replays ? new Promise<void>((resolve) => replayWaits.set(chatId, resolve)) : null
     update(chatId, (state) => ({
       ...state,
       feed: fresh ? emptyFeed : state.feed,
