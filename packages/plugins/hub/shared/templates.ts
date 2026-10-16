@@ -33,19 +33,43 @@ End your reply with the pull request URL on its own line.`
 
 const NAME: Record<Watch['source'], string> = { jira: 'Ship Jira tickets', notion: 'Ship Notion tasks' }
 
-/** A workflow that watches Jira or Notion and has an agent take each new item to a pull request; its watch starts off, so nothing runs before the agent and folder are checked */
-export const shipWorkflow = (source: Watch['source'], agent: string): Workflow => ({
+/** Input, one agent step with the prompt, output */
+const oneStep = (name: string, agent: string, prompt: string, input: Extract<Workflow['nodes'][number], { kind: 'input' }>): Workflow => ({
   id: crypto.randomUUID(),
-  name: NAME[source],
+  name,
   nodes: [
-    { id: 'input', kind: 'input', watches: [{ id: crypto.randomUUID(), source, query: WATCH_QUERY[source], ...(source === 'notion' && { dataSource: '' }), enabled: false }] },
-    { id: 'ship', kind: 'agent', agent, prompt: shipPrompt(source), folder: null, retries: 0, onError: 'stop', timeoutMin: MAX_TIMEOUT_MIN },
+    input,
+    { id: 'agent', kind: 'agent', agent, prompt, folder: null, retries: 0, onError: 'stop', timeoutMin: MAX_TIMEOUT_MIN },
     { id: 'output', kind: 'output', template: '{{prev}}' }
   ],
   edges: [
-    { id: 'input-ship', from: 'input', to: 'ship', branch: null },
-    { id: 'ship-output', from: 'ship', to: 'output', branch: null }
+    { id: 'input-agent', from: 'input', to: 'agent', branch: null },
+    { id: 'agent-output', from: 'agent', to: 'output', branch: null }
   ],
-  layout: { input: { x: 0, y: 0 }, ship: { x: 260, y: 0 }, output: { x: 520, y: 0 } },
+  layout: { input: { x: 0, y: 0 }, agent: { x: 260, y: 0 }, output: { x: 520, y: 0 } },
   updatedAt: Date.now()
 })
+
+/** A workflow that watches Jira or Notion and has an agent take each new item to a pull request; its watch starts off, so nothing runs before the agent and folder are checked */
+export const shipWorkflow = (source: Watch['source'], agent: string): Workflow =>
+  oneStep(NAME[source], agent, shipPrompt(source), {
+    id: 'input',
+    kind: 'input',
+    watches: [{ id: crypto.randomUUID(), source, query: WATCH_QUERY[source], ...(source === 'notion' && { dataSource: '' }), enabled: false }]
+  })
+
+const ADD_TESTS_PROMPT = `You work on one pull request, on your own: nobody watches this run.
+
+Pull request: {{input.url}} {{input.title}}
+Branch: {{input.sourceBranch}}, into {{input.targetBranch}}
+
+1. Fetch, then work in a git worktree on {{input.sourceBranch}}: reuse one that already has it, else add one. Leave the user's checkout alone.
+2. Follow the repo's AGENTS.md or CLAUDE.md, its skills and its subagents.
+3. Read what the pull request changes against {{input.targetBranch}} and add tests that cover it, in the style of the repo's own. If the repo has no tests, say so and stop.
+4. Run the repo's CI commands until they pass.
+5. Commit and push to {{input.sourceBranch}}. Never force-push, merge or approve. No AI attribution anywhere: no Co-Authored-By, no "Generated with" line.
+
+End your reply with what the new tests cover, in one line.`
+
+/** A board stage: a pull request dropped on it gets tests for what it changes */
+export const addTestsWorkflow = (agent: string): Workflow => oneStep('Add tests', agent, ADD_TESTS_PROMPT, { id: 'input', kind: 'input' })

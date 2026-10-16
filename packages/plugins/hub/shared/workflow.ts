@@ -51,6 +51,18 @@ export const isWatch = (value: unknown): value is Watch =>
 /** The ticket a watch started a run for */
 export type Ticket = { key: string; url: string | null }
 
+/** A pull request (or merge request) the board runs a stage on; it is the run's input as JSON */
+export type PullRequestCard = { url: string; title: string; number: number; repoPath: string; sourceBranch: string; targetBranch: string }
+
+export const isPullRequestCard = (value: unknown): value is PullRequestCard =>
+  isJson(value) && ['url', 'title', 'repoPath', 'sourceBranch', 'targetBranch'].every((key) => isString(value[key])) && typeof value.number === 'number'
+
+/** The workflow as it runs on the card: steps without a folder work in the pull request's repo */
+export const onCard = (workflow: Workflow, card: PullRequestCard): Workflow => ({
+  ...workflow,
+  nodes: workflow.nodes.map((node) => (node.kind === 'agent' ? { ...node, folder: node.folder ?? card.repoPath } : node))
+})
+
 export type WorkflowNode =
   /**
    * `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input; `events` start it when a plugin emits one,
@@ -136,6 +148,8 @@ export type Run = {
   output: string | null
   /** Set when a watch started the run */
   ticket?: Ticket | null
+  /** URL of the pull request the board ran it on */
+  card?: string | null
 }
 
 /** One logged chat event of a node, as stored and streamed */
@@ -182,3 +196,6 @@ export const activeAgents = (runs: Run[]): Set<string> =>
 /** Runs are written by the app; this only keeps a damaged file from reaching the UI */
 export const isRun = (value: unknown): value is Run =>
   isJson(value) && typeof value.id === 'string' && typeof value.status === 'string' && isJson(value.workflow) && isJson(value.nodes) && typeof value.startedAt === 'number'
+
+/** The latest run on each pull request card, by its URL; `runs` come newest first */
+export const latestCardRuns = (runs: Run[]): Map<string, Run> => new Map(runs.flatMap((run): [string, Run][] => (run.card ? [[run.card, run]] : [])).reverse())

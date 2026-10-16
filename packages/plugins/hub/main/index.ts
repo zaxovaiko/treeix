@@ -10,7 +10,7 @@ import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, askWorkflow, isPullRequestCard, isWorkflow, onCard, type Run, type Workflow } from '../shared/workflow'
 import { readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
@@ -130,6 +130,27 @@ const plugin: MainPlugin = {
       if (problem) throw new Error(problem.message)
       return engine.launch('workflow', workflow.name, workflow, input).id
     })
+    // A pull request dropped on a board stage: one agent on it at a time, held from the first check so two quick drops can't both start
+    const moving = new Set<string>()
+    context.handle('moveCard', async (_, card: unknown, id: string) => {
+      if (!isPullRequestCard(card)) throw new Error('Invalid pull request')
+      if (moving.has(card.url)) throw new Error('An agent is already on this pull request')
+      moving.add(card.url)
+      try {
+        const workflow = (await workflows.get()).find((entry) => entry.id === id)
+        if (!workflow) throw new Error('The workflow is gone')
+        const problem = validate(
+          workflow,
+          (await agents.get()).map((agent) => agent.id)
+        )[0]
+        if (problem) throw new Error(problem.message)
+        if ((await engine.list()).some((run) => run.card === card.url && run.status === 'running')) throw new Error('An agent is already on this pull request')
+        const title = `${workflow.name}: #${card.number} ${card.title}`.slice(0, TITLE_CHARS)
+        return engine.launch('workflow', title, onCard(workflow, card), JSON.stringify(card), false, { card: card.url }).id
+      } finally {
+        moving.delete(card.url)
+      }
+    })
 
     // Shown notifications are kept until clicked or closed, else Electron collects them and the click goes nowhere
     const notices = new Set<Notification>()
@@ -223,7 +244,7 @@ const plugin: MainPlugin = {
         )[0]
         if (problem) throw new Error(problem.message)
         const title = `${workflow.name}: ${item.key} ${item.title}`.trim().slice(0, TITLE_CHARS)
-        const run = engine.launch('workflow', title, workflow, JSON.stringify(item), false, { key: item.key, url: item.url })
+        const run = engine.launch('workflow', title, workflow, JSON.stringify(item), false, { ticket: { key: item.key, url: item.url } })
         void engine.wait(run.id).then((ended) => {
           if (!ended || ended.status === 'done') return
           show(`${workflow.name} ${ended.status} on ${item.key}`, Object.values(ended.nodes).find((node) => node.error)?.error ?? '', ended.id)

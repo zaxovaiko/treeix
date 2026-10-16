@@ -4,7 +4,7 @@ import { Card, Row, Segmented } from '@treeix/app/settingsUi'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage } from '@treeix/app/ui'
 import type { ReviewComment } from '@treeix/shared/comments'
-import type { PullRequest } from '../shared/types'
+import type { PullRequest, PullRequestList } from '../shared/types'
 import { api, POLL_MINUTES, prSettings } from './api'
 import { cachedPullRequests, findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
 import { pullRequestCommands } from './keys'
@@ -203,6 +203,18 @@ const listedCommands = (host: HostApi): Command[] =>
     run: () => host.openTab(detailTab(pr))
   }))
 
+declare module '@treeix/sdk' {
+  interface Services {
+    /** Provided by the Pull requests plugin: `cached` is the last list fetched for the repos, `subscribe` fires on each new one */
+    pullRequests: {
+      cached: (repoPaths: string[]) => PullRequestList | null
+      refresh: (repoPaths: string[]) => Promise<PullRequestList>
+      subscribe: (listener: () => void) => () => void
+      open: (pr: PullRequest, host: HostApi) => void
+    }
+  }
+}
+
 const plugin: RendererPlugin = {
   openLink: openPullRequestUrl,
   tabs: [{ id: TAB_ID, label: 'Pull requests', icon: 'pullRequest', order: 20, render: PullRequestsTab, panels: ['terminal'], Badge: PullRequestsCount }],
@@ -212,6 +224,14 @@ const plugin: RendererPlugin = {
   toolMarks: {
     gh: () => <ProviderMark provider="github" className="size-4" />,
     glab: () => <ProviderMark provider="gitlab" className="size-4" />
+  },
+  services: {
+    pullRequests: {
+      cached: (repoPaths) => cachedPullRequests(scopeKeyOf(repoPaths)),
+      refresh: refreshPullRequests,
+      subscribe: (listener) => onPullRequestsUpdated(() => listener()),
+      open: (pr, host) => host.openTab(detailTab(pr))
+    }
   }
 }
 

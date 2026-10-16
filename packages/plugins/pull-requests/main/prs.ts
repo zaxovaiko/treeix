@@ -290,14 +290,17 @@ async function listForRepo(repoPath: string): Promise<PullRequest[]> {
   }
   const path = `projects/:id/merge_requests?state=all&order_by=updated_at&per_page=${LIST_LIMIT}`
   // Pipelines are a nicety too: the list still loads without them
-  const [requests, pipelineData] = await Promise.all([
+  const [requests, pipelineData, viewer] = await Promise.all([
     runJson('glab', ['api', path], repoPath),
-    runJson('glab', ['api', 'graphql', '-f', `query=${GITLAB_PIPELINE_QUERY}`, '-f', `path=${remote.slug}`], repoPath).catch(() => null)
+    runJson('glab', ['api', 'graphql', '-f', `query=${GITLAB_PIPELINE_QUERY}`, '-f', `path=${remote.slug}`], repoPath).catch(() => null),
+    gitlabUser(repoPath)
   ])
   const pipelines = gitlabPipelines(pipelineData, remote.host)
   return list(requests).map((raw) => {
     const pr = toGitlabPullRequest(raw, repoPath)
-    return pr.state === 'open' ? { ...pr, pipeline: pipelines.get(pr.number) ?? null } : pr
+    if (pr.state !== 'open') return pr
+    // Only your own merge requests are marked: GitLab's list carries no review state for anyone else's
+    return { ...pr, pipeline: pipelines.get(pr.number) ?? null, review: viewer && pr.author === viewer ? { state: 'yours', newCommits: 0 } : null }
   })
 }
 

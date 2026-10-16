@@ -23,7 +23,7 @@ export type PullRequest = {
   changedFiles: number | null
   /** Conversation comments plus review threads */
   commentCount: number | null
-  /** Your relation to an open GitHub PR; null when unknown (GitLab, closed, or the lookup failed) */
+  /** Your relation to an open PR; null when unknown (closed, the lookup failed, or a GitLab MR that isn't yours) */
   review: ReviewStatus | null
   /** Open and can't merge cleanly into the target branch; false while the provider is still computing it */
   conflicts: boolean

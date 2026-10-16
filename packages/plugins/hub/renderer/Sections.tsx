@@ -2,7 +2,7 @@ import { useHost } from '@treeix/sdk'
 import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, IconButton } from '@treeix/app/ui'
-import { shipWorkflow } from '../shared/templates'
+import { addTestsWorkflow, shipWorkflow } from '../shared/templates'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { historyGroup, historyTime } from './historyGroups'
@@ -105,16 +105,15 @@ export function NewWorkflowButton(): React.JSX.Element {
       },
       (reason: unknown) => host.flash(errorMessage(reason))
     )
-  // A ship run goes unwatched, so its agent should not stop to ask for each command
-  const ship = (source: 'jira' | 'notion'): void => {
+  // Template runs go unwatched, so their agent should not stop to ask for each command
+  const unwatched = (make: (agent: string) => Workflow, lastStep: string): void => {
     const agent = hubAgents.get()[0]
-    const steps = [
-      !agent && 'create an agent and pick it in the workflow',
-      agent && !agent.autoApprove && `turn on "Allow everything it asks" for ${agent.name}`,
-      'turn the watch on in the Input step'
-    ].filter(Boolean)
-    create(shipWorkflow(source, agent?.id ?? ''), `To start: ${steps.join(', then ')}`)
+    const steps = [!agent && 'create an agent and pick it in the workflow', agent && !agent.autoApprove && `turn on "Allow everything it asks" for ${agent.name}`, lastStep].filter(
+      Boolean
+    )
+    create(make(agent?.id ?? ''), `To start: ${steps.join(', then ')}`)
   }
+  const ship = (source: 'jira' | 'notion'): void => unwatched((agent) => shipWorkflow(source, agent), 'turn the watch on in the Input step')
   return (
     <IconButton
       label="New workflow"
@@ -123,7 +122,8 @@ export function NewWorkflowButton(): React.JSX.Element {
           { label: 'Blank workflow', run: () => create(newWorkflow()) },
           null,
           { label: 'Ship Jira tickets', run: () => ship('jira') },
-          { label: 'Ship Notion tasks', run: () => ship('notion') }
+          { label: 'Ship Notion tasks', run: () => ship('notion') },
+          { label: 'Add tests to pull requests', run: () => unwatched(addTestsWorkflow, 'add it as a stage on the Pull requests board') }
         ])
       }
     >
