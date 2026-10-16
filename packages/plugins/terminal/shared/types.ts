@@ -20,6 +20,12 @@ export type AgentHookStatus = 'input' | 'working' | 'done'
 /** A session's agent conversation, for reading its transcript */
 export type TranscriptRef = { sessionId: string; kind: string; agentSessionId: string }
 
+/** `auto` reads a short reply in full and summarizes a long one */
+export type HearMode = 'auto' | 'full'
+
+/** The last reply as it is read out; `error` when it was too long but couldn't be summarized */
+export type HeardReply = { text: string; summarized: boolean; error?: string }
+
 /** Tokens a conversation used: `input` is fresh input including cache writes, `cached` is input read from the cache; `costUsd` is Claude's own figure, when it reported one this run */
 export type SessionUsage = { input: number; output: number; cached: number; costUsd?: number }
 

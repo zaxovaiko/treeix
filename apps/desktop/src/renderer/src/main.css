@@ -224,6 +224,29 @@ html:not([data-translucent]) {
   animation: var(--animate-spin) !important;
 }
 
+/* And the voice orb: it breathes, turns and bounces with each spoken word, so listening reads as live */
+@media (prefers-reduced-motion: no-preference) {
+  .voice-orb {
+    animation: voice-orb-breathe 2.4s ease-in-out infinite !important;
+  }
+  .voice-orb-swirl {
+    animation: voice-orb-turn 5s linear infinite !important;
+  }
+  .voice-orb-pulse {
+    transition: scale 0.18s ease-out !important;
+  }
+}
+@keyframes voice-orb-breathe {
+  50% {
+    scale: 1.05;
+  }
+}
+@keyframes voice-orb-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
 /* Every icon button gives tactile feedback on press */
 button:not(:disabled):active svg {
   scale: 0.85;

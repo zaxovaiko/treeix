@@ -30,6 +30,7 @@ import { setFolderPickerOpen, setPickedFolder, terminalCwd, useTerminalCwd } fro
 import { Inspector } from './Inspector'
 import { Ports } from './Ports'
 import { SessionsDialog } from './SessionsDialog'
+import { hearLastReply, Speaker } from './Speaker'
 import { startRename } from './rename'
 import { openSession, sessionEntries, WorkspaceTerminals } from './SessionPanel'
 import { findInFiles, resolvePath } from './fileLinks'
@@ -61,6 +62,7 @@ import {
   setIssueLinks,
   setWebLinkHandler,
   subscribeTerminals,
+  transcriptRef,
   syncChats,
   useTerminals,
   whenReady
@@ -453,6 +455,7 @@ function Root(): React.JSX.Element | null {
   useEffect(() => registerActionRunner('terminal.reopenClosed', () => reopenClosed(hostRef.current)), [])
   return (
     <>
+      <Speaker />
       {switcher && (
         <SessionsDialog
           sessions={current.sessions}
@@ -484,6 +487,12 @@ defineActions([
   { id: 'terminal.previousPane', label: 'Previous split pane', section: 'Terminal', keys: key('BracketLeft', { meta: true }) },
   { id: 'terminal.nextPane', label: 'Next split pane', section: 'Terminal', keys: key('BracketRight', { meta: true }) },
   {
+    id: 'terminal.hearReply',
+    label: "Hear the agent's last reply: read out, or summarized when long; again to stop",
+    section: 'Terminal',
+    keys: key('KeyL', { meta: true, shift: true })
+  },
+  {
     id: 'terminal.reopenClosed',
     label: 'Reopen the last closed session, resuming its agent conversation',
     menuLabel: 'Reopen Closed Session',
@@ -512,6 +521,7 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.newClaudeTab': () => newSession(host, 'claude'),
     'terminal.newChat': () => newChat(host),
     'terminal.reopenClosed': () => reopenClosed(host),
+    'terminal.hearReply': () => void hearLastReply(scope.session, 'auto', host.flash),
     'terminal.goToFolder': () => openFolderPicker(host)
   }
   const anywhereId = actionForEvent(event, Object.keys(anywhere))
@@ -602,6 +612,26 @@ const plugin: RendererPlugin = {
       shortcut: actionKeys(NEW_TAB_ACTIONS[agent.id] ?? '') || undefined,
       run: () => newSession(host, agent.id)
     })),
+    ...(transcriptRef(scope.session ?? undefined)
+      ? [
+          {
+            id: 'terminal:hearReply',
+            group: 'Actions',
+            label: 'Hear the last reply',
+            detail: 'Summarized when long',
+            icon: 'mic' as const,
+            shortcut: actionKeys('terminal.hearReply') || undefined,
+            run: () => void hearLastReply(scope.session, 'auto', host.flash)
+          },
+          {
+            id: 'terminal:readReply',
+            group: 'Actions',
+            label: 'Read the last reply aloud in full',
+            icon: 'mic' as const,
+            run: () => void hearLastReply(scope.session, 'full', host.flash)
+          }
+        ]
+      : []),
     ...(host.service('chat') && chatAgent()
       ? [
           {

@@ -10,7 +10,7 @@ import { agentState, agentStatus } from './agentStatus'
 import { findIssueLinks, findRowFileLinks, findWebLinks } from './fileLinks'
 import { getCurrentWorkspaceId, getWorkspaces, HOME, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
-import type { AgentHookStatus, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
+import type { AgentHookStatus, HeardReply, HearMode, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
 import {
   type ClosedSession,
   isDefaultChatTitle,
@@ -209,6 +209,9 @@ export const searchTranscripts = (query: string, refs: TranscriptRef[]): Promise
 
 /** Mermaid diagrams the session's agent wrote, newest first */
 export const sessionDiagrams = (ref: TranscriptRef): Promise<string[]> => bridge.invoke<string[]>('diagrams', ref).catch(() => [])
+
+/** The agent's last reply as it is read out, summarized when long in `auto` */
+export const hearReply = (ref: TranscriptRef, mode: HearMode): Promise<HeardReply | null> => bridge.invoke<HeardReply | null>('lastReply', ref, mode).catch(() => null)
 
 export const sessionUsage = (ref: TranscriptRef): Promise<SessionUsage | null> => bridge.invoke<SessionUsage | null>('usage', ref).catch(() => null)
 

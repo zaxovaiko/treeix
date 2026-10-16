@@ -1,14 +1,18 @@
 import { BrowserWindow } from 'electron'
 import type { MainPlugin } from '@treeix/sdk/main'
-import type { SessionUsage, TerminalOptions, TranscriptRef } from '../shared/types'
+import type { HeardReply, HearMode, SessionUsage, TerminalOptions, TranscriptRef } from '../shared/types'
 import { sessionTools } from './agentTools'
 import { codexConversations } from './codex'
 import { claudeCost, watchStatuses, withStatusHooks } from './hooks'
-import { mermaidDiagrams, readTranscript, searchTranscripts, transcriptUsage } from './transcripts'
+import { speakable, summarize } from './speech'
+import { lastReplies, mermaidDiagrams, readTranscript, searchTranscripts, transcriptUsage } from './transcripts'
 import { createTerminal, reportConversation, reportStatus, killAllTerminals, killTerminal, listeningPorts, listTerminals, resizeTerminal, terminalCwd, writeTerminal } from './pty'
 
 /** Stand-ins for when Treeix's MCP server couldn't start */
 const NO_MCP = { TREEIX_CLAUDE_MCP: '{"mcpServers":{}}', TREEIX_CODEX_MCP: 'mcp_servers.treeix={url="http://127.0.0.1:9/mcp",enabled=false}' }
+
+/** Characters past which `auto` summarizes a reply rather than reading it, about 40 seconds of speech */
+const LONG_REPLY = 600
 
 const plugin: MainPlugin = {
   tools: [
@@ -47,6 +51,16 @@ const plugin: MainPlugin = {
     context.handle('usage', async (_, ref: TranscriptRef): Promise<SessionUsage | null> => {
       const [usage, costUsd] = await Promise.all([transcriptUsage(ref), statuses.then(({ folder }) => claudeCost(folder, ref.sessionId))])
       return usage && { ...usage, costUsd }
+    })
+    context.handle('lastReply', async (_, ref: TranscriptRef, mode: HearMode): Promise<HeardReply | null> => {
+      const [reply] = lastReplies(ref.kind, await readTranscript(ref), 1)
+      if (!reply) return null
+      const full = speakable(reply)
+      if (mode === 'full' || full.length <= LONG_REPLY) return { text: full, summarized: false }
+      return summarize(ref.kind, reply).then(
+        (summary) => ({ text: speakable(summary), summarized: true }),
+        (error: unknown) => ({ text: full, summarized: false, error: String(error) })
+      )
     })
     context.handle('diagrams', async (_, ref: TranscriptRef) => mermaidDiagrams(ref.kind, await readTranscript(ref)))
     // ponytail: the focused window, else any; one per session's own window if people run agents across several windows
