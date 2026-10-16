@@ -2,7 +2,7 @@ import { type ChatOption, type ChatService, type ChatSpec, createBridge, createS
 import { errorMessage } from '@treeix/app/ui'
 import { type Agent, getAgent } from '@treeix/app/agents'
 import { parseJson, stringValues } from '@treeix/shared/json'
-import { AGENT_PREFIX, API_PRESETS, type HubAgent, isHubAgent, isRemoteStatus, type RemoteStatus, type Runtime } from '../shared/types'
+import { AGENT_PREFIX, API_PRESETS, type DecisionSettings, type HubAgent, isHubAgent, isRemoteStatus, type RemoteStatus, type Runtime } from '../shared/types'
 import type { LocalModelsState } from '../shared/catalog'
 import type { Subagent } from '../shared/subagents'
 import {
@@ -55,6 +55,9 @@ export const hubApi = {
   /** Whether runs the last quit cut short resume on launch */
   autoResume: () => bridge.invoke<boolean>('autoResume'),
   setAutoResume: (on: boolean) => bridge.invoke<void>('setAutoResume', on),
+  /** Who answers a waiting step when nobody does, and when */
+  decisionSettings: () => bridge.invoke<DecisionSettings>('decisionSettings'),
+  setDecisionSettings: (settings: DecisionSettings) => bridge.invoke<void>('setDecisionSettings', settings),
   ticket: (source: TicketSource, key: string) => bridge.invoke<TicketDetail>('ticket', source, key),
   /** Changes only what is given */
   editTicket: (source: TicketSource, key: string, changes: { title?: string; body?: string }) => bridge.invoke<string>('editTicket', source, key, changes),

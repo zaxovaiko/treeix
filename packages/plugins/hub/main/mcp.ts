@@ -143,7 +143,7 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
       return { id, kind: 'condition', source: field('source', '{{prev}}'), test, value: field('value', '') }
     }
     case 'approval':
-      return { id, kind: 'approval', message: field('message', '{{prev}}') }
+      return { id, kind: 'approval', message: field('message', '{{prev}}'), timeoutMin: typeof value.timeoutMin === 'number' && value.timeoutMin > 0 ? value.timeoutMin : null }
     case 'tool':
       // Arguments come as the JSON template itself or as an object, which reads better in a call
       return { id, kind: 'tool', tool: required(value, 'tool').trim(), args: isJson(value.args) ? JSON.stringify(value.args) : field('args', '{}') }
@@ -328,7 +328,7 @@ export function hubTools(deps: {
         '- agent: {agent: name, prompt, folder?, model?, subagent?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output. model overrides the agent\'s. subagent is a path from hub_subagents: the step runs with that subagent\'s prompt and model, so one agent covers every role its repos already define.',
         '- merge | output: {template}; at least one output, whose text is the run result.',
         '- condition: {source, test: "contains"|"equals"|"regex"|"empty", value}; edges leaving it set branch "true" or "false".',
-        '- approval: {message}; waits for the user to approve in the AI Hub, then passes its input on.',
+        "- approval: {message, timeoutMin?}; waits for the user to approve (in the AI Hub, from their phone or on the run's ticket), then passes its input on. Without a reply within timeoutMin (default: the hub setting), an agent decides.",
         '- tool: {tool: name, args: object}; calls an MCP tool Treeix has (e.g. notion_create_pages), its reply is the output. A string in args that is only a {{reference}} gets the value as is, so an agent step answering in JSON can pass lists and objects.',
         'Templates and prompts read {{input}}, {{prev}} (what flows in) and {{nodes.<id>.output}} of an earlier step; a dotted path reads a field of JSON, e.g. {{input.title}} or {{nodes.notes.output.tasks}}.'
       ].join('\n'),

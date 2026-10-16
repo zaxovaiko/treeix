@@ -165,6 +165,31 @@ const plugin: MainPlugin = {
       }
     })
     context.mcpTool({
+      name: 'notion_comments',
+      description: 'The open comments on a Notion page as JSON, oldest first: created (ISO time) and body as plain text.',
+      inputSchema: {
+        type: 'object',
+        properties: { page: { type: 'string', description: 'Page id or URL' } },
+        required: ['page']
+      },
+      run: async (args) => {
+        const id = pageId(args)
+        const comments: { created: string; body: string }[] = []
+        for (let cursor = ''; ;) {
+          const page = await call('GET', `/comments?block_id=${id}&page_size=100${cursor && `&start_cursor=${cursor}`}`)
+          for (const comment of list(page.results))
+            comments.push({
+              created: text(comment.created_time),
+              body: list(comment.rich_text)
+                .map((part) => text(part.plain_text))
+                .join('')
+            })
+          cursor = page.has_more === true ? text(page.next_cursor) : ''
+          if (!cursor) return JSON.stringify(comments)
+        }
+      }
+    })
+    context.mcpTool({
       name: 'notion_update_page',
       description: 'Sets properties of a page in a data source, with plain values by property name as notion_create_pages takes them.',
       inputSchema: {

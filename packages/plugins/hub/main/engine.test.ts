@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ChatAdapter, ChatEvent } from '@treeix/sdk/main'
+import { DECISION_DEFAULTS, type DecisionSettings } from '../shared/types'
 import type { Run, Workflow } from '../shared/workflow'
+import { createDecisions } from './decisions'
 import { createEngine } from './engine'
 import { createRuns } from './runs'
 
@@ -12,7 +14,10 @@ const dir = mkdtempSync(join(tmpdir(), 'hub-runs-'))
 /** Each connection's `resume`, in order */
 const resumed: (string | null)[] = []
 
-/** Thinks, calls a tool, then answers `<agent>: <prompt>`; a prompt saying "hang" never answers, one saying "permission" answers with the option picked */
+/**
+ * Thinks, calls a tool, then answers `<agent>: <prompt>`; a prompt saying "hang" never answers, one saying "permission" answers with the option picked,
+ * and one asking for a decision approves, unless the agent is the naysayer
+ */
 const adapter: ChatAdapter = {
   id: 'fake',
   label: 'Fake',
@@ -27,6 +32,10 @@ const adapter: ChatAdapter = {
       onEvent: (listener) => (listeners.add(listener), () => listeners.delete(listener)),
       prompt: async (content) => {
         const text = content[0].type === 'text' ? content[0].text : ''
+        if (text.includes('You decide in place')) {
+          emit({ type: 'message_chunk', role: 'agent', content: { type: 'text', text: `{"approve": ${command !== 'naysayer'}, "reason": "${command} checked it"}` } })
+          return { stopReason: 'end_turn' }
+        }
         if (text.includes('hang')) return new Promise(() => undefined)
         if (text.includes('permission')) {
           const answer = new Promise<string | null>((resolve) => (picked = resolve))
@@ -225,4 +234,85 @@ test('a tool step gets its arguments from earlier outputs, fails the run when th
   await engine.retry(failed?.id ?? '', 'save')
   expect(await engine.wait(failed?.id ?? '')).toMatchObject({ status: 'done', output: 'Shipped notion_create_pages ok' })
   expect(toolCalls).toHaveLength(2)
+})
+
+/** An engine with decisions on it, and a ticket whose comments live in memory */
+function decided(settings: Partial<DecisionSettings>) {
+  const comments: { created: string; body: string }[] = []
+  const told: string[] = []
+  const store = createRuns(join(dir, `decisions-${Math.random()}`))
+  let decisions: ReturnType<typeof createDecisions> | null = null
+  const engine = createEngine({
+    adapter: () => adapter,
+    runtime: async (agent) => ({ agent, adapter: 'fake', command: agent, cwd: '/' }),
+    autoApprove: async () => false,
+    sessionEnv: async () => ({}),
+    callTool: async () => '',
+    runs: store,
+    onRun: (run) => decisions?.watch(run),
+    onEvents: () => undefined
+  })
+  decisions = createDecisions({
+    engine,
+    settings: async () => ({ ...DECISION_DEFAULTS, ...settings }),
+    callTool: async (name, args) => {
+      if (name === 'jira_work_item') return JSON.stringify({ comments })
+      comments.push({ created: new Date(Date.now() + comments.length).toISOString(), body: String(args.body) })
+      return 'Commented'
+    },
+    notify: (_, title, body) => told.push(`${title}: ${body}`)
+  })
+  return { engine, decisions, comments, told }
+}
+
+test('nobody answers an approval in time: the picked agent decides, and its decision is recorded and told', async () => {
+  const { engine, told } = decided({ agent: 'judge', afterMin: 60 })
+  const quick = gated({ id: 'gate', kind: 'approval', message: 'Ship {{input}}?', timeoutMin: 0.001 })
+  const run = await engine.wait(engine.launch('workflow', 'Quick', quick, 'v6').id)
+  expect(run).toMatchObject({ status: 'done', output: 'Shipped v6', nodes: { gate: { decision: { approved: true, by: 'agent', reason: 'judge checked it' } } } })
+  await tick()
+  expect(told).toEqual(['Quick: approved: Approved by an agent, as nobody replied in time: judge checked it'])
+
+  const { engine: strict } = decided({ agent: 'naysayer', afterMin: 0.001 })
+  expect(await strict.wait(strict.launch('workflow', 'Strict', approval, 'v7').id)).toMatchObject({
+    status: 'failed',
+    nodes: { gate: { error: 'Rejected', decision: { approved: false, by: 'agent', reason: 'naysayer checked it' } } }
+  })
+})
+
+test('a permission nobody answers is decided by the asking agent, and with no deadline set the step waits on', async () => {
+  const { engine } = decided({ afterMin: 0.001 })
+  expect(await engine.wait(engine.ask('scout', 'permission please', null, false).id)).toMatchObject({
+    status: 'done',
+    output: 'scout: yes',
+    nodes: { agent: { decision: { approved: true, by: 'agent', via: 'app' } } }
+  })
+
+  const { engine: patient } = decided({ afterMin: null })
+  const waiting = patient.ask('scout', 'permission please', null, false)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect((await patient.list()).find((run) => run.id === waiting.id)?.nodes.agent.waiting).toBe('permission')
+  patient.cancel(waiting.id)
+})
+
+test('a reply on the ticket decides: Treeix asks once, takes the first approve or reject under its question, and posts what was decided', async () => {
+  const { engine, decisions, comments, told } = decided({ afterMin: null })
+  const run = engine.launch('workflow', 'Ticketed', approval, 'v8', false, { ticket: { key: 'BF-1', url: null } })
+  await decisions.ask(run, 'gate')
+  await decisions.ask(run, 'gate')
+  expect(comments).toHaveLength(1)
+  expect(comments[0].body).toContain(`[treeix:${run.id}:gate] on Ticketed: Ship v8?`)
+
+  comments.push(
+    { created: new Date(Date.now() + 10).toISOString(), body: 'Looks risky' },
+    { created: new Date(Date.now() + 20).toISOString(), body: 'Reject: not before the release' }
+  )
+  await decisions.poll()
+  expect(await engine.wait(run.id)).toMatchObject({
+    status: 'failed',
+    nodes: { gate: { decision: { approved: false, by: 'you', via: 'jira', reason: 'not before the release' } } }
+  })
+  await tick()
+  expect(comments.at(-1)?.body).toBe(`Treeix decision [treeix:${run.id}:gate]: Rejected by you in Jira: not before the release.`)
+  expect(told).toEqual(['Ticketed: rejected: Rejected by you in Jira: not before the release'])
 })

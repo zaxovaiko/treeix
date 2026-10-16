@@ -4,7 +4,7 @@ import { useAgents } from '@treeix/app/agents'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
-import { isWaiting, SOURCED_TITLE, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
+import { decisionText, isWaiting, SOURCED_TITLE, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { followRunEvents, hubAgents, hubApi, hubBack, hubRunStep, registryId } from './store'
 
@@ -220,6 +220,12 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
                   Reject
                 </button>
               </div>
+            )}
+            {state?.decision && (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground select-text">
+                <Icon name={state.decision.approved ? 'check' : 'close'} className="mt-px size-3.5 shrink-0" />
+                {decisionText(state.decision)}
+              </p>
             )}
             {state?.status === 'running' && !state.waiting && (
               <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -5,7 +5,7 @@ import { applyTheme, THEMES } from '@treeix/app/themes'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { sseReader } from '../../main/sse'
 import { BOARD_COLUMNS, boardColumn, runLinks, runSummary } from '../../shared/board'
-import { isRun, isWaiting, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
+import { decisionText, isRun, isWaiting, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
 
 /** The hub's web app on the tailnet, phone first: what needs you, what runs, and starting a workflow */
 
@@ -373,6 +373,7 @@ function RunDetail({ run, agents }: { run: Run; agents: Named[] }): React.JSX.El
                   <span className="min-w-0 flex-1 truncate text-[15px]">{labelOf(step)}</span>
                   <span className="text-xs text-muted-foreground">{STATUS_LABEL[state.waiting ? 'waiting' : state.status]}</span>
                 </button>
+                {state.decision && <p className="mt-1 pl-5 text-sm text-muted-foreground select-text">{decisionText(state.decision)}</p>}
                 {open === step.id && detail && (
                   <div className="mt-2">
                     <Output value={detail} />

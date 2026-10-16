@@ -419,7 +419,23 @@ function Inspector({
       {step.kind === 'approval' && (
         <>
           <TemplateField label="Message" value={step.message} sources={sources} onChange={(message) => onChange({ ...step, message })} />
-          <p className="text-xs text-muted-foreground">The run waits here until you approve it from the run's page; what came in goes on. Reject fails the run.</p>
+          <div className={LABEL}>
+            If nobody answers
+            <Select
+              title="If nobody answers"
+              value={String(step.timeoutMin ?? '')}
+              options={[
+                { value: '', label: 'As in Settings' },
+                ...[...new Set([...DECIDE_AFTER_MIN, ...(step.timeoutMin ? [step.timeoutMin] : [])])]
+                  .toSorted((a, b) => a - b)
+                  .map((min) => ({ value: String(min), label: `An agent decides after ${min % 60 ? `${min} min` : `${min / 60} h`}` }))
+              ]}
+              onChange={(value) => onChange({ ...step, timeoutMin: Number(value) || null })}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The run waits here until you approve it, here, from your phone or on its ticket; what came in goes on. Reject fails the run.
+          </p>
         </>
       )}
       {(step.kind === 'merge' || step.kind === 'output') && (
@@ -470,6 +486,7 @@ function Inspector({
   )
 }
 
+const DECIDE_AFTER_MIN = [5, 15, 30, 60, 120, 240, 480]
 const STEP_KINDS = ['agent', 'tool', 'merge', 'condition', 'approval', 'output'] as const
 const TOOL = 'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs hover:bg-accent'
 

@@ -3,7 +3,20 @@ import type { ChatAdapter, ChatConnection, ChatEvent } from '@treeix/sdk/main'
 import { createBatcher } from '@treeix/host/batcher'
 import { render, renderArgs, type TemplateScope } from '../shared/template'
 import { descendants } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, freshNode, type NodeRun, type Run, type RunEvent, type RunStatus, type ToolNode, type Workflow } from '../shared/workflow'
+import {
+  type AgentNode,
+  type AgentRuntime,
+  askWorkflow,
+  type Decider,
+  FROM_APP,
+  freshNode,
+  type NodeRun,
+  type Run,
+  type RunEvent,
+  type RunStatus,
+  type ToolNode,
+  type Workflow
+} from '../shared/workflow'
 import { holds, isLive, nextSteps } from './schedule'
 import { readSubagent } from './subagents'
 import { KEEP_RUNS, mergeChunks, type Runs } from './runs'
@@ -42,7 +55,12 @@ type Active = {
   finish: (run: Run) => void
   /** Steps that pick their conversation back up instead of starting one, by node id */
   resumes: Map<string, string>
+  /** Open permission questions, by `<node>:<requestId>` */
+  permissions: Map<string, Question>
 }
+
+/** A permission question an agent step waits on */
+export type Question = Extract<ChatEvent, { type: 'permission' }> & { node: string }
 
 /** Hands out at most `size` slots; a released slot goes straight to the longest waiter */
 function createLimiter(size: number): { acquire: () => Promise<void>; release: () => void } {
@@ -149,8 +167,10 @@ export function createEngine(deps: {
         const allow = event.options.find((option) => option.kind === 'allow_once') ?? event.options.find((option) => option.kind === 'allow_always')
         if (autoApprove && allow) return connection.answer(event.requestId, allow.id)
         asking.add(event.requestId)
+        entry.permissions.set(`${node.id}:${event.requestId}`, { ...event, node: node.id })
         set(entry, node.id, { waiting: 'permission' })
       }
+      if (event.type === 'permission_settled') entry.permissions.delete(`${node.id}:${event.requestId}`)
       if (event.type === 'permission_settled' && asking.delete(event.requestId) && !asking.size) set(entry, node.id, { waiting: null })
       // The node's answer is its own agent's last reply, never a subagent's
       if (event.type === 'tool_call' && !event.parent) reply = ''
@@ -280,7 +300,20 @@ export function createEngine(deps: {
       void deps.runs.append(run.id, merged)
       deps.onEvents(run.id, merged)
     }, EVENTS_DELAY_MS)
-    const entry: Active = { run, delegated, connections: new Map(), events, log: batcher.push, flush: batcher.flush, stopped, stop, finished, finish, resumes: new Map() }
+    const entry: Active = {
+      run,
+      delegated,
+      connections: new Map(),
+      events,
+      log: batcher.push,
+      flush: batcher.flush,
+      stopped,
+      stop,
+      finished,
+      finish,
+      resumes: new Map(),
+      permissions: new Map()
+    }
     active.set(run.id, entry)
     return entry
   }
@@ -349,16 +382,28 @@ export function createEngine(deps: {
       const entry = active.get(id)
       if (entry) end(entry, 'cancelled', new Error('Cancelled'))
     },
-    answer: (id: string, node: string, requestId: string, optionId: string | null): void => active.get(id)?.connections.get(node)?.answer(requestId, optionId),
+    /** The permission questions a live run waits on */
+    questions: (id: string): Question[] => [...(active.get(id)?.permissions.values() ?? [])],
+    /** Answers a permission question; allowing counts as approving it */
+    answer: (id: string, node: string, requestId: string, optionId: string | null, who: Decider = FROM_APP): void => {
+      const entry = active.get(id)
+      const connection = entry?.connections.get(node)
+      const question = entry?.permissions.get(`${node}:${requestId}`)
+      if (!entry || !connection || !question) return
+      const approved = question.options.some((option) => option.id === optionId && option.kind.startsWith('allow'))
+      set(entry, node, { decision: { approved, ...who, at: Date.now() } })
+      connection.answer(requestId, optionId)
+    },
     /** Approves an approval step, passing what came in on, or rejects it, which fails the run */
-    decide: (id: string, node: string, approved: boolean): void => {
+    decide: (id: string, node: string, approved: boolean, who: Decider = FROM_APP): void => {
       const entry = active.get(id)
       if (entry?.run.nodes[node]?.waiting !== 'approval') return
+      const decision = { approved, ...who, at: Date.now() }
       if (!approved) {
-        set(entry, node, { status: 'failed', error: 'Rejected', endedAt: Date.now(), waiting: null })
+        set(entry, node, { status: 'failed', error: 'Rejected', endedAt: Date.now(), waiting: null, decision })
         return end(entry, 'failed')
       }
-      set(entry, node, { status: 'done', output: scopeOf(entry.run, node).prev, endedAt: Date.now(), waiting: null })
+      set(entry, node, { status: 'done', output: scopeOf(entry.run, node).prev, endedAt: Date.now(), waiting: null, decision })
       step(entry)
     },
     /** Runs an ended run again from `node`: it, everything after it and every step the end cut short start over */

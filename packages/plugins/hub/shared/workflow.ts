@@ -95,8 +95,8 @@ export type WorkflowNode =
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
   | { id: string; kind: 'condition'; source: string; test: 'contains' | 'equals' | 'regex' | 'empty'; value: string }
-  /** Pauses the run until the user approves `message`; passes what came in on */
-  | { id: string; kind: 'approval'; message: string }
+  /** Pauses the run until the user approves `message`; passes what came in on. `timeoutMin` overrides when an agent decides instead; missing is the hub's setting */
+  | { id: string; kind: 'approval'; message: string; timeoutMin?: number | null }
   /** Calls a tool an enabled plugin offers; `args` is a JSON object template, its text reply is the output */
   | ToolNode
 
@@ -147,7 +147,22 @@ export type NodeRun = {
   waiting?: 'approval' | 'permission' | null
   /** The agent step's conversation, which Continue in chat resumes */
   sessionId?: string | null
+  /** The last approval or permission answer, and who gave it where */
+  decision?: Decision | null
 }
+
+/** An answer to an approval or a permission: the user's from somewhere, or an agent's once nobody replied in time */
+export type Decision = { approved: boolean; by: 'you' | 'agent'; via: 'app' | 'web' | TicketSource; reason: string | null; at: number }
+
+export type Decider = Pick<Decision, 'by' | 'via' | 'reason'>
+
+export const FROM_APP: Decider = { by: 'you', via: 'app', reason: null }
+
+const VIA: Record<Decision['via'], string> = { app: 'in Treeix', web: 'from your phone', jira: 'in Jira', notion: 'in Notion' }
+
+/** `Approved by you in Jira`, `Rejected by an agent, as nobody replied in time: <why>` */
+export const decisionText = (decision: Decision): string =>
+  `${decision.approved ? 'Approved' : 'Rejected'} ${decision.by === 'agent' ? 'by an agent, as nobody replied in time' : `by you ${VIA[decision.via]}`}${decision.reason ? `: ${decision.reason}` : ''}`
 
 export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted'
 

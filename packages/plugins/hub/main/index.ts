@@ -12,10 +12,11 @@ import { createSecrets } from '@treeix/host/secrets'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
-import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
+import { commandItems, type HubAgent, isHubAgent, type Schedule, toDecisionSettings } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, askWorkflow, isPullRequestCard, isWorkflow, onCard, type TicketDetail, type Workflow } from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, askWorkflow, type Decider, isPullRequestCard, isWorkflow, onCard, type TicketDetail, type Workflow } from '../shared/workflow'
 import { createAttention } from './attention'
+import { createDecisions } from './decisions'
 import { readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createKeys } from './keys'
@@ -38,6 +39,7 @@ const WATCH_EVERY_MIN = 2
 const AWAY_S = 120
 
 const exec = promisify(execFile)
+const FROM_WEB: Decider = { by: 'you', via: 'web', reason: null }
 
 const isAgentRuntime = (value: unknown): value is AgentRuntime =>
   isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
@@ -120,8 +122,8 @@ const plugin: MainPlugin = {
         'GET runs/:id/asks': async ({ id }) => openAsks(await engine.events(id)),
         'GET workflows': async () => (await workflows.get()).map(({ id, name }) => ({ id, name })),
         'POST workflows/:id/run': ({ id }, body) => startWorkflow(id, text(body.input)),
-        'POST runs/:id/decide': ({ id }, body) => engine.decide(id, text(body.node), body.approved === true),
-        'POST runs/:id/answer': ({ id }, body) => engine.answer(id, text(body.node), text(body.requestId), isString(body.optionId) ? body.optionId : null),
+        'POST runs/:id/decide': ({ id }, body) => engine.decide(id, text(body.node), body.approved === true, FROM_WEB),
+        'POST runs/:id/answer': ({ id }, body) => engine.answer(id, text(body.node), text(body.requestId), isString(body.optionId) ? body.optionId : null, FROM_WEB),
         'POST runs/:id/cancel': ({ id }) => engine.cancel(id),
         'POST runs/:id/resume': ({ id }) => engine.resume(id)
       }
@@ -159,6 +161,7 @@ const plugin: MainPlugin = {
           return
         }
         if (!away()) return
+        void decisions.ask(run, attention.node).catch((error: unknown) => console.error('[hub] Asking on the ticket failed', error))
         const node = run.nodes[attention.node]
         tell(`${run.title} needs you`, node.waiting === 'approval' ? (node.prompt ?? 'Approve to go on') : 'An agent asks for permission', run.id)
       },
@@ -173,9 +176,16 @@ const plugin: MainPlugin = {
       sessionEnv: context.sessionEnv,
       callTool: context.callTool,
       runs: createRuns(join(context.dataPath, 'runs')),
-      onRun: (run) => (context.broadcast('run', run), remote.publish({ type: 'run', run }), attend(run)),
+      onRun: (run) => (context.broadcast('run', run), remote.publish({ type: 'run', run }), attend(run), decisions.watch(run)),
       onEvents: (runId, events) => context.broadcast('events', runId, events)
     })
+    // Who answers a waiting step when the user doesn't, and when
+    const decisionsFile = join(context.dataPath, 'decisions.json')
+    const decisionSettings = async () => toDecisionSettings(await readJsonFile(decisionsFile))
+    context.handle('decisionSettings', decisionSettings)
+    context.handle('setDecisionSettings', (_, next: unknown) => writeFile(decisionsFile, JSON.stringify(toDecisionSettings(next))))
+    const decisions = createDecisions({ engine, settings: decisionSettings, callTool: context.callTool, notify: (run, title, body) => tell(title, body, run.id) })
+    context.onDispose(decisions.dispose)
     // The setting lives here, not in the renderer's storage, so runs resume once at launch whatever windows open
     const autoResumeFile = join(context.dataPath, 'autoResume.json')
     context.handle('autoResume', async () => (await readJsonFile(autoResumeFile)) === true)
@@ -185,7 +195,10 @@ const plugin: MainPlugin = {
     void Promise.all([engine.recover(), readJsonFile(atQuitFile)]).then(async ([crashed, atQuit]) => {
       await rm(atQuitFile, { force: true })
       // Approvals wait on across a relaunch: they keep the Mac up and are told again
-      for (const run of await engine.list()) if (run.status === 'running') attend(run)
+      for (const run of (await engine.list()).filter((candidate) => candidate.status === 'running')) {
+        attend(run)
+        decisions.watch(run)
+      }
       if ((await readJsonFile(autoResumeFile)) !== true) return
       for (const id of [...crashed, ...list(atQuit, isString)]) await engine.resume(id).catch((error: unknown) => console.error('[hub] Resuming a run failed', error))
     })
@@ -333,7 +346,7 @@ const plugin: MainPlugin = {
         () => {
           const now = new Date()
           void fireSchedules(now)
-          if (now.getMinutes() % WATCH_EVERY_MIN === 0) void checkWatches()
+          if (now.getMinutes() % WATCH_EVERY_MIN === 0) void checkWatches().then(decisions.poll)
           tick()
         },
         MINUTE_MS - (Date.now() % MINUTE_MS)
