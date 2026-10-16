@@ -1,0 +1,12 @@
+import { expect, test } from 'bun:test'
+import { shipWorkflow } from './templates'
+import { validate } from './validate'
+import { isWorkflow } from './workflow'
+
+test('a ship workflow is valid as made, given its agent', () => {
+  for (const source of ['jira', 'notion'] as const) {
+    const workflow = shipWorkflow(source, 'agent')
+    expect(isWorkflow(workflow)).toBe(true)
+    expect(validate(workflow, ['agent'])).toEqual([])
+  }
+})

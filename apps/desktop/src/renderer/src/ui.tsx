@@ -150,7 +150,7 @@ export function IconButton({
   label: string
   active?: boolean
   disabled?: boolean
-  onClick: () => void
+  onClick: (event: React.MouseEvent) => void
   children: React.ReactNode
 }): React.JSX.Element {
   return (

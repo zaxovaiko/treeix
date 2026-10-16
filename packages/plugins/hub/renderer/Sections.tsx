@@ -3,6 +3,7 @@ import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton } from '@treeix/app/ui'
+import { shipWorkflow } from '../shared/templates'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { shownRun, StatusIcon } from './RunView'
@@ -95,18 +96,37 @@ export function AgentsSection(): React.JSX.Element {
 
 export function NewWorkflowButton(): React.JSX.Element {
   const host = useHost()
-  const create = (): void => {
-    const workflow = newWorkflow()
-    hubApi.saveWorkflow(workflow).then(
+  const create = (workflow: Workflow, note: string | null = null): void =>
+    void hubApi.saveWorkflow(workflow).then(
       () => {
         hubSelection.set(`workflow:${workflow.id}`)
         host.setActiveTab(TAB_ID)
+        if (note) host.flash(note)
       },
       (reason: unknown) => host.flash(errorMessage(reason))
     )
+  // A ship run goes unwatched, so its agent should not stop to ask for each command
+  const ship = (source: 'jira' | 'notion'): void => {
+    const agent = hubAgents.get()[0]
+    const steps = [
+      !agent && 'create an agent and pick it in the workflow',
+      agent && !agent.autoApprove && `turn on "Allow everything it asks" for ${agent.name}`,
+      'turn the watch on in the Input step'
+    ].filter(Boolean)
+    create(shipWorkflow(source, agent?.id ?? ''), `To start: ${steps.join(', then ')}`)
   }
   return (
-    <IconButton label="New workflow" onClick={create}>
+    <IconButton
+      label="New workflow"
+      onClick={(event) =>
+        openMenu(event, [
+          { label: 'Blank workflow', run: () => create(newWorkflow()) },
+          null,
+          { label: 'Ship Jira tickets', run: () => ship('jira') },
+          { label: 'Ship Notion tasks', run: () => ship('notion') }
+        ])
+      }
+    >
       <Icon name="plus" className="size-3.5" />
     </IconButton>
   )
