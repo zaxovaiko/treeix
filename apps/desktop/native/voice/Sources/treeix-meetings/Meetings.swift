@@ -1,4 +1,5 @@
 import CoreMediaIO
+import FluidAudio
 import Foundation
 
 private let iso: ISO8601DateFormatter = {
@@ -38,7 +39,7 @@ final class Meetings {
         case "stop":
             if let folder = stop() { send(["type": "stopped", "folder": folder]) }
         case "transcribe":
-            if let folder = message["folder"] as? String { transcribe(folder: folder, keepAudio: message["keepAudio"] as? Bool ?? false) }
+            if let folder = message["folder"] as? String { transcribe(folder: folder, language: Language(rawValue: message["language"] as? String ?? "")) }
         case "calendar":
             let event = calendar.event(at: isoDate(message["at"]) ?? .now, url: message["url"] as? String)
             send(["type": "calendar", "event": event?.json ?? NSNull()])
@@ -80,7 +81,7 @@ final class Meetings {
         return recording.folder
     }
 
-    private func transcribe(folder: String, keepAudio: Bool) {
+    private func transcribe(folder: String, language: Language?) {
         let previous = transcriptions
         let models = modelsPath
         queued += 1
@@ -88,8 +89,8 @@ final class Meetings {
             await previous?.value
             let url = URL(fileURLWithPath: folder, isDirectory: true)
             do {
-                let utterances = try await transcriber.transcribe(folder: url, models: models)
-                let mixed = keepAudio ? await mixTracks(in: url) : true
+                let utterances = try await transcriber.transcribe(folder: url, models: models, language: language)
+                let mixed = await mixTracks(in: url)
                 send(["type": "transcript", "folder": folder, "utterances": utterances.map(\.json)])
                 // Without the mix the tracks are the only copy of the audio, so they stay
                 if mixed { removeTracks(in: url) }

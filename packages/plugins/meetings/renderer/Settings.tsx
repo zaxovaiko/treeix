@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Card, Row, Segmented, Switch } from '@treeix/app/settingsUi'
-import { DEFAULT_RULES, type Permissions, type Rule, START_DELAYS, STOP_DELAYS, type Status } from '../shared/types'
+import { DEFAULT_RULES, LANGUAGES, type Permissions, type Rule, START_DELAYS, STOP_DELAYS, type Status } from '../shared/types'
 import { bridge, button, meetingsSettings, status } from './state'
 
 const field = 'h-7 min-w-0 rounded-md bg-muted px-2 text-xs ring-1 ring-border outline-none focus:ring-primary'
@@ -77,8 +77,26 @@ function Setup(): React.JSX.Element {
   )
 }
 
+/** Each meeting keeps its audio as meeting.m4a, so it can be transcribed again; this deletes them all */
+function AudioRow(): React.JSX.Element {
+  const [size, setSize] = useState<number | null>(null)
+  const read = (): void => void bridge.invoke<number>('audioSize').then(setSize)
+  useEffect(read, [])
+  const remove = (): void => {
+    if (window.confirm('Delete the audio of every meeting? Transcripts and notes stay, but meetings can no longer be transcribed again.'))
+      void bridge.invoke('removeAudio').then(read)
+  }
+  return (
+    <Row label="Audio" description={`Kept next to each transcript, so a meeting can be transcribed again.${size ? ` ${Math.round(size / 1e6)} MB now.` : ''}`}>
+      <button className={button} disabled={!size} onClick={remove}>
+        Delete audio
+      </button>
+    </Row>
+  )
+}
+
 function Recording(): React.JSX.Element {
-  const { auto, startDelaySec, stopDelaySec, calendar, keepAudio, folder } = meetingsSettings.use()
+  const { auto, startDelaySec, stopDelaySec, calendar, language, folder } = meetingsSettings.use()
   return (
     <Card title="Recording">
       <Row label="Record calls on their own" description="When a rule below matches. Off, only the Start recording command records.">
@@ -101,9 +119,24 @@ function Recording(): React.JSX.Element {
       <Row label="Use the calendar" description="Titles and invitees from the event the call falls in, and today's calls in the Meetings tab.">
         <Switch checked={calendar} label="Use the calendar" onChange={() => meetingsSettings.update({ calendar: !calendar })} />
       </Row>
-      <Row label="Keep the audio" description="Saves meeting.m4a next to the transcript. Off, the audio is deleted once transcribed.">
-        <Switch checked={keepAudio} label="Keep the audio" onChange={() => meetingsSettings.update({ keepAudio: !keepAudio })} />
+      <Row
+        label="Language"
+        description="What your calls are spoken in. Picking it stops words in the wrong alphabet, such as Cyrillic in a Polish call. Detect suits calls that mix languages."
+      >
+        <select
+          aria-label="Language"
+          value={language}
+          onChange={(event) => meetingsSettings.update({ language: LANGUAGES.find(([code]) => code === event.target.value)?.[0] ?? '' })}
+          className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+        >
+          {LANGUAGES.map(([code, name]) => (
+            <option key={code} value={code}>
+              {name}
+            </option>
+          ))}
+        </select>
       </Row>
+      <AudioRow />
       <Row label="Folder" description="Where each meeting gets a folder. Empty keeps them in Treeix's app data.">
         <input
           aria-label="Folder"

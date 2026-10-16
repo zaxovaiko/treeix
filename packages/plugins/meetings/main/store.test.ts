@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStore, folderName, renderTranscript } from './store'
@@ -29,6 +29,13 @@ describe('meeting store', () => {
     await store.saveTranscript(first, [{ speaker: 'Me', start: 0, text: 'ship the deposit fix' }])
     expect((await store.list('deposit')).map((meeting) => meeting.id)).toEqual([first.id])
     await store.saveNotes(first.id, '- fix deposits')
+    expect((await store.detail(first.id)).notes).toBe('- fix deposits')
+
+    await writeFile(join(store.folder(first.id), 'meeting.m4a'), 'abcd')
+    await writeFile(join(store.folder(first.id), 'me.caf'), 'ef')
+    expect(await store.audioSize(first.id)).toBe(6)
+    await store.removeAudio(first.id)
+    expect(await store.audioSize(first.id)).toBe(0)
     expect((await store.detail(first.id)).notes).toBe('- fix deposits')
 
     await store.remove(second.id)

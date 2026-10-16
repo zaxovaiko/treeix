@@ -17,6 +17,40 @@ export const DEFAULT_RULES: Rule[] = [
 export const START_DELAYS = [3, 10, 30] as const
 export const STOP_DELAYS = [10, 20, 60] as const
 
+/** Parakeet v3's languages; the hint keeps words to that language's alphabet */
+export const LANGUAGES = [
+  ['', 'Detect'],
+  ['en', 'English'],
+  ['pl', 'Polish'],
+  ['uk', 'Ukrainian'],
+  ['ru', 'Russian'],
+  ['de', 'German'],
+  ['fr', 'French'],
+  ['es', 'Spanish'],
+  ['it', 'Italian'],
+  ['pt', 'Portuguese'],
+  ['nl', 'Dutch'],
+  ['cs', 'Czech'],
+  ['sk', 'Slovak'],
+  ['sl', 'Slovenian'],
+  ['hr', 'Croatian'],
+  ['bs', 'Bosnian'],
+  ['sr', 'Serbian'],
+  ['bg', 'Bulgarian'],
+  ['be', 'Belarusian'],
+  ['ro', 'Romanian'],
+  ['hu', 'Hungarian'],
+  ['da', 'Danish'],
+  ['sv', 'Swedish'],
+  ['fi', 'Finnish'],
+  ['et', 'Estonian'],
+  ['lv', 'Latvian'],
+  ['lt', 'Lithuanian'],
+  ['mt', 'Maltese'],
+  ['el', 'Greek']
+] as const
+export type Language = (typeof LANGUAGES)[number][0]
+
 export type MeetingsSettings = {
   /** Records on its own when a rule matches; off, only the Start command does */
   auto: boolean
@@ -27,8 +61,8 @@ export type MeetingsSettings = {
   calendar: boolean
   /** Where meeting folders go; empty is `<plugin data>/meetings` */
   folder: string
-  /** Keeps the recording as meeting.m4a after it's transcribed */
-  keepAudio: boolean
+  /** What the calls are spoken in; empty lets the model detect it */
+  language: Language
 }
 
 const isRule = (value: unknown): value is Rule => isJson(value) && isString(value.name) && isString(value.app) && isString(value.url)
@@ -40,7 +74,7 @@ export const parseSettings = (stored: Json): MeetingsSettings => ({
   stopDelaySec: STOP_DELAYS.find((seconds) => seconds === stored.stopDelaySec) ?? 20,
   calendar: stored.calendar !== false,
   folder: text(stored.folder),
-  keepAudio: stored.keepAudio === true
+  language: LANGUAGES.find(([code]) => code === stored.language)?.[0] ?? ''
 })
 
 export type MeetingStatus = 'recording' | 'transcribing' | 'done' | 'failed'

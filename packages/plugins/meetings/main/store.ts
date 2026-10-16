@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { readJsonFile } from '@treeix/host/paths'
 import { isJson, isString, list, text } from '@treeix/shared/json'
@@ -10,6 +10,8 @@ export type Utterance = { speaker: string; start: number; text: string }
 const META = 'meeting.json'
 const TRANSCRIPT = 'transcript.md'
 const NOTES = 'notes.md'
+/** The mix kept after transcribing, and the tracks it's made from while they last */
+const AUDIO = ['meeting.m4a', 'me.caf', 'others.caf']
 const STATUSES = new Set<unknown>(['recording', 'transcribing', 'done', 'failed'] satisfies MeetingStatus[])
 const pad = (value: number): string => String(value).padStart(2, '0')
 
@@ -109,6 +111,19 @@ export function createStore(root: () => string) {
       if (!(await read(id))) throw new Error(`No meeting ${id}`)
       await writeFile(join(folder(id), NOTES), markdown)
     },
+    /** Bytes of the meeting's audio files */
+    async audioSize(id: string): Promise<number> {
+      const sizes = await Promise.all(
+        AUDIO.map((file) =>
+          stat(join(folder(id), file)).then(
+            ({ size }) => size,
+            () => 0
+          )
+        )
+      )
+      return sizes.reduce((total, size) => total + size, 0)
+    },
+    removeAudio: (id: string): Promise<unknown> => Promise.all(AUDIO.map((file) => rm(join(folder(id), file), { force: true }))),
     remove: (id: string): Promise<void> => rm(folder(id), { recursive: true, force: true })
   }
 }

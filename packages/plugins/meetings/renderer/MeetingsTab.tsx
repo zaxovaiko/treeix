@@ -74,7 +74,7 @@ function MeetingView({ id }: { id: string }): React.JSX.Element {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={`${PANE_HEADER} gap-2 px-4`}>
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{meeting.title}</span>
-        {meeting.status === 'failed' && (
+        {(meeting.status === 'failed' || meeting.status === 'done') && (
           <button className={button} onClick={() => act('transcribe', 'Transcribing again')}>
             Transcribe again
           </button>

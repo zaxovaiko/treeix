@@ -116,12 +116,14 @@ const plugin: MainPlugin = {
       return next
     }
 
+    const busy = (meeting: Meeting): boolean => meeting.status === 'recording' || meeting.status === 'transcribing'
+
     const fail = (id: string, error: string): Promise<unknown> => update(id, { status: 'failed', error })
 
     const transcribe = async (id: string): Promise<void> => {
       await update(id, { status: 'transcribing', error: undefined })
       transcribing.add(id)
-      command({ type: 'transcribe', folder: store.folder(id), keepAudio: settings.keepAudio })
+      command({ type: 'transcribe', folder: store.folder(id), language: settings.language })
     }
 
     async function startRecording(call: Call | null): Promise<void> {
@@ -277,9 +279,7 @@ const plugin: MainPlugin = {
       run: async (args) => {
         const cutoff = typeof args.olderThanDays === 'number' && args.olderThanDays >= 1 ? new Date(Date.now() - args.olderThanDays * DAY_MS).toISOString() : null
         if (!isString(args.id) && !cutoff) throw new Error('Give an id or olderThanDays')
-        const doomed = (await store.list()).filter(
-          (meeting) => (meeting.id === args.id || (cutoff !== null && meeting.start < cutoff)) && meeting.status !== 'recording' && meeting.status !== 'transcribing'
-        )
+        const doomed = (await store.list()).filter((meeting) => (meeting.id === args.id || (cutoff !== null && meeting.start < cutoff)) && !busy(meeting))
         for (const meeting of doomed) await store.remove(meeting.id)
         changed()
         return doomed.length ? `Deleted ${doomed.map((meeting) => meeting.id).join(', ')}` : 'Nothing to delete'
@@ -301,7 +301,18 @@ const plugin: MainPlugin = {
       const meeting = await store.detail(id)
       return emitTranscribed(meeting, meeting.transcript)
     })
-    context.handle('transcribe', (_, id: string) => transcribe(id))
+    context.handle('transcribe', async (_, id: string) => {
+      if (!(await store.audioSize(id))) throw new Error('The audio of this meeting was deleted')
+      return transcribe(id)
+    })
+    /** Bytes of audio kept across meetings, for Settings */
+    context.handle('audioSize', async () => {
+      const sizes = await Promise.all((await store.list()).map((meeting) => store.audioSize(meeting.id)))
+      return sizes.reduce((total, size) => total + size, 0)
+    })
+    context.handle('removeAudio', async () => {
+      for (const meeting of await store.list()) if (!busy(meeting)) await store.removeAudio(meeting.id)
+    })
     context.handle('start', () => {
       if (status.helper !== 'running') throw new Error('The meetings helper is not running')
       return startRecording(null)

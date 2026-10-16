@@ -83,7 +83,8 @@ actor Transcriber {
     private var asr: AsrManager?
     private var diarizer: OfflineDiarizerManager?
 
-    func transcribe(folder: URL, models: URL) async throws -> [Utterance] {
+    /// `language` keeps Parakeet to its alphabet, so a Polish call has no Cyrillic words in it
+    func transcribe(folder: URL, models: URL, language: Language?) async throws -> [Utterance] {
         let separate: [(file: String, names: ([SpeakerTurn]) -> [String: String], fallback: String)] = [
             (Track.others, remoteSpeakerNames, "Speaker 1"),
             (Track.mic, micSpeakerNames, "Me"),
@@ -99,7 +100,7 @@ actor Transcriber {
         for track in tracks {
             let url = folder.appendingPathComponent(track.file)
             var state = TdtDecoderState.make(decoderLayers: await asr.decoderLayerCount)
-            let result = try await asr.transcribe(url, decoderState: &state)
+            let result = try await asr.transcribe(url, decoderState: &state, language: language)
             let tokens = (result.tokenTimings ?? []).map { TimedToken(text: $0.token, start: $0.startTime, end: $0.endTime) }
             // Diarization throws on near-silent tracks, such as a call where only you spoke; the track then has one speaker
             let raw = (try? await diarizer.process(url).segments.map {

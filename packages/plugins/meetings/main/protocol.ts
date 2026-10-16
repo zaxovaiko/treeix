@@ -23,8 +23,8 @@ export type HelperCommand =
   /** Records the microphone to me.caf and what `app` plays to others.caf; an empty app records the microphone alone */
   | { type: 'record'; folder: string; app: string }
   | { type: 'stop' }
-  /** Diarized transcript of the folder's audio; `keepAudio` mixes it into meeting.m4a, otherwise the audio is deleted */
-  | { type: 'transcribe'; folder: string; keepAudio: boolean }
+  /** Diarized transcript of the folder's audio, then mixed into meeting.m4a; `language` is a code from LANGUAGES, empty detects it */
+  | { type: 'transcribe'; folder: string; language: string }
   /** The event at `at` (ISO) whose link contains `url`, else one in progress with invitees */
   | { type: 'calendar'; at: string; url: string | null }
   | { type: 'events'; from: string; to: string }
