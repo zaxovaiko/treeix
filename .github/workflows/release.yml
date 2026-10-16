@@ -82,8 +82,15 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 
-      # The dictation helper, a Swift binary shipped unpacked beside the asar
-      - run: bun run --cwd apps/desktop build:voice
+      # The dictation and meetings helpers, Swift binaries shipped unpacked beside the asar. A cold build
+      # (FluidAudio in release) takes ~4 minutes, so the binaries are reused until the Swift sources change.
+      - uses: actions/cache@v4
+        id: voice
+        with:
+          path: apps/desktop/native/voice/bin
+          key: voice-${{ runner.os }}-${{ hashFiles('apps/desktop/native/voice/Package.*', 'apps/desktop/native/voice/Sources/**') }}
+      - if: steps.voice.outputs.cache-hit != 'true'
+        run: bun run --cwd apps/desktop build:voice
 
       # Signed builds are the ones the app can update itself into: macOS only replaces a build whose
       # Developer ID signature matches. Without the secrets this still ships a DMG, just one people install by hand.
