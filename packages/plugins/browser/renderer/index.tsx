@@ -1,13 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { type Command, createBridge, createStore, type HostApi, PageLayout, type SessionPort, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
-import { Icon } from '@treeix/app/Icon'
+import { useEffect, useLayoutEffect } from 'react'
+import { type Command, createBridge, createStore, type HostApi, PageLayout, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
 import { BrowserView, runBrowserAction } from './BrowserView'
 import { DesignPopover } from './DesignPopover'
 import { addVital } from './entries'
 import { onPageMessage, PageLayer } from './pages'
 import { BrowserSettings } from './SettingsPage'
 import { browserSettings } from './settings'
-import { portDetail } from './Suggestions'
 import { toggleStrip } from './Strip'
 import { closeTab, findTab, getBrowser, openTab, openTabIn, selectTab, setBrowserWorkspace, updateBrowser, useBrowser } from './tabs'
 import { browserAction, type BrowserAction, type KeyInput } from '../shared/keys'
@@ -73,118 +71,22 @@ async function runDevServer(current: HostApi, folder: string): Promise<void> {
   pendingDevServers.add(await sessions.runCommand(folder, command))
 }
 
-const NOTICE_MS = 12_000
-const NOTICES_SHOWN = 3
-/** Ports seen this soon after the window loads were already up, e.g. after a reload */
-// ponytail: a time window, not "the first poll"; getPorts could tell polled-empty from not-polled if restores ever take longer
-const SETTLE_MS = 5000
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0'])
-
-type Notice = { id: number; key: string; url: string; label: string; detail: string }
-
-let nextNoticeId = 0
-
-const portKey = ({ sessionId, port }: SessionPort): string => `${sessionId}:${port}`
-
-function showsPort(port: number): boolean {
-  return getBrowser().tabs.some((tab) => {
-    try {
-      const url = new URL(tab.url)
-      return LOCAL_HOSTS.has(url.hostname) && Number(url.port) === port
-    } catch {
-      return false
-    }
-  })
-}
-
-/** "localhost:5173 is up" cards for ports sessions start listening on */
-function ServerNotices(): React.JSX.Element | null {
+/** Dev servers started from the palette open their first port in the browser */
+function useDevServerTabs(): void {
   const service = useHost().service('sessions')
-  const [notices, setNotices] = useState<Notice[]>([])
-  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
-  const dismiss = (id: number): void => setNotices((list) => list.filter((notice) => notice.id !== id))
-  // One timer per card on screen: cards closed, replaced or pushed out take theirs along
-  useEffect(() => {
-    const shown = new Set(notices.map((notice) => notice.id))
-    for (const [id, timer] of timers.current) {
-      if (shown.has(id)) continue
-      clearTimeout(timer)
-      timers.current.delete(id)
-    }
-    for (const { id } of notices)
-      if (!timers.current.has(id))
-        timers.current.set(
-          id,
-          setTimeout(() => dismiss(id), NOTICE_MS)
-        )
-  }, [notices])
-  useEffect(() => () => timers.current.forEach(clearTimeout), [])
   // Again when the terminal plugin is turned on later; the host object itself changes on every render
   useEffect(() => {
     if (!service) return
-    const settleUntil = Date.now() + SETTLE_MS
-    let known = new Set(service.getPorts().map(portKey))
     return service.subscribe(() => {
-      const ports = service.getPorts()
-      const fresh = ports.filter((port) => !known.has(portKey(port)))
-      const started = fresh.filter((port) => pendingDevServers.delete(port.sessionId))
-      started.forEach((port) => openUrl(port.url))
-      const live = new Set(ports.map(portKey))
-      known = live
-      const notify = Date.now() >= settleUntil && browserSettings.get().notifyPorts
-      const added = (notify ? fresh : [])
-        .filter((port) => !showsPort(port.port) && !started.includes(port))
-        .map((port) => ({
-          id: nextNoticeId++,
-          key: portKey(port),
-          url: port.url,
-          label: `localhost:${port.port}`,
-          // What runs it first: the command tells a bun dev server from a python one at a glance
-          detail: [port.command, portDetail(service.getSessions(), host?.repos ?? null, port)].filter(Boolean).join(' · ')
-        }))
-      setNotices((list) => {
-        // Stopped servers take their card with them
-        const kept = list.filter((notice) => live.has(notice.key) && !added.some((item) => item.key === notice.key))
-        return kept.length === list.length && !added.length ? list : [...kept, ...added].slice(-NOTICES_SHOWN)
-      })
+      for (const port of service.getPorts()) if (pendingDevServers.delete(port.sessionId)) openUrl(port.url)
     })
   }, [service])
-  if (!notices.length) return null
-  return (
-    // Under the title bar on the right, clear of the work below
-    <div className="fixed top-11 right-3 z-40 flex w-56 flex-col gap-1.5">
-      {notices.map((notice) => (
-        <div key={notice.id} role="status" aria-label={`${notice.label} is up`} className="flex items-center gap-2 rounded-lg border border-border bg-popover px-2 py-1.5">
-          <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-mono text-[11px] text-foreground">{notice.label}</div>
-            {notice.detail && <div className="truncate text-[10px] text-muted-foreground">{notice.detail}</div>}
-          </div>
-          <button
-            onClick={() => {
-              openUrl(notice.url)
-              dismiss(notice.id)
-            }}
-            className="h-5 shrink-0 rounded border border-border px-1.5 text-[11px] hover:bg-accent"
-          >
-            Open
-          </button>
-          <button
-            aria-label="Dismiss"
-            onClick={() => dismiss(notice.id)}
-            className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Icon name="close" className="size-2.5" />
-          </button>
-        </div>
-      ))}
-    </div>
-  )
 }
 
 function Root(): React.JSX.Element {
   const current = useHost()
   host = current
+  useDevServerTabs()
   const { agentTools } = browserSettings.use()
   useEffect(() => void bridge.invoke('agentTools', agentTools), [agentTools])
   // Before paint, so a workspace never flashes the previous one's tabs
@@ -265,12 +167,9 @@ function Root(): React.JSX.Element {
     []
   )
   return (
-    <>
-      <PageLayer>
-        <DesignPopover />
-      </PageLayer>
-      <ServerNotices />
-    </>
+    <PageLayer>
+      <DesignPopover />
+    </PageLayer>
   )
 }
 

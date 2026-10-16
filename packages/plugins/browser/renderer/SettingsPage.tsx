@@ -73,7 +73,7 @@ function SavedAddresses(): React.JSX.Element {
 }
 
 export function BrowserSettings(): React.JSX.Element {
-  const { openLinks, searchEngine, notifyPorts, agentTools } = browserSettings.use()
+  const { openLinks, searchEngine, agentTools } = browserSettings.use()
   const [canImport, setCanImport] = useState(false)
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
   const [chosen, setChosen] = useState('')
@@ -128,9 +128,6 @@ export function BrowserSettings(): React.JSX.Element {
             ]}
             onChange={(engine) => browserSettings.update({ searchEngine: engine })}
           />
-        </Row>
-        <Row label="Tell me when a session starts a server" description="A card with an Open button when a terminal or agent session starts listening on a new port">
-          <Switch checked={notifyPorts} label="Tell me when a session starts a server" onChange={() => browserSettings.update({ notifyPorts: !notifyPorts })} />
         </Row>
         <Row
           label="Let agents use this browser"

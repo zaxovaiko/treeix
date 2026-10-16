@@ -1,13 +1,20 @@
 import { useRef, useState, useSyncExternalStore } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import { Popup } from '@treeix/app/ui'
+import { useHost } from '@treeix/sdk'
 import { getPorts, killPort, subscribeTerminals } from './terminals'
 
 /** Ports the sessions' servers listen on, each with a way to stop it; hidden while there are none */
 export function Ports(): React.JSX.Element | null {
   const ports = useSyncExternalStore(subscribeTerminals, getPorts)
+  const host = useHost()
+  const open = (url: string): void => {
+    const browser = host.service('browser')
+    if (browser) browser.open(url)
+    else host.openLink(url)
+  }
   const anchor = useRef<HTMLButtonElement>(null)
-  const [open, setOpen] = useState(false)
+  const [shown, setShown] = useState(false)
   if (!ports.length) return null
   const label = `${ports.length} open ${ports.length === 1 ? 'port' : 'ports'}`
   return (
@@ -16,21 +23,30 @@ export function Ports(): React.JSX.Element | null {
         ref={anchor}
         title={label}
         aria-label={label}
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        aria-expanded={shown}
+        onClick={() => setShown(!shown)}
         className="flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground [-webkit-app-region:no-drag]"
       >
         <Icon name="network" className="size-3.5" />
         {ports.length}
       </button>
-      {open && (
-        <Popup anchor={anchor} align="end" onDismiss={() => setOpen(false)} className="w-72 rounded-lg border border-input bg-popover p-1 text-foreground">
+      {shown && (
+        <Popup anchor={anchor} align="end" onDismiss={() => setShown(false)} className="w-72 rounded-lg border border-input bg-popover p-1 text-foreground">
           {ports.map((port) => (
             <div key={`${port.sessionId}:${port.port}`} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
               <div className="min-w-0 flex-1">
                 <div className="truncate font-mono text-[11px]">localhost:{port.port}</div>
                 <div className="truncate text-[10px] text-muted-foreground">{[port.command, port.cwd].filter(Boolean).join(' · ')}</div>
               </div>
+              <button
+                onClick={() => {
+                  open(port.url)
+                  setShown(false)
+                }}
+                className="h-5 shrink-0 rounded border border-border px-1.5 text-[11px] hover:bg-accent"
+              >
+                Open
+              </button>
               <button onClick={() => void killPort(port)} className="h-5 shrink-0 rounded border border-border px-1.5 text-[11px] text-red-400 hover:bg-red-400/12">
                 Kill
               </button>

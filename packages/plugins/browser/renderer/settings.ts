@@ -14,8 +14,6 @@ export const browserSettings = definePluginSettings('browser', (stored) => ({
   searchEngine: ENGINES.find((engine) => engine === stored.searchEngine) ?? 'google',
   /** Addresses the address bar suggests, e.g. a staging site */
   saved: Array.isArray(stored.saved) ? (stored.saved as unknown[]).filter(isSavedAddress) : [],
-  /** A card when a session starts listening on a new port */
-  notifyPorts: stored.notifyPorts !== false,
   /** browser_* tools for agent sessions */
   agentTools: stored.agentTools === true
 }))
