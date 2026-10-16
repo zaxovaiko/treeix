@@ -1,11 +1,11 @@
 import { useHost } from '@treeix/sdk'
 import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
-import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton } from '@treeix/app/ui'
 import { shipWorkflow } from '../shared/templates'
 import type { Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
+import { historyGroup, historyTime } from './historyGroups'
 import { shownRun, StatusIcon } from './RunView'
 import { asking, deleteAgent, type HubChat, hubAgents, hubApi, hubEditing, hubRuns, hubSelection, hubSettings, hubWorkflows, setConversation, TAB_ID } from './store'
 
@@ -174,14 +174,7 @@ export function WorkflowsSection(): React.JSX.Element {
   )
 }
 
-/** Calendar days between `at` and today, so last night reads as Yesterday even a few hours later */
-const daysAgo = (at: number): number => {
-  const midnight = (time: number): number => new Date(time).setHours(0, 0, 0, 0)
-  return Math.max(0, Math.round((midnight(Date.now()) - midnight(at)) / (24 * 60 * 60 * 1000)))
-}
-const dayLabel = (days: number): string => (days === 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`)
-
-/** Conversations and runs together, newest first, under a separator per day */
+/** Conversations and runs together, newest first, under a separator per day, then per week and month */
 export function HistorySection(): React.JSX.Element {
   const host = useHost()
   const agents = hubAgents.use()
@@ -207,7 +200,7 @@ export function HistorySection(): React.JSX.Element {
         className={`${ROW} h-8 ${row === selection ? 'bg-accent' : ''}`}
       >
         {children}
-        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">{timeAgo(new Date(at).toISOString())}</span>
+        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums group-hover:invisible">{historyTime(at)}</span>
       </button>
       {onRemove && (
         <span className="absolute inset-y-0 right-0.5 hidden items-center group-hover:flex">
@@ -259,11 +252,11 @@ export function HistorySection(): React.JSX.Element {
       {[...chatRows, ...runRows]
         .sort((a, b) => b.at - a.at)
         .map(({ at, row }, index, rows) => {
-          const days = daysAgo(at)
-          if (index > 0 && daysAgo(rows[index - 1].at) === days) return row
+          const group = historyGroup(at)
+          if (index > 0 && historyGroup(rows[index - 1].at) === group) return row
           return [
-            <div key={`day:${days}`} className="flex h-6 items-end px-2 pb-0.5 text-[11px] text-muted-foreground">
-              {dayLabel(days)}
+            <div key={`group:${group}`} className="flex h-6 items-end px-2 pb-0.5 text-[11px] text-muted-foreground">
+              {group}
             </div>,
             row
           ]

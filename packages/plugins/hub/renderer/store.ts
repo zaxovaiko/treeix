@@ -103,6 +103,23 @@ const storedSelection = (): string | null => {
 /** What the page shows: `agent:<id>`, `workflow:<id>` or `run:<id>` */
 export const hubSelection = createStore<string | null>(storedSelection())
 hubSelection.subscribe(() => localStorage.setItem(SELECTED_KEY, JSON.stringify(hubSelection.get())))
+
+/** What was shown before, newest last, for Back; the board is null */
+const visited: (string | null)[] = []
+let shown = hubSelection.get()
+let goingBack = false
+hubSelection.subscribe(() => {
+  const next = hubSelection.get()
+  if (next === shown) return
+  if (!goingBack && visited.push(shown) > 50) visited.shift()
+  shown = next
+})
+/** Shows what was on screen before, the board when nothing was */
+export function hubBack(): void {
+  goingBack = true
+  hubSelection.set(visited.pop() ?? null)
+  goingBack = false
+}
 /** The agent the editor dialog is on, `new` for one being created */
 export const hubEditing = createStore<HubAgent | 'new' | null>(null)
 

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { useHost, PANE_HEADER } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
-import { EmptyState, IconButton } from '@treeix/app/ui'
+import { EmptyState, IconButton, usePersisted } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { Board } from './Board'
@@ -92,7 +92,8 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
 
 /** The tab's own column: the board, then agents, workflows and history */
 function Rail({ selection }: { selection: string | null }): React.JSX.Element {
-  const group = (label: string, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
+  const [historyOpen, setHistoryOpen] = usePersisted<boolean>('hub.historyOpen', false)
+  const group = (label: React.ReactNode, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
     <section className="flex flex-col gap-0.5">
       <h3 className="flex h-7 items-center justify-between pr-0.5 pl-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
@@ -112,7 +113,18 @@ function Rail({ selection }: { selection: string | null }): React.JSX.Element {
       </button>
       {group('Agents', <NewAgentButton />, <AgentsSection />)}
       {group('Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
-      {group('History', null, <HistorySection />)}
+      {group(
+        <button
+          onClick={() => setHistoryOpen(!historyOpen)}
+          aria-expanded={historyOpen}
+          className="flex h-full flex-1 items-center gap-1 text-left uppercase hover:text-foreground"
+        >
+          History
+          <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
+        </button>,
+        null,
+        historyOpen && <HistorySection />
+      )}
     </nav>
   )
 }

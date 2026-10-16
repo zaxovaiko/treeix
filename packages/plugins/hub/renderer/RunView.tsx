@@ -6,7 +6,7 @@ import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
-import { followRunEvents, hubAgents, hubApi, hubRunStep, registryId } from './store'
+import { followRunEvents, hubAgents, hubApi, hubBack, hubRunStep, registryId } from './store'
 
 type Shown = NodeStatus | RunStatus | 'waiting'
 
@@ -155,7 +155,10 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* The steps island floats over the header's right end, so the header ends before it */}
-      <header className={`${PANE_HEADER} gap-2.5 pl-3 ${sidebar && openSteps ? 'pr-60' : 'pr-1.5'}`}>
+      <header className={`${PANE_HEADER} gap-2.5 pl-1.5 ${sidebar && openSteps ? 'pr-60' : 'pr-1.5'}`}>
+        <IconButton label="Back" onClick={hubBack}>
+          <Icon name="arrowLeft" className="size-3.5" />
+        </IconButton>
         {lead ? <AgentAvatar agent={lead} size={28} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{run.title}</div>
