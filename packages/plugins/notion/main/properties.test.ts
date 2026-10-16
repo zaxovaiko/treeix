@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { toProperties } from './properties'
+import { pageTitle, plainProperties, toProperties, whereFilter } from './properties'
 
 const schema = {
   Name: { type: 'title' },
@@ -30,4 +30,36 @@ test("an object is Notion's own value, an unknown property or type is refused wi
 test('a relation takes the page ids in URLs', () => {
   const urls = 'https://www.notion.so/Ship-it-28a2c5e0b1c24f6e9d3a7b8c9d0e1f2a\nhttps://www.notion.so/Test-38a2c5e0b1c24f6e9d3a7b8c9d0e1f2b'
   expect(toProperties(schema, { Tasks: urls })).toEqual({ Tasks: { relation: [{ id: '28a2c5e0b1c24f6e9d3a7b8c9d0e1f2a' }, { id: '38a2c5e0b1c24f6e9d3a7b8c9d0e1f2b' }] } })
+})
+
+test('a watch condition becomes a query filter by the property type', () => {
+  expect(whereFilter({ ...schema, Agent: { type: 'status' } }, 'Agent = ready')).toEqual({ property: 'Agent', status: { equals: 'ready' } })
+  expect(whereFilter(schema, 'Done = true AND Tags = "a"')).toEqual({
+    and: [
+      { property: 'Done', checkbox: { equals: true } },
+      { property: 'Tags', multi_select: { contains: 'a' } }
+    ]
+  })
+  expect(() => whereFilter(schema, 'Agnet = ready')).toThrow('No property Agnet')
+  expect(() => whereFilter(schema, 'Due = today')).toThrow('Due is a date property')
+  expect(() => whereFilter(schema, 'ready')).toThrow('Property = value')
+})
+
+test('page properties read back as plain values', () => {
+  const properties = {
+    Name: {
+      type: 'title',
+      title: [{ plain_text: 'Ship ' }, { plain_text: 'it' }]
+    },
+    Agent: { type: 'select', select: { name: 'ready' } },
+    Tags: { type: 'multi_select', multi_select: [{ name: 'a' }] },
+    Done: { type: 'checkbox', checkbox: false }
+  }
+  expect(plainProperties(properties)).toEqual({
+    Name: 'Ship it',
+    Agent: 'ready',
+    Tags: ['a'],
+    Done: false
+  })
+  expect(pageTitle(properties)).toBe('Ship it')
 })
