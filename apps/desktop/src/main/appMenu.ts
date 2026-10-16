@@ -76,5 +76,10 @@ export function buildMenu(window: BrowserWindow, actions: MenuAction[]): void {
   const withExtras = fromActions.map((menu) => (menu.label === 'View' ? { ...menu, submenu: [...(menu.submenu as MenuItemConstructorOptions[]), ...viewExtras] } : menu))
   const view: MenuItemConstructorOptions[] = withExtras.some((menu) => menu.label === 'View') ? withExtras : [...withExtras, { label: 'View', submenu: viewExtras.slice(1) }]
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate([...appMenu, { role: 'editMenu' }, ...view, windowMenu]))
+  // A failed rebuild keeps the previous menu until the next one, rather than stopping the app with an error dialog
+  try {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([...appMenu, { role: 'editMenu' }, ...view, windowMenu]))
+  } catch (error) {
+    console.error('Could not rebuild the menu', error)
+  }
 }
