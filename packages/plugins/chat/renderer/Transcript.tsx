@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import type { LoggedChatEvent } from '@treeix/sdk'
-import { ErrorBlock, PermissionCard, TextBlock, ThoughtBlock, ToolCard } from './Blocks'
+import { ChangeSummary, ErrorBlock, PermissionCard, TextBlock, ThoughtBlock, ToolCard } from './Blocks'
 import { type Block, emptyFeed, type PendingPermission, recomputeWaiting, reduce, turnsOf } from './feed'
 
 export const pendingOf = (block: Block): PendingPermission | null => (block.type === 'permission' ? block.permission : block.type === 'tool' ? block.permission : null)
@@ -95,6 +95,7 @@ export function TurnBlocks({ live, ...props }: FeedProps & { live: boolean }): R
         ) : (
           <Fragment key={index}>
             <Steps {...props} blocks={turn.steps} />
+            <ChangeSummary blocks={turn.steps} cwd={props.cwd} />
             <FeedBlocks {...props} blocks={turn.answer} />
           </Fragment>
         )

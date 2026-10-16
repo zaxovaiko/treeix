@@ -8,7 +8,7 @@ import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
 import { Expandable } from '@treeix/app/Lightbox'
 import { useSettings } from '@treeix/app/settings'
 import { baseName } from '@treeix/app/Sidebar'
-import { type Block, diffCounts, fileTarget, type PendingPermission } from './feed'
+import { type Block, diffCounts, fileTarget, type PendingPermission, turnChanges } from './feed'
 import { keysText } from '@treeix/shared/shortcut'
 
 type Diff = Extract<ToolOutput, { type: 'diff' }>
@@ -156,11 +156,43 @@ function DiffView({ callId, diff }: { callId: string; diff: Diff }): React.JSX.E
 }
 
 function DiffCount({ diff }: { diff: Diff }): React.JSX.Element {
-  const { added, removed } = diffCounts(diff.oldText, diff.newText)
+  return <Counts {...diffCounts(diff.oldText, diff.newText)} />
+}
+
+const Counts = ({ added, removed }: { added: number; removed: number }): React.JSX.Element => (
+  <span className="shrink-0 font-mono">
+    <span className="text-emerald-400">+{added}</span> <span className="text-red-400">-{removed}</span>
+  </span>
+)
+
+/** The files a finished turn changed, so its edits read without unfolding its steps */
+export function ChangeSummary({ blocks, cwd }: { blocks: Block[]; cwd: string }): React.JSX.Element | null {
+  const files = turnChanges(blocks)
+  if (!files.length) return null
+  const total = files.reduce(
+    (sum, file) => ({
+      added: sum.added + file.added,
+      removed: sum.removed + file.removed
+    }),
+    { added: 0, removed: 0 }
+  )
   return (
-    <span className="shrink-0 font-mono">
-      <span className="text-emerald-400">+{added}</span> <span className="text-red-400">-{removed}</span>
-    </span>
+    <div className="overflow-hidden rounded-lg text-xs ring-1 ring-border">
+      <div className="flex items-center gap-2 px-3 py-1.5 text-muted-foreground">
+        <span className="flex-1">
+          {files.length} {files.length === 1 ? 'file' : 'files'} changed
+        </span>
+        <Counts {...total} />
+      </div>
+      {files.map((file) => (
+        <div key={file.path} className="flex min-w-0 items-center gap-2 border-t border-border px-3 py-1">
+          <FileIcon path={file.path} />
+          <Location cwd={cwd} path={file.path} line={null} />
+          <span className="flex-1" />
+          <Counts {...file} />
+        </div>
+      ))}
+    </div>
   )
 }
 

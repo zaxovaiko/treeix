@@ -171,6 +171,31 @@ export function diffCounts(oldText: string | null, newText: string): { added: nu
   return { added, removed }
 }
 
+/** Each file a turn's tool calls (and their subagents') changed, with its lines added and removed over all of them */
+export function turnChanges(blocks: Block[]): { path: string; added: number; removed: number }[] {
+  const files = new Map<string, { path: string; added: number; removed: number }>()
+  const visit = (block: Block): void => {
+    if (block.type !== 'tool') return
+    for (const output of block.call.output) {
+      if (output.type !== 'diff') continue
+      const { added, removed } = diffCounts(output.oldText, output.newText)
+      const file = files.get(output.path) ?? {
+        path: output.path,
+        added: 0,
+        removed: 0
+      }
+      files.set(output.path, {
+        path: output.path,
+        added: file.added + added,
+        removed: file.removed + removed
+      })
+    }
+    block.children.forEach(visit)
+  }
+  blocks.forEach(visit)
+  return [...files.values()]
+}
+
 /** Where the file view opens an agent's path: relative to the chat's folder when inside it, else from the file's own folder */
 export function fileTarget(cwd: string, path: string): { root: string; path: string } {
   if (!path.startsWith('/')) return { root: cwd, path }

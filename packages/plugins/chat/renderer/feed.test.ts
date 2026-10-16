@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ChatEvent } from '@treeix/sdk'
-import { type Block, diffCounts, emptyFeed, fileTarget, reduce, turnsOf } from './feed'
+import { type Block, diffCounts, emptyFeed, fileTarget, reduce, turnChanges, turnsOf } from './feed'
 
 const run = (events: ChatEvent[]) => events.reduce((feed, event, index) => reduce(feed, event, index * 1000), emptyFeed)
 
@@ -152,4 +152,26 @@ test('a turn splits at its last tool call or thought: the steps before, the repl
     [[], ['text']]
   ])
   expect(turnsOf([])).toEqual([])
+})
+
+test("a turn sums its changes per file, a subagent's too", () => {
+  const edit = (id: string, path: string, oldText: string, newText: string, children: Block[] = []): Block => ({
+    type: 'tool',
+    call: {
+      id,
+      title: 'Edit',
+      kind: 'edit',
+      status: 'completed',
+      locations: [],
+      rawInput: null,
+      output: [{ type: 'diff', path, oldText, newText }]
+    },
+    permission: null,
+    children
+  })
+  const blocks = [edit('1', 'a.ts', 'x\n', 'y\nz\n'), edit('2', 'b.ts', '', 'b\n', [edit('3', 'a.ts', 'y\n', '')])]
+  expect(turnChanges(blocks)).toEqual([
+    { path: 'a.ts', added: 2, removed: 2 },
+    { path: 'b.ts', added: 1, removed: 0 }
+  ])
 })
