@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { activeAgents, askWorkflow, freshNode, type NodeStatus, type Run, type RunStatus } from './workflow'
+import { activeAgents, askWorkflow, freshNode, isWorkflow, type NodeStatus, type Run, type RunStatus } from './workflow'
 
 const run = (agent: string, status: RunStatus, node: NodeStatus): Run => ({
   id: `${agent}-${status}-${node}`,
@@ -23,4 +23,25 @@ test('active agents are those a running step asks, each once', () => {
     run('old', 'done', 'done')
   ]
   expect([...activeAgents(runs)].sort()).toEqual(['news', 'scout'])
+})
+
+test('an input watches Jira or Notion, nothing else', () => {
+  const watching = (watch: unknown): unknown => ({
+    ...askWorkflow('a', null),
+    nodes: [{ id: 'input', kind: 'input', watches: [watch] }]
+  })
+  expect(isWorkflow(watching({ id: 'w', source: 'jira', query: 'labels = x', enabled: true }))).toBe(true)
+  expect(
+    isWorkflow(
+      watching({
+        id: 'w',
+        source: 'notion',
+        query: 'Agent = ready',
+        dataSource: 'ds',
+        enabled: false
+      })
+    )
+  ).toBe(true)
+  expect(isWorkflow(watching({ id: 'w', source: 'github', query: '', enabled: true }))).toBe(false)
+  expect(isWorkflow(watching({ id: 'w', source: 'jira', query: 'x' }))).toBe(false)
 })

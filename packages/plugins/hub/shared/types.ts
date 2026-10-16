@@ -88,33 +88,3 @@ export const isHubAgent = (value: unknown): value is HubAgent =>
   (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
   (value.schedules === undefined || (Array.isArray(value.schedules) && value.schedules.every(isSchedule))) &&
   typeof value.updatedAt === 'number'
-
-const TICKET_STATUSES = ['running', 'mr', 'question', 'hold', 'failed', 'stopped'] as const
-/** A run of the launchd ticket runner (~/.claude/ticket-runner), as its runs/<item>.json says */
-export type TicketRun = {
-  item: string
-  title: string
-  project: string
-  cwd: string
-  sessionId: string
-  status: (typeof TICKET_STATUSES)[number]
-  startedAt: number
-  endedAt: number | null
-  cost: number | null
-  url: string | null
-  error: string | null
-}
-
-const isNullableNumber = (value: unknown): value is number | null => value === null || typeof value === 'number'
-export const isTicketRun = (value: unknown): value is TicketRun =>
-  isJson(value) &&
-  ['item', 'title', 'project', 'cwd'].every((key) => isString(value[key])) &&
-  // It goes into a `claude --resume` command line
-  isString(value.sessionId) &&
-  /^[0-9a-f-]{36}$/.test(value.sessionId) &&
-  TICKET_STATUSES.some((status) => status === value.status) &&
-  typeof value.startedAt === 'number' &&
-  isNullableNumber(value.endedAt) &&
-  isNullableNumber(value.cost) &&
-  isNullableString(value.url) &&
-  isNullableString(value.error)

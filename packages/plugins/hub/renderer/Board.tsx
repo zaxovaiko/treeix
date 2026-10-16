@@ -4,11 +4,10 @@ import { useSessions } from '@treeix/app/plugins'
 import { Icon } from '@treeix/app/Icon'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, usePersisted } from '@treeix/app/ui'
-import type { TicketRun } from '../shared/types'
 import type { Run } from '../shared/workflow'
 import { shownRun, StatusIcon } from './RunView'
 import { runTitle } from './Sections'
-import { hubApi, hubRuns, hubSelection, hubTicketRuns } from './store'
+import { hubApi, hubRuns, hubSelection } from './store'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const COLUMNS = [
@@ -27,11 +26,14 @@ type Card = {
   status: ReturnType<typeof shownRun>
   /** Absent while the card's agent works somewhere the board can't open */
   open?: () => void
-  /** The MR or PR the agent opened */
-  link?: string
+  /** The ticket the run is for, the PR or MR it opened */
+  links?: { label: string; url: string }[]
   /** An approval step the card can answer in place */
   decide?: (approved: boolean) => void
 }
+
+/** A GitHub or Bitbucket pull request, or a GitLab merge request */
+const PULL_REQUEST = /https?:\/\/\S+?\/(?:pull|pull-requests|-\/merge_requests)\/\d+/
 
 const firstLine = (text: string | null | undefined): string => text?.trim().split('\n')[0] ?? ''
 
@@ -61,15 +63,6 @@ function sessionColumn(session: SessionSummary): Column | null {
 }
 
 const SESSION_STATUS = { needs: 'waiting', running: 'running', done: 'done' } as const
-
-const TICKET: Record<TicketRun['status'], { column: Column; shown: ReturnType<typeof shownRun>; label: string }> = {
-  running: { column: 'running', shown: 'running', label: 'Working on it' },
-  question: { column: 'needs', shown: 'waiting', label: 'Asked on the ticket' },
-  hold: { column: 'needs', shown: 'waiting', label: 'On hold' },
-  failed: { column: 'needs', shown: 'failed', label: 'Failed' },
-  mr: { column: 'done', shown: 'done', label: 'Opened a merge request' },
-  stopped: { column: 'done', shown: 'cancelled', label: 'Stopped' }
-}
 
 /** Runs cut short by a quit that a Restore can pick up: recent ones only, so an old one doesn't keep the button around */
 export const restorableRuns = (runs: Run[]): Run[] => runs.filter((run) => run.status === 'interrupted' && Date.now() - (run.endedAt ?? run.startedAt) < DAY_MS)
@@ -117,11 +110,15 @@ function BoardCard({ card }: { card: Card }): React.JSX.Element {
       ) : (
         <div className="flex w-full min-w-0 flex-col gap-1 p-2.5">{body}</div>
       )}
-      {card.link && (
-        <button onClick={() => window.open(card.link, '_blank')} className="absolute right-2 bottom-2 text-[11px] text-primary hover:underline">
-          Open MR
-        </button>
-      )}
+      {card.links?.length ? (
+        <div className="absolute right-2 bottom-2 flex gap-2">
+          {card.links.map((link) => (
+            <button key={link.url} onClick={() => window.open(link.url, '_blank')} className="text-[11px] text-primary hover:underline">
+              {link.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {card.decide && (
         <div className="flex justify-end gap-1.5 border-t border-border p-2">
           <button onClick={() => card.decide?.(false)} className="h-6 rounded-md px-2 text-xs ring-1 ring-border hover:bg-accent">
@@ -136,19 +133,30 @@ function BoardCard({ card }: { card: Card }): React.JSX.Element {
   )
 }
 
-/** Every agent at work in one place: hub runs, agent sessions and ticket runs, by whether they need the user, run, or are done */
+/** Every agent at work in one place: hub runs and agent sessions, by whether they need the user, run, or are done */
 export function Board(): React.JSX.Element {
   const host = useHost()
   const sessionsService = host.service('sessions')
   const sessions = useSessions()
   const runs = hubRuns.use()
-  const ticketRuns = hubTicketRuns.use()
   const [layout, setLayout] = usePersisted<'board' | 'list'>('hub.board.layout', 'board')
 
   const runCards = runs.flatMap((run): Card[] => {
     const column = runColumn(run)
     if (!column) return []
     const approval = Object.entries(run.nodes).find(([, node]) => node.waiting === 'approval')
+    const pullRequest = run.output?.match(PULL_REQUEST)?.[0]
+    const links = [
+      ...(run.ticket?.url ? [{ label: 'Open ticket', url: run.ticket.url }] : []),
+      ...(pullRequest
+        ? [
+            {
+              label: pullRequest.includes('merge_requests') ? 'Open MR' : 'Open PR',
+              url: pullRequest
+            }
+          ]
+        : [])
+    ]
     return [
       {
         id: `run:${run.id}`,
@@ -158,6 +166,7 @@ export function Board(): React.JSX.Element {
         at: run.endedAt ?? run.startedAt,
         status: shownRun(run),
         open: () => hubSelection.set(`run:${run.id}`),
+        links,
         decide: approval ? (approved) => hubApi.decide(run.id, approval[0], approved) : undefined
       }
     ]
@@ -182,28 +191,7 @@ export function Board(): React.JSX.Element {
       }
     ]
   })
-  const ticketCards = ticketRuns.flatMap((run): Card[] => {
-    const { column, shown, label } = TICKET[run.status]
-    if (column === 'done' && Date.now() - (run.endedAt ?? run.startedAt) >= DAY_MS) return []
-    return [
-      {
-        id: `ticket:${run.item}`,
-        column,
-        title: runTitle(`${run.item} ${run.title}`),
-        summary: firstLine(run.error) || `${run.project}: ${label}`,
-        at: run.endedAt ?? run.startedAt,
-        status: shown,
-        // The runner owns a running session; resuming it as well would fork the conversation
-        open:
-          run.status === 'running' || !sessionsService
-            ? undefined
-            : () =>
-                void sessionsService.runCommand(run.cwd, `claude --resume ${run.sessionId}`).then(sessionsService.reveal, (reason: unknown) => host.flash(errorMessage(reason))),
-        link: run.url ?? undefined
-      }
-    ]
-  })
-  const cards = [...runCards, ...sessionCards, ...ticketCards].sort((a, b) => b.at - a.at)
+  const cards = [...runCards, ...sessionCards].sort((a, b) => b.at - a.at)
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -25,7 +25,7 @@ import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/ap
 import { Picker, Select } from '@treeix/app/Picker'
 import type { Subagent } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
-import { ASK_TIMEOUT_MIN, type NodeRun, type Workflow, type WorkflowNode } from '../shared/workflow'
+import { ASK_TIMEOUT_MIN, type NodeRun, type Watch, WATCH_QUERY, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
 import { MAX_TIMEOUT_MIN } from '../shared/types'
 import { KIND_LABEL, shownNode, StatusIcon } from './RunView'
@@ -98,7 +98,8 @@ function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.
     step.kind === 'input'
       ? [
           ...(step.schedules ?? []).filter((schedule) => schedule.enabled).map((schedule) => [schedule.cron, schedule.command].filter(Boolean).join(' · ')),
-          ...(step.events ?? [])
+          ...(step.events ?? []),
+          ...(step.watches ?? []).filter((watch) => watch.enabled).map((watch) => `${WATCH_LABEL[watch.source]}: ${watch.query}`)
         ].join('; ') || 'What the run starts with'
       : step.kind === 'agent'
         ? step.prompt
@@ -182,6 +183,98 @@ function TemplateField({
   )
 }
 
+const WATCH_LABEL: Record<Watch['source'], string> = {
+  jira: 'Jira',
+  notion: 'Notion'
+}
+
+/** Jira or Notion queries whose newly matching items each start a run */
+function WatchesField({ watches, onChange }: { watches: Watch[]; onChange: (watches: Watch[]) => void }): React.JSX.Element {
+  const patch = (id: string, next: Partial<Watch>): void => onChange(watches.map((entry) => (entry.id === id ? { ...entry, ...next } : entry)))
+  return (
+    <div className={LABEL}>
+      <span className="flex items-center justify-between">
+        Watches
+        <button
+          onClick={() =>
+            onChange([
+              ...watches,
+              {
+                id: crypto.randomUUID(),
+                source: 'jira',
+                query: WATCH_QUERY.jira,
+                enabled: true
+              }
+            ])
+          }
+          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          <Icon name="plus" className="size-3" />
+          Add
+        </button>
+      </span>
+      {watches.length === 0 && <span className="text-[11px]">None. A watch runs the workflow for each Jira ticket or Notion task that starts matching, while Treeix is open.</span>}
+      {watches.map((watch) => (
+        <div key={watch.id} className="flex flex-col gap-2 border-t border-border pt-2.5 first:border-t-0">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                title="Where to look"
+                value={watch.source}
+                options={(['jira', 'notion'] as const).map((source) => ({
+                  value: source,
+                  label: WATCH_LABEL[source]
+                }))}
+                onChange={(value) => {
+                  const source = value === 'notion' ? 'notion' : 'jira'
+                  // A query written for the other source means nothing here
+                  patch(watch.id, {
+                    source,
+                    query: watch.query === WATCH_QUERY[watch.source] ? WATCH_QUERY[source] : watch.query
+                  })
+                }}
+              />
+            </div>
+            <label className="flex shrink-0 items-center gap-1.5 text-foreground">
+              <input type="checkbox" checked={watch.enabled} onChange={(event) => patch(watch.id, { enabled: event.target.checked })} />
+              On
+            </label>
+            <button
+              onClick={() => onChange(watches.filter((entry) => entry.id !== watch.id))}
+              aria-label="Remove watch"
+              className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent hover:text-foreground"
+            >
+              <Icon name="trash" className="size-3.5" />
+            </button>
+          </div>
+          {watch.source === 'notion' && (
+            <input
+              value={watch.dataSource ?? ''}
+              onChange={(event) => patch(watch.id, { dataSource: event.target.value.trim() })}
+              placeholder="Data source id"
+              aria-label="Notion data source id"
+              className={`${FIELD} h-8 font-mono text-xs`}
+            />
+          )}
+          <textarea
+            value={watch.query}
+            onChange={(event) => patch(watch.id, { query: event.target.value })}
+            aria-label={watch.source === 'jira' ? 'JQL' : 'Condition'}
+            title={watch.source === 'jira' ? 'A JQL query' : 'Property = value, joined by AND'}
+            rows={2}
+            className={`${FIELD} resize-y font-mono text-xs`}
+          />
+        </div>
+      ))}
+      {watches.length > 0 && (
+        <span>
+          Each item becomes {'{{input}}'}: {'{{input.key}}'}, {'{{input.title}}'}, {'{{input.url}}'}. Remove the mark from an item and put it back to run it again.
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** Events of other plugins that start the workflow, their payload as its input */
 function EventsField({ events, onChange }: { events: string[]; onChange: (events: string[]) => void }): React.JSX.Element {
   const [draft, setDraft] = useState(events.join(', '))
@@ -237,6 +330,7 @@ function Inspector({
           <p className="text-xs text-muted-foreground">The text you run the workflow with, or a schedule starts it with. Steps read it as {'{{input}}'}.</p>
           <Schedules workflow schedules={step.schedules ?? []} onChange={(schedules) => onChange({ ...step, schedules })} />
           <EventsField events={step.events ?? []} onChange={(events) => onChange({ ...step, events })} />
+          <WatchesField watches={step.watches ?? []} onChange={(watches) => onChange({ ...step, watches })} />
         </>
       )}
       {step.kind === 'agent' && (

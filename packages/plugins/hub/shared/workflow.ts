@@ -20,9 +20,49 @@ export type AgentNode = {
 
 export type ToolNode = { id: string; kind: 'tool'; tool: string; args: string }
 
+export const WATCH_SOURCES = ['jira', 'notion'] as const
+
+/**
+ * Items a Jira JQL query or a Notion `Property = value` condition matches; each one that starts matching starts a run,
+ * checked every few minutes while Treeix runs
+ */
+export type Watch = {
+  id: string
+  source: (typeof WATCH_SOURCES)[number]
+  query: string
+  dataSource?: string
+  enabled: boolean
+}
+
+/** What a new watch looks for: items marked for an agent, yours, not done */
+export const WATCH_QUERY: Record<Watch['source'], string> = {
+  jira: 'labels = agent-ready AND assignee = currentUser() AND statusCategory != Done',
+  notion: 'Agent = ready'
+}
+
+export const isWatch = (value: unknown): value is Watch =>
+  isJson(value) &&
+  isString(value.id) &&
+  WATCH_SOURCES.some((source) => source === value.source) &&
+  isString(value.query) &&
+  (value.dataSource === undefined || isString(value.dataSource)) &&
+  typeof value.enabled === 'boolean'
+
+/** The ticket a watch started a run for */
+export type Ticket = { key: string; url: string | null }
+
 export type WorkflowNode =
-  /** `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input; `events` start it when a plugin emits one, with the event's JSON as the input */
-  | { id: string; kind: 'input'; schedules?: Schedule[]; events?: string[] }
+  /**
+   * `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input; `events` start it when a plugin emits one,
+   * with the event's JSON as the input; `watches` start it once per new ticket, with the ticket's JSON as the input
+   */
+  | {
+      id: string
+      kind: 'input'
+      schedules?: Schedule[]
+      events?: string[]
+      watches?: Watch[]
+    }
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
   | { id: string; kind: 'condition'; source: string; test: 'contains' | 'equals' | 'regex' | 'empty'; value: string }
@@ -54,7 +94,8 @@ export const isWorkflow = (value: unknown): value is Workflow =>
       typeof node.kind === 'string' &&
       KINDS.includes(node.kind) &&
       (node.schedules === undefined || (Array.isArray(node.schedules) && node.schedules.every(isSchedule))) &&
-      (node.events === undefined || (Array.isArray(node.events) && node.events.every(isString)))
+      (node.events === undefined || (Array.isArray(node.events) && node.events.every(isString))) &&
+      (node.watches === undefined || (Array.isArray(node.watches) && node.watches.every(isWatch)))
   ) &&
   Array.isArray(value.edges) &&
   value.edges.every((edge) => isJson(edge) && typeof edge.from === 'string' && typeof edge.to === 'string') &&
@@ -93,6 +134,8 @@ export type Run = {
   endedAt: number | null
   nodes: Record<string, NodeRun>
   output: string | null
+  /** Set when a watch started the run */
+  ticket?: Ticket | null
 }
 
 /** One logged chat event of a node, as stored and streamed */

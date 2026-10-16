@@ -1,6 +1,4 @@
 import { execFile } from 'node:child_process'
-import { watch } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -10,7 +8,7 @@ import { userShell } from '@treeix/host/env'
 import { isJson, isString } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
 import { render } from '../shared/template'
-import { commandItems, type HubAgent, isHubAgent, isTicketRun, type Schedule, type TicketRun } from '../shared/types'
+import { commandItems, type HubAgent, isHubAgent, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
 import { type AgentNode, type AgentRuntime, askWorkflow, isWorkflow, type Run, type Workflow } from '../shared/workflow'
 import { readSubagents } from './subagents'
@@ -21,32 +19,17 @@ import { createOpenAiAdapter } from './openaiAdapter'
 import { ollamaHandlers } from './ollama'
 import { createRuns } from './runs'
 import { jsonList } from './store'
+import { createWatches } from './watch'
 
 const DETECT_TIMEOUT_MS = 60_000
 const MINUTE_MS = 60_000
 const NOTICE_CHARS = 300
 const TITLE_CHARS = 80
 const COMMAND_TIMEOUT_MS = 60_000
+/** How often watches ask Jira and Notion what matches */
+const WATCH_EVERY_MIN = 2
 
 const exec = promisify(execFile)
-
-/** Where the launchd ticket runner keeps a JSON file per item; absent for anyone without it */
-const TICKET_RUNS = join(homedir(), '.claude', 'ticket-runner', 'runs')
-const TICKET_RUNS_DEBOUNCE_MS = 200
-
-async function readTicketRuns(): Promise<TicketRun[]> {
-  const names = await readdir(TICKET_RUNS).catch((): string[] => [])
-  const runs = await Promise.all(
-    names
-      .filter((name) => name.endsWith('.json'))
-      .map((name) =>
-        readFile(join(TICKET_RUNS, name), 'utf8')
-          .then((text): unknown => JSON.parse(text))
-          .catch(() => null)
-      )
-  )
-  return runs.filter(isTicketRun)
-}
 
 const isAgentRuntime = (value: unknown): value is AgentRuntime =>
   isJson(value) && isString(value.agent) && isString(value.adapter) && isString(value.command) && isString(value.cwd)
@@ -119,18 +102,6 @@ const plugin: MainPlugin = {
     context.onDispose(engine.dispose)
 
     context.handle('runs', () => engine.list())
-    context.handle('ticketRuns', readTicketRuns)
-    let ticketTimer: ReturnType<typeof setTimeout> | undefined
-    try {
-      // ponytail: a runner installed after launch shows up on the next one
-      const watcher = watch(TICKET_RUNS, { persistent: false }, () => {
-        clearTimeout(ticketTimer)
-        ticketTimer = setTimeout(() => void readTicketRuns().then((runs) => context.broadcast('ticketRuns', runs)), TICKET_RUNS_DEBOUNCE_MS)
-      }).on('error', () => undefined)
-      context.onDispose(() => (clearTimeout(ticketTimer), watcher.close()))
-    } catch {
-      // No runner on this Mac
-    }
     context.handle('runEvents', (_, id: string) => engine.events(id))
     context.handle('deleteRun', async (_, id: string) => (await engine.remove(id)) && context.broadcast('runRemoved', id))
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
@@ -239,12 +210,36 @@ const plugin: MainPlugin = {
               (title, input) => void launchWorkflow(workflow, schedule, title, input)
             )
     }
+    // A watched item starts its own run; one that fails says so, since nobody watched it start
+    const checkWatches = createWatches({
+      file: join(context.dataPath, 'watches.json'),
+      workflows: workflows.get,
+      runs: engine.list,
+      callTool: context.callTool,
+      launch: async (workflow, item) => {
+        const problem = validate(
+          workflow,
+          (await agents.get()).map((agent) => agent.id)
+        )[0]
+        if (problem) throw new Error(problem.message)
+        const title = `${workflow.name}: ${item.key} ${item.title}`.trim().slice(0, TITLE_CHARS)
+        const run = engine.launch('workflow', title, workflow, JSON.stringify(item), false, { key: item.key, url: item.url })
+        void engine.wait(run.id).then((ended) => {
+          if (!ended || ended.status === 'done') return
+          show(`${workflow.name} ${ended.status} on ${item.key}`, Object.values(ended.nodes).find((node) => node.error)?.error ?? '', ended.id)
+        })
+      },
+      failed: (workflow, message) => show(`${workflow.name} can't check its watch`, message, null)
+    })
+
     let timer: ReturnType<typeof setTimeout> | undefined
     // Re-aimed at each minute's start, so the clock never drifts past one
     const tick = (): void => {
       timer = setTimeout(
         () => {
-          void fireSchedules(new Date())
+          const now = new Date()
+          void fireSchedules(now)
+          if (now.getMinutes() % WATCH_EVERY_MIN === 0) void checkWatches()
           tick()
         },
         MINUTE_MS - (Date.now() % MINUTE_MS)
