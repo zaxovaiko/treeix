@@ -4,7 +4,7 @@ import { useAgents } from '@treeix/app/agents'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { LazyMarkdown } from '@treeix/app/LazyMarkdown'
-import { isWaiting, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
+import { isWaiting, SOURCED_TITLE, type NodeRun, type NodeStatus, type Run, type RunEvent, type RunStatus, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
 import { followRunEvents, hubAgents, hubApi, hubBack, hubRunStep, registryId } from './store'
 
@@ -160,9 +160,9 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
           <Icon name="arrowLeft" className="size-3.5" />
         </IconButton>
         {lead ? <AgentAvatar agent={lead} size={28} /> : <Icon name="wand" className="size-4 text-muted-foreground" />}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{run.title}</div>
-          <div className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="truncate text-[13px] leading-none font-medium">{SOURCED_TITLE.exec(run.title)?.[3] || run.title}</div>
+          <div className="flex items-center gap-1.5 truncate text-[11px] leading-none text-muted-foreground">
             <StatusIcon status={shownRun(run)} className="size-3" />
             {[STATUS[shownRun(run)].label, new Date(run.startedAt).toLocaleString(), run.endedAt && duration(run.endedAt - run.startedAt)].filter(Boolean).join(' · ')}
           </div>
@@ -251,19 +251,28 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
               <Icon name="panel" className="size-3.5" />
             </IconButton>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1.5 pt-0">
-            {steps.map((step) => {
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-1.5 pt-0">
+            {steps.map((step, index) => {
               const stepRun = run.nodes[step.id]
               const shown = shownNode(stepRun)
               const untouched = shown === 'pending' || shown === 'skipped'
+              const reached = (at: number): boolean => run.nodes[steps[at].id].status === 'done'
               return (
                 <button
                   key={step.id}
                   aria-pressed={step === node}
                   onClick={() => setSelectedId(step.id)}
-                  className={`flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${step === node ? 'bg-accent' : untouched ? 'text-muted-foreground' : ''}`}
+                  className={`flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-accent ${step === node ? 'bg-accent' : untouched ? 'text-muted-foreground' : ''}`}
                 >
-                  <StatusIcon status={shown} className="size-3" />
+                  <span className="relative flex w-5 shrink-0 items-center justify-center self-stretch">
+                    {index > 0 && <span className={`absolute top-0 h-[calc(50%-10px)] w-px ${reached(index - 1) ? 'bg-emerald-400/60' : 'bg-border'}`} />}
+                    {index < steps.length - 1 && <span className={`absolute bottom-0 h-[calc(50%-10px)] w-px ${reached(index) ? 'bg-emerald-400/60' : 'bg-border'}`} />}
+                    <span
+                      className={`flex size-5 items-center justify-center rounded-full ring-1 ${untouched ? 'ring-border' : 'ring-current/30'} ${STATUS[shown].className.replace('animate-spin', '')}`}
+                    >
+                      <StatusIcon status={shown} className="size-3" />
+                    </span>
+                  </span>
                   <span className="min-w-0 flex-1 truncate">{labelOf(step)}</span>
                   {stepRun.startedAt !== null && stepRun.endedAt !== null && (
                     <span className="shrink-0 text-muted-foreground tabular-nums">{duration(stepRun.endedAt - stepRun.startedAt)}</span>
