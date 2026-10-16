@@ -26,7 +26,7 @@ function Section({ children }: { children?: React.ReactNode }): React.JSX.Elemen
     if (foldAll) setOpen(foldAll.open)
   }, [foldAll?.at])
   const [heading, ...body] = Children.toArray(children).filter((child) => typeof child !== 'string' || child.trim() !== '')
-  // The heading's own margins move to the section, so the arrow lines up with the heading text
+  // The heading's own margins move to the section, so the arrow lines up with the heading text; the body indents past the arrow to sit under it
   return (
     <section className="mt-[1.1em] mb-[0.5em] first:mt-0">
       <button
@@ -39,7 +39,7 @@ function Section({ children }: { children?: React.ReactNode }): React.JSX.Elemen
         <Icon name="chevron" className={`size-3 shrink-0 translate-y-[3px] text-muted-foreground/50 group-hover/section:text-foreground ${open ? 'rotate-90' : ''}`} />
         <div className="min-w-0 flex-1">{heading}</div>
       </button>
-      {open && body}
+      {open && <div className="pl-4">{body}</div>}
     </section>
   )
 }
