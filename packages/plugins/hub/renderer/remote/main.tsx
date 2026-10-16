@@ -1,10 +1,11 @@
 import '@treeix/app/main.css'
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { applyTheme, THEMES } from '@treeix/app/themes'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { sseReader } from '../../main/sse'
-import { isRun, isWaiting, type Run, type WorkflowNode } from '../../shared/workflow'
+import { BOARD_COLUMNS, boardColumn, runLinks, runSummary } from '../../shared/board'
+import { isRun, isWaiting, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
 
 /** The hub's web app on the tailnet, phone first: what needs you, what runs, and starting a workflow */
 
@@ -15,7 +16,7 @@ const isNamed = (value: unknown): value is Named => isJson(value) && isString(va
 const isAsk = (value: unknown): value is Ask => isJson(value) && isString(value.node) && isString(value.requestId) && isString(value.title) && Array.isArray(value.options)
 
 const RECONNECT_MS = 3000
-const RECENT = 30
+const ARCHIVED_AT = 'treeix.archivedAt'
 
 /** Every API call carries X-Treeix, which the server requires and no cross-site form or image can send */
 async function call(method: 'GET' | 'POST', path: string, body?: object): Promise<unknown> {
@@ -170,45 +171,121 @@ function Notifications(): React.JSX.Element | null {
   )
 }
 
-function RunRow({ run }: { run: Run }): React.JSX.Element {
+/** A ticket run's title without its source prefix, and the ticket key on its own */
+function titleOf(run: Run): { key: string | null; title: string } {
+  const [, source, key, rest] = SOURCED_TITLE.exec(run.title) ?? []
+  return source ? { key, title: rest || key } : { key: null, title: run.title }
+}
+
+const plain = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1')
+
+function Card({ run }: { run: Run }): React.JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const approval = Object.entries(run.nodes).find(([, node]) => node.waiting === 'approval')?.[0]
+  const { key, title } = titleOf(run)
+  const summary = plain(runSummary(run))
+  const decide = (approved: boolean): void => {
+    setBusy(true)
+    void call('POST', `runs/${encodeURIComponent(run.id)}/decide`, { node: approval, approved }).finally(() => setBusy(false))
+  }
   return (
-    <a href={`#run=${run.id}`} className="flex min-h-14 items-center gap-3 border-b border-border px-1 py-3 last:border-0 active:bg-accent">
-      <Dot status={shown(run)} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px]">{run.title}</span>
-        <span className="block text-xs text-muted-foreground">
-          {STATUS_LABEL[shown(run)]} · {ago(run.endedAt ?? run.startedAt)}
+    <div className="rounded-2xl bg-card ring-1 ring-border">
+      <a href={`#run=${run.id}`} className="flex flex-col gap-1 p-3.5 active:bg-accent">
+        <span className="flex items-center gap-2">
+          <span className="line-clamp-2 min-w-0 flex-1 text-[15px] leading-snug font-medium">{title}</span>
         </span>
-      </span>
-    </a>
+        {summary && !run.title.includes(summary) && <span className="line-clamp-2 text-[13px] text-muted-foreground">{summary}</span>}
+        <span className="flex items-center gap-2 pt-1 text-xs text-muted-foreground tabular-nums">
+          <Dot status={shown(run)} />
+          {STATUS_LABEL[shown(run)]}
+          {key && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{key}</span>}
+          <span className="flex-1 text-right">{ago(run.endedAt ?? run.startedAt)}</span>
+        </span>
+      </a>
+      {runLinks(run).length > 0 && (
+        <div className="flex gap-4 border-t border-border px-3.5">
+          {runLinks(run).map((link) => (
+            <a key={link.url} href={link.url} target="_blank" rel="noreferrer" className="flex h-11 items-center text-sm text-primary">
+              {link.label}
+            </a>
+          ))}
+        </div>
+      )}
+      {approval && (
+        <div className="grid grid-cols-2 gap-2 border-t border-border p-2.5">
+          <button disabled={busy} onClick={() => decide(false)} className={button}>
+            Reject
+          </button>
+          <button disabled={busy} onClick={() => decide(true)} className={primary}>
+            Approve
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
-function Group({ title, runs }: { title: string; runs: Run[] }): React.JSX.Element | null {
-  if (!runs.length) return null
+/** The Mac's board: one column a screen on a phone, swiped or picked from the tabs, side by side when there's room */
+function Board({ runs }: { runs: Run[] }): React.JSX.Element {
+  const [archivedAt, setArchivedAt] = useState(() => Number(localStorage.getItem(ARCHIVED_AT)) || 0)
+  const [column, setColumn] = useState(0)
+  const strip = useRef<HTMLDivElement>(null)
+  const columns = BOARD_COLUMNS.map((entry) => ({
+    ...entry,
+    runs: runs
+      .filter((run) => boardColumn(run) === entry.id && (entry.id !== 'done' || (run.endedAt ?? run.startedAt) > archivedAt))
+      .sort((a, b) => (b.endedAt ?? b.startedAt) - (a.endedAt ?? a.startedAt))
+  }))
+  const archive = (): void => {
+    localStorage.setItem(ARCHIVED_AT, String(Date.now()))
+    setArchivedAt(Date.now())
+  }
+  const show = (index: number): void => strip.current?.children[index]?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' })
   return (
-    <section className="flex flex-col gap-1">
-      <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</h2>
-      <div className="rounded-2xl bg-card px-3 ring-1 ring-border">
-        {runs.map((run) => (
-          <RunRow key={run.id} run={run} />
+    <>
+      <div className="sticky top-0 z-10 -mx-4 flex gap-1 bg-background/90 px-4 pb-2 backdrop-blur md:hidden">
+        {columns.map((entry, index) => (
+          <button
+            key={entry.id}
+            onClick={() => show(index)}
+            className={`h-9 flex-1 rounded-full text-sm ${index === column ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground'}`}
+          >
+            {entry.label} <span className="tabular-nums">{entry.runs.length}</span>
+          </button>
         ))}
       </div>
-    </section>
+      <div
+        ref={strip}
+        onScroll={(event) => setColumn(Math.round(event.currentTarget.scrollLeft / event.currentTarget.clientWidth))}
+        className="-mx-4 flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:gap-3"
+      >
+        {columns.map((entry) => (
+          <section key={entry.id} className="flex w-full shrink-0 snap-start flex-col gap-2 px-4 md:px-0">
+            <h2 className="hidden items-center gap-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase md:flex">
+              <span className="flex-1">{entry.label}</span>
+              <span className="tabular-nums">{entry.runs.length}</span>
+            </h2>
+            {entry.runs.map((run) => (
+              <Card key={run.id} run={run} />
+            ))}
+            {!entry.runs.length && <p className="py-10 text-center text-sm text-muted-foreground">Nothing here</p>}
+            {entry.id === 'done' && entry.runs.length > 0 && (
+              <button onClick={archive} className="py-2 text-sm text-muted-foreground">
+                Archive done runs
+              </button>
+            )}
+          </section>
+        ))}
+      </div>
+    </>
   )
 }
 
 function Home({ runs }: { runs: Run[] }): React.JSX.Element {
-  const waiting = runs.filter(isWaiting)
-  const going = runs.filter((run) => run.status === 'running' && !isWaiting(run))
-  const ended = runs.filter((run) => run.status !== 'running').slice(0, RECENT)
   return (
     <>
       <Notifications />
-      <Group title="Needs you" runs={waiting} />
-      <Group title="Running" runs={going} />
-      <Group title="Recent" runs={ended} />
-      {!runs.length && <p className="py-10 text-center text-sm text-muted-foreground">No runs yet</p>}
+      <Board runs={runs} />
     </>
   )
 }
@@ -243,7 +320,7 @@ function RunDetail({ run, agents }: { run: Run; agents: Named[] }): React.JSX.El
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h1 className="text-lg leading-snug font-semibold">{run.title}</h1>
+        <h1 className="text-lg leading-snug font-semibold">{titleOf(run).title}</h1>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Dot status={shown(run)} />
           {STATUS_LABEL[shown(run)]} · started {ago(run.startedAt)}
@@ -389,20 +466,20 @@ function App(): React.JSX.Element {
     <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/90 px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 backdrop-blur">
         {hash === 'start' || runId ? (
-          <a href="#runs" className="-ml-1 px-1 text-[15px] text-primary">
-            ‹ Runs
+          <a href="#runs" className="-my-2 -ml-2 flex h-11 items-center px-2 text-[15px] text-primary">
+            ‹ Board
           </a>
         ) : (
           <span className="text-[17px] font-semibold">Agents{waiting > 0 && <span className="ml-2 text-sm text-amber-400">{waiting} need you</span>}</span>
         )}
         <span className="flex-1" />
         {hash !== 'start' && (
-          <a href="#start" className="text-[15px] text-primary">
+          <a href="#start" className="-my-2 -mr-2 flex h-11 items-center px-2 text-[15px] text-primary">
             Start
           </a>
         )}
       </header>
-      <main className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
+      <main className={`mx-auto flex w-full flex-col gap-5 px-4 ${hash === 'start' || runId ? 'max-w-xl' : 'max-w-5xl'} pt-4 pb-[max(env(safe-area-inset-bottom),1rem)]`}>
         {error && <p className="rounded-xl bg-red-400/10 p-3 text-sm text-red-400">{error}</p>}
         {hash === 'start' ? <Start /> : runId ? run ? <RunDetail run={run} agents={agents} /> : <p className="text-sm text-muted-foreground">Loading…</p> : <Home runs={runs} />}
       </main>

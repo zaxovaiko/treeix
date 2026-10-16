@@ -5,33 +5,15 @@ import { openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, usePersisted } from '@treeix/app/ui'
 import { type Run, ticketOf } from '../shared/workflow'
-import { BoardCard, type Card, ListRow, runSummary } from './BoardCard'
+import { BOARD_COLUMNS, type BoardColumn, boardColumn, DAY_MS, runLinks, runSummary } from '../shared/board'
+import { BoardCard, type Card, ListRow } from './BoardCard'
 import { shownRun } from './RunView'
 import { runTitle } from './Sections'
 import { TicketDialog, type TicketMode } from './TicketDialog'
 import { Pipeline } from './Pipeline'
 import { hubApi, hubRuns, hubSelection } from './store'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-const COLUMNS = [
-  { id: 'needs', label: 'Needs you' },
-  { id: 'running', label: 'Running' },
-  { id: 'done', label: 'Done' }
-] as const
-type Column = (typeof COLUMNS)[number]['id']
-
-type StatusCard = Card & { column: Column }
-
-/** A GitHub or Bitbucket pull request, or a GitLab merge request */
-const PULL_REQUEST = /https?:\/\/\S+?\/(?:pull|pull-requests|-\/merge_requests)\/\d+/
-
-function runColumn(run: Run): Column | null {
-  const shown = shownRun(run)
-  if (shown === 'waiting' || shown === 'failed' || shown === 'interrupted') return 'needs'
-  if (shown === 'running') return 'running'
-  // Old runs stay in the history, not on the board
-  return shown === 'done' && Date.now() - (run.endedAt ?? run.startedAt) < DAY_MS ? 'done' : null
-}
+type StatusCard = Card & { column: BoardColumn }
 
 const LAYOUTS = { board: 'Board', list: 'List', prs: 'Pull requests' } as const
 
@@ -70,21 +52,9 @@ export function Board(): React.JSX.Element {
   const [ticket, setTicket] = useState<{ source: 'jira' | 'notion'; ticketKey: string; mode: TicketMode } | null>(null)
 
   const cards = runs.flatMap((run): StatusCard[] => {
-    const column = runColumn(run)
+    const column = boardColumn(run)
     if (!column || (column === 'done' && (run.endedAt ?? run.startedAt) <= archivedAt)) return []
     const approval = Object.entries(run.nodes).find(([, node]) => node.waiting === 'approval')
-    const pullRequest = run.output?.match(PULL_REQUEST)?.[0]
-    const links = [
-      ...(run.ticket?.url ? [{ label: 'Open ticket', url: run.ticket.url }] : []),
-      ...(pullRequest
-        ? [
-            {
-              label: pullRequest.includes('merge_requests') ? 'Open MR' : 'Open PR',
-              url: pullRequest
-            }
-          ]
-        : [])
-    ]
     const about = ticketOf(run)
     return [
       {
@@ -95,7 +65,7 @@ export function Board(): React.JSX.Element {
         at: run.endedAt ?? run.startedAt,
         status: shownRun(run),
         open: () => hubSelection.set(`run:${run.id}`),
-        links,
+        links: runLinks(run),
         decide: approval ? (approved) => hubApi.decide(run.id, approval[0], approved) : undefined,
         menu: about
           ? (event) =>
@@ -132,7 +102,7 @@ export function Board(): React.JSX.Element {
         <Pipeline />
       ) : (
         <div className={`min-h-0 flex-1 overflow-auto ${list ? '' : 'grid grid-cols-3 items-start gap-3 p-3'}`}>
-          {COLUMNS.map((column) => {
+          {BOARD_COLUMNS.map((column) => {
             const shown = cards.filter((card) => card.column === column.id)
             const archive = column.id === 'done' && shown.length > 0 && (
               <button onClick={() => setArchivedAt(Date.now())} title="Clears the done runs from the board; they stay in History" className="normal-case hover:text-foreground">

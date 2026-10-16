@@ -1,5 +1,4 @@
 import { timeAgo } from '@treeix/app/time'
-import type { Run } from '../shared/workflow'
 import { type shownRun, StatusIcon } from './RunView'
 
 export type Card = {
@@ -19,19 +18,6 @@ export type Card = {
   moveTo?: (event: React.MouseEvent) => void
   /** Its right-click menu */
   menu?: (event: React.MouseEvent) => void
-}
-
-const firstLine = (text: string | null | undefined): string => text?.trim().split('\n')[0] ?? ''
-
-/** What the run is on, or how it ended, in a line */
-export function runSummary(run: Run): string {
-  const nodes = Object.values(run.nodes)
-  const waiting = nodes.find((node) => node.waiting)
-  if (waiting) return waiting.waiting === 'approval' ? firstLine(waiting.prompt) || 'Waiting for approval' : 'Asks for permission'
-  const failed = nodes.find((node) => node.error)
-  if (run.status === 'failed' && failed) return firstLine(failed.error)
-  if (run.status === 'interrupted') return 'The app quit while it ran'
-  return firstLine(run.output) || firstLine(run.input)
 }
 
 export function BoardCard({ card }: { card: Card }): React.JSX.Element {
