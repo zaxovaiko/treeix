@@ -18,6 +18,7 @@ import {
   workItemSummary
 } from './acli'
 import { assignableUsers } from './people'
+import { jiraTools } from './tools'
 
 const plugin: MainPlugin = {
   tools: [{ name: 'acli', purpose: 'Jira work items and Confluence pages', auth: false }],
@@ -37,6 +38,7 @@ const plugin: MainPlugin = {
     context.handle('assign', (_, key: string, accountId: unknown) => assignWorkItem(key, typeof accountId === 'string' ? accountId : null))
     context.handle('assignable', (_, key: string, query: unknown) => assignableUsers(key, typeof query === 'string' ? query : ''))
     handleAtlassianShared(context)
+    jiraTools.forEach((tool) => context.mcpTool(tool))
   }
 }
 
