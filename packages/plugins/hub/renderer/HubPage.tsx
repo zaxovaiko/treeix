@@ -90,7 +90,7 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
   )
 }
 
-/** The tab's own column: the board, then agents, workflows and history */
+/** The tab's own column: the board, agents and workflows, with history at the bottom */
 function Rail({ selection }: { selection: string | null }): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = usePersisted<boolean>('hub.historyOpen', false)
   const group = (label: React.ReactNode, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
@@ -113,18 +113,20 @@ function Rail({ selection }: { selection: string | null }): React.JSX.Element {
       </button>
       {group('Agents', <NewAgentButton />, <AgentsSection />)}
       {group('Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
-      {group(
-        <button
-          onClick={() => setHistoryOpen(!historyOpen)}
-          aria-expanded={historyOpen}
-          className="flex h-full flex-1 items-center gap-1 text-left uppercase hover:text-foreground"
-        >
-          History
-          <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
-        </button>,
-        null,
-        historyOpen && <HistorySection />
-      )}
+      <div className="mt-auto">
+        {group(
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            aria-expanded={historyOpen}
+            className="flex h-full flex-1 items-center gap-1 text-left uppercase hover:text-foreground"
+          >
+            History
+            <Icon name="chevron" className={`size-3 ${historyOpen ? 'rotate-90' : ''}`} />
+          </button>,
+          null,
+          historyOpen && <HistorySection />
+        )}
+      </div>
     </nav>
   )
 }
