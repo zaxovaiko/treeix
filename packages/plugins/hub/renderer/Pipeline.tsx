@@ -160,6 +160,7 @@ export function Pipeline(): React.JSX.Element {
               </IconButton>
             </h3>
             {shown(stage.id)}
+            {shown(stage.id).length === 0 && <p className="px-1 text-[11px] text-muted-foreground">Drop a pull request here to run {stage.name} on it.</p>}
           </section>
         )
       })}
@@ -168,7 +169,10 @@ export function Pipeline(): React.JSX.Element {
         className={`${COLUMN} items-center justify-center border border-dashed border-border py-6 text-xs text-muted-foreground ring-0 hover:text-foreground`}
       >
         <Icon name="plus" className="size-3.5" />
-        Add stage
+        Add workflow stage
+        <span className="px-3 text-center text-[11px] text-muted-foreground/70">
+          A column for one of your workflows. Drag a pull request onto it to run that workflow on the PR.
+        </span>
       </button>
     </div>
   )
