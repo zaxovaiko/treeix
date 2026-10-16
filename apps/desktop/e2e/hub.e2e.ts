@@ -18,7 +18,7 @@ const fake = {
 }
 
 /** The hub's rows live in the sidebar's sections, which pick what its page shows */
-const section = (page: Page, id: 'agents' | 'workflows' | 'history'): ReturnType<Page['locator']> => page.locator(`[data-sidebar-section="hub.${id}"]`)
+const section = (page: Page, id: 'agents' | 'workflows' | 'history'): ReturnType<Page['locator']> => page.locator(`[data-rail="${id}"]`)
 
 /** An OpenAI-compatible API that thinks, then answers with what it was sent */
 const sse = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`
@@ -57,6 +57,12 @@ test.beforeAll(async () => {
   await page.reload()
   // CI's screen is small; the canvas has to fit there
   await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1024, 740))
+  // The native menu cannot be clicked, so its main-process handler picks a blank workflow from New workflow's menu
+  await launched.app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('showContextMenu')
+    ipcMain.handle('showContextMenu', (_event, items: { id?: string; label?: string }[]) => items.find((item) => item.label === 'Blank workflow')?.id ?? null)
+  })
+  await page.locator('[data-page-tab="hub"]').click()
   // History starts folded
   await section(page, 'history').getByRole('button', { name: 'History' }).click()
 })
@@ -103,10 +109,11 @@ test('an agent made in the AI Hub chats as itself and joins the new-tab menu', a
   await page.keyboard.press('Enter')
   await expect(page.getByText('Chat with Scout')).toBeVisible({ timeout: 20_000 })
 
+  await page.locator('[data-page-tab="hub"]').click()
   await section(page, 'agents').getByRole('button', { name: 'Scout' }).click()
   page.once('dialog', (dialog) => void dialog.accept())
   await page.getByRole('button', { name: 'Delete agent' }).click()
-  await expect(page.getByRole('button', { name: 'Create an agent' })).toBeVisible()
+  await expect(section(page, 'agents').getByRole('button', { name: 'Scout' })).toBeHidden()
 })
 
 test('an agent on an OpenAI-compatible API lists its models and chats with its instructions', async () => {

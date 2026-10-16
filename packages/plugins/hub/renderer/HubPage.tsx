@@ -94,8 +94,8 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
 function Rail({ selection }: { selection: string | null }): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = usePersisted<boolean>('hub.historyOpen', false)
   const [width, setWidth] = usePersisted<number>('hub.rail.width', 240)
-  const group = (label: React.ReactNode, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
-    <section className="flex flex-col gap-0.5">
+  const group = (id: string, label: React.ReactNode, actions: React.ReactNode, list: React.ReactNode): React.JSX.Element => (
+    <section data-rail={id} className="flex flex-col gap-0.5">
       <h3 className="flex h-7 items-center justify-between pr-0.5 pl-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
         {actions}
@@ -113,10 +113,11 @@ function Rail({ selection }: { selection: string | null }): React.JSX.Element {
           <Icon name="layers" className="size-3.5 text-muted-foreground" />
           Board
         </button>
-        {group('Agents', <NewAgentButton />, <AgentsSection />)}
-        {group('Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
+        {group('agents', 'Agents', <NewAgentButton />, <AgentsSection />)}
+        {group('workflows', 'Workflows', <NewWorkflowButton />, <WorkflowsSection />)}
         <div className="mt-auto">
           {group(
+            'history',
             <button
               onClick={() => setHistoryOpen(!historyOpen)}
               aria-expanded={historyOpen}
