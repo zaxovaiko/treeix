@@ -13,6 +13,8 @@ import { hubAgents, hubApi, hubBack, hubEvalsRunning, hubSelection, hubWorkflows
 const SAVE_DELAY_MS = 500
 const HISTORY = 12
 const OFF = 'off'
+/** Suites suit the night, when nobody waits on the machine */
+const NIGHTLY = { cron: '0 3 * * *', label: 'Every night at 3:00' }
 const FIELD = 'w-full rounded-md border border-input bg-muted px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary'
 const LABEL = 'flex flex-col gap-1.5 text-xs text-muted-foreground'
 
@@ -269,7 +271,7 @@ export function EvalView({ suite }: { suite: EvalSuite }): React.JSX.Element {
             custom
             title="When it runs on its own, as a preset or a crontab line; Treeix must be open"
             value={draft.cron ?? OFF}
-            options={[{ value: OFF, label: 'Only when I run it' }, ...CRON_PRESETS.map((preset) => ({ value: preset.cron, label: preset.label }))]}
+            options={[{ value: OFF, label: 'Only when I run it' }, ...[NIGHTLY, ...CRON_PRESETS].map((preset) => ({ value: preset.cron, label: preset.label }))]}
             onChange={(cron) => (cron === OFF || isCron(cron)) && setDraft({ ...draft, cron: cron === OFF ? null : cron })}
           />
         </div>

@@ -133,7 +133,7 @@ export function Schedules({ schedules, onChange, workflow = false }: { schedules
               <Icon name="trash" className="size-3.5" />
             </button>
           </div>
-          {!isCron(schedule.cron) && <span className="text-[11px] text-destructive">Not a crontab line: minute hour day month weekday, e.g. 0 9 * * 1</span>}
+          {!isCron(schedule.cron) && <span className="text-[11px] text-red-400">Not a crontab line: minute hour day month weekday, e.g. 0 9 * * 1</span>}
           <textarea
             value={schedule.prompt}
             onChange={(event) => patch(schedule.id, { prompt: event.target.value })}
@@ -471,7 +471,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
 
         <Schedules schedules={draft.schedules ?? []} onChange={(schedules) => patch({ schedules })} />
 
-        {problem && <span className="text-[11px] whitespace-pre-wrap text-destructive">{problem}</span>}
+        {problem && <span className="text-[11px] whitespace-pre-wrap text-red-400">{problem}</span>}
       </div>
 
       <div className="flex shrink-0 justify-end gap-2 border-t border-border px-4 py-3">
