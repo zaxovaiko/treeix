@@ -245,35 +245,38 @@ function Workspaces({ repos, onSwitch, onEdit }: { repos: Repo[] | null; onSwitc
     const dropEdge = drop?.id === workspace.id ? drop.edge : null
     return (
       <div key={workspace.id}>
-        <button
-          data-workspace={workspace.id}
-          title={`${workspace.id === ALL_PROJECTS ? 'Every project, across workspaces' : `${workspace.name}\n${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'No projects yet'}`}${keys ? ` (${keys})` : ''}`}
-          data-tip-side="right"
-          aria-current={current || undefined}
-          onClick={() => (current ? toggle(workspace.id) : onSwitch(workspace.id))}
-          {...extra}
-          className={`${ROW} h-8 pl-0.5 ${current ? 'font-medium text-foreground' : ''}`}
-        >
-          {dropEdge && <span className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-px' : '-bottom-px'}`} />}
-          {/* The chevron folds without switching, so other workspaces' sessions can stay in view */}
-          <span
-            onClick={(event) => {
-              event.stopPropagation()
-              toggle(workspace.id)
-            }}
-            className="-m-1 flex shrink-0 p-1"
+        {/* The plus sits beside the row's button, not in it: a button can't hold another */}
+        <div className="group relative flex items-center">
+          <button
+            data-workspace={workspace.id}
+            title={`${workspace.id === ALL_PROJECTS ? 'Every project, across workspaces' : `${workspace.name}\n${workspace.repoPaths.map((path) => path.split('/').pop()).join(', ') || 'No projects yet'}`}${keys ? ` (${keys})` : ''}`}
+            data-tip-side="right"
+            aria-current={current || undefined}
+            onClick={() => (current ? toggle(workspace.id) : onSwitch(workspace.id))}
+            {...extra}
+            className={`${ROW} h-8 pl-0.5 ${current ? 'font-medium text-foreground' : ''}`}
           >
-            <Icon name="chevron" className={`size-3 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
-          </span>
-          <Badge workspace={workspace} className="size-5 rounded-md text-[9px]" />
-          <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-          {/* The sessions show their own marks while the group is open; the plus takes this spot on hover */}
-          <span className="flex shrink-0 items-center gap-1.5 pr-1 group-hover:invisible">
-            {!open && NEWS.includes(activity) && <ActivityMark activity={activity} className="size-2" />}
-            {!open && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
-          </span>
+            {dropEdge && <span className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-foreground/60 ${dropEdge === 'top' ? '-top-px' : '-bottom-px'}`} />}
+            {/* The chevron folds without switching, so other workspaces' sessions can stay in view */}
+            <span
+              onClick={(event) => {
+                event.stopPropagation()
+                toggle(workspace.id)
+              }}
+              className="-m-1 flex shrink-0 p-1"
+            >
+              <Icon name="chevron" className={`size-3 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
+            </span>
+            <Badge workspace={workspace} className="size-5 rounded-md text-[9px]" />
+            <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+            {/* The sessions show their own marks while the group is open; the plus takes this spot on hover */}
+            <span className="flex shrink-0 items-center gap-1.5 pr-1 group-hover:invisible">
+              {!open && NEWS.includes(activity) && <ActivityMark activity={activity} className="size-2" />}
+              {!open && own.length > 0 && <span className="text-[11px] text-muted-foreground tabular-nums">{own.length}</span>}
+            </span>
+          </button>
           <NewSessionMenu label={`New shell in ${workspace.name} (${actionKeys('terminal.newTab')})`} entries={newSessionEntries(workspace)} />
-        </button>
+        </div>
         {open && <Sessions sessions={own} onOpen={() => current || onSwitch(workspace.id)} />}
       </div>
     )
