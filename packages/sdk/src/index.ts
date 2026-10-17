@@ -124,8 +124,8 @@ export type SessionsService = {
   getSessions: () => SessionSummary[]
   /** Ports live sessions listen on, sorted by port; same array until they change */
   getPorts: () => SessionPort[]
-  /** Resolves with the session id once its process started */
-  start: (cwd: string, kind: SessionKind, promptArgument?: string) => Promise<string>
+  /** Resolves with the session id once its process started; `chat` opens it as a chat where the agent has one */
+  start: (cwd: string, kind: SessionKind, promptArgument?: string, view?: 'terminal' | 'chat') => Promise<string>
   /** Resolves once the agent is ready for input */
   whenReady: (id: string) => Promise<void>
   /** Bracketed paste, optionally followed by Enter */

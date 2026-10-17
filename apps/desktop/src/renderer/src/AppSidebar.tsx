@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ISLAND, type SessionSummary, type SidebarSection, useHost } from '@treeix/sdk'
 import type { Repo } from '../../shared/types'
 import { ActivityMark, NEWS } from './activity'
-import { getAgents, isChatOnly } from './agents'
+import { chatAgent, getAgents, isChatOnly } from './agents'
 import { type MenuAction, openMenu } from './contextMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Icon } from './Icon'
@@ -199,7 +199,7 @@ function Workspaces({
   useEffect(() => setExpanded((previous) => (previous.has(currentId) ? previous : new Set([...previous, currentId]))), [currentId])
   const toggle = (id: string): void => setExpanded((previous) => toggleIn(previous, id))
 
-  const newSession = (workspace: Workspace, kind: string): void => {
+  const newSession = (workspace: Workspace, kind: string, view: 'terminal' | 'chat' = 'terminal'): void => {
     const service = host.service('sessions')
     if (!service) return host.flash('Sessions need the Terminal plugin')
     if (workspace.id !== currentId) {
@@ -208,10 +208,12 @@ function Workspaces({
       if (workspace.id === HOME.id && !sessions.some((session) => session.workspaceId === HOME.id)) return
     }
     host.setActiveTab(TERMINAL_TAB)
-    void service.start(workspaceFolder(workspace), kind).then((id) => service.reveal(id))
+    void service.start(workspaceFolder(workspace), kind, undefined, view).then((id) => service.reveal(id))
   }
 
+  const chat = host.service('chat') ? chatAgent() : null
   const newSessionEntries = (workspace: Workspace): MenuAction[] => [
+    ...(chat ? [{ label: 'New chat here', run: () => newSession(workspace, chat.id, 'chat') }] : []),
     { label: 'New shell here', run: () => newSession(workspace, 'shell') },
     ...getAgents()
       .filter((agent) => agent.agent && !isChatOnly(agent))
