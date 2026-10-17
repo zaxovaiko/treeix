@@ -7,6 +7,9 @@ import type { AgentUsage as Usage, UsageRow } from '../shared/types'
 
 const bridge = createBridge('agent-usage')
 
+// The last scan, shown at once when the page opens again while a fresh one runs
+let lastUsage: Usage | null = null
+
 const RANGES = [
   ['today', 'Today'],
   ['thisWeek', 'This week'],
@@ -182,7 +185,7 @@ function Breakdown({ title, groups }: { title: string; groups: Group[] }): React
 }
 
 function Dashboard(): React.JSX.Element {
-  const [usage, setUsage] = useState<Usage | null>(null)
+  const [usage, setUsage] = useState<Usage | null>(lastUsage)
   const [error, setError] = useState('')
   const [agent, setAgent] = useState('all')
   const [project, setProject] = useState('all')
@@ -191,8 +194,13 @@ function Dashboard(): React.JSX.Element {
   useEffect(() => {
     bridge
       .invoke<Usage>('usage')
-      .then(setUsage)
-      .catch((reason: unknown) => setError(errorMessage(reason)))
+      .then((fresh) => {
+        lastUsage = fresh
+        setUsage(fresh)
+      })
+      .catch((reason: unknown) => {
+        if (!lastUsage) setError(errorMessage(reason))
+      })
   }, [])
 
   const view = useMemo(() => {
