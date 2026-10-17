@@ -75,7 +75,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       # The bump lives only in this build, main is never committed to
-      - run: npm version --no-git-tag-version --prefix apps/desktop "${TAG#v}" > /dev/null
+      - run: npm version --no-git-tag-version --allow-same-version --prefix apps/desktop "${TAG#v}" > /dev/null
 
       - run: bun install
 
@@ -163,7 +163,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - run: npm version --no-git-tag-version --prefix apps/desktop "${TAG#v}" > /dev/null
+      - run: npm version --no-git-tag-version --allow-same-version --prefix apps/desktop "${TAG#v}" > /dev/null
 
       # Compiles node-pty, which ships no Linux prebuild (scripts/postinstall.sh)
       - run: bun install
