@@ -1,21 +1,29 @@
 import { expect, test } from 'bun:test'
-import { addTestsWorkflow, shipWorkflow } from './templates'
+import { fixWorkflow, ticketWorkflow } from './templates'
 import { validate } from './validate'
 import { isWorkflow } from './workflow'
 
-test('a ship workflow is valid as made, given its agent', () => {
+test('a ticket workflow is valid as made, given its agent, and runs to a pull request with nobody in the loop', () => {
   for (const source of ['jira', 'notion'] as const) {
-    const workflow = shipWorkflow(source, 'agent')
+    const workflow = ticketWorkflow(source, 'agent', true)
     expect(isWorkflow(workflow)).toBe(true)
     expect(validate(workflow, ['agent'])).toEqual([])
-    // Its plan waits on approval, and changes asked for send the plan back
-    expect(workflow.edges.map((edge) => edge.to)).toEqual(['plan', 'approve', 'agent', 'review', 'output'])
-    expect(workflow.nodes.find((node) => node.id === 'approve')).toMatchObject({ kind: 'approval', retryStep: 'plan' })
+    expect(workflow.edges.map((edge) => [edge.to, edge.branch])).toEqual([
+      ['plan', null],
+      ['asked', null],
+      ['implement', 'false'],
+      ['built', null],
+      ['qa', 'false'],
+      ['verified', null],
+      ['pr', 'false'],
+      ['output', null]
+    ])
+    expect(workflow.nodes.some((node) => node.kind === 'approval' || node.kind === 'judge')).toBe(false)
   }
 })
 
-test('an add tests workflow is valid as made, given its agent', () => {
-  const workflow = addTestsWorkflow('agent')
+test('a fix workflow is valid as made, given its agent', () => {
+  const workflow = fixWorkflow('agent')
   expect(isWorkflow(workflow)).toBe(true)
   expect(validate(workflow, ['agent'])).toEqual([])
 })

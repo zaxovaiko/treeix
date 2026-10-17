@@ -2,7 +2,7 @@ import { useHost } from '@treeix/sdk'
 import { type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, IconButton } from '@treeix/app/ui'
-import { addTestsWorkflow, shipWorkflow } from '../shared/templates'
+import { ticketWorkflow } from '../shared/templates'
 import type { EvalSuite } from '../shared/evals'
 import { SOURCED_TITLE, type Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
@@ -122,15 +122,17 @@ export function NewWorkflowButton(): React.JSX.Element {
       },
       (reason: unknown) => host.flash(errorMessage(reason))
     )
-  // Template runs go unwatched, so their agent should not stop to ask for each command
-  const unwatched = (make: (agent: string) => Workflow, lastStep: string): void => {
+  // Nobody watches its runs, so its watch waits until the agent may run every command without asking
+  const ship = (source: 'jira' | 'notion'): void => {
     const agent = hubAgents.get()[0]
-    const steps = [!agent && 'create an agent and pick it in the workflow', agent && !agent.autoApprove && `turn on "Allow everything it asks" for ${agent.name}`, lastStep].filter(
-      Boolean
-    )
-    create(make(agent?.id ?? ''), `To start: ${steps.join(', then ')}`)
+    const steps = [
+      !agent && 'create an agent and pick it in each step',
+      agent && !agent.autoApprove && `turn on "Allow everything it asks" for ${agent.name}`,
+      source === 'notion' && 'pick the data source in the Input step',
+      !agent?.autoApprove && 'turn the watch on in the Input step'
+    ].filter(Boolean)
+    create(ticketWorkflow(source, agent?.id ?? '', agent?.autoApprove === true), steps.length ? `To start: ${steps.join(', then ')}` : 'Watching: tag a ticket agent-ready')
   }
-  const ship = (source: 'jira' | 'notion'): void => unwatched((agent) => shipWorkflow(source, agent), 'turn the watch on in the Input step')
   return (
     <IconButton
       label="New workflow"
@@ -139,8 +141,7 @@ export function NewWorkflowButton(): React.JSX.Element {
           { label: 'Blank workflow', run: () => create(newWorkflow()) },
           null,
           { label: 'Ship Jira tickets', run: () => ship('jira') },
-          { label: 'Ship Notion tasks', run: () => ship('notion') },
-          { label: 'Add tests to pull requests', run: () => unwatched(addTestsWorkflow, 'add it as a stage on the Pull requests board') }
+          { label: 'Ship Notion tasks', run: () => ship('notion') }
         ])
       }
     >

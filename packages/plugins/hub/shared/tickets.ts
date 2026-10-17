@@ -1,5 +1,6 @@
 import { isJson, isString, object, parseJson, text } from '@treeix/shared/json'
 import { PULL_REQUEST, runSummary } from './board'
+import { STOP } from './templates'
 import { type Run, type TicketSource, ticketOf } from './workflow'
 
 /** Where a ticket is, on the Mac and on the phone; there is no To do, the watches pick tickets up */
@@ -23,7 +24,10 @@ export const TICKET_BADGES = [
 export type TicketBadge = (typeof TICKET_BADGES)[number]['id']
 
 /** The ticket flow's steps by the column they put the ticket in; any other step counts as In progress */
-const STAGE_COLUMN: Record<string, TicketColumn> = { plan: 'progress', implement: 'progress', qa: 'qa', pr: 'pullRequest' }
+const STAGE_COLUMN: Record<string, TicketColumn> = { plan: 'progress', asked: 'progress', implement: 'progress', built: 'progress', qa: 'qa', verified: 'qa', pr: 'pullRequest' }
+
+/** The line an agent stopped the flow with, to ask a person something */
+const STOPPED = new RegExp(`^(?:${Object.values(STOP).join('|')}).*$`, 'm')
 
 export type TicketLogEntry = { at: number; text: string }
 
@@ -131,7 +135,8 @@ function summaryOf(card: Pick<TicketCard, 'runs' | 'state' | 'badge' | 'pullRequ
   const latest = card.runs[0]
   if (card.badge === 'merged') return 'Merged'
   if (card.state?.needsYou) return card.state.needsYou
-  if (card.badge === 'needsYou' && latest.status === 'done') return 'Finished without opening a pull request'
+  if (card.badge === 'needsYou' && latest.status === 'done')
+    return Object.values(latest.nodes).flatMap((node) => node.output?.match(STOPPED) ?? [])[0] ?? 'Finished without opening a pull request'
   if (card.badge === 'error' && card.state?.error) return card.state.error
   if (card.badge === 'ciFailing') return 'CI fails, a fix comes next'
   if (card.badge === 'review') return card.state?.ci === 'running' ? 'CI is running' : 'Waiting for review'

@@ -50,7 +50,12 @@ test('a failed or stuck ticket needs you, and says why', () => {
   const [failed] = ticketCards([flowRun('BF-1', { plan: { status: 'failed', error: 'The ticket is unclear' } }, { status: 'failed' })], [])
   expect([failed.badge, failed.summary]).toEqual(['needsYou', 'The ticket is unclear'])
   const [noPullRequest] = ticketCards([flowRun('BF-1', { pr: { status: 'done', output: 'Pushed' } }, { status: 'done' })], [])
-  expect(noPullRequest.badge).toBe('needsYou')
+  expect([noPullRequest.badge, noPullRequest.summary]).toEqual(['needsYou', 'Finished without opening a pull request'])
+  const [asked] = ticketCards(
+    [flowRun('BF-1', { plan: { status: 'done', output: 'Asked: which screen?' }, asked: { status: 'done', output: 'Asked: which screen?' } }, { status: 'done' })],
+    []
+  )
+  expect([asked.column, asked.badge, asked.summary]).toEqual(['progress', 'needsYou', 'Asked: which screen?'])
   const opened = flowRun('BF-1', { pr: { status: 'done', output: PR } }, { status: 'done' })
   const [capped] = ticketCards([opened], [{ ...freshTicketState('BF-1'), ci: 'failed', needsYou: 'CI still fails after 3 fixes' }])
   expect([capped.badge, capped.summary]).toEqual(['needsYou', 'CI still fails after 3 fixes'])
