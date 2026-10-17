@@ -5,7 +5,7 @@
   "treeix": {
     "id": "agent-usage",
     "name": "Agent usage",
-    "description": "Tokens and estimated cost per day, model and project, counted from Claude, Codex and Ollama session logs.",
+    "description": "A Usage tab with tokens and estimated cost per day, model, project and session, counted from Claude, Codex and Ollama session logs.",
     "enabledByDefault": true
   }
 }

@@ -9,11 +9,14 @@ import type { UsageRow } from '../shared/types'
 
 const CLAUDE_PROJECTS = join(homedir(), '.claude', 'projects')
 const CODEX_FOLDERS = [join(homedir(), '.codex', 'sessions'), join(homedir(), '.codex', 'archived_sessions')]
+const CODEX_INDEX = join(homedir(), '.codex', 'session_index.jsonl')
 // Bumped when parsing changes, so every log is read again
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 
 type Tokens = Pick<UsageRow, 'input' | 'output' | 'cacheRead' | 'cacheWrite'>
 type Lines = AsyncIterable<string> | Iterable<string>
+/** A log's usage rows and the session titles it names, by session id */
+export type Parsed = { rows: UsageRow[]; titles: Record<string, string> }
 
 const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
 
@@ -37,7 +40,7 @@ function tally(): {
   const rows = new Map<string, UsageRow>()
   return {
     add: (key, tokens) => {
-      const id = [key.day, key.agent, key.model, key.project].join('\n')
+      const id = [key.day, key.agent, key.model, key.project, key.session].join('\n')
       const row = rows.get(id) ?? {
         ...key,
         input: 0,
@@ -55,11 +58,22 @@ function tally(): {
   }
 }
 
-/** Claude Code transcripts: one `usage` per API reply, repeated on each content block line of that reply */
-export async function claudeRows(lines: Lines): Promise<UsageRow[]> {
+/** Claude Code transcripts: one `usage` per API reply, repeated on each content block line of that reply; a title the user set beats the generated one */
+export async function claudeRows(lines: Lines): Promise<Parsed> {
   const rows = tally()
   const seen = new Set<string>()
+  const titles: Record<string, string> = {}
+  const named = new Set<string>()
   for await (const line of lines) {
+    if (line.includes('-title"')) {
+      const entry = object(parseJson(line))
+      const session = text(entry.sessionId)
+      const custom = entry.type === 'custom-title' ? text(entry.customTitle) : ''
+      const generated = entry.type === 'ai-title' ? text(entry.aiTitle) : ''
+      if (session && custom) named.add(session)
+      if (session && (custom || (generated && !named.has(session)))) titles[session] = custom || generated
+      continue
+    }
     if (!line.includes('"usage"')) continue
     const entry = parseJson(line)
     if (!isJson(entry) || entry.type !== 'assistant') continue
@@ -79,7 +93,8 @@ export async function claudeRows(lines: Lines): Promise<UsageRow[]> {
         day,
         agent: 'claude',
         model: model || 'unknown',
-        project: projectOf(text(entry.cwd))
+        project: projectOf(text(entry.cwd)),
+        session: text(entry.sessionId) || 'unknown'
       },
       {
         input: num(usage.input_tokens),
@@ -89,12 +104,13 @@ export async function claudeRows(lines: Lines): Promise<UsageRow[]> {
       }
     )
   }
-  return rows.rows()
+  return { rows: rows.rows(), titles }
 }
 
 /** Codex rollouts: cumulative `token_count` totals, so each event adds what grew since the last; Ollama-backed sessions count as Ollama */
-export async function codexRows(lines: Lines): Promise<UsageRow[]> {
+export async function codexRows(lines: Lines): Promise<Parsed> {
   const rows = tally()
+  let session = 'unknown'
   let cwd = ''
   let agent = 'codex'
   let model = 'unknown'
@@ -106,6 +122,7 @@ export async function codexRows(lines: Lines): Promise<UsageRow[]> {
     const payload = object(event.payload)
     if (event.type === 'session_meta') {
       cwd = text(payload.cwd) || cwd
+      session = text(payload.id) || session
       agent = text(payload.model_provider).includes('ollama') ? 'ollama' : 'codex'
       continue
     }
@@ -132,14 +149,25 @@ export async function codexRows(lines: Lines): Promise<UsageRow[]> {
       cacheWrite
     }
     if (total) previous = total
-    if (tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite > 0) rows.add({ day, agent, model, project: projectOf(cwd) }, tokens)
+    if (tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite > 0) rows.add({ day, agent, model, project: projectOf(cwd), session }, tokens)
   }
-  return rows.rows()
+  return { rows: rows.rows(), titles: {} }
 }
 
-type FileRows = { mtimeMs: number; size: number; rows: UsageRow[] }
+/** Codex keeps thread names apart from the rollouts; a later line renames */
+export async function codexTitles(lines: Lines): Promise<Record<string, string>> {
+  const titles: Record<string, string> = {}
+  for await (const line of lines) {
+    const entry = object(parseJson(line))
+    if (text(entry.id) && text(entry.thread_name)) titles[text(entry.id)] = text(entry.thread_name)
+  }
+  return titles
+}
 
-const isFileRows = (value: unknown): value is FileRows => isJson(value) && typeof value.mtimeMs === 'number' && typeof value.size === 'number' && Array.isArray(value.rows)
+type FileRows = Parsed & { mtimeMs: number; size: number }
+
+const isFileRows = (value: unknown): value is FileRows =>
+  isJson(value) && typeof value.mtimeMs === 'number' && typeof value.size === 'number' && Array.isArray(value.rows) && isJson(value.titles)
 
 const jsonlUnder = async (folder: string): Promise<string[]> =>
   (await readdir(folder, { recursive: true }).catch(() => [])).filter((name) => name.endsWith('.jsonl')).map((name) => join(folder, name))
@@ -150,7 +178,7 @@ const linesOf = (path: string): AsyncIterable<string> => createInterface({ input
  * Logs are read again only when their size or time changed; the rest come from `cacheFile`.
  * ponytail: a growing log is re-read whole, read from the last offset if live sessions make this slow.
  */
-async function scan(cacheFile: string): Promise<UsageRow[]> {
+async function scan(cacheFile: string): Promise<Parsed> {
   const saved = object(await readJsonFile(cacheFile))
   const cached = saved.version === CACHE_VERSION ? object(saved.files) : {}
   const [claude, codex] = await Promise.all([jsonlUnder(CLAUDE_PROJECTS), Promise.all(CODEX_FOLDERS.map(jsonlUnder)).then((folders) => folders.flat())])
@@ -168,18 +196,25 @@ async function scan(cacheFile: string): Promise<UsageRow[]> {
     files[path] = {
       mtimeMs: info.mtimeMs,
       size: info.size,
-      rows: await parse(linesOf(path)).catch(() => [])
+      ...(await parse(linesOf(path)).catch((): Parsed => ({ rows: [], titles: {} })))
     }
     read++
   }
   if (read > 0 || Object.keys(cached).length !== Object.keys(files).length) await writeFile(cacheFile, JSON.stringify({ version: CACHE_VERSION, files }))
-  return Object.values(files).flatMap((file) => file.rows)
+  const codexNames = await stat(CODEX_INDEX).then(
+    () => codexTitles(linesOf(CODEX_INDEX)),
+    () => ({})
+  )
+  return {
+    rows: Object.values(files).flatMap((file) => file.rows),
+    titles: Object.assign({}, ...Object.values(files).map((file) => file.titles), codexNames)
+  }
 }
 
-let scanning: Promise<UsageRow[]> | null = null
+let scanning: Promise<Parsed> | null = null
 
-/** Every agent's tokens by day, model and project; overlapping calls share one scan */
-export function usageRows(cacheFile: string): Promise<UsageRow[]> {
+/** Every agent's tokens by day, model, project and session, with session titles; overlapping calls share one scan */
+export function usageRows(cacheFile: string): Promise<Parsed> {
   scanning ??= scan(cacheFile).finally(() => (scanning = null))
   return scanning
 }

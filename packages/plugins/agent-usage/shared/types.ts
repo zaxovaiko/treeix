@@ -5,6 +5,8 @@ export type UsageRow = {
   agent: string
   model: string
   project: string
+  /** Claude or Codex session id */
+  session: string
   input: number
   output: number
   cacheRead: number
@@ -14,4 +16,5 @@ export type UsageRow = {
 /** USD per token: input, output, cache read, cache write */
 export type Price = [number, number, number, number]
 
-export type AgentUsage = { rows: UsageRow[]; prices: Record<string, Price> }
+/** `titles` names sessions by id, where the agent saved a title */
+export type AgentUsage = { rows: UsageRow[]; prices: Record<string, Price>; titles: Record<string, string> }

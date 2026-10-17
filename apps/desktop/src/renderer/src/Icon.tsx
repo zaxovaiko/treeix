@@ -257,6 +257,7 @@ const paths = {
       <path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0" />
     </>
   ),
+  chart: <path d="M3 3v16a2 2 0 0 0 2 2h16M8 17v-3M13 17V5M18 17V9" />,
   network: (
     <>
       <rect x="16" y="16" width="6" height="6" rx="1" />

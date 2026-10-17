@@ -1,8 +1,8 @@
 import type { RendererPlugin } from '@treeix/sdk'
-import { AgentUsage } from './AgentUsage'
+import { UsagePage } from './AgentUsage'
 
 const plugin: RendererPlugin = {
-  Settings: AgentUsage
+  tabs: [{ id: 'agent-usage', label: 'Usage', icon: 'chart', order: 70, render: UsagePage }]
 }
 
 export default plugin
