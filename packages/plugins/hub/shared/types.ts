@@ -97,16 +97,15 @@ const nullableString = (value: unknown): value is string | null => value === nul
 export const isRemoteStatus = (value: unknown): value is RemoteStatus =>
   isJson(value) && typeof value.on === 'boolean' && nullableString(value.url) && nullableString(value.enableUrl) && nullableString(value.error) && typeof value.devices === 'number'
 
-/** When nobody answers a waiting step in time, an agent decides: after `afterMin` (null waits forever), as `agent` (null is the step's own); `ticket` also asks on the run's ticket */
-export type DecisionSettings = { afterMin: number | null; agent: string | null; ticket: boolean }
+/** When nobody answers a waiting step in time, its agent decides after `afterMin` (null waits forever); `ticket` also asks on the run's ticket */
+export type DecisionSettings = { afterMin: number | null; ticket: boolean }
 
-export const DECISION_DEFAULTS: DecisionSettings = { afterMin: 60, agent: null, ticket: true }
+export const DECISION_DEFAULTS: DecisionSettings = { afterMin: 60, ticket: true }
 
 export const toDecisionSettings = (value: unknown): DecisionSettings =>
   isJson(value)
     ? {
         afterMin: typeof value.afterMin === 'number' && value.afterMin > 0 ? value.afterMin : value.afterMin === null ? null : DECISION_DEFAULTS.afterMin,
-        agent: typeof value.agent === 'string' && value.agent ? value.agent : null,
         ticket: value.ticket !== false
       }
     : DECISION_DEFAULTS

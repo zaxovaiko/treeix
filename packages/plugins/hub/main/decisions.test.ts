@@ -25,7 +25,7 @@ test("an agent's verdict is read from its JSON, and anything else rejects", () =
   expect(parseVerdict('{"approve": "yes"}').approved).toBe(false)
 })
 
-test("the decider is the picked agent, else the step's own, the one feeding it, or the workflow's first", () => {
+test("the decider is the step's own agent, else the one feeding it, or the workflow's first", () => {
   const agent = (id: string) => ({ id, kind: 'agent' as const, agent: `${id}-agent`, prompt: '', folder: null, retries: 0, onError: 'stop' as const, timeoutMin: 1 })
   const run = {
     workflow: {
@@ -33,8 +33,7 @@ test("the decider is the picked agent, else the step's own, the one feeding it, 
       edges: [{ id: 'e', from: 'build', to: 'gate', branch: null }]
     }
   } as unknown as Run
-  expect(deciderOf(run, 'gate', 'judge')).toBe('judge')
-  expect(deciderOf(run, 'build', null)).toBe('build-agent')
-  expect(deciderOf(run, 'gate', null)).toBe('build-agent')
-  expect(deciderOf(run, 'lone', null)).toBe('plan-agent')
+  expect(deciderOf(run, 'build')).toBe('build-agent')
+  expect(deciderOf(run, 'gate')).toBe('build-agent')
+  expect(deciderOf(run, 'lone')).toBe('plan-agent')
 })

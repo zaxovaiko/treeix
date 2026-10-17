@@ -45,9 +45,8 @@ export function parseVerdict(reply: string): Reply {
   return { approved: false, reason: `The agent's answer was not a decision: ${reply.slice(0, 200)}` }
 }
 
-/** Who decides for a step: the hub's pick, else the step's own agent, the agent feeding it, or the workflow's first */
-export function deciderOf(run: Run, node: string, picked: string | null): string | null {
-  if (picked) return picked
+/** Who decides for a step: its own agent, else the agent feeding it, or the workflow's first */
+export function deciderOf(run: Run, node: string): string | null {
   const agents = run.workflow.nodes.filter((step): step is AgentNode | JudgeNode => step.kind === 'agent' || step.kind === 'judge')
   return (
     agents.find((step) => step.id === node)?.agent ??
@@ -129,8 +128,8 @@ export function createDecisions(deps: {
   }
 
   async function decideAlone(run: Run, node: string, minutes: number): Promise<void> {
-    const agent = deciderOf(run, node, (await deps.settings()).agent)
-    if (!agent) return deps.notify(run, `${run.title} still waits for you`, 'No agent can decide in your place; pick one in Settings, Agents.')
+    const agent = deciderOf(run, node)
+    if (!agent) return deps.notify(run, `${run.title} still waits for you`, 'Its workflow has no agent to decide in your place.')
     const prompt = [
       `Decide for ${run.title}: ${question(run, node)}`,
       `You decide in place of the user, who did not answer within ${minutes} min. Change nothing; only read what you need to judge.`,

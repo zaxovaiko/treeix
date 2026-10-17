@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Card, Row, Steps, Switch } from '@treeix/app/settingsUi'
 import { errorMessage } from '@treeix/app/ui'
-import { Select } from '@treeix/app/Picker'
 import { fit, LOCAL_MODELS, type LocalModelsState, longContextId } from '../shared/catalog'
 import { DECISION_DEFAULTS, type DecisionSettings, type RemoteStatus } from '../shared/types'
-import { WholeNumber } from './AgentEditor'
-import { hubAgents, hubApi } from './store'
+import { hubApi } from './store'
 
 const button = 'h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent disabled:opacity-50'
 const FIT_COLOR = { fits: 'text-emerald-400', tight: 'text-amber-400', 'too big': 'text-red-400' } as const
@@ -47,7 +45,6 @@ function RunsCard(): React.JSX.Element {
 /** Who answers a step waiting on the user when nobody does */
 function AwayCard(): React.JSX.Element {
   const [settings, setSettings] = useState<DecisionSettings | null>(null)
-  const agents = hubAgents.use()
   useEffect(() => void hubApi.decisionSettings().then(setSettings), [])
   const change = (next: Partial<DecisionSettings>): void => {
     if (!settings) return
@@ -58,7 +55,7 @@ function AwayCard(): React.JSX.Element {
     <Card title="When you're away">
       <Row
         label="Let an agent decide"
-        description="When a step waits for your approval or an agent asks for permission and nobody answers in time, an agent decides. Its reason shows on the run, your phone and the ticket."
+        description="When a step waits for your approval or an agent asks for permission and nobody answers within an hour, the step's agent decides. Its reason shows on the run, your phone and the ticket."
       >
         <Switch
           checked={settings?.afterMin !== null}
@@ -66,28 +63,6 @@ function AwayCard(): React.JSX.Element {
           onChange={() => change({ afterMin: settings?.afterMin === null ? DECISION_DEFAULTS.afterMin : null })}
         />
       </Row>
-      {settings && settings.afterMin !== null && (
-        <>
-          <Row label="Decide after, minutes" description="How long a step waits for you first. An approval step can set its own.">
-            <WholeNumber
-              min={1}
-              max={1440}
-              value={settings.afterMin}
-              onChange={(afterMin) => change({ afterMin })}
-              className="h-7 w-20 rounded-md border border-input bg-muted px-2 text-xs"
-            />
-          </Row>
-          <Row label="Deciding agent" description="Reads what the step waits on and approves only when it is clearly safe.">
-            <Select
-              title="Deciding agent"
-              width="w-56"
-              value={settings.agent ?? ''}
-              options={[{ value: '', label: "The step's own agent" }, ...agents.map((agent) => ({ value: agent.id, label: agent.name }))]}
-              onChange={(agent) => change({ agent: agent || null })}
-            />
-          </Row>
-        </>
-      )}
       <Row
         label="Ask on the ticket"
         description='Runs started from a Jira work item or Notion page also ask in a comment there when you are away, and take a reply starting with "approve" or "reject".'

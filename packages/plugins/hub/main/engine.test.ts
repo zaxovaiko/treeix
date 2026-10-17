@@ -316,16 +316,31 @@ function decided(settings: Partial<DecisionSettings>) {
   return { engine, decisions, comments, told }
 }
 
-test('nobody answers an approval in time: the picked agent decides, and its decision is recorded and told', async () => {
-  const { engine, told } = decided({ agent: 'judge', afterMin: 60 })
-  const quick = gated({ id: 'gate', kind: 'approval', message: 'Ship {{input}}?', timeoutMin: 0.001 })
-  const run = await engine.wait(engine.launch('workflow', 'Quick', quick, 'v6').id)
-  expect(run).toMatchObject({ status: 'done', output: 'Shipped v6', nodes: { gate: { decision: { approved: true, by: 'agent', reason: 'judge checked it' } } } })
+/** An agent's work, then an approval on it that gives up after `timeoutMin` */
+const fedGate = (agent: string, timeoutMin: number | null): Workflow => ({
+  ...gated({ id: 'gate', kind: 'approval', message: 'Ship {{input}}?', timeoutMin }),
+  nodes: [
+    { id: 'input', kind: 'input' },
+    agentNode(agent, 'Build {{input}}'),
+    { id: 'gate', kind: 'approval', message: 'Ship {{input}}?', timeoutMin },
+    { id: 'output', kind: 'output', template: 'Shipped {{prev}}' }
+  ],
+  edges: [
+    { id: '1', from: 'input', to: agent, branch: null },
+    { id: '2', from: agent, to: 'gate', branch: null },
+    { id: '3', from: 'gate', to: 'output', branch: null }
+  ]
+})
+
+test('nobody answers an approval in time: the agent feeding it decides, and its decision is recorded and told', async () => {
+  const { engine, told } = decided({ afterMin: 60 })
+  const run = await engine.wait(engine.launch('workflow', 'Quick', fedGate('judge', 0.001), 'v6').id)
+  expect(run).toMatchObject({ status: 'done', output: 'Shipped judge: Build v6', nodes: { gate: { decision: { approved: true, by: 'agent', reason: 'judge checked it' } } } })
   await tick()
   expect(told).toEqual(['Quick: approved: Approved by an agent, as nobody replied in time: judge checked it'])
 
-  const { engine: strict } = decided({ agent: 'naysayer', afterMin: 0.001 })
-  expect(await strict.wait(strict.launch('workflow', 'Strict', approval, 'v7').id)).toMatchObject({
+  const { engine: strict } = decided({ afterMin: 0.001 })
+  expect(await strict.wait(strict.launch('workflow', 'Strict', fedGate('naysayer', null), 'v7').id)).toMatchObject({
     status: 'failed',
     nodes: { gate: { error: 'Rejected', decision: { approved: false, by: 'agent', reason: 'naysayer checked it' } } }
   })
