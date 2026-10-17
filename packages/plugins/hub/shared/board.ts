@@ -20,7 +20,7 @@ export function boardColumn(run: Run, now = Date.now()): BoardColumn | null {
 }
 
 /** A GitHub or Bitbucket pull request, or a GitLab merge request */
-const PULL_REQUEST = /https?:\/\/\S+?\/(?:pull|pull-requests|-\/merge_requests)\/\d+/
+export const PULL_REQUEST = /https?:\/\/\S+?\/(?:pull|pull-requests|-\/merge_requests)\/\d+/
 
 /** The ticket a run is for and the PR or MR it opened */
 export function runLinks(run: Run): { label: string; url: string }[] {

@@ -445,12 +445,12 @@ export function createEngine(deps: {
     }
     const entry = track(run, [], delegated)
     publish(run)
-    // Eval runs keep their own count, so a suite's runs never push the user's out
+    // Eval runs keep their own count, so a suite's runs never push the user's out; a ticket's runs stay as its audit trail
     void deps.runs.list().then((runs) =>
       deps.runs.remove(
         [false, true].flatMap((evals) =>
           runs
-            .filter((old) => (old.kind === 'eval') === evals)
+            .filter((old) => (old.kind === 'eval') === evals && !old.ticket)
             .slice(KEEP_RUNS)
             .map((old) => old.id)
         )
