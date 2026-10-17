@@ -44,8 +44,6 @@ test('a workflow resolves agents by name and fills step defaults', () => {
     agent: news.id,
     prompt: '{{input}}',
     folder: null,
-    model: null,
-    subagent: null,
     retries: 0,
     onError: 'stop',
     timeoutMin: 10

@@ -5,7 +5,6 @@ import { parseJson, stringValues } from '@treeix/shared/json'
 import { AGENT_PREFIX, API_PRESETS, type DecisionSettings, type HubAgent, isHubAgent, isRemoteStatus, type RemoteStatus, type Runtime } from '../shared/types'
 import type { LocalModelsState } from '../shared/catalog'
 import { type EvalResult, type EvalSuite, isEvalResult, isEvalSuite } from '../shared/evals'
-import type { Subagent } from '../shared/subagents'
 import { isTicketState, type TicketState } from '../shared/tickets'
 import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type TicketDetail, type TicketSource, type Workflow } from '../shared/workflow'
 
@@ -27,8 +26,6 @@ export const hubApi = {
   removeRun: (id: string) => bridge.invoke<void>('deleteRun', id),
   /** Starts a recorded one-off question; resolves with the run id */
   ask: (agent: string, message: string) => bridge.invoke<string>('ask', agent, message),
-  /** The subagents the agent's folders define, which a workflow step can run */
-  subagents: (agent: string) => bridge.invoke<Subagent[]>('subagents', agent),
   workflows: () => bridge.invoke<Workflow[]>('workflows'),
   saveWorkflow: (workflow: Workflow) => bridge.invoke<void>('saveWorkflow', workflow),
   removeWorkflow: (id: string) => bridge.invoke<void>('deleteWorkflow', id),

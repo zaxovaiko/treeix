@@ -6,7 +6,6 @@ import { type HubAgent, isHubAgent, isTimeout, MAX_TIMEOUT_MIN, type Schedule } 
 import { validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type Edge, MAX_ROUNDS, MAX_SCORE, type Run, type Workflow, type WorkflowNode } from '../shared/workflow'
 import type { createEngine } from './engine'
-import { readSubagents } from './subagents'
 
 type Args = Record<string, unknown>
 
@@ -125,8 +124,6 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
         agent: findAgent(agents, required(value, 'agent')).id,
         prompt: field('prompt', '{{prev}}'),
         folder: nullable(value, 'folder', null),
-        model: nullable(value, 'model', null),
-        subagent: nullable(value, 'subagent', null),
         retries: typeof value.retries === 'number' ? value.retries : 0,
         onError: value.onError === 'continue' ? 'continue' : 'stop',
         timeoutMin: typeof value.timeoutMin === 'number' ? value.timeoutMin : ASK_TIMEOUT_MIN
@@ -150,7 +147,6 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
         id,
         kind: 'judge',
         agent: findAgent(agents, required(value, 'agent')).id,
-        model: nullable(value, 'model', null),
         source: field('source', '{{prev}}'),
         rubric: required(value, 'rubric'),
         minScore: whole('minScore', 8, 1, MAX_SCORE),
@@ -226,17 +222,6 @@ export function hubTools(deps: {
       run: async () => {
         const agents = await deps.agents()
         return agents.length ? JSON.stringify(agents, omit('avatar', 'mode', 'directories', 'updatedAt'), 2) : 'No agents yet; hub_save_agent creates one'
-      }
-    },
-    {
-      name: 'hub_subagents',
-      description:
-        "Lists the subagents the agent's own repos define (.claude/agents, .rulesync/subagents or .codex/agents) as JSON: name, description, model, folder and path. Pass a path as an agent step's `subagent` in hub_save_workflow to run that step as it.",
-      inputSchema: byName('The agent whose folders to read'),
-      run: async (args) => {
-        const agent = findAgent(await deps.agents(), required(args, 'name'))
-        const subagents = agent.folder ? await readSubagents([agent.folder]) : []
-        return subagents.length ? JSON.stringify(subagents, null, 2) : 'Its folders define none'
       }
     },
     {
@@ -334,11 +319,11 @@ export function hubTools(deps: {
         'Creates an AI Hub workflow, or replaces the steps of the one with this name. It is saved only when it can run, else the call fails with what to fix.',
         'Steps by kind:',
         "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}], events?: [name]}; where the run input enters; exactly one. Events are other plugins' (e.g. meetings.transcribed, slack.messages): each one starts a run with its JSON payload as the input. A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
-        '- agent: {agent: name, prompt, folder?, model?, subagent?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output. model overrides the agent\'s. subagent is a path from hub_subagents: the step runs with that subagent\'s prompt and model, so one agent covers every role its repos already define.',
+        '- agent: {agent: name, prompt, folder?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output.',
         '- merge | output: {template}; at least one output, whose text is the run result.',
         '- condition: {source, test: "contains"|"equals"|"regex"|"empty", value}; edges leaving it set branch "true" or "false".',
         "- approval: {message, timeoutMin?}; waits for the user to approve (in the AI Hub, from their phone or on the run's ticket), then passes its input on. Without a reply within timeoutMin (default: the hub setting), an agent decides.",
-        `- judge: {agent: name, rubric, source?: "{{prev}}", model?, minScore?: 8, retryStep?: id, rounds?: 2, onError?: "stop"|"continue"}; the agent scores the work in source against the rubric, 1 to ${MAX_SCORE}, and passes it on at minScore or more. Below it, the agent step retryStep (before this one) resumes its conversation with the issues to fix and what follows it runs again, at most rounds times; then it fails, and onError says whether the run goes on. Pick another model than the builder's when you can.`,
+        `- judge: {agent: name, rubric, source?: "{{prev}}", minScore?: 8, retryStep?: id, rounds?: 2, onError?: "stop"|"continue"}; the agent scores the work in source against the rubric, 1 to ${MAX_SCORE}, and passes it on at minScore or more. Below it, the agent step retryStep (before this one) resumes its conversation with the issues to fix and what follows it runs again, at most rounds times; then it fails, and onError says whether the run goes on. Pick an agent on another model than the builder's when you can.`,
         '- tool: {tool: name, args: object}; calls an MCP tool Treeix has (e.g. notion_create_pages), its reply is the output. A string in args that is only a {{reference}} gets the value as is, so an agent step answering in JSON can pass lists and objects.',
         'Templates and prompts read {{input}}, {{prev}} (what flows in) and {{nodes.<id>.output}} of an earlier step; a dotted path reads a field of JSON, e.g. {{input.title}} or {{nodes.notes.output.tasks}}.'
       ].join('\n'),

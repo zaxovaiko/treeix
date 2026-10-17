@@ -136,9 +136,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
   const state = node ? run.nodes[node.id] : null
   const nodeEvents = useMemo(() => events.filter((entry) => entry.node === node?.id), [events, node?.id])
   const agentOf = (step: WorkflowNode | undefined) => (step?.kind === 'agent' ? agents.find((agent) => agent.id === step.agent) : undefined)
-  // Two steps of one agent tell apart by the subagent the second borrows
-  const labelOf = (step: WorkflowNode): string =>
-    step.kind === 'agent' ? [agentOf(step)?.name ?? 'Deleted agent', step.subagent?.split('/').pop()?.replace(/\.md$/, '')].filter(Boolean).join(' · ') : KIND_LABEL[step.kind]
+  const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agentOf(step)?.name ?? 'Deleted agent') : KIND_LABEL[step.kind])
   const lead = agentOf(steps.find((step) => step.kind === 'agent'))
   const logged = nodeEvents.some((entry) => entry.event.type === 'error')
   const retryable =

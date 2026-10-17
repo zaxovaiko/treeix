@@ -12,10 +12,6 @@ export type AgentNode = {
   retries: number
   onError: 'stop' | 'continue'
   timeoutMin: number
-  /** Runs this step on another model, so one agent can both build and review; missing is the agent's own */
-  model?: string | null
-  /** Path of a subagent one of the agent's repos defines; the step runs with that subagent's prompt and model */
-  subagent?: string | null
 }
 
 /**
@@ -26,7 +22,6 @@ export type JudgeNode = {
   id: string
   kind: 'judge'
   agent: string
-  model?: string | null
   source: string
   rubric: string
   minScore: number

@@ -23,7 +23,6 @@ import { FLOW_THEME, prettify } from '@treeix/app/flow'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
-import type { Subagent } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, KIND_LABEL, MAX_ROUNDS, MAX_SCORE, type NodeRun, type Watch, WATCH_QUERY, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
@@ -327,7 +326,6 @@ function Inspector({
   onDelete: () => void
 }): React.JSX.Element {
   const agents = hubAgents.use()
-  const [subagents, setSubagents] = useState<Subagent[] | null>(null)
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -358,58 +356,8 @@ function Inspector({
               onChange={(agent) => onChange({ ...step, agent })}
             />
           </div>
-          <div className={LABEL}>
-            Subagent
-            <Select
-              title="Runs the step with the prompt and model of a subagent the agent's repos define"
-              value={step.subagent ?? ''}
-              placeholder="The agent itself"
-              note={
-                subagents === null
-                  ? undefined
-                  : subagents.length === 0
-                    ? "The agent's folders define none"
-                    : (subagents.find((entry) => entry.path === step.subagent)?.description ?? undefined)
-              }
-              options={[
-                { value: '', label: 'The agent itself' },
-                ...(subagents ?? []).map((subagent) => ({
-                  value: subagent.path,
-                  label: subagent.name,
-                  hint: subagent.model ?? undefined,
-                  section: subagent.folder.split('/').pop() ?? subagent.folder
-                }))
-              ]}
-              onOpen={() => void hubApi.subagents(step.agent).then(setSubagents, () => setSubagents([]))}
-              onChange={(subagent) => onChange({ ...step, subagent: subagent || null })}
-            />
-          </div>
           <TemplateField label="Prompt" value={step.prompt} sources={sources} onChange={(prompt) => onChange({ ...step, prompt })} />
-          <label className={LABEL}>
-            Model
-            <input
-              value={step.model ?? ''}
-              onChange={(event) => onChange({ ...step, model: event.target.value.trim() || null })}
-              placeholder={step.subagent ? "The subagent's own" : "The agent's own"}
-              className={`${FIELD} h-8 font-mono text-xs`}
-            />
-          </label>
-          <label className={LABEL}>
-            Folder
-            <input
-              value={step.folder ?? ''}
-              // Trimmed on blur, not per key, so a path with spaces can be typed
-              onChange={(event) => onChange({ ...step, folder: event.target.value || null })}
-              onBlur={(event) => onChange({ ...step, folder: event.target.value.trim() || null })}
-              placeholder="The agent's own"
-              className={`${FIELD} h-8 font-mono text-xs`}
-            />
-          </label>
           <div className="flex gap-2">
-            <label className={`${LABEL} flex-1`}>
-              Retries
-              <WholeNumber min={0} max={5} value={step.retries} onChange={(retries) => onChange({ ...step, retries })} className={`${FIELD} h-8`} />
-            </label>
             <label className={`${LABEL} flex-1`}>
               Timeout, min
               <WholeNumber min={1} max={MAX_TIMEOUT_MIN} value={step.timeoutMin} onChange={(timeoutMin) => onChange({ ...step, timeoutMin })} className={`${FIELD} h-8`} />
@@ -473,15 +421,6 @@ function Inspector({
               onChange={(agent) => onChange({ ...step, agent })}
             />
           </div>
-          <label className={LABEL}>
-            Model
-            <input
-              value={step.model ?? ''}
-              onChange={(event) => onChange({ ...step, model: event.target.value.trim() || null })}
-              placeholder="The agent's own"
-              className={`${FIELD} h-8 font-mono text-xs`}
-            />
-          </label>
           <TemplateField label="Work to judge" value={step.source} sources={sources} onChange={(source) => onChange({ ...step, source })} />
           <TemplateField label="Judge it by" value={step.rubric} sources={sources} onChange={(rubric) => onChange({ ...step, rubric })} />
           <label className={LABEL}>

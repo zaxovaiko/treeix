@@ -22,7 +22,6 @@ import {
   type Workflow
 } from '../shared/workflow'
 import { holds, isLive, nextSteps } from './schedule'
-import { readSubagent } from './subagents'
 import { KEEP_RUNS, mergeChunks, type Runs } from './runs'
 
 const MAX_AGENTS = 3
@@ -177,15 +176,11 @@ export function createEngine(deps: {
     const adapter = deps.adapter(runtime.adapter)
     if (!adapter) throw new Error(`Nothing runs ${runtime.adapter} agents; is its plugin on?`)
     const autoApprove = await deps.autoApprove(node.agent)
-    // A step can borrow a subagent the repo already defines, instead of the hub needing an agent per role
-    const subagent = node.subagent ? await readSubagent(node.subagent) : null
-    if (node.subagent && !subagent) throw new Error(`${node.subagent} is gone`)
-    const model = node.model ?? subagent?.model ?? null
     entry.log({ node: node.id, at: Date.now(), event: { type: 'message_chunk', role: 'user', content: { type: 'text', text: prompt } } })
     const connecting = adapter.connect({
       command: runtime.command,
-      instructions: subagent ? [runtime.instructions, subagent.instructions].filter(Boolean).join('\n\n') : runtime.instructions,
-      preset: model ? { ...runtime.preset, model } : runtime.preset,
+      instructions: runtime.instructions,
+      preset: runtime.preset,
       directories: runtime.directories,
       cwd: node.folder ?? runtime.cwd,
       env: entry.delegated ? {} : await deps.sessionEnv(),
@@ -268,7 +263,6 @@ export function createEngine(deps: {
       id: node.id,
       kind: 'agent',
       agent: node.agent,
-      model: node.model,
       prompt,
       // Where the work it judges was done
       folder: retry?.folder ?? null,
