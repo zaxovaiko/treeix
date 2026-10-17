@@ -16,20 +16,7 @@ import { type EvalSuite, isEvalSuite } from '../shared/evals'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule, toDecisionSettings } from '../shared/types'
 import { validate } from '../shared/validate'
-import {
-  type AgentNode,
-  type AgentRuntime,
-  ASK_TIMEOUT_MIN,
-  askWorkflow,
-  type Decider,
-  FROM_APP,
-  isPullRequestCard,
-  isWorkflow,
-  onCard,
-  type Run,
-  type TicketDetail,
-  type Workflow
-} from '../shared/workflow'
+import { type AgentNode, type AgentRuntime, ASK_TIMEOUT_MIN, askWorkflow, type Decider, FROM_APP, isWorkflow, type Run, type TicketDetail, type Workflow } from '../shared/workflow'
 import { createAttention } from './attention'
 import { createDecisions } from './decisions'
 import { readSubagents } from './subagents'
@@ -268,28 +255,6 @@ const plugin: MainPlugin = {
       return engine.launch('workflow', workflow.name, workflow, input).id
     }
     context.handle('runWorkflow', (_, id: string, input: string) => startWorkflow(id, input))
-    // A pull request dropped on a board stage: one agent on it at a time, held from the first check so two quick drops can't both start
-    const moving = new Set<string>()
-    context.handle('moveCard', async (_, card: unknown, id: string) => {
-      if (!isPullRequestCard(card)) throw new Error('Invalid pull request')
-      if (moving.has(card.url)) throw new Error('An agent is already on this pull request')
-      moving.add(card.url)
-      try {
-        const workflow = (await workflows.get()).find((entry) => entry.id === id)
-        if (!workflow) throw new Error('The workflow is gone')
-        const problem = validate(
-          workflow,
-          (await agents.get()).map((agent) => agent.id)
-        )[0]
-        if (problem) throw new Error(problem.message)
-        if ((await engine.list()).some((run) => run.card === card.url && run.status === 'running')) throw new Error('An agent is already on this pull request')
-        const title = `${workflow.name}: #${card.number} ${card.title}`.slice(0, TITLE_CHARS)
-        return engine.launch('workflow', title, onCard(workflow, card), JSON.stringify(card), false, { card: card.url }).id
-      } finally {
-        moving.delete(card.url)
-      }
-    })
-
     const launchScheduled = (agent: HubAgent, schedule: Schedule, title: string, prompt: string): void => {
       const run = engine.launch('schedule', title, askWorkflow(agent.id, null, schedule.timeoutMin), prompt)
       if (schedule.notify) void engine.wait(run.id).then((ended) => ended?.status === 'done' && show(agent.name, ended.output ?? '', ended.id))

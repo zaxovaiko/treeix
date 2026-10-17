@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
 import { useHost, PANE_HEADER } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
@@ -7,6 +7,8 @@ import type { HubAgent } from '../shared/types'
 import { AgentAvatar, AgentEditor } from './AgentEditor'
 import { Board } from './Board'
 import { RunView } from './RunView'
+import { TicketView } from './TicketView'
+import { ticketCards } from '../shared/tickets'
 import { EvalView } from './EvalView'
 import { AgentsSection, EvalsSection, HistorySection, NewAgentButton, NewSuiteButton, NewWorkflowButton, WorkflowsSection } from './Sections'
 import {
@@ -17,6 +19,7 @@ import {
   hubEditing,
   hubRuns,
   hubSelection,
+  hubTicketStates,
   hubSettings,
   hubSuites,
   hubWorkflows,
@@ -166,6 +169,11 @@ export function HubPage(): React.JSX.Element {
   const workflow = workflows.find((candidate) => `workflow:${candidate.id}` === selection) ?? null
   const run = runs.find((candidate) => `run:${candidate.id}` === selection) ?? null
   const suite = hubSuites.use().find((candidate) => `eval:${candidate.id}` === selection) ?? null
+  const states = hubTicketStates.use()
+  const ticket = useMemo(
+    () => (selection?.startsWith('ticket:') ? (ticketCards(runs, states).find((card) => `ticket:${card.key}` === selection) ?? null) : null),
+    [selection, runs, states]
+  )
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
@@ -173,6 +181,8 @@ export function HubPage(): React.JSX.Element {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {run ? (
           <RunView key={run.id} run={run} />
+        ) : ticket ? (
+          <TicketView key={ticket.key} card={ticket} />
         ) : suite ? (
           <EvalView key={suite.id} suite={suite} />
         ) : workflow ? (

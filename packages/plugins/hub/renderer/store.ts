@@ -6,18 +6,8 @@ import { AGENT_PREFIX, API_PRESETS, type DecisionSettings, type HubAgent, isHubA
 import type { LocalModelsState } from '../shared/catalog'
 import { type EvalResult, type EvalSuite, isEvalResult, isEvalSuite } from '../shared/evals'
 import type { Subagent } from '../shared/subagents'
-import {
-  type AgentRuntime,
-  isRun,
-  isRunEvent,
-  isWorkflow,
-  type PullRequestCard,
-  type Run,
-  type RunEvent,
-  type TicketDetail,
-  type TicketSource,
-  type Workflow
-} from '../shared/workflow'
+import { isTicketState, type TicketState } from '../shared/tickets'
+import { type AgentRuntime, isRun, isRunEvent, isWorkflow, type Run, type RunEvent, type TicketDetail, type TicketSource, type Workflow } from '../shared/workflow'
 
 export const TAB_ID = 'hub'
 
@@ -44,8 +34,6 @@ export const hubApi = {
   removeWorkflow: (id: string) => bridge.invoke<void>('deleteWorkflow', id),
   /** Starts a run of the saved workflow; resolves with the run id */
   runWorkflow: (id: string, input: string) => bridge.invoke<string>('runWorkflow', id, input),
-  /** Runs the workflow on the pull request, as the board's stage; resolves with the run id */
-  moveCard: (card: PullRequestCard, workflowId: string) => bridge.invoke<string>('moveCard', card, workflowId),
   cancelRun: (id: string) => bridge.send('cancelRun', id),
   answer: (runId: string, node: string, requestId: string, optionId: string) => bridge.send('answer', runId, node, requestId, optionId),
   /** Lets an approval step through, or rejects it and fails the run */
@@ -119,6 +107,14 @@ export function followEvals(): () => void {
 
 export const hubRuns = createStore<Run[]>([])
 
+/** What the pull request watcher knows of each ticket */
+export const hubTicketStates = createStore<TicketState[]>([])
+
+export function followTickets(): () => void {
+  void bridge.invoke<TicketState[]>('tickets').then(hubTicketStates.set)
+  return bridge.on('tickets', (states) => Array.isArray(states) && hubTicketStates.set(states.filter(isTicketState)))
+}
+
 /** Clicks on main's notifications for scheduled runs; returns the unfollow */
 export const onOpenRun = (listener: (runId: string) => void): (() => void) => bridge.on('openRun', (id) => typeof id === 'string' && listener(id))
 
@@ -154,7 +150,7 @@ const storedSelection = (): string | null => {
   const value = parseJson(localStorage.getItem(SELECTED_KEY))
   return typeof value === 'string' ? value : null
 }
-/** What the page shows: `agent:<id>`, `workflow:<id>` or `run:<id>` */
+/** What the page shows: `agent:<id>`, `workflow:<id>`, `run:<id>` or `ticket:<key>` */
 export const hubSelection = createStore<string | null>(storedSelection())
 hubSelection.subscribe(() => localStorage.setItem(SELECTED_KEY, JSON.stringify(hubSelection.get())))
 

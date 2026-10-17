@@ -12,6 +12,7 @@ import {
   followAgents,
   followChats,
   followRuns,
+  followTickets,
   followWorkflows,
   hubAgents,
   hubApi,
@@ -98,6 +99,7 @@ function Root(): React.JSX.Element {
   useEffect(() => (chat ? followChats(chat) : undefined), [chat])
   useEffect(followWorkflows, [])
   useEffect(followRuns, [])
+  useEffect(followTickets, [])
   useEffect(followEvals, [])
   useRuntimes()
   useRunNotifications()

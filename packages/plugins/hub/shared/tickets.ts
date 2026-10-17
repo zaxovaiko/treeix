@@ -139,6 +139,9 @@ function summaryOf(card: Pick<TicketCard, 'runs' | 'state' | 'badge' | 'pullRequ
   return runSummary(latest)
 }
 
+/** Tokens over every step of a run */
+export const runTokens = (run: Run): number => Object.values(run.nodes).reduce((total, node) => total + (node.usage?.used ?? 0), 0)
+
 /** One card per ticket, over every run that names it */
 export function ticketCards(runs: Run[], states: TicketState[]): TicketCard[] {
   const byKey = new Map<string, { source: TicketSource; runs: Run[] }>()
@@ -173,7 +176,7 @@ export function ticketCards(runs: Run[], states: TicketState[]): TicketCard[] {
       column,
       badge,
       summary: summaryOf({ runs: sorted, state, badge, pullRequest }),
-      tokens: nodes.reduce((total, node) => total + (node.usage?.used ?? 0), 0),
+      tokens: sorted.reduce((total, run) => total + runTokens(run), 0),
       cost: costs.length ? costs.reduce((total, cost) => total + cost, 0) : null,
       at: Math.max(state?.mergedAt ?? 0, ...sorted.map((run) => run.endedAt ?? run.startedAt))
     }

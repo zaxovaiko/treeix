@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { activeAgents, askWorkflow, freshNode, isWorkflow, latestCardRuns, type NodeStatus, onCard, type Run, type RunStatus } from './workflow'
+import { activeAgents, askWorkflow, freshNode, isWorkflow, type NodeStatus, type Run, type RunStatus } from './workflow'
 
 const run = (agent: string, status: RunStatus, node: NodeStatus): Run => ({
   id: `${agent}-${status}-${node}`,
@@ -44,20 +44,4 @@ test('an input watches Jira or Notion, nothing else', () => {
   ).toBe(true)
   expect(isWorkflow(watching({ id: 'w', source: 'github', query: '', enabled: true }))).toBe(false)
   expect(isWorkflow(watching({ id: 'w', source: 'jira', query: 'x' }))).toBe(false)
-})
-
-test('a pull request sits where its newest run put it', () => {
-  const on = (id: string, card: string | null): Run => ({ ...run(id, 'done', 'done'), id, card })
-  const latest = latestCardRuns([on('new', 'pr/1'), on('plain', null), on('old', 'pr/1'), on('other', 'pr/2')])
-  expect([...latest].map(([card, entry]) => [card, entry.id])).toEqual([
-    ['pr/2', 'other'],
-    ['pr/1', 'new']
-  ])
-})
-
-test('steps without a folder work in the pull request repo', () => {
-  const card = { url: 'u', title: 't', number: 1, repoPath: '/repo', sourceBranch: 'b', targetBranch: 'main' }
-  const kept = { ...askWorkflow('a', '/mine'), nodes: [...askWorkflow('a', null).nodes, { ...askWorkflow('a', '/mine').nodes[1], id: 'kept' }] }
-  const folders = onCard(kept, card).nodes.flatMap((node) => (node.kind === 'agent' ? [node.folder] : []))
-  expect(folders).toEqual(['/repo', '/mine'])
 })

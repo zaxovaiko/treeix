@@ -429,7 +429,7 @@ export function createEngine(deps: {
   /** Only approval steps hold it: nothing is lost when the app quits, so it waits on after a relaunch */
   const onlyApprovals = (run: Run): boolean => Object.values(run.nodes).every((node) => node.status !== 'running' || node.waiting === 'approval')
 
-  function launch(kind: Run['kind'], title: string, workflow: Workflow, input: string, delegated = false, about: Pick<Run, 'ticket' | 'card'> = {}): Run {
+  function launch(kind: Run['kind'], title: string, workflow: Workflow, input: string, delegated = false, about: Pick<Run, 'ticket'> = {}): Run {
     const run: Run = {
       id: randomUUID(),
       kind,
