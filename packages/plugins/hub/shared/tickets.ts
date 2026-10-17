@@ -40,8 +40,6 @@ export type TicketState = {
   ciFixes: number
   /** Pull request comments already handed to an agent, or written before it watched */
   seenComments: string[]
-  /** No CI fix before this: right after a push the old red status still shows */
-  settleUntil: number
   needsYou: string | null
   error: string | null
   log: TicketLogEntry[]
@@ -53,7 +51,6 @@ export const freshTicketState = (key: string): TicketState => ({
   ci: null,
   ciFixes: 0,
   seenComments: [],
-  settleUntil: 0,
   needsYou: null,
   error: null,
   log: []
@@ -70,7 +67,6 @@ export const isTicketState = (value: unknown): value is TicketState =>
   typeof value.ciFixes === 'number' &&
   Array.isArray(value.seenComments) &&
   value.seenComments.every(isString) &&
-  typeof value.settleUntil === 'number' &&
   orNull(value.needsYou) &&
   orNull(value.error) &&
   Array.isArray(value.log) &&

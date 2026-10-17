@@ -43,6 +43,7 @@ import { createRemote, openAsks } from './remote'
 import { createRuns } from './runs'
 import { jsonList } from './store'
 import { createWatches } from './watch'
+import { createPullRequests } from './pulls'
 
 const DETECT_TIMEOUT_MS = 60_000
 const MINUTE_MS = 60_000
@@ -367,6 +368,17 @@ const plugin: MainPlugin = {
       },
       failed: (workflow, message) => show(`${workflow.name} can't check its watch`, message, null)
     })
+    // A ticket's pull request is kept green and moves the ticket to Done once merged
+    const pullRequests = createPullRequests({
+      file: join(context.dataPath, 'tickets.json'),
+      runs: engine.list,
+      callTool: context.callTool,
+      folder: (run) => workflowFolder(run.workflow),
+      launch: (title, workflow, input, ticket) => void engine.launch('workflow', title.slice(0, TITLE_CHARS), workflow, input, false, { ticket }),
+      notify: (card, title, body) => tell(title, body, card.runs[0].id),
+      changed: (states) => context.broadcast('tickets', states)
+    })
+    context.handle('tickets', () => pullRequests.list())
 
     let timer: ReturnType<typeof setTimeout> | undefined
     // Re-aimed at each minute's start, so the clock never drifts past one
@@ -376,7 +388,10 @@ const plugin: MainPlugin = {
           const now = new Date()
           void fireSchedules(now)
           void evals.fire(now)
-          if (now.getMinutes() % WATCH_EVERY_MIN === 0) void checkWatches().then(decisions.poll)
+          if (now.getMinutes() % WATCH_EVERY_MIN === 0) {
+            void checkWatches().then(decisions.poll)
+            void pullRequests.check().catch((error: unknown) => console.error('[hub] Following pull requests failed', error))
+          }
           tick()
         },
         MINUTE_MS - (Date.now() % MINUTE_MS)
