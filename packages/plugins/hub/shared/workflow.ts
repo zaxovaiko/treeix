@@ -12,6 +12,8 @@ export type AgentNode = {
   retries: number
   onError: 'stop' | 'continue'
   timeoutMin: number
+  /** Path of a subagent the agent's project defines; the step runs with that subagent's prompt and model */
+  subagent?: string | null
 }
 
 /**

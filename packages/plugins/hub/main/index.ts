@@ -19,6 +19,7 @@ import { validate } from '../shared/validate'
 import { type AgentNode, type AgentRuntime, ASK_TIMEOUT_MIN, askWorkflow, type Decider, FROM_APP, isWorkflow, type Run, type TicketDetail, type Workflow } from '../shared/workflow'
 import { createAttention } from './attention'
 import { createDecisions } from './decisions'
+import { readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createEvals } from './evals'
 import { createKeys } from './keys'
@@ -229,6 +230,10 @@ const plugin: MainPlugin = {
       remote.publish({ type: 'removed', id })
     })
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
+    context.handle('subagents', async (_, id: string) => {
+      const agent = (await agents.get()).find((entry) => entry.id === id)
+      return agent?.folder ? readSubagents([agent.folder]) : []
+    })
     const workflows = jsonList(join(context.dataPath, 'workflows.json'), isWorkflow)
     const writeWorkflows = async (next: Workflow[]): Promise<void> => {
       await workflows.set(next)

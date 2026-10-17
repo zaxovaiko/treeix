@@ -6,6 +6,7 @@ import { type HubAgent, isHubAgent, isTimeout, MAX_TIMEOUT_MIN, type Schedule } 
 import { validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, type Edge, MAX_ROUNDS, MAX_SCORE, type Run, type Workflow, type WorkflowNode } from '../shared/workflow'
 import type { createEngine } from './engine'
+import { readSubagents } from './subagents'
 
 type Args = Record<string, unknown>
 
@@ -124,6 +125,7 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
         agent: findAgent(agents, required(value, 'agent')).id,
         prompt: field('prompt', '{{prev}}'),
         folder: nullable(value, 'folder', null),
+        subagent: nullable(value, 'subagent', null),
         retries: typeof value.retries === 'number' ? value.retries : 0,
         onError: value.onError === 'continue' ? 'continue' : 'stop',
         timeoutMin: typeof value.timeoutMin === 'number' ? value.timeoutMin : ASK_TIMEOUT_MIN
@@ -225,6 +227,17 @@ export function hubTools(deps: {
       }
     },
     {
+      name: 'hub_subagents',
+      description:
+        "Lists the subagents the agent's project defines (.claude/agents, .rulesync/subagents or .codex/agents) as JSON: name, description, model, folder and path. Pass a path as an agent step's `subagent` in hub_save_workflow to run that step as it.",
+      inputSchema: byName('The agent whose project to read'),
+      run: async (args) => {
+        const agent = findAgent(await deps.agents(), required(args, 'name'))
+        const subagents = agent.folder ? await readSubagents([agent.folder]) : []
+        return subagents.length ? JSON.stringify(subagents, null, 2) : 'Its project defines none'
+      }
+    },
+    {
       name: 'hub_save_agent',
       description:
         'Creates an AI Hub agent, or edits the one with this name. On edit only the fields passed change; schedules, when passed, replace the list. The user sees it in the AI Hub tab right away.',
@@ -319,7 +332,7 @@ export function hubTools(deps: {
         'Creates an AI Hub workflow, or replaces the steps of the one with this name. It is saved only when it can run, else the call fails with what to fix.',
         'Steps by kind:',
         "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}], events?: [name]}; where the run input enters; exactly one. Events are other plugins' (e.g. meetings.transcribed, slack.messages): each one starts a run with its JSON payload as the input. A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
-        '- agent: {agent: name, prompt, folder?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output.',
+        '- agent: {agent: name, prompt, folder?, subagent?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output. subagent is a path from hub_subagents: the step runs with that subagent\'s prompt and model, so the project\'s own planner, builder or tester does the step and the prompt stays short.',
         '- merge | output: {template}; at least one output, whose text is the run result.',
         '- condition: {source, test: "contains"|"equals"|"regex"|"empty", value}; edges leaving it set branch "true" or "false".',
         "- approval: {message, timeoutMin?}; waits for the user to approve (in the AI Hub, from their phone or on the run's ticket), then passes its input on. Without a reply within timeoutMin (default: the hub setting), an agent decides.",

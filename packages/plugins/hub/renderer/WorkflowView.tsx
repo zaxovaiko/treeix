@@ -23,6 +23,7 @@ import { FLOW_THEME, prettify } from '@treeix/app/flow'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
+import type { Subagent } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
 import { ASK_TIMEOUT_MIN, KIND_LABEL, MAX_ROUNDS, MAX_SCORE, type NodeRun, type Watch, WATCH_QUERY, type Workflow, type WorkflowNode } from '../shared/workflow'
 import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
@@ -326,6 +327,7 @@ function Inspector({
   onDelete: () => void
 }): React.JSX.Element {
   const agents = hubAgents.use()
+  const [subagents, setSubagents] = useState<Subagent[] | null>(null)
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -353,7 +355,41 @@ function Inspector({
               value={agents.some((agent) => agent.id === step.agent) ? step.agent : null}
               placeholder="Pick an agent"
               options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
-              onChange={(agent) => onChange({ ...step, agent })}
+              onChange={(agent) => onChange({ ...step, agent, subagent: null })}
+            />
+          </div>
+          <div className={LABEL}>
+            Subagent
+            <Select
+              title="Runs the step with the prompt and model of a subagent the agent's project defines"
+              value={step.subagent ?? ''}
+              placeholder="The agent itself"
+              note={
+                subagents === null
+                  ? undefined
+                  : subagents.length === 0
+                    ? "The agent's project defines none in .claude/agents, .rulesync/subagents or .codex/agents"
+                    : (subagents.find((entry) => entry.path === step.subagent)?.description ?? undefined)
+              }
+              options={[
+                { value: '', label: 'The agent itself' },
+                ...(subagents ?? []).map((subagent) => ({ value: subagent.path, label: subagent.name, hint: subagent.model ?? undefined })),
+                // Shown by its file name until the list loads
+                ...(step.subagent && !subagents?.some((entry) => entry.path === step.subagent)
+                  ? [
+                      {
+                        value: step.subagent,
+                        label:
+                          step.subagent
+                            .split('/')
+                            .pop()
+                            ?.replace(/\.(md|toml)$/, '') ?? step.subagent
+                      }
+                    ]
+                  : [])
+              ]}
+              onOpen={() => void hubApi.subagents(step.agent).then(setSubagents, () => setSubagents([]))}
+              onChange={(subagent) => onChange({ ...step, subagent: subagent || null })}
             />
           </div>
           <TemplateField label="Prompt" value={step.prompt} sources={sources} onChange={(prompt) => onChange({ ...step, prompt })} />
