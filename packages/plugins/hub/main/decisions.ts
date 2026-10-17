@@ -206,7 +206,10 @@ export function createDecisions(deps: {
       if (!ticket || ticketThread(await comments(ticket), tag).asked) return
       const minutes = await minutesFor(run, node)
       const deadline = minutes ? ` Without a reply within ${minutes} min, an agent decides.` : ''
-      await comment(ticket, `${ASK} ${tag} on ${run.title}: ${question(run, node)}\n\nReply "approve" or "reject <why>".${deadline}`)
+      const step = run.workflow.nodes.find((candidate) => candidate.id === node)
+      const reply =
+        step?.kind === 'approval' && step.retryStep ? 'Reply "approve" (notes after it go on with it), or "reject" and what to change.' : 'Reply "approve" or "reject <why>".'
+      await comment(ticket, `${ASK} ${tag} on ${run.title}: ${question(run, node)}\n\n${reply}${deadline}`)
     },
     /** Takes replies from the tickets of waiting runs; a slow check is skipped on the next tick, never stacked */
     poll: async (): Promise<void> => {

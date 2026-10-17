@@ -8,6 +8,9 @@ test('a ship workflow is valid as made, given its agent', () => {
     const workflow = shipWorkflow(source, 'agent')
     expect(isWorkflow(workflow)).toBe(true)
     expect(validate(workflow, ['agent'])).toEqual([])
+    // Its plan waits on approval, and changes asked for send the plan back
+    expect(workflow.edges.map((edge) => edge.to)).toEqual(['plan', 'approve', 'agent', 'review', 'output'])
+    expect(workflow.nodes.find((node) => node.id === 'approve')).toMatchObject({ kind: 'approval', retryStep: 'plan' })
   }
 })
 

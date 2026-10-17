@@ -22,6 +22,7 @@ import {
   ASK_TIMEOUT_MIN,
   askWorkflow,
   type Decider,
+  FROM_APP,
   isPullRequestCard,
   isWorkflow,
   onCard,
@@ -178,8 +179,12 @@ const plugin: MainPlugin = {
             void remote.notify({ title: `${run.title} is done`, body: (run.output ?? '').slice(0, NOTICE_CHARS), url: `/#run=${run.id}`, tag: run.id })
           return
         }
-        if (!away()) return
+        // A step that takes changes, like a plan, asks on its ticket always: that is where the people who comment on it are
+        const step = run.workflow.nodes.find((candidate) => candidate.id === attention.node)
+        const takesChanges = step?.kind === 'approval' && Boolean(step.retryStep)
+        if (!away() && !takesChanges) return
         void decisions.ask(run, attention.node).catch((error: unknown) => console.error('[hub] Asking on the ticket failed', error))
+        if (!away()) return
         const node = run.nodes[attention.node]
         tell(`${run.title} needs you`, node.waiting === 'approval' ? (node.prompt ?? 'Approve to go on') : 'An agent asks for permission', run.id)
       },
@@ -491,7 +496,9 @@ const plugin: MainPlugin = {
     context.handle('commentTicket', (_, source: unknown, key: string, body: string) => context.callTool(ticketTool(source, 'comment'), { ...ticketArgs(source, key), body }))
 
     context.on('cancelRun', (_, id: string) => engine.cancel(id))
-    context.on('decide', (_, runId: string, node: string, approved: boolean) => engine.decide(runId, node, approved))
+    context.on('decide', (_, runId: string, node: string, approved: boolean, reason: unknown) =>
+      engine.decide(runId, node, approved, { ...FROM_APP, reason: isString(reason) && reason.trim() ? reason.trim() : null })
+    )
     context.handle('retryRun', (_, runId: string, node: string) => engine.retry(runId, node))
     context.handle('resumeRun', (_, runId: string) => engine.resume(runId))
     context.on('answer', (_, runId: string, node: string, requestId: string, optionId: string | null) => engine.answer(runId, node, requestId, optionId))

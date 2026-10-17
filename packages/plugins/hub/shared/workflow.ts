@@ -115,8 +115,12 @@ export type WorkflowNode =
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
   | { id: string; kind: 'condition'; source: string; test: 'contains' | 'equals' | 'regex' | 'empty'; value: string }
-  /** Pauses the run until the user approves `message`; passes what came in on. `timeoutMin` overrides when an agent decides instead; missing is the hub's setting */
-  | { id: string; kind: 'approval'; message: string; timeoutMin?: number | null }
+  /**
+   * Pauses the run until the user approves `message`; passes what came in on, with the user's notes. `timeoutMin` overrides
+   * when an agent decides instead; missing is the hub's setting. The user's reject with changes sends `retryStep`, an agent
+   * step before it, back to redo its work with them; without one, or without changes, reject fails the run
+   */
+  | { id: string; kind: 'approval'; message: string; timeoutMin?: number | null; retryStep?: string | null }
   /** Calls a tool an enabled plugin offers; `args` is a JSON object template, its text reply is the output */
   | ToolNode
   | JudgeNode

@@ -61,6 +61,14 @@ const fixPrompt = ({ score, issues, minScore }: Fix, task: string): string =>
     issues.map((issue) => `- ${issue}`).join('\n') || '- (no details given) Check the work against the task again.',
     `The task, for reference:\n${task}`
   ].join('\n\n')
+
+const changesPrompt = (changes: string, task: string): string =>
+  [
+    'The user read your work and wants changes before the run goes on:',
+    changes,
+    'Redo it with these in mind, then reply as the task asks.',
+    `The task, for reference:\n${task}`
+  ].join('\n\n')
 // Options, commands and usage are session state, not part of what the agent did
 const LOGGED = new Set<ChatEvent['type']>([
   'message_chunk',
@@ -93,8 +101,8 @@ type Active = {
   resumes: Map<string, string>
   /** Open permission questions, by `<node>:<requestId>` */
   permissions: Map<string, Question>
-  /** What a judge step sends back for a step to fix, by node id; used instead of the task once */
-  fixes: Map<string, Fix>
+  /** What a judge or an approval sends back for a step to redo, by node id; wraps the task once */
+  fixes: Map<string, (task: string) => string>
 }
 
 /** A permission question an agent step waits on */
@@ -283,7 +291,7 @@ export function createEngine(deps: {
     }
     if (entry.run.status !== 'running') return
     if (review.score >= node.minScore) set(entry, node.id, { status: 'done', output: work, endedAt: Date.now(), review })
-    else if (retry && review.round <= node.rounds) sendBack(entry, node, retry, review)
+    else if (retry && review.round <= node.rounds) sendBack(entry, node.id, retry, (task) => fixPrompt({ ...review, minScore: node.minScore }, task), { review })
     else {
       set(entry, node.id, { status: 'failed', output: work, error: `Scored ${review.score}/${MAX_SCORE}, needs ${node.minScore}`, endedAt: Date.now(), review })
       if (node.onError === 'stop') end(entry, 'failed')
@@ -291,15 +299,18 @@ export function createEngine(deps: {
     step(entry)
   }
 
-  /** Starts `retry` and what follows it over, the step resuming its conversation with the issues; the judge keeps its review to count rounds */
-  function sendBack(entry: Active, node: JudgeNode, retry: AgentNode, review: Review): void {
+  /**
+   * Starts `retry` and what follows it over, the step resuming its conversation with `fix` around its task; the step that
+   * sent it back keeps `kept`: a judge its review to count rounds, an approval its decision
+   */
+  function sendBack(entry: Active, from: string, retry: AgentNode, fix: (task: string) => string, kept: Partial<NodeRun>): void {
     const { run } = entry
     const sessionId = run.nodes[retry.id].sessionId
     if (sessionId) entry.resumes.set(retry.id, sessionId)
-    entry.fixes.set(retry.id, { ...review, minScore: node.minScore })
+    entry.fixes.set(retry.id, fix)
     // A parallel branch still going finishes on its own
-    const reset = [retry.id, ...descendants(run.workflow, retry.id)].filter((id) => id === node.id || run.nodes[id].status !== 'running')
-    entry.run = { ...run, nodes: { ...run.nodes, ...Object.fromEntries(reset.map((id) => [id, freshNode()])), [node.id]: { ...freshNode(), review } } }
+    const reset = [retry.id, ...descendants(run.workflow, retry.id)].filter((id) => id === from || run.nodes[id].status !== 'running')
+    entry.run = { ...run, nodes: { ...run.nodes, ...Object.fromEntries(reset.map((id) => [id, freshNode()])), [from]: { ...freshNode(), ...kept } } }
     publish(entry.run)
   }
 
@@ -370,7 +381,7 @@ export function createEngine(deps: {
         const task = render(node.prompt, scope)
         const fix = entry.fixes.get(id)
         entry.fixes.delete(id)
-        const prompt = fix ? fixPrompt(fix, task) : entry.resumes.has(id) ? `${RESUME_PROMPT}\n\n${task}` : task
+        const prompt = fix ? fix(task) : entry.resumes.has(id) ? `${RESUME_PROMPT}\n\n${task}` : task
         set(entry, id, { status: 'running', prompt })
         return void runAgent(entry, node, prompt)
       }
@@ -501,16 +512,30 @@ export function createEngine(deps: {
       set(entry, node, { decision: { approved, ...who, at: Date.now() } })
       connection.answer(requestId, optionId)
     },
-    /** Approves an approval step, passing what came in on, or rejects it, which fails the run */
+    /**
+     * Approves an approval step, passing what came in on with the user's notes, or rejects it, which fails the run; the user's
+     * reject with changes sends the step's `retryStep` back to redo its work with them instead
+     */
     decide: (id: string, node: string, approved: boolean, who: Decider = FROM_APP): void => {
       const entry = active.get(id)
       if (entry?.run.nodes[node]?.waiting !== 'approval') return
       const decision = { approved, ...who, at: Date.now() }
+      const approval = entry.run.workflow.nodes.find((candidate) => candidate.id === node)
+      const retry =
+        approval?.kind === 'approval'
+          ? entry.run.workflow.nodes.find((candidate): candidate is AgentNode => candidate.kind === 'agent' && candidate.id === approval.retryStep)
+          : undefined
+      const changes = who.by === 'you' ? who.reason : null
+      if (!approved && retry && changes) {
+        sendBack(entry, node, retry, (task) => changesPrompt(changes, task), { decision })
+        return step(entry)
+      }
       if (!approved) {
         set(entry, node, { status: 'failed', error: 'Rejected', endedAt: Date.now(), waiting: null, decision })
         return end(entry, 'failed')
       }
-      set(entry, node, { status: 'done', output: scopeOf(entry.run, node).prev, endedAt: Date.now(), waiting: null, decision })
+      const { prev } = scopeOf(entry.run, node)
+      set(entry, node, { status: 'done', output: changes ? `${prev}\n\nNotes from the approval: ${changes}` : prev, endedAt: Date.now(), waiting: null, decision })
       step(entry)
     },
     /** Runs an ended run again from `node`: it, everything after it and every step the end cut short start over */

@@ -1,5 +1,5 @@
 import { MAX_TIMEOUT_MIN } from './types'
-import { MAX_SCORE, WATCH_QUERY, type Watch, type Workflow } from './workflow'
+import { MAX_SCORE, WATCH_QUERY, type Watch, type Workflow, type WorkflowNode } from './workflow'
 
 /** How the agent reads, answers and hands back each kind of item, through the Treeix tools */
 const TOOLS: Record<Watch['source'], { read: string; comment: string; unmark: string; handOff: string }> = {
@@ -12,14 +12,28 @@ const TOOLS: Record<Watch['source'], { read: string; comment: string; unmark: st
   }
 }
 
-const shipPrompt = (source: Watch['source']): string => {
-  const tools = TOOLS[source]
-  return `You take one ${source === 'jira' ? 'Jira ticket' : 'Notion task'} to a pull request, on your own: nobody watches this run.
+const ITEM: Record<Watch['source'], string> = { jira: 'Jira ticket', notion: 'Notion task' }
+
+const planPrompt = (source: Watch['source']): string => `You plan one ${ITEM[source]} before anyone builds it. Change nothing yet: no files, branches or comments.
 
 Item: {{input.key}} {{input.title}}
 Link: {{input.url}}
 
-1. Read it in full with the ${tools.read} tool (Treeix), with its comments and linked docs.
+1. Read it in full with the ${TOOLS[source].read} tool (Treeix), with its comments and linked docs, and the code it touches. Follow the repo's AGENTS.md or CLAUDE.md.
+2. Reply with the plan: what changes where, how it gets tested, and what is left out. Short and in plain words: people read it on the item and comment on it.
+3. If it is unclear what to build, or it needs a decision only a person can make, put the questions first.`
+
+const shipPrompt = (source: Watch['source']): string => {
+  const tools = TOOLS[source]
+  return `You take one ${ITEM[source]} to a pull request, on your own: nobody watches this run.
+
+Item: {{input.key}} {{input.title}}
+Link: {{input.url}}
+
+The approved plan, with the notes it was approved with:
+{{prev}}
+
+1. Read it in full with the ${tools.read} tool (Treeix), with its comments and linked docs. Build what the plan says, taking every note and comment into account.
 2. Find the repo it belongs to: this folder, or the one under it the item names. Follow that repo's AGENTS.md or CLAUDE.md, its skills and its subagents.
 3. If it is unclear what to build, or it needs a decision only a person can make: ask in one ${tools.comment} comment, then ${tools.unmark} and stop. Say "Asked: " and the questions as your reply.
 4. Pull the target branch, then work in a new git worktree off it, on a branch named after {{input.key}}. Leave the user's checkout alone.
@@ -34,39 +48,56 @@ End your reply with the pull request URL on its own line.`
 const shipRubric = (source: Watch['source']): string => `The work is a pull request for {{input.key}} {{input.title}} ({{input.url}}), or questions asked on the item instead.
 
 1. Read the item in full with the ${TOOLS[source].read} tool (Treeix), and the pull request with its diff.
-2. Every acceptance criterion is met; a bug has a test that fails without the fix; nothing outside the item changed; a visible change has screenshots in the pull request; no AI attribution in commits or the pull request.
+2. Every acceptance criterion is met; it follows the approved plan and its notes ({{nodes.approve.output}}); a bug has a test that fails without the fix; nothing outside the item changed; a visible change has screenshots in the pull request; no AI attribution in commits or the pull request.
 3. In a git worktree of the branch, run the repo's CI commands. Any failure is an issue.
 
 If the agent asked questions instead: score ${MAX_SCORE} when only a person could answer them, 1 when the item was clear enough to build.`
 
 const NAME: Record<Watch['source'], string> = { jira: 'Ship Jira tickets', notion: 'Ship Notion tasks' }
 
-/** Input, one agent step with the prompt, a review that sends it back twice at most, output */
-const reviewedStep = (name: string, agent: string, prompt: string, rubric: string, input: Extract<Workflow['nodes'][number], { kind: 'input' }>): Workflow => ({
+/** Steps in a row, each feeding the next */
+const chain = (name: string, nodes: WorkflowNode[]): Workflow => ({
   id: crypto.randomUUID(),
   name,
-  nodes: [
-    input,
-    { id: 'agent', kind: 'agent', agent, prompt, folder: null, retries: 0, onError: 'stop', timeoutMin: MAX_TIMEOUT_MIN },
-    { id: 'review', kind: 'judge', agent, source: '{{prev}}', rubric, minScore: 8, retryStep: 'agent', rounds: 2, onError: 'stop' },
-    { id: 'output', kind: 'output', template: '{{prev}}' }
-  ],
-  edges: [
-    { id: 'input-agent', from: 'input', to: 'agent', branch: null },
-    { id: 'agent-review', from: 'agent', to: 'review', branch: null },
-    { id: 'review-output', from: 'review', to: 'output', branch: null }
-  ],
-  layout: { input: { x: 0, y: 0 }, agent: { x: 260, y: 0 }, review: { x: 520, y: 0 }, output: { x: 780, y: 0 } },
+  nodes,
+  edges: nodes.slice(1).map((node, index) => ({ id: `${nodes[index].id}-${node.id}`, from: nodes[index].id, to: node.id, branch: null })),
+  layout: Object.fromEntries(nodes.map((node, index) => [node.id, { x: index * 260, y: 0 }])),
   updatedAt: Date.now()
 })
 
-/** A workflow that watches Jira or Notion and has an agent take each new item to a pull request; its watch starts off, so nothing runs before the agent and folder are checked */
+const agentStep = (id: string, agent: string, prompt: string): WorkflowNode => ({
+  id,
+  kind: 'agent',
+  agent,
+  prompt,
+  folder: null,
+  retries: 0,
+  onError: 'stop',
+  timeoutMin: MAX_TIMEOUT_MIN
+})
+
+/** One agent step with the prompt and a review that sends it back twice at most, then the output */
+const reviewed = (agent: string, prompt: string, rubric: string): WorkflowNode[] => [
+  agentStep('agent', agent, prompt),
+  { id: 'review', kind: 'judge', agent, source: '{{prev}}', rubric, minScore: 8, retryStep: 'agent', rounds: 2, onError: 'stop' },
+  { id: 'output', kind: 'output', template: '{{prev}}' }
+]
+
+/**
+ * A workflow that watches Jira or Notion and has an agent take each new item to a pull request, after its plan is approved on
+ * the item or in Treeix: changes asked for there send the plan back. Its watch starts off, so nothing runs before the agent and folder are checked
+ */
 export const shipWorkflow = (source: Watch['source'], agent: string): Workflow =>
-  reviewedStep(NAME[source], agent, shipPrompt(source), shipRubric(source), {
-    id: 'input',
-    kind: 'input',
-    watches: [{ id: crypto.randomUUID(), source, query: WATCH_QUERY[source], ...(source === 'notion' && { dataSource: '' }), enabled: false }]
-  })
+  chain(NAME[source], [
+    {
+      id: 'input',
+      kind: 'input',
+      watches: [{ id: crypto.randomUUID(), source, query: WATCH_QUERY[source], ...(source === 'notion' && { dataSource: '' }), enabled: false }]
+    },
+    agentStep('plan', agent, planPrompt(source)),
+    { id: 'approve', kind: 'approval', message: 'The plan for {{input.key}} {{input.title}}:\n\n{{prev}}', retryStep: 'plan' },
+    ...reviewed(agent, shipPrompt(source), shipRubric(source))
+  ])
 
 const ADD_TESTS_PROMPT = `You work on one pull request, on your own: nobody watches this run.
 
@@ -90,4 +121,4 @@ const ADD_TESTS_RUBRIC = `The work is new tests pushed to {{input.sourceBranch}}
 If the agent said the repo has no tests: score ${MAX_SCORE} when that is true, 1 when it is not.`
 
 /** A board stage: a pull request dropped on it gets tests for what it changes */
-export const addTestsWorkflow = (agent: string): Workflow => reviewedStep('Add tests', agent, ADD_TESTS_PROMPT, ADD_TESTS_RUBRIC, { id: 'input', kind: 'input' })
+export const addTestsWorkflow = (agent: string): Workflow => chain('Add tests', [{ id: 'input', kind: 'input' }, ...reviewed(agent, ADD_TESTS_PROMPT, ADD_TESTS_RUBRIC)])

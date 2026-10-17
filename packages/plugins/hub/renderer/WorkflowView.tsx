@@ -446,8 +446,18 @@ function Inspector({
               onChange={(value) => onChange({ ...step, timeoutMin: Number(value) || null })}
             />
           </div>
+          <div className={LABEL}>
+            Changes go back to
+            <Select
+              title="When you reject with notes, this step redoes its work with them, in its own conversation"
+              value={step.retryStep ?? ''}
+              options={[{ value: '', label: 'Nobody' }, ...sources.filter((source) => source.kind === 'agent').map((source) => ({ value: source.id, label: source.label }))]}
+              onChange={(retryStep) => onChange({ ...step, retryStep: retryStep || null })}
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
-            The run waits here until you approve it, here, from your phone or on its ticket; what came in goes on. Reject fails the run.
+            The run waits here until you approve it, here, from your phone or on its ticket; what came in goes on, with your notes.{' '}
+            {step.retryStep ? 'Reject with notes sends the step back to redo it; reject without them fails the run.' : 'Reject fails the run.'}
           </p>
         </>
       )}

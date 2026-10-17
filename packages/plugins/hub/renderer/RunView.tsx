@@ -85,6 +85,32 @@ function ReplyBox({ name, inset, onSend }: { name: string; inset: boolean; onSen
   )
 }
 
+/** Approve or reject a waiting step; notes go on with an approve, and a reject with them sends the step's agent back to redo its work */
+function ApprovalBox({ runId, node, sendsBack }: { runId: string; node: string; sendsBack: boolean }): React.JSX.Element {
+  const [notes, setNotes] = useState('')
+  const reason = notes.trim() || null
+  return (
+    <div className="flex flex-col gap-2">
+      <textarea
+        value={notes}
+        onChange={(event) => setNotes(event.target.value)}
+        rows={3}
+        aria-label="Notes"
+        placeholder={sendsBack ? 'Notes for the agent, or what to change before it goes on' : 'Notes for the next steps'}
+        className="resize-y rounded-md bg-muted/40 px-2.5 py-2 text-[13px] ring-1 ring-border outline-none placeholder:text-muted-foreground/60 focus:ring-primary"
+      />
+      <div className="flex gap-2">
+        <button onClick={() => hubApi.decide(runId, node, true, reason)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+          Approve
+        </button>
+        <button onClick={() => hubApi.decide(runId, node, false, reason)} className="h-7 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">
+          {sendsBack && reason ? 'Send back' : 'Reject'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** A run: its steps, and for the selected one what the agent did or what the step produced */
 export function RunView({ run }: { run: Run }): React.JSX.Element {
   const host = useHost()
@@ -221,16 +247,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
                 <LazyMarkdown>{state.prompt}</LazyMarkdown>
               </div>
             )}
-            {node && state?.waiting === 'approval' && (
-              <div className="flex gap-2">
-                <button onClick={() => hubApi.decide(run.id, node.id, true)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
-                  Approve
-                </button>
-                <button onClick={() => hubApi.decide(run.id, node.id, false)} className="h-7 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">
-                  Reject
-                </button>
-              </div>
-            )}
+            {node?.kind === 'approval' && state?.waiting === 'approval' && <ApprovalBox key={node.id} runId={run.id} node={node.id} sendsBack={Boolean(node.retryStep)} />}
             {state?.review && (
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground select-text">
                 <Icon name="star" className="mt-px size-3.5 shrink-0" />

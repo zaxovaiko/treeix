@@ -49,7 +49,7 @@ export const hubApi = {
   cancelRun: (id: string) => bridge.send('cancelRun', id),
   answer: (runId: string, node: string, requestId: string, optionId: string) => bridge.send('answer', runId, node, requestId, optionId),
   /** Lets an approval step through, or rejects it and fails the run */
-  decide: (runId: string, node: string, approved: boolean) => bridge.send('decide', runId, node, approved),
+  decide: (runId: string, node: string, approved: boolean, reason: string | null = null) => bridge.send('decide', runId, node, approved, reason),
   /** Runs an ended run again from the step */
   retry: (runId: string, node: string) => bridge.invoke<void>('retryRun', runId, node),
   resume: (runId: string) => bridge.invoke<void>('resumeRun', runId),

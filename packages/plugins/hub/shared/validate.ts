@@ -57,9 +57,9 @@ export function validate(workflow: Workflow, agents: string[]): Problem[] {
     if (node.kind !== 'input' && before.size === 0) add('Connect a step to it')
     if ((node.kind === 'agent' || node.kind === 'judge') && !agents.includes(node.agent)) add('Pick an agent')
     if (node.kind === 'judge' && !node.rubric.trim()) add('Say what to judge it by')
-    if (node.kind === 'judge' && node.retryStep) {
+    if ((node.kind === 'judge' || node.kind === 'approval') && node.retryStep) {
       const retry = workflow.nodes.find((candidate) => candidate.id === node.retryStep)
-      if (retry?.kind !== 'agent' || !before.has(retry.id)) add('Send fixes back to an agent step before this one')
+      if (retry?.kind !== 'agent' || !before.has(retry.id)) add(`Send ${node.kind === 'judge' ? 'fixes' : 'changes'} back to an agent step before this one`)
     }
     if (node.kind === 'agent' && !node.prompt.trim()) add('Write a prompt')
     if (node.kind === 'tool' && !node.tool.trim()) add('Pick a tool')

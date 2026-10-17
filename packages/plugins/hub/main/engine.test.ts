@@ -43,7 +43,7 @@ const adapter: ChatAdapter = {
           emit({ type: 'message_chunk', role: 'agent', content: { type: 'text', text: reply } })
           return { stopReason: 'end_turn' }
         }
-        if (text.includes('hang')) return new Promise(() => undefined)
+        if (/\bhang\b/.test(text)) return new Promise(() => undefined)
         if (text.includes('permission')) {
           const answer = new Promise<string | null>((resolve) => (picked = resolve))
           emit({
@@ -173,6 +173,50 @@ test('an approval holds the run until approved, passing its input on, and a reje
   const rejected = engine.launch('workflow', 'Gated', approval, 'v3')
   engine.decide(rejected.id, 'gate', false)
   expect(await engine.wait(rejected.id)).toMatchObject({ status: 'failed', output: null, nodes: { gate: { error: 'Rejected' }, output: { status: 'pending' } } })
+})
+
+test("the user's changes on an approval send its step back to redo the work, and notes on approve go on with it", async () => {
+  const planned: Workflow = {
+    id: 'p',
+    name: 'Planned',
+    updatedAt: 0,
+    layout: {},
+    nodes: [
+      { id: 'input', kind: 'input' },
+      agentNode('planner', 'Plan {{input}}'),
+      { id: 'gate', kind: 'approval', message: 'Plan: {{prev}}', retryStep: 'planner' },
+      { id: 'output', kind: 'output', template: '{{prev}}' }
+    ],
+    edges: [
+      { id: '1', from: 'input', to: 'planner', branch: null },
+      { id: '2', from: 'planner', to: 'gate', branch: null },
+      { id: '3', from: 'gate', to: 'output', branch: null }
+    ]
+  }
+  const latest = (id: string): Run | undefined => updates.findLast((update) => update.id === id)
+  resumed.length = 0
+  const run = engine.launch('workflow', 'Planned', planned, 'the login')
+  const waiting = async (): Promise<void> => {
+    while (latest(run.id)?.nodes.gate.waiting !== 'approval') await tick()
+  }
+  await waiting()
+  engine.decide(run.id, 'gate', false, { by: 'you', via: 'jira', reason: 'Use OAuth' })
+  await tick()
+  expect(latest(run.id)?.nodes.gate.decision).toMatchObject({ approved: false, reason: 'Use OAuth' })
+  await waiting()
+  expect(latest(run.id)?.nodes.planner.prompt).toStartWith('The user read your work and wants changes before the run goes on:\n\nUse OAuth')
+  engine.decide(run.id, 'gate', true, { by: 'you', via: 'app', reason: 'Keep it small' })
+  const done = await engine.wait(run.id)
+  expect(done).toMatchObject({ status: 'done', nodes: { gate: { status: 'done' } } })
+  expect(done?.output).toEndWith('Notes from the approval: Keep it small')
+  // Planner, then the planner again in its own conversation
+  expect(resumed).toEqual([null, 's'])
+
+  // Without changes, or decided by an agent, a reject still fails the run
+  const plain = engine.launch('workflow', 'Planned', planned, 'the logout')
+  while (latest(plain.id)?.nodes.gate.waiting !== 'approval') await tick()
+  engine.decide(plain.id, 'gate', false, { by: 'agent', via: 'app', reason: 'Too risky' })
+  expect(await engine.wait(plain.id)).toMatchObject({ status: 'failed', nodes: { gate: { error: 'Rejected' } } })
 })
 
 test('an approval waits on across a relaunch, while a run cut short by it is interrupted', async () => {
