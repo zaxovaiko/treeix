@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Row, Switch } from '@treeix/app/settingsUi'
+import { Card, Row, Steps, Switch } from '@treeix/app/settingsUi'
 import { errorMessage } from '@treeix/app/ui'
 import { Select } from '@treeix/app/Picker'
 import { fit, LOCAL_MODELS, type LocalModelsState, longContextId } from '../shared/catalog'
@@ -158,6 +158,13 @@ function RemoteCard(): React.JSX.Element {
   )
 }
 
+const ModelSteps = ({ quality, speed }: { quality: number; speed: number }): React.JSX.Element => (
+  <span className="mr-2 flex flex-col gap-1">
+    <Steps label="Quality" value={quality} />
+    <Steps label="Speed" value={speed} />
+  </span>
+)
+
 /** Ollama models with ratings and whether they fit this Mac; agents and workflows pick them under the Ollama API */
 function LocalModels(): React.JSX.Element {
   const [local, setLocal] = useState<LocalModelsState | undefined>(undefined)
@@ -203,13 +210,10 @@ function LocalModels(): React.JSX.Element {
           <Row
             key={model.id}
             label={model.name}
-            description={
-              job?.failed
-                ? job.label
-                : `${model.note} Quality ${model.quality}/5, speed ${model.speed}/5, ${model.sizeGB} GB. ${long ? `Long context: ${longContextId(model.id)}.` : model.id}`
-            }
+            description={job?.failed ? job.label : `${model.note} ${model.sizeGB} GB. ${long ? `Long context: ${longContextId(model.id)}.` : model.id}`}
           >
             <div className="flex items-center gap-2">
+              <ModelSteps quality={model.quality} speed={model.speed} />
               <span className={`text-xs ${FIT_COLOR[rating]}`}>{rating}</span>
               {job && !job.failed ? (
                 <>

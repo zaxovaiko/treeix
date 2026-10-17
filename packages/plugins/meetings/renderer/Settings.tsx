@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Select } from '@treeix/app/Picker'
 import { Card, Row, Segmented, Switch } from '@treeix/app/settingsUi'
 import { DEFAULT_RULES, LANGUAGES, type Permissions, type Rule, START_DELAYS, STOP_DELAYS, type Status } from '../shared/types'
 import { bridge, button, meetingsSettings, status } from './state'
@@ -123,18 +124,14 @@ function Recording(): React.JSX.Element {
         label="Language"
         description="What your calls are spoken in. Picking it stops words in the wrong alphabet, such as Cyrillic in a Polish call. Detect suits calls that mix languages."
       >
-        <select
-          aria-label="Language"
-          value={language}
-          onChange={(event) => meetingsSettings.update({ language: LANGUAGES.find(([code]) => code === event.target.value)?.[0] ?? '' })}
-          className="h-7 rounded-md border border-border bg-background px-2 text-xs"
-        >
-          {LANGUAGES.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </select>
+        <div className="w-48 min-w-0">
+          <Select
+            title="Language"
+            value={language}
+            options={LANGUAGES.map(([code, name]) => ({ value: code, label: name }))}
+            onChange={(picked) => meetingsSettings.update({ language: LANGUAGES.find(([code]) => code === picked)?.[0] ?? '' })}
+          />
+        </div>
       </Row>
       <AudioRow />
       <Row label="Folder" description="Where each meeting gets a folder. Empty keeps them in Treeix's app data.">

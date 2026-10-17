@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Select } from '@treeix/app/Picker'
-import { Card, Row, Switch } from '@treeix/app/settingsUi'
+import { Card, Row, Steps, Switch } from '@treeix/app/settingsUi'
 import { CopyButton } from '@treeix/app/ui'
 import { DEFAULT_PROMPT, type Hotkey, hotkeyLabel, isModifierKey, MODELS, type ModelId, type ModelState, type Permissions, type Status } from '../shared/types'
 import { bridge, dictationSettings, history, status } from './state'
@@ -163,8 +163,14 @@ function Models({ current }: { current: Status | null }): React.JSX.Element {
       {(Object.keys(MODELS) as ModelId[]).map((id) => {
         const state = current?.models.find((entry) => entry.id === id)
         return (
-          <Row key={id} label={MODELS[id].name} description={state?.error ?? `${MODELS[id].description} Quality ${MODELS[id].quality}/5, speed ${MODELS[id].speed}/5.`}>
-            <ModelControls id={id} state={state} selected={id === model} />
+          <Row key={id} label={MODELS[id].name} description={state?.error ?? MODELS[id].description}>
+            <div className="flex items-center gap-4">
+              <span className="flex flex-col gap-1">
+                <Steps label="Quality" value={MODELS[id].quality} />
+                <Steps label="Speed" value={MODELS[id].speed} />
+              </span>
+              <ModelControls id={id} state={state} selected={id === model} />
+            </div>
           </Row>
         )
       })}
@@ -278,8 +284,10 @@ function Vocabulary(): React.JSX.Element {
   )
 }
 
+/** Folded until asked for: dictations are private and the list is long */
 function History(): React.JSX.Element {
   const items = history.use()
+  const [open, setOpen] = useState(false)
   return (
     <Card title="History">
       {items.length === 0 ? (
@@ -288,20 +296,26 @@ function History(): React.JSX.Element {
         </Row>
       ) : (
         <>
-          {items.map((item) => (
-            <Row
-              key={item.at}
-              label={item.text}
-              description={`${new Date(item.at).toLocaleString()}${item.app ? ` in ${item.app}` : ''}${item.raw !== item.text ? `. Heard: ${item.raw}` : ''}`}
-            >
-              <CopyButton text={() => item.text} />
-            </Row>
-          ))}
-          <Row label="Clear history" description="Removes every dictation stored on this Mac.">
-            <button className={button} onClick={() => void bridge.invoke('clearHistory')}>
-              Clear
-            </button>
+          <Row label={`${items.length} ${items.length === 1 ? 'dictation' : 'dictations'}`} description="The last 50, stored only on this Mac.">
+            <div className="flex gap-2">
+              <button className={button} aria-expanded={open} onClick={() => setOpen(!open)}>
+                {open ? 'Hide' : 'Show'}
+              </button>
+              <button className={button} onClick={() => void bridge.invoke('clearHistory')}>
+                Clear
+              </button>
+            </div>
           </Row>
+          {open &&
+            items.map((item) => (
+              <Row
+                key={item.at}
+                label={item.text}
+                description={`${new Date(item.at).toLocaleString()}${item.app ? ` in ${item.app}` : ''}${item.raw !== item.text ? `. Heard: ${item.raw}` : ''}`}
+              >
+                <CopyButton text={() => item.text} />
+              </Row>
+            ))}
         </>
       )}
     </Card>

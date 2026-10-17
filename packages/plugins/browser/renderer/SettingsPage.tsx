@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createBridge } from '@treeix/sdk'
+import { Select } from '@treeix/app/Picker'
 import { Card, Row, Segmented, Switch } from '@treeix/app/settingsUi'
 import type { BrowserProfile, ImportInfo, ImportResult } from '../shared/types'
 import { type SearchEngine, searchUrl, toUrl } from './address'
@@ -158,20 +159,15 @@ export function BrowserSettings(): React.JSX.Element {
             description={`A one-off copy of your sign-ins, so sites open signed in. macOS will ask for access to the browser's key. Click Allow, not Always Allow. Last import: ${importLabel(info)}`}
           >
             <div className="flex items-center gap-2">
-              <select
-                aria-label="Browser to import from"
-                value={chosen}
-                onChange={(event) => setChosen(event.target.value)}
-                className="h-7 rounded-md border border-border bg-background px-2 text-xs"
-              >
-                {profiles.length === 0 && <option value="">No browsers found</option>}
-                {profiles.map((profile) => (
-                  <option key={profile.key} value={profile.key}>
-                    {profile.browser}, {profile.name}
-                    {profile.blocked ? ' (needs access)' : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="w-64 min-w-0">
+                <Select
+                  title="Browser to import from"
+                  value={chosen || null}
+                  placeholder="No browsers found"
+                  options={profiles.map((profile) => ({ value: profile.key, label: `${profile.browser}, ${profile.name}`, hint: profile.blocked ? 'needs access' : undefined }))}
+                  onChange={setChosen}
+                />
+              </div>
               <button
                 disabled={!chosen || busy}
                 onClick={() => void runImport()}

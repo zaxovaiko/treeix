@@ -63,6 +63,28 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 }
 
 /** The rows' keyboard cursor is focus; focus itself draws nothing */
+/** A score out of `of` as filled steps, like a model's quality */
+export function Steps({ label, value, of = 5 }: { label: string; value: number; of?: number }): React.JSX.Element {
+  return (
+    <span
+      role="meter"
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={of}
+      title={`${label} ${value}/${of}`}
+      className="flex items-center gap-2 text-[11px] text-muted-foreground"
+    >
+      <span className="w-11">{label}</span>
+      <span className="flex gap-0.5">
+        {Array.from({ length: of }, (_, step) => (
+          <span key={step} className={`h-1.5 w-2.5 rounded-full ${step < value ? 'bg-primary' : 'bg-foreground/15'}`} />
+        ))}
+      </span>
+    </span>
+  )
+}
+
 export const SETTING_ROW = 'rounded-md outline-none'
 
 /** One setting: label and description, its control beside them, or wrapped under them when the page is narrow */
