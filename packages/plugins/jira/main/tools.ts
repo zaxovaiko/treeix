@@ -1,6 +1,6 @@
 import type { McpTool } from '@treeix/sdk/main'
 import { isString, list, text } from '@treeix/shared/json'
-import { checkedKey, commentOnWorkItem, editDescription, editWorkItem, searchWorkItems, transitionWorkItem, workItemDetail } from './acli'
+import { checkedKey, commentOnWorkItem, editDescription, editWorkItem, searchWorkItems, transitionWorkItem, updateComment, workItemDetail } from './acli'
 
 const key = (args: Record<string, unknown>): string => checkedKey(text(args.key).trim())
 const keyArg = { key: { type: 'string', description: 'Work item key, such as ABC-123' } }
@@ -26,13 +26,16 @@ export const jiraTools: McpTool[] = [
   },
   {
     name: 'jira_comment',
-    description: "Adds a comment to a work item under the user's own account. body is plain text; blank lines split paragraphs.",
-    inputSchema: { type: 'object', properties: { ...keyArg, body: { type: 'string' } }, required: ['key', 'body'] },
+    description:
+      "Adds a comment to a work item under the user's own account, or with id replaces that comment, such as a plan checklist kept up to date; ids are in jira_work_item's comments. body is plain text; blank lines split paragraphs.",
+    inputSchema: { type: 'object', properties: { ...keyArg, body: { type: 'string' }, id: { type: 'string' } }, required: ['key', 'body'] },
     run: async (args) => {
       const body = text(args.body).trim()
       if (!body) throw new Error('body is required')
-      await commentOnWorkItem(key(args), body, null)
-      return 'Commented'
+      const id = text(args.id).trim()
+      if (id) await updateComment(key(args), id, body)
+      else await commentOnWorkItem(key(args), body, null)
+      return id ? 'Comment updated' : 'Commented'
     }
   },
   {

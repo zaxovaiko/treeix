@@ -25,6 +25,7 @@ import {
   setThreadResolved,
   submitReview
 } from './prs'
+import { pullRequestTools } from './tools'
 
 const plugin: MainPlugin = {
   tools: [
@@ -67,6 +68,7 @@ const plugin: MainPlugin = {
     context.handle('close', (_, pullRequest: PullRequest) => closePullRequest(pullRequest))
     context.handle('comment', (_, pullRequest: PullRequest, comment: PullRequestComment) => commentOnPullRequest(pullRequest, comment))
     context.handle('react', (_, pullRequest: PullRequest, commentId: string, reaction: Reaction) => reactToPullRequestComment(pullRequest, commentId, reaction))
+    pullRequestTools.forEach((tool) => rawContext.mcpTool(tool))
   }
 }
 
