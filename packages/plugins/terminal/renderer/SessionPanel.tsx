@@ -379,12 +379,7 @@ function SessionBar({
     <div className={`@container ${PANE_HEADER} gap-1 px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
-          <button
-            title={`Sidebar${actionKeys('app.sidebar') ? ` (${actionKeys('app.sidebar')})` : ''}`}
-            aria-label="Toggle sidebar"
-            onClick={() => runAction('app.sidebar')}
-            className={stripButton}
-          >
+          <button title={`Sidebar${actionKeys('app.sidebar') ? ` (${actionKeys('app.sidebar')})` : ''}`} onClick={() => runAction('app.sidebar')} className={stripButton}>
             <Icon name="panel" className="size-3.5" />
           </button>
           {onGoToFolder && <FolderPicker label={label} current={session?.worktreePath ?? cwd} onGo={onGoToFolder} />}

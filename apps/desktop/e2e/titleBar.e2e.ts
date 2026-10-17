@@ -35,7 +35,7 @@ test('a workspace takes any hex colour or shade and an icon', async () => {
   await expect(page.locator('[data-app-sidebar] [data-icon="coffee"]')).toBeVisible()
 })
 
-test('the sidebar hides from its own header and comes back with its key', async () => {
+test('the sidebar hides from the Terminal page header and comes back with its key', async () => {
   const { page } = launched
   const sidebar = page.locator('[data-app-sidebar]')
   await expect(sidebar).toBeVisible()
