@@ -1,5 +1,5 @@
 import { timeAgo } from '@treeix/app/time'
-import { TICKET_BADGES, type TicketBadge, type TicketCard } from '../shared/tickets'
+import { spent, TICKET_BADGES, type TicketBadge, type TicketCard, ticketLinks } from '../shared/tickets'
 import { hubSelection } from './store'
 
 const BADGE_CLASS: Record<TicketBadge, string> = {
@@ -11,20 +11,9 @@ const BADGE_CLASS: Record<TicketBadge, string> = {
   merged: 'bg-emerald-400/15 text-emerald-500'
 }
 
-export const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumSignificantDigits: 3 }).format
-
-/** Tokens over the whole ticket, and what they cost when the agents priced them */
-export const spent = (tokens: number, cost: number | null): string => `${compact(tokens)} tokens${cost == null ? '' : ` · $${cost.toFixed(2)}`}`
-
 export function TicketBadgeChip({ badge }: { badge: TicketBadge }): React.JSX.Element {
   return <span className={`shrink-0 rounded px-1.5 py-px text-[10px] font-medium ${BADGE_CLASS[badge]}`}>{TICKET_BADGES.find((entry) => entry.id === badge)?.label}</span>
 }
-
-/** The ticket and the pull request it opened */
-export const ticketLinks = (card: TicketCard): { label: string; url: string }[] => [
-  ...(card.url ? [{ label: 'Ticket', url: card.url }] : []),
-  ...(card.pullRequest ? [{ label: card.pullRequest.includes('merge_requests') ? 'MR' : 'PR', url: card.pullRequest }] : [])
-]
 
 export function BoardCard({ card, menu }: { card: TicketCard; menu: (event: React.MouseEvent) => void }): React.JSX.Element {
   return (

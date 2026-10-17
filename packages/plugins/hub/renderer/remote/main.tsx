@@ -1,13 +1,14 @@
 import '@treeix/app/main.css'
-import { StrictMode, useEffect, useRef, useState } from 'react'
+import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { applyTheme, THEMES } from '@treeix/app/themes'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { sseReader } from '../../main/sse'
-import { BOARD_COLUMNS, boardColumn, runLinks, runSummary } from '../../shared/board'
+import { runSummary } from '../../shared/board'
+import { compact, isTicketState, runTokens, spent, TICKET_BADGES, TICKET_COLUMNS, type TicketCard, ticketCards, ticketLinks, type TicketState } from '../../shared/tickets'
 import { decisionText, isRun, isWaiting, KIND_LABEL, reviewText, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
 
-/** The hub's web app on the tailnet, phone first: what needs you, what runs, and starting a workflow */
+/** The hub's web app on the tailnet, phone first: the ticket board, what needs you, and starting a workflow */
 
 type Named = { id: string; name: string }
 type Ask = { node: string; requestId: string; title: string; options: Named[] }
@@ -62,16 +63,17 @@ function Dot({ status }: { status: string }): React.JSX.Element {
   return <span className={`size-2.5 shrink-0 rounded-full ${STATUS_DOT[status] ?? 'bg-muted-foreground'}`} />
 }
 
-/** Runs as they change: loaded once, then kept up by the server's stream, reloaded whenever the page comes back */
-function useRuns(): { runs: Run[]; error: string | null } {
+/** Runs and ticket states as they change: loaded once, then kept up by the server's stream, reloaded whenever the page comes back */
+function useHub(): { runs: Run[]; states: TicketState[]; error: string | null } {
   const [runs, setRuns] = useState<Run[]>([])
+  const [states, setStates] = useState<TicketState[]>([])
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let stop = false
     let abort = new AbortController()
     const load = (): void =>
-      void call('GET', 'runs')
-        .then((data) => (setRuns(list(data, isRun)), setError(null)))
+      void Promise.all([call('GET', 'runs'), call('GET', 'tickets')])
+        .then(([runData, stateData]) => (setRuns(list(runData, isRun)), setStates(list(stateData, isTicketState)), setError(null)))
         .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)))
     const follow = async (): Promise<void> => {
       while (!stop) {
@@ -86,7 +88,8 @@ function useRuns(): { runs: Run[]; error: string | null } {
             if (message.type === 'run' && isRun(message.run)) {
               const run = message.run
               setRuns((current) => (current.some((entry) => entry.id === run.id) ? current.map((entry) => (entry.id === run.id ? run : entry)) : [run, ...current]))
-            } else if (message.type === 'removed') setRuns((current) => current.filter((entry) => entry.id !== message.id))
+            } else if (message.type === 'tickets') setStates(list(message.states, isTicketState))
+            else if (message.type === 'removed') setRuns((current) => current.filter((entry) => entry.id !== message.id))
           })
           // Safari's streams can't be iterated with for await
           const chunks = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -107,7 +110,7 @@ function useRuns(): { runs: Run[]; error: string | null } {
       document.removeEventListener('visibilitychange', visible)
     }
   }, [])
-  return { runs, error }
+  return { runs, states, error }
 }
 
 function useHash(): string {
@@ -179,62 +182,57 @@ function titleOf(run: Run): { key: string | null; title: string } {
 
 const plain = (text: string): string => text.replace(/\*\*(.+?)\*\*/g, '$1')
 
-function Card({ run }: { run: Run }): React.JSX.Element {
-  const [busy, setBusy] = useState(false)
-  const approval = Object.entries(run.nodes).find(([, node]) => node.waiting === 'approval')?.[0]
-  const { key, title } = titleOf(run)
-  const summary = plain(runSummary(run))
-  const decide = (approved: boolean): void => {
-    setBusy(true)
-    void call('POST', `runs/${encodeURIComponent(run.id)}/decide`, { node: approval, approved }).finally(() => setBusy(false))
-  }
+const BADGE_DOT: Record<TicketCard['badge'], string> = {
+  needsYou: 'waiting',
+  error: 'failed',
+  ciFailing: 'failed',
+  working: 'running',
+  review: 'pending',
+  merged: 'done'
+}
+
+const badgeLabel = (card: TicketCard): string => TICKET_BADGES.find((entry) => entry.id === card.badge)?.label ?? ''
+
+function Links({ card }: { card: TicketCard }): React.JSX.Element | null {
+  const links = ticketLinks(card)
+  if (!links.length) return null
+  return (
+    <div className="flex gap-4 border-t border-border px-3.5">
+      {links.map((link) => (
+        <a key={link.url} href={link.url} target="_blank" rel="noreferrer" className="flex h-11 items-center text-sm text-primary">
+          Open {link.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function Card({ card }: { card: TicketCard }): React.JSX.Element {
   return (
     <div className="rounded-2xl bg-card ring-1 ring-border">
-      <a href={`#run=${run.id}`} className="flex flex-col gap-1 p-3.5 active:bg-accent">
-        <span className="flex items-center gap-2">
-          <span className="line-clamp-2 min-w-0 flex-1 text-[15px] leading-snug font-medium">{title}</span>
-        </span>
-        {summary && !run.title.includes(summary) && <span className="line-clamp-2 text-[13px] text-muted-foreground">{summary}</span>}
+      <a href={`#ticket=${encodeURIComponent(card.key)}`} className="flex flex-col gap-1 p-3.5 active:bg-accent">
+        <span className="line-clamp-2 text-[15px] leading-snug font-medium">{card.title}</span>
+        {card.summary && <span className="line-clamp-2 text-[13px] text-muted-foreground">{plain(card.summary)}</span>}
         <span className="flex items-center gap-2 pt-1 text-xs text-muted-foreground tabular-nums">
-          <Dot status={shown(run)} />
-          {STATUS_LABEL[shown(run)]}
-          {key && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{key}</span>}
-          <span className="flex-1 text-right">{ago(run.endedAt ?? run.startedAt)}</span>
+          <Dot status={BADGE_DOT[card.badge]} />
+          {badgeLabel(card)}
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{card.source === 'jira' ? card.key : card.project}</span>
+          <span className="flex-1 text-right">{ago(card.at)}</span>
         </span>
       </a>
-      {runLinks(run).length > 0 && (
-        <div className="flex gap-4 border-t border-border px-3.5">
-          {runLinks(run).map((link) => (
-            <a key={link.url} href={link.url} target="_blank" rel="noreferrer" className="flex h-11 items-center text-sm text-primary">
-              {link.label}
-            </a>
-          ))}
-        </div>
-      )}
-      {approval && (
-        <div className="grid grid-cols-2 gap-2 border-t border-border p-2.5">
-          <button disabled={busy} onClick={() => decide(false)} className={button}>
-            Reject
-          </button>
-          <button disabled={busy} onClick={() => decide(true)} className={primary}>
-            Approve
-          </button>
-        </div>
-      )}
+      <Links card={card} />
     </div>
   )
 }
 
 /** The Mac's board: one column a screen on a phone, swiped or picked from the tabs, side by side when there's room */
-function Board({ runs }: { runs: Run[] }): React.JSX.Element {
+function Board({ cards }: { cards: TicketCard[] }): React.JSX.Element {
   const [archivedAt, setArchivedAt] = useState(() => Number(localStorage.getItem(ARCHIVED_AT)) || 0)
   const [column, setColumn] = useState(0)
   const strip = useRef<HTMLDivElement>(null)
-  const columns = BOARD_COLUMNS.map((entry) => ({
+  const columns = TICKET_COLUMNS.map((entry) => ({
     ...entry,
-    runs: runs
-      .filter((run) => boardColumn(run) === entry.id && (entry.id !== 'done' || (run.endedAt ?? run.startedAt) > archivedAt))
-      .sort((a, b) => (b.endedAt ?? b.startedAt) - (a.endedAt ?? a.startedAt))
+    cards: cards.filter((card) => card.column === entry.id && (entry.id !== 'done' || card.at > archivedAt)).sort((a, b) => b.at - a.at)
   }))
   const archive = (): void => {
     localStorage.setItem(ARCHIVED_AT, String(Date.now()))
@@ -248,30 +246,30 @@ function Board({ runs }: { runs: Run[] }): React.JSX.Element {
           <button
             key={entry.id}
             onClick={() => show(index)}
-            className={`h-9 flex-1 rounded-full text-sm ${index === column ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground'}`}
+            className={`h-9 flex-1 rounded-full text-[13px] whitespace-nowrap ${index === column ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground'}`}
           >
-            {entry.label} <span className="tabular-nums">{entry.runs.length}</span>
+            {entry.label} <span className="tabular-nums">{entry.cards.length}</span>
           </button>
         ))}
       </div>
       <div
         ref={strip}
         onScroll={(event) => setColumn(Math.round(event.currentTarget.scrollLeft / event.currentTarget.clientWidth))}
-        className="-mx-4 flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:gap-3"
+        className="-mx-4 flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-4 md:gap-3"
       >
         {columns.map((entry) => (
           <section key={entry.id} className="flex w-full shrink-0 snap-start flex-col gap-2 px-4 md:px-0">
             <h2 className="hidden items-center gap-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase md:flex">
               <span className="flex-1">{entry.label}</span>
-              <span className="tabular-nums">{entry.runs.length}</span>
+              <span className="tabular-nums">{entry.cards.length}</span>
             </h2>
-            {entry.runs.map((run) => (
-              <Card key={run.id} run={run} />
+            {entry.cards.map((card) => (
+              <Card key={card.key} card={card} />
             ))}
-            {!entry.runs.length && <p className="py-10 text-center text-sm text-muted-foreground">Nothing here</p>}
-            {entry.id === 'done' && entry.runs.length > 0 && (
+            {!entry.cards.length && <p className="py-10 text-center text-sm text-muted-foreground">Nothing here</p>}
+            {entry.id === 'done' && entry.cards.length > 0 && (
               <button onClick={archive} className="py-2 text-sm text-muted-foreground">
-                Archive done runs
+                Archive done tickets
               </button>
             )}
           </section>
@@ -281,11 +279,64 @@ function Board({ runs }: { runs: Run[] }): React.JSX.Element {
   )
 }
 
-function Home({ runs }: { runs: Run[] }): React.JSX.Element {
+function Home({ cards }: { cards: TicketCard[] }): React.JSX.Element {
   return (
     <>
       <Notifications />
-      <Board runs={runs} />
+      {cards.length ? (
+        <Board cards={cards} />
+      ) : (
+        <p className="py-10 text-center text-sm text-muted-foreground">No tickets yet. Tag a ticket agent-ready once a Ship workflow watches on the Mac.</p>
+      )}
+    </>
+  )
+}
+
+type Entry = { at: number; text: string } | { at: number; run: Run }
+
+/** A ticket's whole trail, oldest first: every run on it and everything the pull request watcher did */
+function TicketDetail({ card }: { card: TicketCard }): React.JSX.Element {
+  const entries: Entry[] = [...(card.state?.log ?? []), ...card.runs.map((run) => ({ at: run.startedAt, run }))].sort((a, b) => a.at - b.at)
+  return (
+    <>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-lg leading-snug font-semibold">{card.title}</h1>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
+          <Dot status={BADGE_DOT[card.badge]} />
+          {[badgeLabel(card), card.source === 'jira' ? card.key : card.project, spent(card.tokens, card.cost)].join(' · ')}
+        </div>
+      </div>
+      <div className="rounded-2xl bg-card ring-1 ring-border">
+        <p className="p-3.5 text-[15px] select-text">{plain(card.summary)}</p>
+        <Links card={card} />
+      </div>
+      <section className="flex flex-col gap-1">
+        <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Trail</h2>
+        <div className="rounded-2xl bg-card px-3 ring-1 ring-border">
+          {entries.map((entry) =>
+            'run' in entry ? (
+              <a key={entry.run.id} href={`#run=${entry.run.id}`} className="flex min-h-12 items-center gap-3 border-b border-border py-2 last:border-0 active:bg-accent">
+                <Dot status={shown(entry.run)} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[15px]">{titleOf(entry.run).title}</span>
+                  <span className="truncate text-xs text-muted-foreground">{plain(runSummary(entry.run))}</span>
+                </span>
+                <span className="text-right text-xs text-muted-foreground tabular-nums">
+                  {compact(runTokens(entry.run))}
+                  <br />
+                  {ago(entry.at)}
+                </span>
+              </a>
+            ) : (
+              <div key={`${entry.at}:${entry.text}`} className="flex min-h-10 items-center gap-3 border-b border-border py-2 text-sm text-muted-foreground last:border-0">
+                <span className={`size-1.5 shrink-0 rounded-full ${entry.text.startsWith('Error') ? 'bg-red-400' : 'bg-muted-foreground/50'}`} />
+                <span className="min-w-0 flex-1 select-text">{entry.text}</span>
+                <span className="text-xs tabular-nums">{ago(entry.at)}</span>
+              </div>
+            )
+          )}
+        </div>
+      </section>
     </>
   )
 }
@@ -456,17 +507,21 @@ function Start(): React.JSX.Element {
 }
 
 function App(): React.JSX.Element {
-  const { runs, error } = useRuns()
+  const { runs, states, error } = useHub()
+  const cards = useMemo(() => ticketCards(runs, states), [runs, states])
   const hash = useHash()
   const [agents, setAgents] = useState<Named[]>([])
   useEffect(() => void call('GET', 'agents').then((data) => setAgents(list(data, isNamed))), [])
   const runId = hash.startsWith('run=') ? decodeURIComponent(hash.slice(4)) : null
   const run = runId ? runs.find((entry) => entry.id === runId) : undefined
-  const waiting = runs.filter(isWaiting).length
+  const ticketKey = hash.startsWith('ticket=') ? decodeURIComponent(hash.slice(7)) : null
+  const ticket = ticketKey ? cards.find((card) => card.key === ticketKey) : undefined
+  const waiting = cards.filter((card) => card.badge === 'needsYou').length
+  const detail = hash === 'start' || runId || ticketKey
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/90 px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3 backdrop-blur">
-        {hash === 'start' || runId ? (
+        {detail ? (
           <a href="#runs" className="-my-2 -ml-2 flex h-11 items-center px-2 text-[15px] text-primary">
             ‹ Board
           </a>
@@ -480,9 +535,21 @@ function App(): React.JSX.Element {
           </a>
         )}
       </header>
-      <main className={`mx-auto flex w-full flex-col gap-5 px-4 ${hash === 'start' || runId ? 'max-w-xl' : 'max-w-5xl'} pt-4 pb-[max(env(safe-area-inset-bottom),1rem)]`}>
+      <main className={`mx-auto flex w-full flex-col gap-5 px-4 ${detail ? 'max-w-xl' : 'max-w-5xl'} pt-4 pb-[max(env(safe-area-inset-bottom),1rem)]`}>
         {error && <p className="rounded-xl bg-red-400/10 p-3 text-sm text-red-400">{error}</p>}
-        {hash === 'start' ? <Start /> : runId ? run ? <RunDetail run={run} agents={agents} /> : <p className="text-sm text-muted-foreground">Loading…</p> : <Home runs={runs} />}
+        {hash === 'start' ? (
+          <Start />
+        ) : runId || ticketKey ? (
+          run ? (
+            <RunDetail run={run} agents={agents} />
+          ) : ticket ? (
+            <TicketDetail card={ticket} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          )
+        ) : (
+          <Home cards={cards} />
+        )}
       </main>
     </div>
   )

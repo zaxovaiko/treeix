@@ -1,35 +1,9 @@
-import { isWaiting, type Run } from './workflow'
-
-/** The board's columns, on the Mac and on the phone */
-export const BOARD_COLUMNS = [
-  { id: 'needs', label: 'Needs you' },
-  { id: 'running', label: 'Running' },
-  { id: 'done', label: 'Done' }
-] as const
-export type BoardColumn = (typeof BOARD_COLUMNS)[number]['id']
+import type { Run } from './workflow'
 
 export const DAY_MS = 24 * 60 * 60 * 1000
 
-export function boardColumn(run: Run, now = Date.now()): BoardColumn | null {
-  // Eval runs show in their suite
-  if (run.kind === 'eval') return null
-  if (isWaiting(run) || run.status === 'failed' || run.status === 'interrupted') return 'needs'
-  if (run.status === 'running') return 'running'
-  // Old runs stay in the history, not on the board
-  return run.status === 'done' && now - (run.endedAt ?? run.startedAt) < DAY_MS ? 'done' : null
-}
-
 /** A GitHub or Bitbucket pull request, or a GitLab merge request */
 export const PULL_REQUEST = /https?:\/\/\S+?\/(?:pull|pull-requests|-\/merge_requests)\/\d+/
-
-/** The ticket a run is for and the PR or MR it opened */
-export function runLinks(run: Run): { label: string; url: string }[] {
-  const pullRequest = run.output?.match(PULL_REQUEST)?.[0]
-  return [
-    ...(run.ticket?.url ? [{ label: 'Open ticket', url: run.ticket.url }] : []),
-    ...(pullRequest ? [{ label: pullRequest.includes('merge_requests') ? 'Open MR' : 'Open PR', url: pullRequest }] : [])
-  ]
-}
 
 const firstLine = (text: string | null | undefined): string => text?.trim().split('\n')[0] ?? ''
 

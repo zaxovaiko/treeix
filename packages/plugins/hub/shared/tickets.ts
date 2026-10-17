@@ -142,6 +142,17 @@ function summaryOf(card: Pick<TicketCard, 'runs' | 'state' | 'badge' | 'pullRequ
 /** Tokens over every step of a run */
 export const runTokens = (run: Run): number => Object.values(run.nodes).reduce((total, node) => total + (node.usage?.used ?? 0), 0)
 
+export const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumSignificantDigits: 3 }).format
+
+/** Tokens over the whole ticket, and what they cost when the agents priced them */
+export const spent = (tokens: number, cost: number | null): string => `${compact(tokens)} tokens${cost == null ? '' : ` · $${cost.toFixed(2)}`}`
+
+/** The ticket and the pull request it opened */
+export const ticketLinks = (card: TicketCard): { label: string; url: string }[] => [
+  ...(card.url ? [{ label: 'Ticket', url: card.url }] : []),
+  ...(card.pullRequest ? [{ label: card.pullRequest.includes('merge_requests') ? 'MR' : 'PR', url: card.pullRequest }] : [])
+]
+
 /** One card per ticket, over every run that names it */
 export function ticketCards(runs: Run[], states: TicketState[]): TicketCard[] {
   const byKey = new Map<string, { source: TicketSource; runs: Run[] }>()

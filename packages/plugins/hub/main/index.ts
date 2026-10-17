@@ -124,6 +124,7 @@ const plugin: MainPlugin = {
       routes: {
         'GET agents': async () => (await agents.get()).map(({ id, name }) => ({ id, name })),
         'GET runs': async () => (await engine.list()).filter((run) => run.kind !== 'eval'),
+        'GET tickets': () => pullRequests.list(),
         'GET runs/:id/asks': async ({ id }) => openAsks(await engine.events(id)),
         'GET workflows': async () => (await workflows.get()).map(({ id, name }) => ({ id, name })),
         'POST workflows/:id/run': ({ id }, body) => startWorkflow(id, text(body.input)),
@@ -341,7 +342,7 @@ const plugin: MainPlugin = {
       folder: (run) => workflowFolder(run.workflow),
       launch: (title, workflow, input, ticket) => void engine.launch('workflow', title.slice(0, TITLE_CHARS), workflow, input, false, { ticket }),
       notify: (card, title, body) => tell(title, body, card.runs[0].id),
-      changed: (states) => context.broadcast('tickets', states)
+      changed: (states) => (context.broadcast('tickets', states), remote.publish({ type: 'tickets', states }))
     })
     context.handle('tickets', () => pullRequests.list())
 
