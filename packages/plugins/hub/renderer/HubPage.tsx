@@ -81,7 +81,7 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
         <AgentAvatar agent={agent} size={28} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{agent.name}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model, agent.mode].filter(Boolean).join(' · ')}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model].filter(Boolean).join(' · ')}</div>
         </div>
         <IconButton label={`Ask ${agent.name}`} onClick={() => asking.set({ target: `agent:${agent.id}`, openRun: true })}>
           <Icon name="comment" className="size-3.5" />

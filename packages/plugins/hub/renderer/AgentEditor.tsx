@@ -4,7 +4,6 @@ import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { Select, type SelectOption } from '@treeix/app/Picker'
 import { Dialog, errorMessage } from '@treeix/app/ui'
-import { shrinkImage } from '@treeix/app/WorkspaceSwitcher'
 import { WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { CRON_PRESETS, isCron } from '../shared/cron'
 import { API_PRESETS, type HubAgent, MAX_TIMEOUT_MIN, type Runtime, type Schedule } from '../shared/types'
@@ -24,14 +23,12 @@ const runtimeChoice = (runtime: Runtime): string =>
 const fromChoice = (choice: string): Runtime =>
   choice.startsWith('agent:') ? { kind: 'agent', agent: choice.slice('agent:'.length) } : { kind: 'api', baseUrl: choice.slice('api:'.length) }
 
-/** The one-character badge an agent shows without an uploaded image */
+/** The one-character badge an agent shows */
 const glyphOf = (agent: Pick<HubAgent, 'icon' | 'name'>): string => agent.icon || agent.name.trim().slice(0, 1).toUpperCase() || '?'
 
-/** The agent's uploaded image, else its glyph on its colour */
-export function AgentAvatar({ agent, size }: { agent: Pick<HubAgent, 'avatar' | 'icon' | 'name' | 'color'>; size: number }): React.JSX.Element {
-  return agent.avatar ? (
-    <img src={agent.avatar} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-lg object-cover" />
-  ) : (
+/** The agent's glyph on its colour */
+export function AgentAvatar({ agent, size }: { agent: Pick<HubAgent, 'icon' | 'name' | 'color'>; size: number }): React.JSX.Element {
+  return (
     <span
       aria-hidden
       style={{ width: size, height: size, background: agent.color, fontSize: Math.round(size * 0.5) }}
@@ -187,19 +184,15 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
         id: crypto.randomUUID(),
         name: '',
         icon: '',
-        avatar: null,
         color: WORKSPACE_COLORS[0],
         runtime: { kind: 'agent', agent: runtimes[0]?.id ?? 'claude' },
         model: null,
-        mode: null,
         instructions: '',
         folder: null,
         updatedAt: 0
       }
   )
   const patch = (next: Partial<HubAgent>): void => setDraft((current) => ({ ...current, ...next }))
-  // Kept as typed, so a new line can be started; split into paths on save
-  const [directories, setDirectories] = useState((agent?.directories ?? []).join('\n'))
   const [options, setOptions] = useState<ChatOption[]>([])
   const [detecting, setDetecting] = useState(false)
   const [problem, setProblem] = useState('')
@@ -253,14 +246,6 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
   }
   const detectOnOpen = (): void => void (options.length === 0 && detect(false))
 
-  const pickImage = (file: File | undefined): void => {
-    if (!file) return
-    shrinkImage(file).then(
-      (avatar) => (patch({ avatar }), setProblem('')),
-      () => setProblem(`${file.name} isn't an image`)
-    )
-  }
-
   const name = draft.name.trim()
   // An API has no default model to fall back on
   const canSave = name !== '' && (!isApi || (URL.canParse(baseUrl) && draft.model !== null)) && (draft.schedules ?? []).every((schedule) => isCron(schedule.cron))
@@ -273,11 +258,6 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
           name,
           folder: draft.folder?.trim() || null,
           icon: glyphOf(draft),
-          mode: isApi ? null : draft.mode,
-          directories: directories
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean),
           updatedAt: Date.now()
         })
       )
@@ -298,17 +278,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
 
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-4">
         <div className="flex items-end gap-3">
-          <div className="flex shrink-0 flex-col items-center gap-1.5">
-            <label title="Upload an image" className="cursor-pointer">
-              <AgentAvatar agent={draft} size={44} />
-              <input type="file" accept="image/*" aria-label="Avatar image" className="hidden" onChange={(event) => pickImage(event.target.files?.[0])} />
-            </label>
-            {draft.avatar && (
-              <button onClick={() => patch({ avatar: null })} className="h-6 text-[11px] text-muted-foreground hover:text-foreground">
-                Remove
-              </button>
-            )}
-          </div>
+          <AgentAvatar agent={draft} size={32} />
           <label className={`${LABEL} flex-1`}>
             Name
             <input
@@ -348,7 +318,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             <Select
               title="Runtime"
               value={runtimeChoice(draft.runtime)}
-              onChange={(choice) => (patch({ runtime: fromChoice(choice), model: null, mode: null }), setOptions([]))}
+              onChange={(choice) => (patch({ runtime: fromChoice(choice), model: null }), setOptions([]))}
               options={[
                 ...(!spec && draft.runtime.kind === 'agent' ? [{ value: runtimeChoice(draft.runtime), label: `${draft.runtime.agent} (gone)`, section: 'Agents' }] : []),
                 ...runtimes.map((entry) => ({ value: `agent:${entry.id}`, label: entry.label, section: 'Agents' })),
@@ -404,7 +374,7 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex">
           <OptionField
             label="Model"
             optional={!isApi}
@@ -414,17 +384,6 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             option={options.find((option) => option.category === 'model')}
             onChange={(model) => patch({ model })}
           />
-          {!isApi && (
-            <OptionField
-              label="Mode"
-              optional
-              loading={detecting}
-              onOpen={detectOnOpen}
-              value={draft.mode}
-              option={options.find((option) => option.category === 'mode')}
-              onChange={(mode) => patch({ mode })}
-            />
-          )}
         </div>
 
         <label className={LABEL}>
@@ -447,19 +406,6 @@ export function AgentEditor({ agent, onClose, onSaved }: { agent: HubAgent | nul
             className={`${FIELD} font-mono`}
           />
         </label>
-
-        {!isApi && (
-          <label className={LABEL}>
-            Also loads
-            <textarea
-              value={directories}
-              onChange={(event) => setDirectories(event.target.value)}
-              placeholder="More folders, one per line; it gets their CLAUDE.md, skills and subagents"
-              rows={3}
-              className={`${PROMPT_FIELD} font-mono`}
-            />
-          </label>
-        )}
 
         <label className="flex items-start gap-2 text-xs">
           <input type="checkbox" checked={draft.autoApprove === true} onChange={(event) => patch({ autoApprove: event.target.checked })} className="mt-0.5 shrink-0" />

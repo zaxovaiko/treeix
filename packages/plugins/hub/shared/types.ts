@@ -42,18 +42,13 @@ export type HubAgent = {
   name: string
   /** One glyph, shown on tabs and badges */
   icon: string
-  /** A small square image as a data URL; the glyph on the color when null */
-  avatar: string | null
   color: string
   runtime: Runtime
-  /** Option values the runtime offers; null keeps its default */
+  /** A model the runtime offers; null keeps its default */
   model: string | null
-  mode: string | null
   instructions: string
   /** Where it works; null is the selected worktree */
   folder: string | null
-  /** More folders it loads beside `folder`: their instructions, skills and subagents */
-  directories?: string[]
   /** Allows every permission it asks for in runs, so they never wait; missing on agents saved before it existed */
   autoApprove?: boolean
   /** Missing on agents saved before schedules existed */
@@ -82,9 +77,8 @@ export const isSchedule = (value: unknown): value is Schedule =>
 export const isHubAgent = (value: unknown): value is HubAgent =>
   isJson(value) &&
   ['id', 'name', 'icon', 'color', 'instructions'].every((key) => isString(value[key])) &&
-  ['avatar', 'model', 'mode', 'folder'].every((key) => isNullableString(value[key])) &&
+  ['model', 'folder'].every((key) => isNullableString(value[key])) &&
   isRuntime(value.runtime) &&
-  (value.directories === undefined || (Array.isArray(value.directories) && value.directories.every(isString))) &&
   (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
   (value.schedules === undefined || (Array.isArray(value.schedules) && value.schedules.every(isSchedule))) &&
   typeof value.updatedAt === 'number'

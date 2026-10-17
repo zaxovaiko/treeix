@@ -232,7 +232,7 @@ const plugin: MainPlugin = {
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
     context.handle('subagents', async (_, id: string) => {
       const agent = (await agents.get()).find((entry) => entry.id === id)
-      return agent ? readSubagents([agent.folder, ...(agent.directories ?? [])].filter((folder): folder is string => folder !== null)) : []
+      return agent?.folder ? readSubagents([agent.folder]) : []
     })
     const workflows = jsonList(join(context.dataPath, 'workflows.json'), isWorkflow)
     const writeWorkflows = async (next: Workflow[]): Promise<void> => {

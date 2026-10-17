@@ -5,11 +5,9 @@ const agent = {
   id: 'a',
   name: 'Reviewer',
   icon: 'R',
-  avatar: null,
   color: '#4f5ff0',
   runtime: { kind: 'agent', agent: 'claude' },
   model: 'opus',
-  mode: null,
   instructions: '',
   folder: null,
   updatedAt: 1
@@ -22,11 +20,6 @@ test('a stored agent passes, one from an older or broken file does not', () => {
   expect(isHubAgent({ ...agent, runtime: { kind: 'api' } })).toBe(false)
   const { folder: _, ...missing } = agent
   expect(isHubAgent(missing)).toBe(false)
-})
-
-test('more folders are paths', () => {
-  expect(isHubAgent({ ...agent, directories: ['/repo'] })).toBe(true)
-  expect(isHubAgent({ ...agent, directories: '/repo' })).toBe(false)
 })
 
 test('schedules are optional and need a valid crontab line', () => {

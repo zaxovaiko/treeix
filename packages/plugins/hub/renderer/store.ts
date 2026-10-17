@@ -258,15 +258,14 @@ export function runtimeLabel(runtime: Runtime): string {
 export function asAgent(agent: HubAgent): Agent | null {
   const base = runtimeSpec(agent.runtime)
   if (!base) return null
-  const preset = { ...(agent.model ? { model: agent.model } : {}), ...(agent.mode ? { mode: agent.mode } : {}) }
+  const preset = agent.model ? { model: agent.model } : {}
   return {
     id: registryId(agent),
     label: agent.name,
     mark: agent.icon,
-    image: agent.avatar ?? undefined,
     color: agent.color,
     command: null,
     agent: true,
-    chat: { ...base, ...(agent.instructions.trim() ? { instructions: agent.instructions } : {}), ...(agent.directories?.length ? { directories: agent.directories } : {}), preset }
+    chat: { ...base, ...(agent.instructions.trim() ? { instructions: agent.instructions } : {}), preset }
   }
 }

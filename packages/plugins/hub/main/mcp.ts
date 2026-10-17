@@ -85,7 +85,6 @@ export function toAgent(args: Args, agents: HubAgent[], now: number): HubAgent {
     id,
     name,
     icon: icon || existing?.icon || name.slice(0, 1).toUpperCase(),
-    avatar: existing?.avatar ?? null,
     color: optional(args, 'color')?.trim() || existing?.color || DEFAULT_COLOR,
     runtime: runtime
       ? /^https?:\/\//.test(runtime)
@@ -93,10 +92,8 @@ export function toAgent(args: Args, agents: HubAgent[], now: number): HubAgent {
         : { kind: 'agent', agent: runtime }
       : (existing?.runtime ?? { kind: 'agent', agent: 'claude' }),
     model: nullable(args, 'model', existing?.model ?? null),
-    mode: nullable(args, 'mode', existing?.mode ?? null),
     instructions: optional(args, 'instructions') ?? existing?.instructions ?? '',
     folder: nullable(args, 'folder', existing?.folder ?? null),
-    directories: Array.isArray(args.directories) ? args.directories.filter(isString) : existing?.directories,
     autoApprove: typeof autoApprove === 'boolean' ? autoApprove : (existing?.autoApprove ?? false),
     schedules: schedules ? schedules.map(toSchedule) : (existing?.schedules ?? []),
     updatedAt: now
@@ -228,7 +225,7 @@ export function hubTools(deps: {
       inputSchema: none,
       run: async () => {
         const agents = await deps.agents()
-        return agents.length ? JSON.stringify(agents, omit('avatar', 'updatedAt'), 2) : 'No agents yet; hub_save_agent creates one'
+        return agents.length ? JSON.stringify(agents, omit('avatar', 'mode', 'directories', 'updatedAt'), 2) : 'No agents yet; hub_save_agent creates one'
       }
     },
     {
@@ -238,7 +235,7 @@ export function hubTools(deps: {
       inputSchema: byName('The agent whose folders to read'),
       run: async (args) => {
         const agent = findAgent(await deps.agents(), required(args, 'name'))
-        const subagents = await readSubagents([agent.folder, ...(agent.directories ?? [])].filter((folder): folder is string => folder !== null))
+        const subagents = agent.folder ? await readSubagents([agent.folder]) : []
         return subagents.length ? JSON.stringify(subagents, null, 2) : 'Its folders define none'
       }
     },
@@ -254,13 +251,7 @@ export function hubTools(deps: {
           instructions: { type: 'string', description: 'Its system prompt' },
           runtime: { type: 'string', description: "What it runs on: an agent id like 'claude' or 'codex', or an OpenAI-compatible base URL. 'claude' by default" },
           model: { type: ['string', 'null'], description: "A model the runtime offers, e.g. 'opus'; null for the runtime's default" },
-          mode: { type: ['string', 'null'], description: "A mode the runtime offers; null for the runtime's default" },
           folder: { type: ['string', 'null'], description: 'Absolute path it works in; null for the selected worktree' },
-          directories: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Absolute paths of more folders it loads beside its own: their CLAUDE.md, rules, skills and subagents. Replaces the list'
-          },
           icon: { type: 'string', description: 'One glyph; its first letter by default' },
           color: { type: 'string', description: 'A CSS color' },
           autoApprove: { type: 'boolean', description: 'Allows every permission it asks for in runs' },
