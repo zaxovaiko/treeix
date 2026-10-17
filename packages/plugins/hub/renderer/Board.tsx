@@ -35,11 +35,12 @@ function RestoreButton(): React.JSX.Element | null {
   return (
     <button
       onClick={restore}
-      title="Start the sessions and runs the last quit stopped, and let their agents carry on"
-      className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-white"
+      title={`Restore ${count}: start the sessions and runs the last quit stopped, and let their agents carry on`}
+      aria-label={`Restore ${count}`}
+      className="relative flex size-7 items-center justify-center rounded-md text-primary hover:bg-accent"
     >
-      <Icon name="history" className="size-3.5" />
-      Restore ({count})
+      <Icon name="history" className="size-4" />
+      <span className="absolute -top-0.5 -right-0.5 min-w-3.5 rounded-full bg-primary px-1 text-[9px] leading-3.5 font-medium text-white">{count}</span>
     </button>
   )
 }
