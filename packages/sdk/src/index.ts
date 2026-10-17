@@ -24,7 +24,7 @@ export type { Command, IconName, Theme }
 export * from './layout'
 export type * from './chat'
 /** Makes a plugin's action runnable from the native menu; the action needs a `Go to` or `Panels` section to show there */
-export { registerActionRunner } from '@treeix/app/actionRunners'
+export { registerActionRunner, runAction } from '@treeix/app/actionRunners'
 
 /** A tab in the title bar that always exists while the plugin is enabled */
 export type TabContribution = {

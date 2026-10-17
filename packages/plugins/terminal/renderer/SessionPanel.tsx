@@ -10,7 +10,7 @@ import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
-import { PANE_HEADER, useHost, usePanels } from '@treeix/sdk'
+import { PANE_HEADER, runAction, useHost, usePanels } from '@treeix/sdk'
 import { errorMessage, NameInput, ResizeGrip, useChromeless } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
@@ -304,11 +304,8 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
   return (
     <Picker
       title={`${label}: go to a folder (${actionKeys('terminal.goToFolder')}); new sessions start there`}
-      trigger={
-        <span className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground">
-          <Icon name="folder" className="size-3.5" />
-        </span>
-      }
+      // No button of its own: ⌘O and the palette open it, anchored at the strip's left edge
+      trigger={null}
       options={options}
       current={current}
       placeholder="Go to folder"
@@ -333,7 +330,7 @@ function FolderRow({ name, path }: { name: string; path: string }): React.JSX.El
   )
 }
 
-/** The session on screen with a new session button; on the Terminal page also the list and inspector toggles */
+/** The session on screen with a new session button; on the Terminal page also the sidebar, list and inspector toggles */
 function SessionBar({
   session,
   label,
@@ -382,6 +379,14 @@ function SessionBar({
     <div className={`@container ${PANE_HEADER} gap-1 px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
+          <button
+            title={`Sidebar${actionKeys('app.sidebar') ? ` (${actionKeys('app.sidebar')})` : ''}`}
+            aria-label="Toggle sidebar"
+            onClick={() => runAction('app.sidebar')}
+            className={stripButton}
+          >
+            <Icon name="panel" className="size-3.5" />
+          </button>
           {onGoToFolder && <FolderPicker label={label} current={session?.worktreePath ?? cwd} onGo={onGoToFolder} />}
           <span className="ml-1 h-4 w-px shrink-0 bg-border" />
         </div>

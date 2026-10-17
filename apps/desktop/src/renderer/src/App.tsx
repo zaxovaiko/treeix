@@ -2419,10 +2419,10 @@ function App(): React.JSX.Element {
       ))}
     </>
   )
-  // The sidebar carries its own toggle; the title bar only holds the way back while it is hidden, beside the traffic lights where the sidebar was
-  const sidebarReveal = !sidebarShown && (
+  // The Terminal page's header carries the sidebar toggle at its left edge; every other page keeps it beside the traffic lights
+  const sidebarReveal = appTab !== 'terminal' && (
     <span className="flex shrink-0 items-center pr-1 [-webkit-app-region:no-drag]">
-      <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarShown(true)}>
+      <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={() => setSidebarShown(!sidebarShown)}>
         <Icon name="panel" className="size-3.5 text-muted-foreground" />
       </IconButton>
     </span>
@@ -2583,7 +2583,6 @@ function App(): React.JSX.Element {
                 onResize={(width) => setSidebarWidth(Math.min(width, SIDEBAR_MAX))}
                 onSwitch={switchWorkspace}
                 onEdit={setEditingWorkspace}
-                onHide={() => setSidebarShown(false)}
               />
             )}
             <div

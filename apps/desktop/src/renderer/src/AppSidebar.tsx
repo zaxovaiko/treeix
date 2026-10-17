@@ -179,17 +179,7 @@ function NewSessionMenu({ label, entries }: { label: string; entries: MenuAction
   )
 }
 
-function Workspaces({
-  repos,
-  onSwitch,
-  onEdit,
-  onHide
-}: {
-  repos: Repo[] | null
-  onSwitch: (id: string) => void
-  onEdit: (workspace: Workspace | null) => void
-  onHide: () => void
-}): React.JSX.Element {
+function Workspaces({ repos, onSwitch, onEdit }: { repos: Repo[] | null; onSwitch: (id: string) => void; onEdit: (workspace: Workspace | null) => void }): React.JSX.Element {
   const host = useHost()
   const { workspaces, currentId } = useWorkspaces()
   const sessions = useSessions()
@@ -293,14 +283,7 @@ function Workspaces({
     <>
       {/* Shells outside every workspace, in the home folder, listed on their own rather than as a workspace */}
       <div>
-        <SectionHeader
-          label="Tabs"
-          pinned={
-            <IconButton label={`Sidebar (${actionKeys('app.sidebar')})`} onClick={onHide}>
-              <Icon name="panel" className="size-3.5" />
-            </IconButton>
-          }
-        >
+        <SectionHeader label="Tabs">
           <IconButton label="New shell in your home folder" onClick={() => newSession(HOME, 'shell')}>
             <Icon name="plus" className="size-3.5" />
           </IconButton>
@@ -342,8 +325,7 @@ export function AppSidebar({
   width,
   onResize,
   onSwitch,
-  onEdit,
-  onHide
+  onEdit
 }: {
   repos: Repo[] | null
   island: boolean
@@ -351,7 +333,6 @@ export function AppSidebar({
   onResize: (width: number) => void
   onSwitch: (id: string) => void
   onEdit: (workspace: Workspace | null) => void
-  onHide: () => void
 }): React.JSX.Element {
   const { loaded } = usePlugins()
   const [folded, setFolded] = useState<string[]>(['hub.history'])
@@ -363,7 +344,7 @@ export function AppSidebar({
       className={island ? `absolute top-2 bottom-2 left-2 z-20 flex flex-col overflow-hidden ${ISLAND}` : 'relative flex shrink-0 flex-col border-r border-border bg-sidebar'}
     >
       <div className="flex min-h-0 flex-1 flex-col space-y-2 overflow-y-auto p-1.5">
-        <Workspaces repos={repos} onSwitch={onSwitch} onEdit={onEdit} onHide={onHide} />
+        <Workspaces repos={repos} onSwitch={onSwitch} onEdit={onEdit} />
         {/* The last section, the hub's history, keeps to the bottom */}
         {sections.map((section, index) => (
           <div key={section.id} data-sidebar-section={section.id} className={index === sections.length - 1 ? 'mt-auto' : undefined}>
