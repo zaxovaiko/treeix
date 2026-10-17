@@ -19,6 +19,9 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 ## Features
 
 - AI Hub: your own agents (a name, a model and instructions on Claude Code, Codex, OpenRouter or Ollama) chained into workflows with conditions, approvals, cron schedules, events from other plugins and tool steps that call any MCP tool Treeix serves.
+- Ship tickets: a workflow watches Jira or Notion and takes each new item to a pull request. The agent first posts a plan on the ticket and in Treeix and waits; reply "approve" with notes to build it, or say what to change and it rewrites the plan. Comments on the ticket are read while it builds.
+- Review step: a judge agent scores a step's work against your rubric and sends it back to fix the issues until it passes.
+- Evals: saved cases test agents and workflows by text, pattern, a command or a judge's score, on demand or nightly, with a warning when a suite gets worse.
 - Meetings (off by default): Meet, Slack huddles, Zoom and Teams record on their own and are transcribed with speakers on the Mac. A workflow turns the transcript into notes and tasks.
 - Slack and Notion (off by default): Slack messages arrive in batches for workflows; workflow steps and agents write pages to any Notion database.
 - Dependency graph and Drizzle schema diagrams of a worktree, laid out to fit, left to right, top to bottom or as a grid with the fewest crossings.
@@ -32,6 +35,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - Built-in editor for quick fixes; every save keeps a snapshot.
 - Env tab: every .env file across worktrees, which variables are secret, public or exposed to the browser, what is missing or differs from main.
 - Claude and Codex 5-hour and weekly usage limits in the title bar.
+- Usage tab: tokens and estimated cost of every Claude and Codex session, per day, model, project and session, for today, this week, 7 or 30 days, this month or all time.
 - Claude plans next to the code they describe.
 - Markdown with foldable headings, mermaid diagrams and images from private uploads.
 - Themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized.
@@ -62,6 +66,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - [Releases and changelog](https://github.com/zaxovaiko/treeix/releases)
 - [Plugin docs](https://github.com/zaxovaiko/treeix/blob/main/packages/README.md): how to write a plugin
 - [Architecture](https://github.com/zaxovaiko/treeix/blob/main/docs/architecture.md)
+- [llms-full.txt](https://treeix.dyvertex.com/llms-full.txt): this file plus every plugin and the plugin guide
 
 ## Optional
 
