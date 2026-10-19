@@ -7,8 +7,8 @@ import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
-import { builtinOf, completion, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
-import { cancel, clear, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
+import { builtinOf, completion, shellCommandOf, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
+import { cancel, clear, filesFor, hasConversation, isBusy, runShell, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 import { primaryKey } from '@treeix/shared/shortcut'
 
 const readImage = (file: File): Promise<ChatImage> =>
@@ -156,7 +156,7 @@ function UsageRow({ label, tokens, total }: { label: string; tokens: number; tot
 }
 
 /** The context bar; clicking it splits the last turn's tokens into cached, new and generated */
-function ContextMeter({ usage, turn }: { usage: NonNullable<Feed['usage']>; turn: Feed['turnUsage'] }): React.JSX.Element {
+function ContextMeter({ usage, turn, running }: { usage: NonNullable<Feed['usage']>; turn: Feed['turnUsage']; running: boolean }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
   const fullness = usage.size > 0 ? usage.used / usage.size : 0
@@ -198,7 +198,8 @@ function ContextMeter({ usage, turn }: { usage: NonNullable<Feed['usage']>; turn
               {turn.thought > 0 && <UsageRow label="Thinking" tokens={turn.thought} />}
             </>
           ) : (
-            <span className="text-muted-foreground">This agent doesn't report a turn's tokens</span>
+            // Agents report a turn's tokens when it ends, so the first one has nothing to show yet
+            <span className="text-muted-foreground">{running ? 'Counted when this turn ends' : "This agent doesn't report a turn's tokens"}</span>
           )}
         </Popup>
       )}
@@ -316,6 +317,13 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
       clear(chatId).catch((reason: unknown) => host.flash(errorMessage(reason)))
       return
     }
+    const command = shellCommandOf(text)
+    if (command && chat.connected) {
+      setDraft(chatId, '')
+      runShell(chatId, command).catch((reason: unknown) => host.flash(errorMessage(reason)))
+      onSent()
+      return
+    }
     send(chatId, [...images, ...(text ? [{ type: 'text' as const, text }] : [])])
     setDraft(chatId, '')
     setImages([])
@@ -388,7 +396,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
       {chat.queue.length > 0 && (
         <div className="mb-2 flex flex-col gap-1">
           {chat.queue.map((content, index) => (
-            <div key={index} className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1 text-xs text-muted-foreground/70">
+            <div key={index} className="flex items-center gap-2 rounded-md bg-popover px-3 py-1 text-xs text-muted-foreground/70">
               <span className="min-w-0 flex-1 truncate">{preview(content)}</span>
               <button aria-label="Remove queued message" onClick={() => unqueue(chatId, index)} className="hover:text-foreground">
                 <Icon name="close" className="size-3" />
@@ -398,7 +406,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
         </div>
       )}
       {pendingSwitch && (
-        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-amber-400/5 py-2 pr-2 pl-4 text-xs ring-1 ring-amber-400/40">
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-popover py-2 pr-2 pl-4 text-xs ring-1 ring-amber-400/40">
           <span className="min-w-0 flex-1 text-foreground">
             Switching re-reads the whole chat without the cache
             {pendingSwitch.tokens !== null && <span className="text-muted-foreground">, about {formatTokens(pendingSwitch.tokens)} tokens</span>}
@@ -522,7 +530,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
             />
           )}
           <span className="flex-1" />
-          {feed.usage && <ContextMeter usage={feed.usage} turn={feed.turnUsage} />}
+          {feed.usage && <ContextMeter usage={feed.usage} turn={feed.turnUsage} running={feed.running} />}
           {busy ? (
             <button onClick={() => cancel(chatId)} aria-label="Stop" title="Stop" className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-on-foreground">
               <span className="size-2.5 rounded-[2px] bg-current" />
@@ -540,7 +548,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
           )}
         </div>
       </div>
-      {(problem ?? hint) && <div className="mt-1.5 px-3 text-[11px] text-muted-foreground">{problem ?? hint}</div>}
+      {(problem ?? hint) && <div className="mt-1.5 w-fit rounded-full bg-background/90 px-3 py-0.5 text-[11px] text-muted-foreground backdrop-blur">{problem ?? hint}</div>}
     </div>
   )
 }
