@@ -29,13 +29,6 @@ export const MENU_BAR_OPTIONS: [MenuBarLabel, string, string][] = [
   ['icon', 'Icon only', '']
 ]
 
-export const USAGE_LABELS: [UsageLabel, string, string][] = [
-  ['reset', 'Percent and reset', '5h 35% · 2h   wk 28% · 5d'],
-  ['percent', 'Percent', '35% · 28%'],
-  ['weekly', 'Weekly and reset', '28% in 5d'],
-  ['bars', 'Bars', '▰▰▱ ▰▱▱']
-]
-
 // Changes are pushed as sources are written; the poll only ages out windows that reset
 const POLL_MS = 60_000
 
@@ -102,7 +95,7 @@ function describe(name: string, limits: AgentLimits): string {
 /** Claude and Codex subscription windows for the title bar */
 export function UsageLimits(): React.JSX.Element | null {
   const { openSettings: onOpenSettings } = useHost()
-  const { usageLabel } = usageSettings.use()
+  const { usageLabel } = usageSettings.useValue()
   const [limits, setLimits] = useState<Limits | null>(null)
 
   useEffect(() => {

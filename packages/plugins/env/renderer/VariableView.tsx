@@ -15,7 +15,7 @@ const VARIANT_DOTS = ['bg-emerald-400', 'bg-amber-400', 'bg-sky-400', 'bg-violet
 /** One name everywhere it is set or missing, with a dot per distinct value */
 export function VariableMain({ name, places, scoped, state }: { name: string; places: Place[]; scoped: ScopedWorktree[]; state: RowState }): React.JSX.Element {
   const host = useHost()
-  const edits = pending.use()
+  const edits = pending.useValue()
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulk, setBulk] = useState('')
   if (!places.length) return <EmptyState fill icon="braces" title="Pick a variable" />
@@ -69,7 +69,7 @@ export function VariableMain({ name, places, scoped, state }: { name: string; pl
             onKeyDown={(event) => event.key === 'Enter' && apply()}
             className="min-w-0 flex-1 rounded-[5px] bg-transparent px-1.5 py-0.5 font-mono text-[11.5px] ring-1 ring-input outline-none focus:ring-primary"
           />
-          <button onClick={apply} className="h-6 shrink-0 rounded-md bg-primary px-2.5 text-[11.5px] font-medium text-white">
+          <button onClick={apply} className="h-6 shrink-0 rounded-md bg-primary px-2.5 text-[11.5px] font-medium text-primary-foreground">
             Apply
           </button>
         </div>

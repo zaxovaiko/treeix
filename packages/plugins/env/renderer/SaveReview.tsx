@@ -21,8 +21,8 @@ function changeOf(edit: EnvEdit, env: WorktreeEnv | undefined): Change {
 /** Every unsaved value as a small diff, secrets masked, before anything is written */
 export function SaveReview({ scoped, onClose }: { scoped: ScopedWorktree[]; onClose: () => void }): React.JSX.Element {
   const host = useHost()
-  const edits = [...pending.use().values()]
-  const known = envs.get()
+  const edits = [...pending.useValue().values()]
+  const known = envs.useValue()
   const changes = edits.map((edit) => changeOf(edit, known.get(edit.worktreePath)))
   const fileCount = new Set(edits.map((edit) => `${edit.worktreePath}|${edit.file}`)).size
   const [busy, setBusy] = useState(false)
@@ -105,7 +105,7 @@ export function SaveReview({ scoped, onClose }: { scoped: ScopedWorktree[]; onCl
           <button
             onClick={save}
             disabled={busy || edits.length === 0}
-            className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+            className="h-7 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
           >
             {busy ? 'Saving...' : `Save ${plural(fileCount, 'file')}`}
           </button>

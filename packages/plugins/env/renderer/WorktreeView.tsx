@@ -44,7 +44,7 @@ export const matches = (row: Row, query: string): boolean => !query || row.name.
 
 export function WorktreeMain({ target, query, state }: { target: Target; query: string; state: RowState }): React.JSX.Element {
   const host = useHost()
-  const edits = pending.use()
+  const edits = pending.useValue()
   const [kindFilter, setKindFilter] = useState<Kind | null>(null)
   const [compare, setCompare] = useState(true)
   const [raw, setRaw] = useState(false)
@@ -338,7 +338,7 @@ export function FreshMain({ target, onDismiss }: { target: ScopedWorktree; onDis
       .finally(() => setBusy(false))
   }
   const check = (on: boolean): React.JSX.Element => (
-    <span className={`flex size-3.5 items-center justify-center rounded-sm ${on ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
+    <span className={`flex size-3.5 items-center justify-center rounded-sm ${on ? 'bg-primary text-primary-foreground' : 'ring-1 ring-input'}`}>
       {on && <Icon name="check" className="size-2.5" />}
     </span>
   )
@@ -393,7 +393,7 @@ export function FreshMain({ target, onDismiss }: { target: ScopedWorktree; onDis
             <button
               onClick={run}
               disabled={busy || chosen.size === 0}
-              className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+              className="h-7 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
             >
               {verb} {chosen.size} file{chosen.size === 1 ? '' : 's'}
             </button>

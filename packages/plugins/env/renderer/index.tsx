@@ -26,7 +26,7 @@ const FOCUS_RESCAN_MS = 60_000
 /** Scans the workspace's worktrees, rescans one when its env files change, and sets up new worktrees when asked to */
 function Root(): null {
   const host = useHost()
-  const known = envs.use()
+  const known = envs.useValue()
   const scoped = scopedWorktrees(host, known)
   const pathsKey = scoped.map(({ worktree }) => worktree.path).join('\n')
   const mainsKey = scoped
@@ -73,7 +73,7 @@ function Root(): null {
 /** Red while any worktree ships a secret to the browser, lacks what its .env.example asks for, or lacks main's env files */
 function Badge(): React.JSX.Element | null {
   const host = useHost()
-  const known = envs.use()
+  const known = envs.useValue()
   const alarming = scopedWorktrees(host, known).some(({ env, main, isMain }) => env && issueTone(issuesOf(env, isMain ? null : (main ?? null))) === 'red')
   return alarming ? <span title="Some env variables are exposed or missing, or a new worktree has none" className="size-1.5 shrink-0 rounded-full bg-red-400" /> : null
 }
@@ -131,10 +131,17 @@ const COPY_OPTIONS: [CopyMode | 'off', string][] = [
 ]
 
 /** Repositories whose new worktrees get main's env files, set from the page's new worktree card */
-function EnvSettings(): React.JSX.Element | null {
-  const { autoCopy } = envSettings.use()
+function EnvSettings(): React.JSX.Element {
+  const { autoCopy } = envSettings.useValue()
   const repos = Object.keys(autoCopy)
-  if (repos.length === 0) return null
+  if (repos.length === 0)
+    return (
+      <Card title="Copy on new worktrees">
+        <p className="px-4 py-3 text-xs text-muted-foreground">
+          No repository yet. Copy env files into a new worktree with Do this for every new worktree on, and its repository shows here.
+        </p>
+      </Card>
+    )
   const set = (repo: string, mode: CopyMode | 'off'): void => {
     const next = { ...autoCopy }
     if (mode === 'off') delete next[repo]

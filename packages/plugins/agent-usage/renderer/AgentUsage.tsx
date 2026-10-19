@@ -125,6 +125,8 @@ function DailyChart({ days, rows }: { days: string[]; rows: UsageRow[] }): React
     totals.output += row.output
   }
   const peak = Math.max(1, ...[...byDay.values()].map(({ input, output }) => input + output))
+  const [hovered, setHovered] = useState<string | null>(null)
+  const entries = [...byDay]
   return (
     <div className="px-2">
       <div className="mb-1.5 flex justify-end gap-3 text-[10.5px] text-muted-foreground">
@@ -136,9 +138,26 @@ function DailyChart({ days, rows }: { days: string[]; rows: UsageRow[] }): React
         </span>
         <span>cache excluded</span>
       </div>
-      <div className="flex h-28 items-end justify-center gap-px border-b border-border">
-        {[...byDay].map(([day, { input, output }]) => (
-          <div key={day} title={`${shortDay(day)}\ninput ${compact(input)}\noutput ${compact(output)}`} className="flex h-full max-w-6 min-w-px flex-1 flex-col justify-end">
+      <div onMouseLeave={() => setHovered(null)} className="flex h-28 items-end justify-center gap-px border-b border-border">
+        {entries.map(([day, { input, output }], index) => (
+          <div
+            key={day}
+            onMouseEnter={() => setHovered(day)}
+            className={`relative flex h-full max-w-6 min-w-px flex-1 flex-col justify-end transition-opacity ${hovered && hovered !== day ? 'opacity-40' : ''}`}
+          >
+            {hovered === day && (
+              // Kept inside the chart at its edges
+              <div
+                className={`pointer-events-none absolute bottom-full z-10 mb-1 rounded-md bg-popover px-2 py-1 text-[11px] whitespace-nowrap text-popover-foreground shadow-md ring-1 ring-border tabular-nums ${
+                  index < entries.length / 4 ? 'left-0' : index >= (entries.length * 3) / 4 ? 'right-0' : 'left-1/2 -translate-x-1/2'
+                }`}
+              >
+                <div className="font-medium">{shortDay(day)}</div>
+                <div className="text-muted-foreground">
+                  output {compact(output)} · input {compact(input)}
+                </div>
+              </div>
+            )}
             <div style={{ height: `${(output / peak) * 100}%` }} className="rounded-t-[2px] bg-primary" />
             <div style={{ height: `${(input / peak) * 100}%` }} className="bg-foreground/30" />
           </div>
@@ -154,9 +173,13 @@ function DailyChart({ days, rows }: { days: string[]; rows: UsageRow[] }): React
 
 const BREAKDOWN_ROWS = 12
 
+/** A project's folder name; its full path shows on hover */
+const folderName = (path: string): string => path.split('/').filter(Boolean).at(-1) ?? path
+
 /** The biggest groups, then the rest behind a toggle */
-function Breakdown({ title, groups }: { title: string; groups: Group[] }): React.JSX.Element {
+function Breakdown({ title, groups, label = (name) => name }: { title: string; groups: Group[]; label?: (name: string) => string }): React.JSX.Element | null {
   const [all, setAll] = useState(false)
+  if (!groups.length) return null
   const most = Math.max(1, ...groups.map((group) => group.tokens))
   const hidden = groups.length - BREAKDOWN_ROWS
   return (
@@ -165,7 +188,7 @@ function Breakdown({ title, groups }: { title: string; groups: Group[] }): React
         {(all ? groups : groups.slice(0, BREAKDOWN_ROWS)).map(({ name, tokens, cost }, index) => (
           <Fragment key={index}>
             <span className="truncate" title={name}>
-              {name}
+              {label(name)}
             </span>
             <span className="h-1.5 overflow-hidden rounded-full bg-foreground/10">
               <span style={{ width: `${(tokens / most) * 100}%` }} className="block h-full rounded-full bg-primary" />
@@ -184,7 +207,8 @@ function Breakdown({ title, groups }: { title: string; groups: Group[] }): React
   )
 }
 
-function Dashboard(): React.JSX.Element {
+/** Rendered inside the Usage settings page, which already pads and scrolls */
+export function UsagePage(): React.JSX.Element {
   const [usage, setUsage] = useState<Usage | null>(lastUsage)
   const [error, setError] = useState('')
   const [agent, setAgent] = useState('all')
@@ -220,7 +244,7 @@ function Dashboard(): React.JSX.Element {
       sessionName: (id: string): string => titles[id] ?? `Untitled ${id.slice(0, 8)}`,
       days: daysFrom(start),
       agents: groupBy(rows, (row) => row.agent, costOf).map(({ name }) => [name, agentName(name)] as const),
-      projects: groupBy(inRange, (row) => row.project, costOf).map(({ name }) => [name, name] as const),
+      projects: groupBy(inRange, (row) => row.project, costOf).map(({ name }) => [name, folderName(name)] as const),
       cost: sum((row) => costOf(row) ?? 0),
       unpriced: sum(
         tokensOf,
@@ -261,18 +285,8 @@ function Dashboard(): React.JSX.Element {
         <DailyChart days={days} rows={shown} />
       </Card>
       <Breakdown title="By model" groups={groupBy(shown, (row) => row.model, costOf)} />
-      {project === 'all' && <Breakdown title="By project" groups={groupBy(shown, (row) => row.project, costOf)} />}
+      {project === 'all' && <Breakdown title="By project" groups={groupBy(shown, (row) => row.project, costOf)} label={folderName} />}
       <Breakdown title="By session" groups={sessions} />
-    </div>
-  )
-}
-
-export function UsagePage(): React.JSX.Element {
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-      <div className="mx-auto max-w-4xl">
-        <Dashboard />
-      </div>
     </div>
   )
 }

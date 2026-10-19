@@ -38,9 +38,9 @@ function StatusDot({ target }: { target: ScopedWorktree }): React.JSX.Element | 
 export function EnvPage(): React.JSX.Element {
   const host = useHost()
   const panels = usePanels()
-  const known = envs.use()
-  const edits = pending.use()
-  const busy = scanning.use()
+  const known = envs.useValue()
+  const edits = pending.useValue()
+  const busy = scanning.useValue()
   const scoped = useMemo(() => scopedWorktrees(host, known), [host.repos, host.scopeRepoPaths, known])
   const [storedMode, setMode] = usePersisted<string>(workspaceKey('env.mode'), 'worktree')
   const mode = storedMode === 'variable' ? 'variable' : 'worktree'
@@ -53,7 +53,7 @@ export function EnvPage(): React.JSX.Element {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
   const [reviewing, setReviewing] = useState(false)
   const [showQuiet, setShowQuiet] = useState(false)
-  const requested = openRequest.use().name
+  const requested = openRequest.useValue().name
 
   // Opening the page looks again, for env files created since the last scan
   useEffect(() => void rescan(scoped.map(({ worktree }) => worktree.path)).catch(() => undefined), [])
@@ -287,7 +287,7 @@ export function EnvPage(): React.JSX.Element {
           <button onClick={() => pending.set(new Map())} className="text-muted-foreground hover:text-foreground">
             Discard
           </button>
-          <button onClick={() => setReviewing(true)} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-white">
+          <button onClick={() => setReviewing(true)} className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 font-medium text-primary-foreground">
             Review and save <Kbd>⌘S</Kbd>
           </button>
         </div>

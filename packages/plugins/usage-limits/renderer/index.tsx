@@ -1,6 +1,7 @@
 import type { RendererPlugin } from '@treeix/sdk'
-import { Card, Row } from '@treeix/app/settingsUi'
-import { MENU_BAR_OPTIONS, setMenuBarLabel, USAGE_LABELS, UsageLimits, usageSettings } from './UsageLimits'
+import { Card, Row, Switch } from '@treeix/app/settingsUi'
+import { updateSettings, useSettings } from '@treeix/app/settings'
+import { MENU_BAR_OPTIONS, setMenuBarLabel, UsageLimits, usageSettings } from './UsageLimits'
 
 function Choices<Id extends string>({ options, value, onPick }: { options: [Id, string, string][]; value: Id; onPick: (id: Id) => void }): React.JSX.Element {
   return (
@@ -23,23 +24,17 @@ function Choices<Id extends string>({ options, value, onPick }: { options: [Id, 
 }
 
 function UsageSettings(): React.JSX.Element {
-  const { usageLabel, menuBarLabel } = usageSettings.use()
+  const { menuBarLabel } = usageSettings.useValue()
+  const { menuBarIcon } = useSettings()
   return (
-    <>
-      <Card title="Title bar">
-        <Row
-          label="Title bar label"
-          description="Claude numbers come from the newest of Claude sessions started here, the Claude desktop app or LimitBar; Codex numbers from its latest session log."
-        >
-          <Choices options={USAGE_LABELS} value={usageLabel} onPick={(id) => usageSettings.update({ usageLabel: id })} />
-        </Row>
-      </Card>
-      <Card title="Menu bar">
-        <Row label="Next to the icon" description="Claude, then Codex. Turn the menu bar icon on under General; its menu lists every number.">
-          <Choices options={MENU_BAR_OPTIONS} value={menuBarLabel} onPick={setMenuBarLabel} />
-        </Row>
-      </Card>
-    </>
+    <Card title="Menu bar">
+      <Row label="Show in the menu bar" description="Treeix beside the clock, with Claude's and Codex's limits; clicking it lists every number.">
+        <Switch checked={menuBarIcon} onChange={() => updateSettings({ menuBarIcon: !menuBarIcon })} label="Show in the menu bar" />
+      </Row>
+      <Row label="Next to the icon" description="Claude, then Codex.">
+        <Choices options={MENU_BAR_OPTIONS} value={menuBarLabel} onPick={setMenuBarLabel} />
+      </Row>
+    </Card>
   )
 }
 
