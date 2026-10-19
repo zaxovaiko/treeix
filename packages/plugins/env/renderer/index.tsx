@@ -1,5 +1,5 @@
 import { defineActions, key } from '@treeix/shared/keymap'
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { type Command, type HostApi, type RendererPlugin, useHost } from '@treeix/sdk'
 import { baseName } from '@treeix/app/Sidebar'
 import { Card, Row, Segmented } from '@treeix/app/settingsUi'
@@ -7,7 +7,7 @@ import { errorMessage } from '@treeix/app/ui'
 import { isSecretKind } from '../shared/classify'
 import type { CopyMode } from '../shared/types'
 import { folderOf, issuesOf, issueTone, rowsOf } from './model'
-import { copyFromMain, envs, envSettings, openRequest, rescan, scopedWorktrees, TAB_ID, worktreeTitle } from './store'
+import { copyFromMain, envApi, envs, envSettings, openRequest, rescan, scopedWorktrees, TAB_ID, worktreeTitle } from './store'
 
 // The page pulls in the editor rows, inspector and dialogs, so it loads when first opened
 const EnvPage = lazy(() => import('./EnvPage').then((module) => ({ default: module.EnvPage })))
@@ -49,23 +49,20 @@ function Root(): null {
     return () => window.removeEventListener('focus', onFocus)
   }, [mainsKey])
 
-  // A worktree that appears after the first scan was just created; the host has no event for that, so compare lists
-  const seen = useRef<Set<string> | null>(null)
-  const allPaths = (host.repos ?? []).flatMap((repo) => repo.worktrees.map((worktree) => worktree.path))
-  useEffect(() => {
-    if (!host.repos) return
-    const previous = seen.current
-    seen.current = new Set(allPaths)
-    if (!previous) return
-    const { autoCopy } = envSettings.get()
-    for (const target of scopedWorktrees(host, envs.get())) {
-      const mode = autoCopy[target.repo.path]
-      if (!mode || previous.has(target.worktree.path) || !target.main?.files.length) continue
-      copyFromMain(target, mode)
-        .then((created) => created && host.flash(`Env: ${created} file${created === 1 ? '' : 's'} from main in ${baseName(target.worktree.path)}`))
-        .catch((reason: unknown) => host.flash(errorMessage(reason)))
-    }
-  }, [allPaths.join('\n')])
+  // A new worktree of a repository set to get main's env files
+  useEffect(
+    () =>
+      envApi.onWorktreeAdded((main, path) => {
+        const mode = envSettings.get().autoCopy[main]
+        if (!mode) return
+        envApi
+          .scan([main])
+          .then(([scanned]) => envApi.copyFromMain(main, path, scanned?.files.map((file) => file.path) ?? [], mode))
+          .then((created) => created && host.flash(`Env: ${created} file${created === 1 ? '' : 's'} from main in ${baseName(path)}`))
+          .catch((reason: unknown) => host.flash(errorMessage(reason)))
+      }),
+    []
+  )
 
   return null
 }
@@ -130,31 +127,32 @@ const COPY_OPTIONS: [CopyMode | 'off', string][] = [
   ['example', 'From .env.example']
 ]
 
-/** Repositories whose new worktrees get main's env files, set from the page's new worktree card */
+/** Repositories whose new worktrees get main's env files */
 function EnvSettings(): React.JSX.Element {
+  const host = useHost()
   const { autoCopy } = envSettings.useValue()
-  const repos = Object.keys(autoCopy)
-  if (repos.length === 0)
-    return (
-      <Card title="Copy on new worktrees">
-        <p className="px-2 py-3 text-xs text-muted-foreground">
-          No repository yet. Copy env files into a new worktree with Do this for every new worktree on, and its repository shows here.
-        </p>
-      </Card>
-    )
   const set = (repo: string, mode: CopyMode | 'off'): void => {
     const next = { ...autoCopy }
     if (mode === 'off') delete next[repo]
     else next[repo] = mode
     envSettings.update({ autoCopy: next })
   }
+  const add = async (): Promise<void> => {
+    const folder = await window.api.pickFolder()
+    if (folder) set(await envApi.mainOf(folder), 'copy')
+  }
   return (
     <Card title="Copy on new worktrees">
-      {repos.map((repo) => (
+      {Object.keys(autoCopy).map((repo) => (
         <Row key={repo} label={`New worktrees of ${baseName(repo)}`} description={`Env files from main go into every new worktree of ${repo}`}>
           <Segmented value={autoCopy[repo]} options={COPY_OPTIONS} onChange={(mode) => set(repo, mode)} />
         </Row>
       ))}
+      <Row label="Add a repository" description="Its .env files get copied into every new worktree, so the app there runs without setting them up again">
+        <button onClick={() => void add().catch(() => host.flash('Not a git repository'))} className="h-7 rounded-md bg-foreground/5 px-3 text-xs hover:bg-foreground/10">
+          Choose folder…
+        </button>
+      </Row>
     </Card>
   )
 }

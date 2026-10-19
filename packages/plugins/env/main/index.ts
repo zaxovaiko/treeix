@@ -1,5 +1,6 @@
 import type { MainPlugin } from '@treeix/sdk/main'
 import type { Annotation, CopyMode, EnvEdit, WorktreeEnv } from '../shared/types'
+import { mainWorktreeOf, onWorktreeAdded } from '@treeix/host/git'
 import { copyFromMain, markName, scanWorktree, stopWatching, usages, watchWorktree, writeEdits } from './env'
 
 /** Worktrees scanned at once: each scan runs three git processes that walk the whole tree, node_modules too */
@@ -24,6 +25,8 @@ const plugin: MainPlugin = {
     context.handle('watch', (_, worktreePath: string | null, files: string[]) =>
       worktreePath ? watchWorktree(worktreePath, files, () => context.broadcast('changed', worktreePath)) : stopWatching()
     )
+    context.handle('mainOf', (_, folder: string) => mainWorktreeOf(folder))
+    context.onDispose(onWorktreeAdded((main, path) => context.broadcast('worktreeAdded', main, path)))
     context.onDispose(stopWatching)
   }
 }

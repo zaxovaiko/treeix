@@ -15,7 +15,11 @@ export const envApi = {
   usages: (worktreePath: string, name: string) => bridge.invoke<Usage[]>('usages', worktreePath, name),
   /** Watches only this worktree's files, replacing the last call; null stops */
   watch: (worktreePath: string | null, files: string[] = []) => bridge.invoke<void>('watch', worktreePath, files),
-  onChanged: (listener: (worktreePath: string) => void) => bridge.on('changed', (path) => typeof path === 'string' && listener(path))
+  onChanged: (listener: (worktreePath: string) => void) => bridge.on('changed', (path) => typeof path === 'string' && listener(path)),
+  /** The main worktree of the repository a folder is in */
+  mainOf: (folder: string) => bridge.invoke<string>('mainOf', folder),
+  onWorktreeAdded: (listener: (main: string, path: string) => void) =>
+    bridge.on('worktreeAdded', (main, path) => typeof main === 'string' && typeof path === 'string' && listener(main, path))
 }
 
 // Held in memory only: env values and unsaved edits never go to localStorage

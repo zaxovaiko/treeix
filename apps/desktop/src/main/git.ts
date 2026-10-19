@@ -341,6 +341,13 @@ export async function deleteBranch(repoPath: string, name: string): Promise<void
   await git(repoPath, ['branch', '-d', name])
 }
 
+const worktreeAdded = new Set<(main: string, path: string) => void>()
+/** Each worktree created from now on, with its repository's main worktree */
+export function onWorktreeAdded(listener: (main: string, path: string) => void): () => void {
+  worktreeAdded.add(listener)
+  return () => worktreeAdded.delete(listener)
+}
+
 /** Creates in flight, by repository and branch: a second click before the list refreshes gets the same worktree */
 const addingWorktrees = new Map<string, Promise<string>>()
 
@@ -367,10 +374,12 @@ async function createWorktree(repoPath: string, branch: string, base?: string): 
     const onRemote = await succeeds(repoPath, ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${name}`])
     await git(repoPath, ['worktree', 'add', ...(onRemote ? ['--track', '-b', name, path, `origin/${name}`] : ['-b', name, path, ...(base ? [base] : [])])])
   }
+  const main = await mainWorktreeOf(path)
+  worktreeAdded.forEach((listener) => listener(main, path))
   return path
 }
 
-async function mainWorktreeOf(worktreePath: string): Promise<string> {
+export async function mainWorktreeOf(worktreePath: string): Promise<string> {
   const commonDir = (await git(worktreePath, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim()
   return dirname(commonDir)
 }
