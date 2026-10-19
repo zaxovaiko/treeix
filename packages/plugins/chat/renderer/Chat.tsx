@@ -158,45 +158,47 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
           {empty ? <EmptyState chatId={chatId} chat={chat} cwd={cwd} /> : <TurnBlocks blocks={feed.blocks} cwd={cwd} newest={newest} onAnswer={reply} live={feed.running} />}
         </div>
       </div>
-      {/* Floats over the messages, which scroll on beneath it; the rows above the box keep a backdrop to stay readable */}
+      {/* Floats over the messages, which scroll on beneath it; the rows above the box stack on one opaque column so no text shows between them */}
       <div className={`pointer-events-none absolute inset-x-0 bottom-0 mx-auto w-full ${width} [&>*]:pointer-events-auto`}>
-        {!empty && isConnecting(chat) && (
-          <div role="status" className="mx-4 mb-2 flex w-fit items-center gap-2 rounded-full bg-background/90 px-2 py-0.5 text-xs text-muted-foreground backdrop-blur">
-            <Icon name="loader" className="size-3.5 animate-spin" />
-            <span className="shimmer">Reconnecting to {agents.find((candidate) => candidate.id === chat.options?.agent)?.label ?? chat.options?.agent}…</span>
-          </div>
-        )}
-        {isBusy(chat) && (
-          <div className="mx-4 mb-2 w-fit max-w-[calc(100%-2rem)] rounded-full bg-background/90 px-1 py-0.5 backdrop-blur">
-            <Activity chat={chat} />
-          </div>
-        )}
-        {chat.error && !(empty && !chat.connected) && (
-          <div className="mx-4 mb-2 flex items-center gap-2 rounded-md bg-background px-3 py-1.5 text-xs text-red-300 ring-1 ring-red-400/30">
-            <Icon name="alert" className="size-3.5 shrink-0 text-red-400" />
-            <span className="min-w-0 flex-1 truncate select-text" title={chat.error}>
-              {chat.error}
-            </span>
-            {chat.options && (
-              <button onClick={() => retry(chatId)} className="shrink-0 text-foreground hover:underline">
-                Retry
-              </button>
-            )}
-          </div>
-        )}
-        {feed.running && feed.plan.length > 0 && (
-          <ul className="mx-4 mb-2 flex flex-col gap-0.5 rounded-md bg-background px-3 py-2 text-xs ring-1 ring-border">
-            {feed.plan.map((entry, index) => (
-              <li key={index} className={`flex items-center gap-2 ${entry.status === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                <Icon
-                  name={entry.status === 'completed' ? 'check' : entry.status === 'in_progress' ? 'loader' : 'chevron'}
-                  className={`size-3 shrink-0 ${entry.status === 'in_progress' ? 'animate-spin text-foreground' : 'text-muted-foreground'}`}
-                />
-                <span className="min-w-0 truncate">{entry.content}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="mx-2 flex flex-col gap-2 bg-background px-2 pb-2 empty:hidden">
+          {!empty && isConnecting(chat) && (
+            <div role="status" className="flex w-fit items-center gap-2 px-2 py-0.5 text-xs text-muted-foreground">
+              <Icon name="loader" className="size-3.5 animate-spin" />
+              <span className="shimmer">Reconnecting to {agents.find((candidate) => candidate.id === chat.options?.agent)?.label ?? chat.options?.agent}…</span>
+            </div>
+          )}
+          {isBusy(chat) && (
+            <div className="w-fit max-w-full px-1 py-0.5">
+              <Activity chat={chat} />
+            </div>
+          )}
+          {chat.error && !(empty && !chat.connected) && (
+            <div className="flex items-center gap-2 rounded-md bg-background px-3 py-1.5 text-xs text-red-300 ring-1 ring-red-400/30">
+              <Icon name="alert" className="size-3.5 shrink-0 text-red-400" />
+              <span className="min-w-0 flex-1 truncate select-text" title={chat.error}>
+                {chat.error}
+              </span>
+              {chat.options && (
+                <button onClick={() => retry(chatId)} className="shrink-0 text-foreground hover:underline">
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+          {feed.running && feed.plan.length > 0 && (
+            <ul className="flex flex-col gap-0.5 rounded-md bg-background px-3 py-2 text-xs ring-1 ring-border">
+              {feed.plan.map((entry, index) => (
+                <li key={index} className={`flex items-center gap-2 ${entry.status === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                  <Icon
+                    name={entry.status === 'completed' ? 'check' : entry.status === 'in_progress' ? 'loader' : 'chevron'}
+                    className={`size-3 shrink-0 ${entry.status === 'in_progress' ? 'animate-spin text-foreground' : 'text-muted-foreground'}`}
+                  />
+                  <span className="min-w-0 truncate">{entry.content}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <Composer
           chatId={chatId}
           cwd={cwd}
