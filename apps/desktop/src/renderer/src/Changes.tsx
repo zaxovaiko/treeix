@@ -1,9 +1,10 @@
-import { type DiffLineAnnotation, PatchDiff } from '@pierre/diffs/react'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { type DiffLineAnnotation, PatchDiff, Virtualizer } from '@pierre/diffs/react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { type Attachment, commentsPrompt, extractLines, isReviewComment, type LineRange, linesLabel, type ReviewComment } from '../../shared/comments'
 import { list } from '../../shared/json'
 import type { FilePatch } from '../../shared/types'
 import { CommentCard, CommentDraft, orderRange } from './Comments'
+import { FolderExplorer } from './Explorer'
 import { codeThemeOptions, diffBackground, FileView } from './FileView'
 import { HistoryDialog } from './HistoryDialog'
 import { FileIcon, Icon } from './Icon'
@@ -11,7 +12,7 @@ import type { Navigate } from './codeNavigation'
 import { updateSettings, useSettings } from './settings'
 import { readStored } from './storage'
 import { withKeys, actionKeys } from '../../shared/keymap'
-import { EmptyState, FoldAllButton, IconButton, useActionKeys } from './ui'
+import { EmptyState, FoldAllButton, IconButton, ResizeHandle, useActionKeys, usePersisted } from './ui'
 
 const COMMENTS_KEY = 'comments'
 // ponytail: polls while the panel is open; a file watcher if agents ever edit faster than a glance
@@ -98,6 +99,9 @@ export function Changes({
   const [error, setError] = useState('')
   const [folded, setFolded] = useState<Set<string>>(new Set())
   const [draft, setDraft] = useState<{ path: string; range: LineRange } | null>(null)
+  const [explorer, setExplorer] = usePersisted<boolean>('changes.explorer', false)
+  const [explorerWidth, setExplorerWidth] = usePersisted<number>('changes.explorerWidth', 220)
+  const changed = useMemo(() => new Set(patches?.map((patch) => patch.path)), [patches])
   const all = useComments().filter((comment) => comment.worktreePath === folder && !comment.kind)
 
   useEffect(() => {
@@ -156,8 +160,17 @@ export function Changes({
         <IconButton label={withKeys(diffStyle === 'split' ? 'Unified diff' : 'Split diff', 'changes.diffStyle')} onClick={toggleDiffStyle}>
           <Icon name={diffStyle === 'split' ? 'list' : 'splitRight'} />
         </IconButton>
+        <IconButton label={explorer ? 'Hide files' : 'Show files'} active={explorer} onClick={() => setExplorer(!explorer)}>
+          <Icon name="folder" />
+        </IconButton>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto select-text">
+      <div className="flex min-h-0 flex-1">
+        {explorer && (
+          <nav style={{ width: explorerWidth }} className="relative flex shrink-0 flex-col border-r border-border">
+            <FolderExplorer root={folder} activePath={null} changed={changed} onOpen={(path) => onOpen(path, null)} />
+            <ResizeHandle onResize={setExplorerWidth} />
+          </nav>
+        )}
         {error ? (
           <EmptyState fill icon="branch" title={error} />
         ) : !patches ? (
@@ -165,72 +178,75 @@ export function Changes({
         ) : !patches.length ? (
           <EmptyState fill icon="check" title="No changes" />
         ) : (
-          patches.map((patch) => {
-            const open = !folded.has(patch.path)
-            const fileComments = all.filter((comment) => comment.filePath === patch.path)
-            const fileDraft = draft?.path === patch.path ? draft.range : null
-            const annotations: DiffLineAnnotation<{ commentId: string | null }>[] = [
-              ...fileComments.map((comment) => ({ side: annotationSide(comment.range), lineNumber: comment.range.end, metadata: { commentId: comment.id } })),
-              ...(fileDraft ? [{ side: annotationSide(fileDraft), lineNumber: fileDraft.end, metadata: { commentId: null } }] : [])
-            ]
-            return (
-              <section key={patch.path} className="border-b border-border">
-                <header
-                  onClick={() => toggle(patch.path)}
-                  className="sticky top-0 z-10 flex h-8 cursor-pointer items-center gap-2 bg-background px-3 text-xs hover:bg-accent select-none"
-                >
-                  <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
-                  <FileIcon path={patch.path} />
-                  <span title={patch.path} className="min-w-0 truncate font-mono text-[11.5px]">
-                    {patch.path}
-                  </span>
-                  {fileComments.length > 0 && <Icon name="comment" className="size-3 shrink-0 text-muted-foreground" />}
-                  <span className="flex-1" />
-                  <span className="shrink-0 font-mono tabular-nums">
-                    <span className="text-emerald-400">+{patch.additions}</span> <span className="text-red-400">-{patch.deletions}</span>
-                  </span>
-                  <IconButton label="Open file" onClick={(event) => (event.stopPropagation(), onOpen(patch.path, null))}>
-                    <Icon name="pencil" className="size-3" />
-                  </IconButton>
-                </header>
-                {open && (
-                  <PatchDiff
-                    patch={patch.patch}
-                    className="block"
-                    style={diffBackground()}
-                    lineAnnotations={annotations}
-                    selectedLines={fileDraft}
-                    renderAnnotation={({ metadata }) => {
-                      const comment = fileComments.find((candidate) => candidate.id === metadata.commentId)
-                      if (comment) return <CommentCard comment={comment} onDelete={() => deleteComment(comment)} />
-                      return fileDraft ? (
-                        <CommentDraft
-                          label={`Agent comment on ${linesLabel(fileDraft).toLowerCase()}`}
-                          onSave={(text, attachments) => save(patch, text, attachments)}
-                          onCancel={() => setDraft(null)}
-                        />
-                      ) : null
-                    }}
-                    options={{
-                      ...codeThemeOptions(),
-                      diffStyle,
-                      disableFileHeader: true,
-                      // Both sides in full, so the lines between hunks can be expanded
-                      loadDiffFiles: async ({ name, prevName = name }) => {
-                        const [before, after] = await Promise.all([window.api.readHeadFile(folder, prevName), window.api.readFile(folder, name)])
-                        if (before === null || after === null) throw new Error(`${name} cannot be expanded`)
-                        return { oldFile: { name: prevName, contents: before }, newFile: { name, contents: after } }
-                      },
-                      enableLineSelection: true,
-                      enableGutterUtility: true,
-                      onGutterUtilityClick: (range) => setDraft({ path: patch.path, range: orderRange(range) }),
-                      onLineSelectionEnd: (range) => range && setDraft({ path: patch.path, range: orderRange(range) })
-                    }}
-                  />
-                )}
-              </section>
-            )
-          })
+          // Only the diffs near the viewport render, so a few hundred files and a split/unified switch stay fast
+          <Virtualizer className="min-w-0 flex-1 overflow-auto select-text">
+            {patches.map((patch) => {
+              const open = !folded.has(patch.path)
+              const fileComments = all.filter((comment) => comment.filePath === patch.path)
+              const fileDraft = draft?.path === patch.path ? draft.range : null
+              const annotations: DiffLineAnnotation<{ commentId: string | null }>[] = [
+                ...fileComments.map((comment) => ({ side: annotationSide(comment.range), lineNumber: comment.range.end, metadata: { commentId: comment.id } })),
+                ...(fileDraft ? [{ side: annotationSide(fileDraft), lineNumber: fileDraft.end, metadata: { commentId: null } }] : [])
+              ]
+              return (
+                <section key={patch.path} className="border-b border-border">
+                  <header
+                    onClick={() => toggle(patch.path)}
+                    className="sticky top-0 z-10 flex h-8 cursor-pointer items-center gap-2 bg-background px-3 text-xs hover:bg-accent select-none"
+                  >
+                    <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
+                    <FileIcon path={patch.path} />
+                    <span title={patch.path} className="min-w-0 truncate font-mono text-[11.5px]">
+                      {patch.path}
+                    </span>
+                    {fileComments.length > 0 && <Icon name="comment" className="size-3 shrink-0 text-muted-foreground" />}
+                    <span className="flex-1" />
+                    <span className="shrink-0 font-mono tabular-nums">
+                      <span className="text-emerald-400">+{patch.additions}</span> <span className="text-red-400">-{patch.deletions}</span>
+                    </span>
+                    <IconButton label="Open file" onClick={(event) => (event.stopPropagation(), onOpen(patch.path, null))}>
+                      <Icon name="pencil" className="size-3" />
+                    </IconButton>
+                  </header>
+                  {open && (
+                    <PatchDiff
+                      patch={patch.patch}
+                      className="block"
+                      style={diffBackground()}
+                      lineAnnotations={annotations}
+                      selectedLines={fileDraft}
+                      renderAnnotation={({ metadata }) => {
+                        const comment = fileComments.find((candidate) => candidate.id === metadata.commentId)
+                        if (comment) return <CommentCard comment={comment} onDelete={() => deleteComment(comment)} />
+                        return fileDraft ? (
+                          <CommentDraft
+                            label={`Agent comment on ${linesLabel(fileDraft).toLowerCase()}`}
+                            onSave={(text, attachments) => save(patch, text, attachments)}
+                            onCancel={() => setDraft(null)}
+                          />
+                        ) : null
+                      }}
+                      options={{
+                        ...codeThemeOptions(),
+                        diffStyle,
+                        disableFileHeader: true,
+                        // Both sides in full, so the lines between hunks can be expanded
+                        loadDiffFiles: async ({ name, prevName = name }) => {
+                          const [before, after] = await Promise.all([window.api.readHeadFile(folder, prevName), window.api.readFile(folder, name)])
+                          if (before === null || after === null) throw new Error(`${name} cannot be expanded`)
+                          return { oldFile: { name: prevName, contents: before }, newFile: { name, contents: after } }
+                        },
+                        enableLineSelection: true,
+                        enableGutterUtility: true,
+                        onGutterUtilityClick: (range) => setDraft({ path: patch.path, range: orderRange(range) }),
+                        onLineSelectionEnd: (range) => range && setDraft({ path: patch.path, range: orderRange(range) })
+                      }}
+                    />
+                  )}
+                </section>
+              )
+            })}
+          </Virtualizer>
         )}
       </div>
     </div>

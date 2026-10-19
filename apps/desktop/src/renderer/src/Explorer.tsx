@@ -269,11 +269,13 @@ export function Explorer({
 export function FolderExplorer({
   root,
   activePath,
+  changed = NOTHING_CHANGED,
   onOpen,
   onParent
 }: {
   root: string
   activePath: string | null
+  changed?: Set<string>
   onOpen: (path: string) => void
   onParent?: () => void
 }): React.JSX.Element {
@@ -298,7 +300,7 @@ export function FolderExplorer({
     <Explorer
       files={tree}
       rootPath={repoFiles ? root : undefined}
-      changed={NOTHING_CHANGED}
+      changed={changed}
       activePath={activePath}
       onOpen={onOpen}
       onExpand={repoFiles ? undefined : load}
