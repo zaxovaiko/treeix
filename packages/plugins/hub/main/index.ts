@@ -223,6 +223,14 @@ const plugin: MainPlugin = {
     const autoResumeFile = join(context.dataPath, 'autoResume.json')
     context.handle('autoResume', async () => (await readJsonFile(autoResumeFile)) === true)
     context.handle('setAutoResume', (_, on: unknown) => writeFile(autoResumeFile, JSON.stringify(on === true)))
+    // Off, nothing starts on its own (schedules, watches, events, pull request follow-ups); runs already going finish
+    const autopilotFile = join(context.dataPath, 'autopilot.json')
+    const autopilotOn = async (): Promise<boolean> => (await readJsonFile(autopilotFile)) !== false
+    context.handle('autopilot', autopilotOn)
+    context.handle('setAutopilot', async (_, on: unknown) => {
+      await writeFile(autopilotFile, JSON.stringify(on !== false))
+      context.broadcast('autopilot', on !== false)
+    })
     // Quitting interrupts runs itself; recover() catches the ones a crash left running
     const atQuitFile = join(context.dataPath, 'interruptedAtQuit.json')
     void Promise.all([engine.recover(), readJsonFile(atQuitFile)]).then(async ([crashed, atQuit]) => {
@@ -387,12 +395,15 @@ const plugin: MainPlugin = {
       timer = setTimeout(
         () => {
           const now = new Date()
-          void fireSchedules(now)
           void evals.fire(now)
-          if (now.getMinutes() % WATCH_EVERY_MIN === 0) {
-            void checkWatches().then(decisions.poll)
-            void pullRequests.check().catch((error: unknown) => console.error('[hub] Following pull requests failed', error))
-          }
+          void autopilotOn().then((on) => {
+            if (!on) return
+            void fireSchedules(now)
+            if (now.getMinutes() % WATCH_EVERY_MIN === 0) {
+              void checkWatches().then(decisions.poll)
+              void pullRequests.check().catch((error: unknown) => console.error('[hub] Following pull requests failed', error))
+            }
+          })
           tick()
         },
         MINUTE_MS - (Date.now() % MINUTE_MS)
@@ -478,6 +489,7 @@ const plugin: MainPlugin = {
 
     // A workflow whose input lists an event starts on it
     context.onEvent(async (name, payload) => {
+      if (!(await autopilotOn())) return false
       const triggered = (await workflows.get()).filter((workflow) => workflow.nodes.some((node) => node.kind === 'input' && node.events?.includes(name)))
       const ids = (await agents.get()).map((agent) => agent.id)
       let started = false

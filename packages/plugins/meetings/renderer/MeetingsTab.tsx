@@ -67,7 +67,7 @@ function MeetingView({ id }: { id: string }): React.JSX.Element {
   if (!meeting) return <EmptyState fill title="Loading..." />
   const act = (channel: string, done: string): void =>
     void bridge.invoke<unknown>(channel, id).then(
-      (result) => host.flash(result === false ? 'No AI Hub workflow starts on meetings.transcribed' : done),
+      (result) => host.flash(result === false ? 'No workflow starts on meetings.transcribed, or Autopilot is off' : done),
       (reason: unknown) => host.flash(errorMessage(reason))
     )
   return (

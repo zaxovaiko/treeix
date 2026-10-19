@@ -156,7 +156,7 @@ const plugin: MainPlugin = {
             messages,
             text: render(messages)
           }
-          if (!(await context.emit('messages', payload))) return setStatus({ error: 'No AI Hub workflow starts on Slack messages, so they wait for one' })
+          if (!(await context.emit('messages', payload))) return setStatus({ error: 'No workflow starts on Slack messages (or Autopilot is off), so they wait' })
         }
         await cut(data.length)
         setStatus({ error: null, lastBatch: Date.now() })

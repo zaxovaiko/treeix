@@ -474,14 +474,19 @@ export function Bots(): React.JSX.Element {
   // ⌘, is the menu's, which sends it here
   useEffect(() => window.api.onOpenSettings(() => setSelectedId(CONFIGURE)), [])
 
-  // Keep awake's switch sits beside New chat, as it did in the old shell's title bar
+  // Autopilot's and Keep awake's switches sit beside Settings, as they did in the old shell's title bar
   const { loaded } = usePlugins()
-  const KeepAwake = loaded.find(({ manifest }) => manifest.id === 'keep-awake')?.plugin.titleBar?.[0]?.render
+  const switches = ['hub', 'keep-awake'].flatMap((id) => {
+    const render = loaded.find(({ manifest }) => manifest.id === id)?.plugin.titleBar?.[0]?.render
+    return render ? [{ id, Toggle: render }] : []
+  })
 
   const sidebar = (
     <aside style={{ width: sidebarWidth }} className={`relative flex shrink-0 flex-col ${islandUi ? '' : 'border-r border-border'}`}>
       <div className={`flex h-10 shrink-0 items-center justify-end gap-1 px-2 ${chromeless ? '' : 'pl-[80px] [-webkit-app-region:drag]'}`}>
-        {KeepAwake && <KeepAwake />}
+        {switches.map(({ id, Toggle }) => (
+          <Toggle key={id} />
+        ))}
         <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => setSelectedId(CONFIGURE)}>
           <Icon name="settings" />
         </IconButton>

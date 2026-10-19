@@ -1,5 +1,6 @@
 import { type ComponentType, lazy, Suspense, useEffect, useSyncExternalStore } from 'react'
 import { createStore, type RendererPlugin, useHost } from '@treeix/sdk'
+import { Icon } from '@treeix/app/Icon'
 import { type Agent, useAgents } from '@treeix/app/agents'
 import { subscribeSettings, useSettings } from '@treeix/app/settings'
 import { notify } from '@treeix/app/notifications'
@@ -21,10 +22,13 @@ import {
   hubEditing,
   hubRuns,
   followEvals,
+  followAutopilot,
+  hubAutopilot,
   hubSelection,
   hubSettings,
   hubWorkflows,
   onOpenRun,
+  setAutopilot,
   TAB_ID
 } from './store'
 
@@ -166,6 +170,7 @@ function Root(): React.JSX.Element {
   useEffect(followRuns, [])
   useEffect(followTickets, [])
   useEffect(followEvals, [])
+  useEffect(followAutopilot, [])
   useRuntimes()
   useRunNotifications()
   const bots = useBots()
@@ -182,6 +187,39 @@ function Root(): React.JSX.Element {
   )
 }
 
+/** Lit while a workflow or agent would start on its own; a click stops all of that, runs already going finish */
+function Autopilot(): React.JSX.Element {
+  const on = hubAutopilot.useValue()
+  const workflows = hubWorkflows.useValue()
+  const agents = hubAgents.useValue()
+  const armed =
+    workflows.some((workflow) =>
+      workflow.nodes.some(
+        (node) => node.kind === 'input' && (node.watches?.some((watch) => watch.enabled) || node.schedules?.some((schedule) => schedule.enabled) || Boolean(node.events?.length))
+      )
+    ) || agents.some((agent) => agent.schedules?.some((schedule) => schedule.enabled))
+  const state = !on
+    ? 'Autopilot is off: no workflow starts on its own'
+    : armed
+      ? 'Autopilot is on: workflows start on their watches, schedules and events'
+      : 'Autopilot is on, but no workflow has a watch, schedule or event turned on'
+  const title = `${state}. Click to turn it ${on ? 'off' : 'on'}`
+  return (
+    <button
+      title={title}
+      aria-label={title}
+      aria-pressed={on}
+      onClick={() => void setAutopilot(!on)}
+      className={`relative flex h-6 items-center rounded-md px-1.5 hover:bg-accent [-webkit-app-region:no-drag] ${
+        !on ? 'text-muted-foreground/40' : armed ? 'bg-emerald-400/12 text-emerald-400' : 'bg-foreground/8 text-foreground'
+      }`}
+    >
+      <Icon name="sparkles" className="size-3.5" />
+      {!on && <span className="absolute top-1/2 left-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current" />}
+    </button>
+  )
+}
+
 const plugin: RendererPlugin = {
   tabs: [
     {
@@ -194,6 +232,7 @@ const plugin: RendererPlugin = {
     { id: 'hub.configure', label: 'Configure', icon: 'settings', order: 31, render: Configure, hidden: true }
   ],
   Root,
+  titleBar: [{ order: 0, render: Autopilot }],
   services: { bots: { list: botList.get, subscribe: botList.subscribe, Thread } },
   Settings: HubSettings,
   commands: () => [

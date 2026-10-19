@@ -118,6 +118,16 @@ export function followTickets(): () => void {
   return bridge.on('tickets', (states) => Array.isArray(states) && hubTicketStates.set(states.filter(isTicketState)))
 }
 
+/** Whether workflows and agents start on their own: schedules, watches, events, pull request follow-ups */
+export const hubAutopilot = createStore(true)
+
+export function followAutopilot(): () => void {
+  void bridge.invoke<boolean>('autopilot').then(hubAutopilot.set)
+  return bridge.on('autopilot', (on) => typeof on === 'boolean' && hubAutopilot.set(on))
+}
+
+export const setAutopilot = (on: boolean): Promise<void> => bridge.invoke<void>('setAutopilot', on)
+
 /** Clicks on main's notifications for scheduled runs; returns the unfollow */
 export const onOpenRun = (listener: (runId: string) => void): (() => void) => bridge.on('openRun', (id) => typeof id === 'string' && listener(id))
 
