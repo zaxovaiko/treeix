@@ -574,7 +574,7 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
 /** Keys the plugin owns that aren't single actions: the digit row and the close that rides the app's ⌘W */
 const SHORTCUTS: ShortcutInfo[] = (
   [
-    ['⌥ 1-9', 'Nth session of the workspace, 9 is the last (in a terminal)', undefined],
+    ['⌥ 1-9', 'Nth terminal session, 9 is the last (in a terminal)', undefined],
     ['⌘ W', 'Close the session on screen to History', undefined]
   ] satisfies [string, string, string | undefined][]
 ).map(([keys, label, page]) => ({ keys, label, section: 'Terminal', page }))

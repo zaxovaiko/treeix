@@ -1,4 +1,4 @@
-import { actionForEvent, actionKeys } from '../../shared/keymap'
+import { actionForEvent } from '../../shared/keymap'
 import { useSettings } from './settings'
 import { useEffect, useRef, useState } from 'react'
 import { type Attachment, formatComments, type LineRange, linesLabel, rangeLabel, type ReviewComment, type Side } from '../../shared/comments'
@@ -529,7 +529,6 @@ export function AgentCommentsDrawer({
     }
   }, [])
 
-  const toggleKeys = actionKeys('app.comments')
   return (
     <div
       ref={ref}
@@ -544,7 +543,7 @@ export function AgentCommentsDrawer({
         <span className="text-xs text-muted-foreground tabular-nums">{comments.length}</span>
         <span className="flex-1" />
         <button
-          title={`Close (esc${toggleKeys ? ` or ${toggleKeys}` : ''})`}
+          title="Close (esc)"
           aria-label="Close agent comments"
           onClick={onClose}
           className="flex h-6 items-center gap-1 rounded-md px-1 text-muted-foreground hover:bg-accent hover:text-foreground"

@@ -9,11 +9,10 @@ export const MENU_SECTIONS: [section: string, label: string][] = [
 ]
 
 /**
- * Reachable from the menu, but without their key beside them. macOS hands a menu key equivalent to the item
- * before the web contents sees the keydown, which would skip the context filters these two have in `useShellKeys`:
- * zen stays out of text fields, and so does the keyboard sheet.
+ * Reachable from the menu, but without its key beside it. macOS hands a menu key equivalent to the item before the
+ * web contents sees the keydown, which would skip the app's filter that keeps the keyboard sheet out of text fields.
  */
-export const NO_ACCELERATOR = new Set(['shell.zen', 'app.shortcuts'])
+export const NO_ACCELERATOR = new Set(['app.shortcuts'])
 
 /** Runnable, but not menu material: the app menu already carries Settings, and the rest are second keys for one command */
-export const NOT_IN_MENU = new Set(['app.settings', 'app.paletteAlt'])
+export const NOT_IN_MENU = new Set(['app.settings', 'panel.listAlt', 'app.shortcutsBare'])

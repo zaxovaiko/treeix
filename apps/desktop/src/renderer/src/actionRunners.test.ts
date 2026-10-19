@@ -35,12 +35,12 @@ test('the menu carries the short label and the key the action answers to', () =>
 test('an alias key and a context-guarded key are kept out of the menu payload', async () => {
   const { defineActions: define, key: bind } = await import('../../shared/keymap')
   define([
-    { id: 'app.paletteAlt', label: 'Search everything, second key', section: 'Go to', keys: bind('KeyP', { meta: true, shift: true }) },
-    { id: 'shell.zen', label: 'Zen', section: 'Panels', keys: bind('Enter', { meta: true, shift: true }) }
+    { id: 'app.shortcuts', label: 'Keyboard sheet', section: 'Panels', keys: bind('Slash', { meta: true }) },
+    { id: 'app.shortcutsBare', label: 'Keyboard sheet, second key', section: 'Panels', keys: bind('Slash', { shift: true }) }
   ])
-  const drops = [registerActionRunner('app.paletteAlt', () => undefined), registerActionRunner('shell.zen', () => undefined)]
-  // The second key never reaches the menu, and zen reaches it without its key, since macOS would skip the typing guard
-  expect(menuActions()).toEqual([{ id: 'shell.zen', label: 'Zen', section: 'Panels' }])
+  const drops = [registerActionRunner('app.shortcutsBare', () => undefined), registerActionRunner('app.shortcuts', () => undefined)]
+  // The second key never reaches the menu, and the sheet reaches it without its key, since macOS would skip the typing guard
+  expect(menuActions()).toEqual([{ id: 'app.shortcuts', label: 'Keyboard sheet', section: 'Panels' }])
   drops.forEach((drop) => drop())
 })
 
