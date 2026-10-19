@@ -75,7 +75,7 @@ export function CleanupDialog({ repos, onRemoved, onClose }: { repos: Repo[]; on
             onClick={() => toggle(worktree.path)}
             className="flex h-8 w-full items-center gap-2.5 rounded-md px-1.5 text-left text-[13px] hover:bg-accent"
           >
-            <span className={`grid size-4 shrink-0 place-items-center rounded ${checked.has(worktree.path) ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
+            <span className={`grid size-4 shrink-0 place-items-center rounded ${checked.has(worktree.path) ? 'bg-primary text-primary-foreground' : 'ring-1 ring-input'}`}>
               {checked.has(worktree.path) && <Icon name="check" className="size-3" />}
             </span>
             <span className="min-w-0 truncate font-mono text-[12.5px]">{branchLabel(worktree)}</span>

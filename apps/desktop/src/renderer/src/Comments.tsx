@@ -1,4 +1,5 @@
 import { actionForEvent, actionKeys } from '../../shared/keymap'
+import { useSettings } from './settings'
 import { useEffect, useRef, useState } from 'react'
 import { type Attachment, formatComments, type LineRange, linesLabel, rangeLabel, type ReviewComment, type Side } from '../../shared/comments'
 import { focusZone, ISLAND, KeyHintLabel, Keys, useShell, PANE_HEADER } from '@treeix/sdk'
@@ -127,6 +128,7 @@ const cardClass = 'mx-3 my-2 rounded-lg border border-border bg-card font-sans t
 
 /** A reference sends its own text when nothing on this machine could fetch it; this is the manual override */
 function InlineToggle({ comment, onChange }: { comment: ReviewComment; onChange: (comment: ReviewComment) => void }): React.JSX.Element {
+  'use no memo' // tool availability is read from module state during render
   const on = comment.inline ?? inlineByDefault(comment.tool)
   const why = comment.tool && inlineByDefault(comment.tool) ? `${comment.tool} is not installed, so nothing could read it` : `${comment.tool ?? 'The agent'} can read it`
   return (
@@ -341,7 +343,7 @@ export function CommentDraft({
         <button
           onClick={save}
           disabled={!canSave}
-          className="h-7 shrink-0 rounded-md bg-primary whitespace-nowrap px-2.5 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+          className="h-7 shrink-0 rounded-md bg-primary whitespace-nowrap px-2.5 text-xs font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
         >
           {busy ? '...' : submitLabel}
         </button>
@@ -474,6 +476,8 @@ export function AgentCommentsDrawer({
   onRestore: (id: string) => void
   onClose: () => void
 }): React.JSX.Element {
+  'use no memo' // shortcut labels are read from the keymap during render
+  useSettings()
   const island = useShell().islandUi
   const ref = useRef<HTMLDivElement>(null)
   const paths = [...new Set(comments.map((comment) => comment.worktreePath))]

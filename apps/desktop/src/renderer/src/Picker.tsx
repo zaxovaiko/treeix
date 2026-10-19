@@ -105,7 +105,7 @@ export function Picker({
               if (event.key === 'Enter' && ordered[active]) pick(ordered[active].id)
             }}
             placeholder={placeholder}
-            className="mb-1 h-7 w-full shrink-0 rounded-md px-2 text-xs ring-1 ring-border outline-none placeholder:text-muted-foreground/70"
+            className="mb-1 h-8 w-full shrink-0 border-b border-border bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground/70"
           />
           <div className="max-h-80 min-h-0 overflow-y-auto">
             {(sections.length === 0 || note) && <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{note ?? 'No matches'}</p>}
@@ -153,7 +153,8 @@ export function Select({
   width = 'w-72',
   note,
   onOpen,
-  transparent = false
+  transparent = false,
+  soft = false
 }: {
   value: string | null
   options: SelectOption[]
@@ -168,6 +169,8 @@ export function Select({
   onOpen?: () => void
   /** A trigger without the field fill, for a pane header */
   transparent?: boolean
+  /** A borderless rounded trigger, for the bot editor */
+  soft?: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -206,7 +209,11 @@ export function Select({
       }))}
       trigger={
         <span
-          className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-md border ${transparent ? '' : 'bg-muted'} px-2.5 text-left text-[13px] group-focus:border-foreground/22 ${open ? 'border-foreground/22' : 'border-input'}`}
+          className={
+            soft
+              ? `flex h-9 w-full min-w-0 items-center gap-2 rounded-xl bg-foreground/5 px-3 text-left text-[13px] ring-1 group-focus:ring-input ${open ? 'ring-input' : 'ring-transparent'}`
+              : `flex h-8 w-full min-w-0 items-center gap-2 rounded-md border ${transparent ? '' : 'bg-muted'} px-2.5 text-left text-[13px] group-focus:border-foreground/22 ${open ? 'border-foreground/22' : 'border-input'}`
+          }
         >
           <span className={`min-w-0 flex-1 truncate ${current ? 'text-foreground' : 'text-muted-foreground/60'}`}>{current?.label ?? placeholder}</span>
           {current?.hint && <span className="shrink-0 truncate text-xs text-muted-foreground">{current.hint}</span>}

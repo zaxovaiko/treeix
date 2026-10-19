@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useSettings } from './settings'
 import { actionKeys } from '../../shared/keymap'
 import { Icon, type IconName } from './Icon'
 import { Popup } from './ui'
@@ -164,6 +165,8 @@ export function PanelToggle({
   onDragStart: (event: React.DragEvent) => void
   onDragEnd: () => void
 }): React.JSX.Element {
+  'use no memo' // shortcut labels are read from the keymap during render
+  useSettings()
   const [menuOpen, setMenuOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null)
   const { label, icon } = info

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 
 import { errorMessage } from '../../shared/errors'
+import { actionForEvent } from '../../shared/keymap'
 import { IS_MAC } from '../../shared/platform'
 import { keysText } from '../../shared/shortcut'
 import { readStored } from './storage'
@@ -140,6 +141,22 @@ export function CopyButton({ text, label = 'Copy', className = 'size-3' }: { tex
   )
 }
 
+/** Window keys while the component is mounted: the first action whose key was pressed runs and takes the key */
+export function useActionKeys(handlers: Record<string, () => void>): void {
+  const latest = useRef(handlers)
+  latest.current = handlers
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const id = event.defaultPrevented ? undefined : actionForEvent(event, Object.keys(latest.current))
+      if (!id) return
+      event.preventDefault()
+      latest.current[id]()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+}
+
 export function IconButton({
   label,
   active = false,
@@ -160,7 +177,7 @@ export function IconButton({
       disabled={disabled}
       onClick={onClick}
       className={`inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 [-webkit-app-region:no-drag] ${
-        active ? 'text-foreground' : 'text-muted-foreground'
+        active ? 'bg-accent text-foreground' : 'text-muted-foreground'
       }`}
     >
       {children}
@@ -560,7 +577,7 @@ export function TextPrompt({
         <button
           onClick={submit}
           disabled={!value.trim() || busy}
-          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
         >
           {busy ? 'Working…' : confirmLabel}
         </button>

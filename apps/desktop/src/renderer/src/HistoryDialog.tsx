@@ -1,4 +1,5 @@
 import { MultiFileDiff } from '@pierre/diffs/react'
+import { useSettings } from './settings'
 import { useEffect, useState } from 'react'
 import type { HistoryEntry } from '../../shared/types'
 import { codeThemeOptions, diffBackground } from './FileView'
@@ -10,6 +11,8 @@ const timeLabel = (at: number): string => new Date(at).toLocaleString(undefined,
 
 /** Local snapshots taken before autosave overwrote the file, diffed against what is on disk now */
 export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { worktreePath: string; path: string; onRestored: () => void; onClose: () => void }): React.JSX.Element {
+  'use no memo' // diff colors and code themes are read from settings during render
+  useSettings()
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<string | null>(null)
@@ -77,7 +80,7 @@ export function HistoryDialog({ worktreePath, path, onRestored, onClose }: { wor
         <button
           onClick={restore}
           disabled={snapshot === null || snapshot === current}
-          className="h-6 rounded-md bg-primary px-2.5 font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+          className="h-6 rounded-md bg-primary px-2.5 font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
         >
           Restore this version
         </button>

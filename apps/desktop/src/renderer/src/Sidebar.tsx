@@ -86,6 +86,7 @@ export function Sidebar({
   /** Workspaces already pick their projects, so the folder filter only shows for All projects */
   folderFilter?: boolean
 }): React.JSX.Element {
+  'use no memo' // folder open state is read from settings during render
   const [query, setQuery] = usePersisted<string>(workspaceKey('sidebar.query'), '')
   const { sidebarBranches, sections } = useSettings()
   const [changesOnly, setChangesOnly] = usePersisted<boolean>(workspaceKey('sidebar.changesOnly'), false)

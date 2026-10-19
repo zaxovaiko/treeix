@@ -62,6 +62,9 @@ export function actionKeys(id: string): string {
   return shortcut ? shortcutLabel(shortcut) : ''
 }
 
+/** "Split right (⌘D)": a tooltip shows the bracketed part as a key chip; the label alone while the action has no key */
+export const withKeys = (label: string, id: string): string => (actionKeys(id) ? `${label} (${actionKeys(id)})` : label)
+
 const sameShortcut = (a: Shortcut | null, b: Shortcut | null): boolean =>
   a !== null && b !== null && a.code === b.code && a.meta === b.meta && a.alt === b.alt && a.ctrl === b.ctrl && a.shift === b.shift
 

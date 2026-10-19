@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import { openMenu } from '@treeix/app/contextMenu'
+import { useService } from '@treeix/app/plugins'
 import { createBridge, useHost, PANE_HEADER } from '@treeix/sdk'
 import { usePersisted } from '@treeix/app/ui'
 import { toUrl } from './address'
@@ -78,7 +79,7 @@ function EmptyPageSection({ title, items }: { title: string; items: Suggestion[]
 /** A blank tab: what the browser is for and how to start */
 function EmptyPage({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   const running = useRunning()
-  const { saved } = browserSettings.use()
+  const { saved } = browserSettings.useValue()
   return (
     <div className="flex h-full flex-col items-center justify-center-safe gap-4 overflow-y-auto px-6 text-center">
       <div className="flex h-16 w-22 flex-col rounded-xl text-muted-foreground ring-[1.5px] ring-foreground/15">
@@ -199,7 +200,7 @@ function TabStrip(): React.JSX.Element {
                 onDoubleClick={() => setRenamingGroup(group)}
                 onContextMenu={(event) => groupMenu(event, group)}
                 {...dropProps((id) => updateBrowser((current) => groupTab(current, id, group)))}
-                className={`ml-1 flex h-5 max-w-32 shrink-0 items-center rounded px-1.5 text-[11px] font-medium text-background ${groupColor(group)}`}
+                className={`ml-1 flex h-5 max-w-32 shrink-0 items-center rounded px-1.5 text-[11px] font-medium text-on-foreground ${groupColor(group)}`}
               >
                 {renamingGroup === group ? (
                   <NameInput value={group} label="Group name" onDone={(name) => finishGroupRename(group, name)} />
@@ -253,6 +254,7 @@ function TabStrip(): React.JSX.Element {
 
 export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.Element {
   const host = useHost()
+  const sessions = useService('sessions')
   const { tabs, activeId } = useBrowser()
   const tab = tabs.find((candidate) => candidate.id === activeId)
   const designOn = useDesign().on
@@ -371,7 +373,7 @@ export function BrowserView({ place }: { place: 'tab' | 'panel' }): React.JSX.El
         <button aria-label="Developer tools" title="Developer tools (⌥⌘I)" className={toolButton} onClick={() => runBrowserAction('devtools')}>
           <Icon name="code" className="size-3.5" />
         </button>
-        {place === 'tab' && host.service('sessions') && (
+        {place === 'tab' && sessions && (
           <button
             aria-label="Terminal"
             title="Terminal beside the page; move it to a side from its title bar button"

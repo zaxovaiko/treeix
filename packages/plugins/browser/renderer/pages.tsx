@@ -206,7 +206,7 @@ function Page({ tab, active }: { tab: BrowserTab; active: boolean }): React.JSX.
 type Design = { on: boolean; selection: { tabId: string; value: ElementSelection } | null }
 const designStore = createStore<Design>({ on: false, selection: null })
 const setDesignState = designStore.set
-export const useDesign = designStore.use
+export const useDesign = designStore.useValue
 export const getDesign = designStore.get
 
 /** Design mode applies to every open page, so switching tabs keeps it */

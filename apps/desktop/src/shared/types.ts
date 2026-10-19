@@ -131,7 +131,7 @@ export type Api = {
   home: string
   scan: () => Promise<Repo[]>
   diff: (worktreePath: string) => Promise<FilePatch[]>
-  listFiles: (worktreePath: string) => Promise<WorktreeFiles>
+  listFiles: (worktreePath: string) => Promise<WorktreeFiles | null>
   listDirectory: (root: string, folder: string) => Promise<string[]>
   /** Native folder picker; null when cancelled */
   pickFolder: () => Promise<string | null>

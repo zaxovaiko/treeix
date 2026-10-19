@@ -10,7 +10,7 @@ import { EditorComments, useEditorNavigation } from './monaco/comments'
 import { normalizeEol } from './monaco/text'
 import { EmptyState, errorMessage } from './ui'
 
-import { activeTheme, codeThemes, getSettings } from './settings'
+import { activeTheme, codeThemes, getSettings, useSettings } from './settings'
 import { withAlpha } from './themes'
 import { primaryKey } from '../../shared/shortcut'
 
@@ -20,9 +20,13 @@ export const diffBackground = (): React.CSSProperties => {
   return { '--diffs-dark-bg': background, '--diffs-light-bg': background } as React.CSSProperties
 }
 /** Both slots' code themes load; themeType picks the one matching the app theme */
-export const codeThemeOptions = (): { theme: Record<'dark' | 'light', string>; themeType: 'dark' | 'light' } => ({
+/** A comment row under selected lines keeps its plain background; the selection tint stops at the code */
+const COMMENT_ROW_CSS =
+  '[data-line-annotation][data-selected-line],[data-gutter-buffer=annotation][data-selected-line]{--diffs-computed-selected-line-bg:var(--diffs-computed-diff-line-bg)}'
+export const codeThemeOptions = (): { theme: Record<'dark' | 'light', string>; themeType: 'dark' | 'light'; unsafeCSS: string } => ({
   theme: codeThemes(),
-  themeType: activeTheme().mode
+  themeType: activeTheme().mode,
+  unsafeCSS: COMMENT_ROW_CSS
 })
 const SCROLL_ATTEMPTS = 60
 
@@ -135,6 +139,8 @@ function TextFileView({
   onSaved?: () => void
   onShowHistory?: () => void
 }): React.JSX.Element {
+  'use no memo' // diff colors and code themes are read from settings during render
+  useSettings()
   const [loadedContents, setContents] = useState<string | null | undefined>(undefined)
   const contents = providedContents === undefined ? loadedContents : providedContents
   /** Gone from disk, e.g. deleted from a terminal while the tab was open */

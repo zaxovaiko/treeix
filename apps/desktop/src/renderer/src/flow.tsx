@@ -122,10 +122,14 @@ export const LAYOUTS = [
   { id: 'fit', label: 'Fit the screen' },
   { id: 'horizontal', label: 'Left to right' },
   { id: 'vertical', label: 'Top to bottom' },
+  { id: 'hierarchy', label: 'Hierarchy' },
   { id: 'grid', label: 'Grid' },
   { id: 'circle', label: 'Circle' }
 ] as const
 export type Layout = (typeof LAYOUTS)[number]['id']
+
+/** The canvas shape a graph is laid out for before it has been measured */
+export const START_ASPECT = 16 / 10
 
 /** Tried column heights between the tallest node and the tallest column */
 const WRAP_STEPS = 24
@@ -135,7 +139,8 @@ type Placement = { placed: Map<string, Point>; width: number; height: number }
 /**
  * `layered` and `untangle`, then arranged as `layout` asks: `fit` wraps each column into as many side-by-side columns as
  * fill a canvas `aspect` wide per unit of height at the largest zoom, `vertical` turns the columns into rows, `grid` fills
- * rows in that order with as many per row as fill the canvas best, `circle` rings them in that order, neighbours a column apart
+ * rows in that order with as many per row as fill the canvas best, `circle` rings them in that order, neighbours a column apart,
+ * `hierarchy` hangs each node off one source a column before it, centered beside its own subtree
  */
 export function prettify<N extends Positioned>(
   nodes: N[],
@@ -186,7 +191,36 @@ export function prettify<N extends Positioned>(
     })
     return { placed, width: 2 * radius + column, height: 2 * radius + gap }
   }
+  const tree = (): Placement => {
+    const level = new Map(untangled.map((node) => [node.id, Math.round(node.position.x / column)]))
+    const order = levels.flat()
+    const children = new Map<string, N[]>()
+    const hasParent = new Set<string>()
+    for (const node of order) {
+      const parent = edges.find((edge) => edge.target === node.id && level.get(edge.source) === (level.get(node.id) ?? 0) - 1)?.source
+      if (!parent) continue
+      children.set(parent, [...(children.get(parent) ?? []), node])
+      hasParent.add(node.id)
+    }
+    const placed = new Map<string, Point>()
+    // Where each column is free from, so a node taller than its subtree never overlaps the one above it
+    const bottom = new Map<number, number>()
+    let next = 0
+    const place = (node: N): number => {
+      const at = level.get(node.id) ?? 0
+      const centers = (children.get(node.id) ?? []).map(place)
+      const wanted = centers.length ? (centers[0] + centers[centers.length - 1]) / 2 - height(node) / 2 : next
+      const y = Math.max(wanted, bottom.get(at) ?? 0)
+      bottom.set(at, y + height(node))
+      next = Math.max(next, y + height(node))
+      placed.set(node.id, { x: at * column, y })
+      return y + height(node) / 2
+    }
+    for (const node of order) if (!hasParent.has(node.id)) place(node)
+    return { placed, width: levels.length * column, height: next }
+  }
   const chosen = (() => {
+    if (layout === 'hierarchy') return tree()
     if (layout === 'vertical') return rows(levels)
     if (layout === 'circle') return ring(levels.flat())
     if (layout === 'grid') {
@@ -209,7 +243,7 @@ export function FlowControls({ onLayout }: { onLayout: (view: { layout: Layout; 
   // Where the menu opens: the button, measured when clicked
   const [open, setOpen] = useState<DOMRect | null>(null)
   return (
-    <Controls showInteractive={false}>
+    <Controls showInteractive={false} className="overflow-hidden rounded-lg">
       <ControlButton title="Prettify" aria-label="Prettify" aria-expanded={open !== null} onClick={(event) => setOpen(open ? null : event.currentTarget.getBoundingClientRect())}>
         <Icon name="wand" />
       </ControlButton>

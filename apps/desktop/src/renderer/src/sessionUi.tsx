@@ -1,6 +1,6 @@
 import type { Repo } from '../../shared/types'
 import { baseName, branchLabel } from './Sidebar'
-import { agentOr, isAgent } from './agents'
+import { agentOr, isAgent, useAgents } from './agents'
 import { type Activity, agentActivity } from './activity'
 import type { SessionKind, SessionStatus, SessionSummary } from '@treeix/sdk'
 
@@ -25,6 +25,8 @@ export function worktreeLabel(repos: Repo[] | null, worktreePath: string): strin
 }
 
 export function KindBadge({ kind }: { kind: SessionKind }): React.JSX.Element {
+  'use no memo' // agent mark is read from the agents list during render
+  useAgents()
   const { mark, color } = agentOr(kind)
   return (
     <span

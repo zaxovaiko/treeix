@@ -2,7 +2,7 @@ import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useState } from 'react'
 import { applyNodeChanges, Background, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
 import { createBridge, PageLayout, PANE_HEADER, useHost } from '@treeix/sdk'
-import { FLOW_THEME, FlowControls, layered, prettify } from '@treeix/app/flow'
+import { FLOW_THEME, FlowControls, prettify, START_ASPECT } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { Segmented, Switch } from '@treeix/app/settingsUi'
 import { errorMessage, IconButton, usePersisted } from '@treeix/app/ui'
@@ -44,10 +44,11 @@ function toFlow(graph: Graph): { nodes: BoxNode[]; edges: Edge[] } {
     source: edge.source,
     target: edge.target,
     data: { count: edge.count },
-    style: { strokeWidth: 1 + Math.log2(edge.count), strokeDasharray: edge.kind === 'devDependencies' ? '4 3' : undefined }
+    // Faint until a node is picked, so a hundred links read as a shape instead of a wall
+    style: { strokeOpacity: 0.25 }
   }))
   const nodes: BoxNode[] = graph.nodes.map((item, index) => ({ id: item.id, type: 'box', position: { x: 0, y: index }, data: { item } }))
-  return { nodes: layered(nodes, edges, LAYOUT), edges }
+  return { nodes: prettify(nodes, edges, { ...LAYOUT, aspect: START_ASPECT, layout: 'hierarchy' }), edges }
 }
 
 export function DependenciesPage(): React.JSX.Element {
@@ -78,7 +79,7 @@ export function DependenciesPage(): React.JSX.Element {
   const selected = new Set(nodes.filter((node) => node.selected).map((node) => node.id))
   const edges = (flow?.edges ?? []).map((edge) =>
     selected.has(edge.source) || selected.has(edge.target)
-      ? { ...edge, animated: true, label: view === 'folders' ? String(edge.data?.count) : undefined, style: { ...edge.style, stroke: 'var(--color-primary)' } }
+      ? { ...edge, animated: true, label: view === 'folders' ? String(edge.data?.count) : undefined, style: { stroke: 'var(--color-primary)' } }
       : edge
   )
 
@@ -99,7 +100,7 @@ export function DependenciesPage(): React.JSX.Element {
 
   const main = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={`${PANE_HEADER} gap-3 px-3 text-xs text-muted-foreground`}>
+      <div className={`${PANE_HEADER} @container gap-2 px-3 text-xs text-muted-foreground`}>
         <WorktreeSelect value={worktree} onChange={setWorktree} />
         <Segmented
           value={view}
@@ -115,8 +116,8 @@ export function DependenciesPage(): React.JSX.Element {
             External
           </span>
         ) : (
-          <span className="flex items-center gap-1">
-            Depth
+          <span title="Depth" className="flex shrink-0 items-center gap-1">
+            <span className="hidden @xl:inline">Depth</span>
             <IconButton label="Shallower" onClick={() => setDepth(Math.max(1, depth - 1))}>
               <Icon name="narrow" className="size-3.5" />
             </IconButton>
@@ -127,7 +128,7 @@ export function DependenciesPage(): React.JSX.Element {
           </span>
         )}
         <span className="flex-1" />
-        <span className="truncate">{flow ? `${flow.nodes.length} nodes, ${flow.edges.length} links` : loading ? 'Reading imports' : ''}</span>
+        <span className="hidden min-w-0 truncate @lg:inline">{flow ? `${flow.nodes.length} nodes, ${flow.edges.length} links` : loading ? 'Reading imports' : ''}</span>
         <IconButton label="Rescan" onClick={rescan}>
           <Icon name={loading ? 'loader' : 'refresh'} className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
         </IconButton>
@@ -144,7 +145,8 @@ export function DependenciesPage(): React.JSX.Element {
           onNodeDoubleClick={(_, node: BoxNode) => node.data.item.manifest && openManifest(node.data.item.manifest)}
           nodesConnectable={false}
           fitView
-          fitViewOptions={{ maxZoom: 1 }}
+          // Labels stay readable in a narrow panel; the rest is a pan away
+          fitViewOptions={{ maxZoom: 1, minZoom: 0.85 }}
           minZoom={0.1}
           proOptions={{ hideAttribution: true }}
           style={FLOW_THEME}

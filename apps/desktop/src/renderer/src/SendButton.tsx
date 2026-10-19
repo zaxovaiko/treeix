@@ -41,6 +41,7 @@ export function SendButton({
   /** ⌘↵ sends to the default target, t picks another from the menu; for the agent comments drawer */
   hotkeys?: boolean
 }): React.JSX.Element {
+  'use no memo' // agent kinds are read from the agents list during render
   // Only sessions of this workspace, even when another workspace has one on the same checkout
   const { workspaces, currentId } = useWorkspaces()
   const workspace = workspaceOf(workspaces, currentId)
@@ -132,7 +133,7 @@ export function SendButton({
     </button>
   )
 
-  const shell = variant === 'pill' ? 'h-7 rounded-full border border-primary/40 bg-card text-primary' : 'h-8 w-full rounded-md bg-primary text-white'
+  const shell = variant === 'pill' ? 'h-7 rounded-full border border-primary/40 bg-card text-primary' : 'h-8 w-full rounded-md bg-primary text-primary-foreground'
   const divider = variant === 'pill' ? 'border-primary/30' : 'border-white/25'
 
   return (

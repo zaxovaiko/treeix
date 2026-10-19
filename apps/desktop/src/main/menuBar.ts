@@ -1,4 +1,4 @@
-import { app, Menu, nativeImage, Tray } from 'electron'
+import { app, Menu, nativeImage, Tray, type NativeImage } from 'electron'
 import type { MenuBarStatus } from '@treeix/sdk/main'
 import glyphPath from '../../resources/menuBarGlyph.png?asset'
 import { HEIGHT, menuBarAlpha } from './menuBarImage'
@@ -15,15 +15,20 @@ function glyphAlpha(): { width: number; alpha: Uint8Array } {
   return { width: bgra.length / 4 / HEIGHT, alpha: Uint8Array.from({ length: bgra.length / 4 }, (_, pixel) => bgra[pixel * 4 + 3]) }
 }
 
-function render(): void {
-  if (!tray || !open) return
+function glyphImage(): NativeImage {
   const { width, alpha } = menuBarAlpha(glyphAlpha(), status.meters)
   // Black with the drawn alpha; as a template image macOS tints it for light and dark menu bars
   const bgra = Buffer.alloc(alpha.length * 4)
   alpha.forEach((value, pixel) => (bgra[pixel * 4 + 3] = value))
   const image = nativeImage.createFromBitmap(bgra, { width, height: HEIGHT, scaleFactor: 2 })
   image.setTemplateImage(true)
-  tray.setImage(image)
+  return image
+}
+
+function render(): void {
+  if (!tray || !open) return
+  // A text label stands on its own; the glyph shows only when there is no text
+  tray.setImage(status.title && status.meters.length === 0 ? nativeImage.createEmpty() : glyphImage())
   tray.setTitle(status.title, { fontType: 'monospacedDigit' })
   tray.setToolTip(status.lines.join('\n') || 'Treeix')
   const show = open

@@ -32,6 +32,8 @@ export function useKeyExtras(): ShortcutInfo[] {
 
 /** Every key the app answers to: the actions in the keymap and the fixed ones beside them, grouped by section */
 export function useShortcuts(): [section: string, shortcuts: ShortcutInfo[]][] {
+  'use no memo' // action keys are read from the keymap during render
+  useSettings()
   const extras = useKeyExtras()
   const all: ShortcutInfo[] = [...actionList().map(({ id, label, section, page }) => ({ keys: actionKeys(id) || 'unbound', label, section, page })), ...extras]
   const sections = [...new Set(all.map((shortcut) => shortcut.section))]

@@ -31,7 +31,7 @@ export type Settings = {
   sections: 'expanded' | 'hidden'
   /** A bottom panel sits under the content beside the sidebar, or spans the full width under it */
   bottomPanel: 'content' | 'full'
-  /** The sidebar floats over the page as a rounded island, Figma style, instead of being a column beside it */
+  /** The page and the right panel float over the window as rounded islands, like Claude Desktop */
   islandUi: boolean
   /** Which end of an open title bar tab holds its close button */
   tabCloseSide: 'left' | 'right'

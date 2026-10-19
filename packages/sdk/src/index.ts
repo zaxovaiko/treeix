@@ -117,6 +117,9 @@ export type SessionSummary = {
 /** `cwd` is the folder the listening process runs in, which tells apart servers of one session */
 export type SessionPort = { sessionId: string; port: number; url: string; cwd: string | null; command: string | null }
 
+/** A session the user closed; it can come back with its agent conversation */
+export type ClosedSessionSummary = Pick<SessionSummary, 'id' | 'kind' | 'view' | 'title' | 'worktreePath' | 'workspaceId' | 'startedAt'> & { endedAt: number }
+
 /** Agent and terminal sessions, provided by the terminal plugin */
 export type SessionsService = {
   subscribe: (listener: () => void) => () => void
@@ -138,8 +141,16 @@ export type SessionsService = {
   active: () => string | null
   /** Shows the session in the terminal area and focuses it */
   reveal: (id: string) => void
+  /** Starts a dormant session where it already shows, like a chat drawn outside the terminal area */
+  wake: (id: string) => Promise<void>
   /** Ends the session; it stays in the history, so an agent conversation can be resumed */
   close: (id: string) => void
+  /** Closed sessions, newest first; same array until it changes */
+  getClosed: () => ClosedSessionSummary[]
+  /** Starts a closed session again, resuming its agent conversation; resolves with its new id */
+  reopen: (closedId: string) => Promise<string | null>
+  /** Drops a closed session from the history */
+  forget: (closedId: string) => void
   /** An empty title goes back to the automatic one */
   rename: (id: string, title: string) => void
   /** The session's context menu, with `onRename` behind its Rename… */
@@ -162,6 +173,8 @@ export interface Services {
 
 export type ChatService = {
   View: ComponentType<{ chatId: string }>
+  /** The chat's message box alone, with its agent, model and option pickers and context meter, e.g. for a new chat's first message */
+  Composer: ComponentType<{ chatId: string; onSent?: () => void; /** Beside the attach button, e.g. where the chat will work */ tools?: ReactNode }>
   /** A read-only conversation from logged events, e.g. an agent's part of a workflow run; permission prompts still take answers */
   /** `live` keeps the last turn unfolded while it runs */
   Transcript: ComponentType<{ events: LoggedChatEvent[]; cwd: string; live?: boolean; onAnswer?: (requestId: string, optionId: string) => void }>
@@ -182,6 +195,8 @@ export type ChatService = {
   agent: (chatId: string) => string | null
   /** The first message, shortened, for the tab */
   title: (chatId: string) => string | null
+  /** For a chat moved before its first message: takes `from`'s draft now and, once `to` connects, the options `from` had picked */
+  carryOver: (from: string, to: string) => Promise<void>
   subscribe: (listener: () => void) => () => void
 }
 
@@ -299,7 +314,7 @@ export function createBridge(pluginId: string): {
   }
 }
 
-export type Store<T> = { get: () => T; set: (next: T) => void; use: () => T; subscribe: (listener: () => void) => () => void }
+export type Store<T> = { get: () => T; set: (next: T) => void; useValue: () => T; subscribe: (listener: () => void) => () => void }
 
 /** A value React components can follow; keep it immutable, since a new value is what rerenders them */
 export function createStore<T>(initial: T): Store<T> {
@@ -315,7 +330,7 @@ export function createStore<T>(initial: T): Store<T> {
       value = next
       listeners.forEach((listener) => listener())
     },
-    use: () => useSyncExternalStore(subscribe, () => value),
+    useValue: () => useSyncExternalStore(subscribe, () => value),
     subscribe
   }
 }
@@ -327,7 +342,7 @@ export function createStore<T>(initial: T): Store<T> {
 export function definePluginSettings<T extends object>(
   pluginId: string,
   parse: (stored: Record<string, unknown>) => T
-): { get: () => T; update: (patch: Partial<T>) => void; use: () => T } {
+): { get: () => T; update: (patch: Partial<T>) => void; useValue: () => T } {
   const key = `plugin.${pluginId}.settings`
   const read = (raw: string | null): Record<string, unknown> | null => {
     try {
@@ -345,6 +360,6 @@ export function definePluginSettings<T extends object>(
       store.set({ ...store.get(), ...patch })
       storage?.setItem(key, JSON.stringify(store.get()))
     },
-    use: store.use
+    useValue: store.useValue
   }
 }

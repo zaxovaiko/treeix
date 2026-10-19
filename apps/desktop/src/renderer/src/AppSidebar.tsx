@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ISLAND, type SessionSummary, type SidebarSection, useHost } from '@treeix/sdk'
 import type { Repo } from '../../shared/types'
 import { ActivityMark, NEWS } from './activity'
-import { chatAgent, getAgents, isChatOnly } from './agents'
+import { chatAgent, getAgents, isChatOnly, useAgents } from './agents'
 import { type MenuAction, openMenu } from './contextMenu'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Icon } from './Icon'
 import { usePlugins, useSessions } from './plugins'
 import { activityOf, KindBadge, SESSION_MIME, StatusDot } from './sessionUi'
-import { digitLabel, toggleIn } from './settings'
+import { digitLabel, toggleIn, useSettings } from './settings'
 import { IconButton, NameInput, Popup, ResizeHandle } from './ui'
 import { Badge } from './WorkspaceSwitcher'
 import { ALL_PROJECTS, commonFolder, deleteWorkspace, HOME, inWorkspace, moveWorkspace, useWorkspaces, type Workspace } from './workspaces'
@@ -111,15 +111,19 @@ function Sessions({ sessions, onOpen, indent = 'pl-7' }: { sessions: SessionSumm
               {icon}
               <span className="min-w-0 flex-1 truncate">{session.title}</span>
               {session.split && <Icon name="splitRight" className="size-3 shrink-0 text-muted-foreground" />}
-              <span className="flex group-hover:invisible">
+              {/* The close button takes this same slot on hover */}
+              <span className="grid size-5 shrink-0 place-items-center group-hover:invisible">
                 <StatusDot session={session} />
               </span>
             </button>
-            <span className="absolute top-0 right-0 hidden group-hover:flex">
-              <IconButton label="Close session" onClick={() => service?.close(session.id)}>
-                <Icon name="close" className="size-3" />
-              </IconButton>
-            </span>
+            <button
+              title="Close session"
+              aria-label="Close session"
+              onClick={() => service?.close(session.id)}
+              className="absolute top-1 right-1 hidden size-5 place-items-center rounded text-muted-foreground group-hover:grid hover:bg-foreground/10 hover:text-foreground"
+            >
+              <Icon name="close" className="size-3" />
+            </button>
           </div>
         )
       })}
@@ -180,6 +184,9 @@ function NewSessionMenu({ label, entries }: { label: string; entries: MenuAction
 }
 
 function Workspaces({ repos, onSwitch, onEdit }: { repos: Repo[] | null; onSwitch: (id: string) => void; onEdit: (workspace: Workspace | null) => void }): React.JSX.Element {
+  'use no memo' // agents, shortcut labels and activity are read from module state during render
+  useAgents()
+  useSettings()
   const host = useHost()
   const { workspaces, currentId } = useWorkspaces()
   const sessions = useSessions()

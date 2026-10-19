@@ -1,4 +1,5 @@
-import { Children, createContext, useContext, useEffect, useRef, useState } from 'react'
+import { Children, createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import type { Components } from 'react-markdown'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
@@ -140,13 +141,45 @@ function ResolvedImage({ src, alt, resolve }: { src: string; alt: string; resolv
 
 const HEADING = /^#{1,6} \S/gm
 
-export function Markdown({ children, baseUrl, resolveImage }: { children: string; baseUrl?: string; resolveImage?: ImageResolver }): React.JSX.Element {
+// Memoized, and its components kept stable: a new component type each render would remount diagrams and images whenever a parent rerenders
+export const Markdown = memo(function Markdown({ children, baseUrl, resolveImage }: { children: string; baseUrl?: string; resolveImage?: ImageResolver }): React.JSX.Element {
   // One heading folds on its own; the scope's fold all button is for texts with a few of them
   const foldable = (children.match(HEADING) ?? []).length > 1
   const register = useContext(MarkdownFoldsContext)?.register
   useEffect(() => (foldable ? register?.() : undefined), [foldable, register])
   // Fenced blocks whose language a plugin renders, like mermaid diagrams
-  const codeBlocks: Record<string, React.ComponentType<{ code: string }>> = Object.assign({}, ...usePlugins().loaded.map(({ plugin }) => plugin.codeBlocks ?? {}))
+  const { loaded } = usePlugins()
+  const components = useMemo((): Components => {
+    const codeBlocks: Record<string, React.ComponentType<{ code: string }>> = Object.assign({}, ...loaded.map(({ plugin }) => plugin.codeBlocks ?? {}))
+    return {
+      a: ({ node: _node, children, ...props }) => (
+        <a {...props} target="_blank" rel="noreferrer">
+          {children}
+        </a>
+      ),
+      section: ({ node: _node, children }) => <Section>{children}</Section>,
+      table: ({ node: _node, children }) => <ResizableTable>{children}</ResizableTable>,
+      th: ({ node: _node, ...props }) => <ResizableHeader {...props} />,
+      img: ({ node: _node, src, alt, ...props }) =>
+        resolveImage && typeof src === 'string' ? (
+          <ResolvedImage src={src} alt={alt ?? ''} resolve={resolveImage} />
+        ) : (
+          <Expandable title={alt} preview={<img src={src} alt={alt} {...props} />}>
+            <img src={src} alt={alt} />
+          </Expandable>
+        ),
+      code: ({ node: _node, className, children: code, ...props }) => {
+        const Block = Object.hasOwn(codeBlocks, className?.replace(/^language-/, '') ?? '') ? codeBlocks[className?.replace(/^language-/, '') ?? ''] : undefined
+        return Block ? (
+          <Block code={String(code).trim()} />
+        ) : (
+          <NavigableCode className={className} {...props}>
+            {code}
+          </NavigableCode>
+        )
+      }
+    }
+  }, [loaded, resolveImage])
   return (
     <div className="markdown select-text">
       <ReactMarkdown
@@ -154,37 +187,10 @@ export function Markdown({ children, baseUrl, resolveImage }: { children: string
         // Raw HTML from PR bodies (details, sub, img) is parsed, then sanitized to GitHub's allowlist
         rehypePlugins={[rehypeRaw, [rehypeSanitize, SCHEMA]]}
         urlTransform={(url) => defaultUrlTransform(baseUrl && url.startsWith('/') ? `${baseUrl}${url}` : url)}
-        components={{
-          a: ({ node: _node, children, ...props }) => (
-            <a {...props} target="_blank" rel="noreferrer">
-              {children}
-            </a>
-          ),
-          section: ({ node: _node, children }) => <Section>{children}</Section>,
-          table: ({ node: _node, children }) => <ResizableTable>{children}</ResizableTable>,
-          th: ({ node: _node, ...props }) => <ResizableHeader {...props} />,
-          img: ({ node: _node, src, alt, ...props }) =>
-            resolveImage && typeof src === 'string' ? (
-              <ResolvedImage src={src} alt={alt ?? ''} resolve={resolveImage} />
-            ) : (
-              <Expandable title={alt} preview={<img src={src} alt={alt} {...props} />}>
-                <img src={src} alt={alt} />
-              </Expandable>
-            ),
-          code: ({ node: _node, className, children: code, ...props }) => {
-            const Block = Object.hasOwn(codeBlocks, className?.replace(/^language-/, '') ?? '') ? codeBlocks[className?.replace(/^language-/, '') ?? ''] : undefined
-            return Block ? (
-              <Block code={String(code).trim()} />
-            ) : (
-              <NavigableCode className={className} {...props}>
-                {code}
-              </NavigableCode>
-            )
-          }
-        }}
+        components={components}
       >
         {children}
       </ReactMarkdown>
     </div>
   )
-}
+})

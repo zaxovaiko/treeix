@@ -2,7 +2,7 @@ import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo, useState } from 'react'
 import { applyNodeChanges, Background, type Edge, Handle, type Node, type NodeProps, Position, ReactFlow } from '@xyflow/react'
 import { createBridge, PageLayout, PANE_HEADER, useHost } from '@treeix/sdk'
-import { FLOW_THEME, FlowControls, layered, prettify } from '@treeix/app/flow'
+import { FLOW_THEME, FlowControls, prettify, START_ASPECT } from '@treeix/app/flow'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
 import { errorMessage, IconButton } from '@treeix/app/ui'
@@ -82,7 +82,7 @@ function toFlow(schema: Schema): { nodes: TableNode[]; edges: Edge[] } {
     position: { x: 0, y: index },
     data: { table, enums: schema.enums, linked: linked.get(table.id) ?? new Set() }
   }))
-  return { nodes: layered(nodes, edges, LAYOUT), edges }
+  return { nodes: prettify(nodes, edges, { ...LAYOUT, aspect: START_ASPECT, layout: 'grid' }), edges }
 }
 
 export function SchemaPage(): React.JSX.Element {
@@ -129,12 +129,12 @@ export function SchemaPage(): React.JSX.Element {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={`${PANE_HEADER} gap-2 px-3 text-xs text-muted-foreground`}>
         <WorktreeSelect value={worktree} onChange={setWorktree} />
-        <span className="truncate">
+        <span className="shrink-0 whitespace-nowrap">
           {schema ? `${schema.tables.length} tables, ${schema.relations.length} relations` : loading ? 'Reading schema files' : ''}
           {schema?.errors.length ? ` · ${schema.errors.length} files unreadable` : ''}
         </span>
         <span className="flex-1" />
-        <span className="hidden sm:inline">Double-click a table for its source</span>
+        <span className="hidden truncate whitespace-nowrap sm:inline">Double-click a table for its source</span>
         <IconButton label="Rescan" onClick={scan}>
           <Icon name={loading ? 'loader' : 'refresh'} className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
         </IconButton>

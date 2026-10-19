@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react'
 import { type Command, createBridge, createStore, type HostApi, PageLayout, type RendererPlugin, type ShortcutInfo, useHost } from '@treeix/sdk'
+import { useService } from '@treeix/app/plugins'
 import { BrowserView, runBrowserAction } from './BrowserView'
 import { DesignPopover } from './DesignPopover'
 import { addVital } from './entries'
@@ -73,7 +74,7 @@ async function runDevServer(current: HostApi, folder: string): Promise<void> {
 
 /** Dev servers started from the palette open their first port in the browser */
 function useDevServerTabs(): void {
-  const service = useHost().service('sessions')
+  const service = useService('sessions')
   // Again when the terminal plugin is turned on later; the host object itself changes on every render
   useEffect(() => {
     if (!service) return
@@ -87,7 +88,7 @@ function Root(): React.JSX.Element {
   const current = useHost()
   host = current
   useDevServerTabs()
-  const { agentTools } = browserSettings.use()
+  const { agentTools } = browserSettings.useValue()
   useEffect(() => void bridge.invoke('agentTools', agentTools), [agentTools])
   // Before paint, so a workspace never flashes the previous one's tabs
   useLayoutEffect(() => setBrowserWorkspace(current.workspaceId), [current.workspaceId])
@@ -176,7 +177,7 @@ function Root(): React.JSX.Element {
 /** The workspace's open pages, on the page tab like the terminal's session count; a dot for pages an agent opened out of sight */
 function TabsCount(): React.JSX.Element | null {
   const count = useBrowser().tabs.filter((tab) => tab.url !== 'about:blank').length
-  const fresh = unseen.use()
+  const fresh = unseen.useValue()
   if (!count) return null
   return (
     <span

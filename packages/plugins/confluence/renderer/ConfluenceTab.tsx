@@ -200,7 +200,7 @@ export function ConfluenceTab(): React.JSX.Element {
     setCollapsedJson(JSON.stringify(closed ? [...new Set([...collapsedSpaces, space])] : collapsedSpaces.filter((entry) => entry !== space)))
   const showAll = (space: string): void => setExpandedJson(JSON.stringify([...expandedSpaces, space]))
   const opened = parseOpened(openedJson)
-  const requested = openRequest.use().id
+  const requested = openRequest.useValue().id
   const { value: page, error: pageError, refresh: reloadPage } = useCached<Page>(pageCache, selectedId, TTL.page, confluenceApi.page)
   const shownPage = page?.id === selectedId ? page : null
   const { value: parent } = useCached<Page>(pageCache, shownPage?.parentId ?? '', TTL.page, confluenceApi.page)

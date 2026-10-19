@@ -104,6 +104,7 @@ export function applyTheme(id: string, theme: Theme, opacity: number, borderStre
   root.setProperty('--color-primary', theme.primary)
   // Text on a primary fill: whichever of black or white reads on that accent, never the backdrop (its alpha would show through)
   root.setProperty('--color-primary-foreground', onColor(theme.primary))
+  root.setProperty('--color-on-foreground', onColor(theme.foreground))
   // Hairlines and hover fills are the foreground at low alpha, so they flip with the mode
   const tint = theme.mode === 'light' ? '0 0 0' : '255 255 255'
   root.setProperty('--color-border', `rgb(${tint} / ${(theme.mode === 'light' ? 10 : 6) * borderStrength}%)`)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { type SessionPort, type SessionSummary, useHost } from '@treeix/sdk'
 import type { Repo } from '@treeix/shared/types'
+import { useService } from '@treeix/app/plugins'
 import { worktreeLabel } from '@treeix/app/sessionUi'
 import { useRecent } from './recent'
 import { browserSettings } from './settings'
@@ -31,7 +32,7 @@ export function portDetail(sessions: SessionSummary[], repos: Repo[] | null, { s
 /** Servers started by sessions, as suggestions */
 export function useRunning(): Suggestion[] {
   const host = useHost()
-  const service = host.service('sessions')
+  const service = useService('sessions')
   const ports = useSyncExternalStore(service?.subscribe ?? noSubscribe, service?.getPorts ?? (() => NO_PORTS))
   // Titles and worktrees come from the sessions
   const sessions = useSyncExternalStore(service?.subscribe ?? noSubscribe, service?.getSessions ?? (() => NO_SESSIONS))
@@ -41,7 +42,7 @@ export function useRunning(): Suggestion[] {
 export function useSuggestions(query: string): SuggestionSection[] {
   const running = useRunning()
   const recent = useRecent()
-  const { saved } = browserSettings.use()
+  const { saved } = browserSettings.useValue()
   return useMemo(() => {
     const text = query.trim().toLowerCase()
     const matches = ({ url, label, detail }: Suggestion): boolean => !text || [url, label, detail].some((value) => value.toLowerCase().includes(text))

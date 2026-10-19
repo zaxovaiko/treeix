@@ -79,6 +79,17 @@ test('vertical turns columns into centered rows; grid fills rows to suit the can
   expect(new Set(grid.map((each) => each.position.y)).size).toBe(2)
 })
 
+test('hierarchy centers a node beside its subtree and hangs a shared node off one parent', () => {
+  const nodes = ['a', 'b', 'c', 'd'].map((id, index) => node(id, index))
+  const edges = [
+    { source: 'a', target: 'b' },
+    { source: 'a', target: 'c' },
+    { source: 'b', target: 'd' },
+    { source: 'c', target: 'd' }
+  ]
+  expect(at(prettify(nodes, edges, { column: 100, height: () => 50, aspect: 1, layout: 'hierarchy' }))).toEqual({ a: '0,25', b: '100,0', c: '100,50', d: '200,0' })
+})
+
 test('circle rings the nodes with neighbours at least a column apart', () => {
   const nodes = ['a', 'b', 'c', 'd'].map((id, index) => node(id, index))
   const ring = prettify(nodes, [], { column: 100, height: () => 50, aspect: 1, layout: 'circle' }).map(({ position }) => position)

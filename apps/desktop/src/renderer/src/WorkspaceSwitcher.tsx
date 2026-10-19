@@ -241,7 +241,7 @@ export function WorkspaceDialog({
                         title={allChecked ? 'Deselect folder' : 'Select all projects in folder'}
                         onClick={() => setFolderSelected(folderRepos, !allChecked)}
                         className={`ml-1.5 grid size-4 shrink-0 place-items-center rounded ${
-                          allChecked ? 'bg-primary text-white' : checkedCount > 0 ? 'bg-primary/40 text-white' : 'ring-1 ring-foreground/25'
+                          allChecked ? 'bg-primary text-primary-foreground' : checkedCount > 0 ? 'bg-primary/40 text-primary-foreground' : 'ring-1 ring-foreground/25'
                         }`}
                       >
                         {allChecked ? <Icon name="check" className="size-3" /> : checkedCount > 0 && <span className="h-0.5 w-2 rounded bg-white" />}
@@ -258,7 +258,7 @@ export function WorkspaceDialog({
                           >
                             <span className="min-w-0 flex-1 truncate">{baseName(repo.path)}</span>
                             <span className="text-[11px] text-muted-foreground tabular-nums">{repo.worktrees.length}</span>
-                            <span className={`grid size-4 shrink-0 place-items-center rounded ${checked ? 'bg-primary text-white' : 'ring-1 ring-foreground/25'}`}>
+                            <span className={`grid size-4 shrink-0 place-items-center rounded ${checked ? 'bg-primary text-primary-foreground' : 'ring-1 ring-foreground/25'}`}>
                               {checked && <Icon name="check" className="size-3" />}
                             </span>
                           </button>
@@ -312,7 +312,11 @@ export function WorkspaceDialog({
         <button onClick={onClose} className="h-7 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
           Cancel
         </button>
-        <button onClick={save} disabled={!canSave} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
+        <button
+          onClick={save}
+          disabled={!canSave}
+          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
+        >
           {workspace ? 'Save' : 'Create workspace'}
         </button>
       </div>

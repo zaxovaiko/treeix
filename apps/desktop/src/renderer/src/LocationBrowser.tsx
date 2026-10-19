@@ -116,6 +116,8 @@ export function LocationsDialog({
   const [index, setIndex] = useState(0)
   /** Folders and files start collapsed; only the path to the first result is opened */
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  /** Files listed by path instead of under their folders */
+  const [flat, setFlat] = usePersisted<boolean>('search.flat', false)
   const listRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -138,8 +140,12 @@ export function LocationsDialog({
       if (files) files.push(inFile)
       else byWorktree.set(inFile[0].worktreePath, [inFile])
     }
-    return [...byWorktree].map(([worktreePath, files]) => ({ worktreePath, files, tree: buildFolderTree(files, (inFile) => inFile[0].path) }))
-  }, [byGroup])
+    return [...byWorktree].map(([worktreePath, files]) => ({
+      worktreePath,
+      files,
+      tree: flat ? { name: '', path: '', folders: [], files: files.toSorted((a, b) => a[0].path.localeCompare(b[0].path)) } : buildFolderTree(files, (inFile) => inFile[0].path)
+    }))
+  }, [byGroup, flat])
 
   /** Folder and file headers plus rows in tree order; `isOpen` decides which groups show their children */
   const flatten = (isOpen: (key: string) => boolean): Item[] => {
@@ -183,7 +189,7 @@ export function LocationsDialog({
     groupKey(location)
   ]
   /** Every folder and file key, for expanding everything at once */
-  const allKeys = useMemo(() => new Set(locations.flatMap(keysOf)), [locations])
+  const allKeys = useMemo(() => new Set(locations.flatMap((location) => (flat ? [`${location.worktreePath}\0`, groupKey(location)] : keysOf(location)))), [locations, flat])
   const allExpanded = allKeys.size > 0 && [...allKeys].every((key) => expanded.has(key))
 
   const offsets = useMemo(() => {
@@ -252,6 +258,7 @@ export function LocationsDialog({
       >
         <div className="flex min-h-10 shrink-0 items-center gap-2 border-b border-border pr-2 pl-4 text-xs text-muted-foreground">
           {header}
+          {locations.length > 0 && <Toggle label={<Icon name="list" className="size-3.5" />} title="Show as a flat list" on={flat} onChange={setFlat} />}
           {locations.length > 0 && <FoldAllButton anyOpen={allExpanded} groups="results" shortcut={null} onClick={() => setExpanded(allExpanded ? new Set() : allKeys)} />}
           <span className="shrink-0 text-[11px]">↑↓ to move · ↵ to open</span>
           <button onClick={onClose} aria-label="Close" className="grid size-7 shrink-0 place-items-center rounded-md hover:bg-accent">
@@ -295,7 +302,8 @@ export function LocationsDialog({
                     >
                       <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground ${open ? 'rotate-90' : ''}`} />
                       <FileIcon path={path} />
-                      <span className="min-w-0 flex-1 truncate text-foreground/90">{path.split('/').pop()}</span>
+                      <span className={`min-w-0 truncate text-foreground/90 ${flat ? 'max-w-[60%] shrink-0' : 'flex-1'}`}>{baseName(path)}</span>
+                      {flat && <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{path.split('/').slice(0, -1).join('/')}</span>}
                       <span className="rounded-full bg-accent px-1.5 text-[10.5px] text-muted-foreground tabular-nums">{item.inFile.length}</span>
                     </button>
                   )

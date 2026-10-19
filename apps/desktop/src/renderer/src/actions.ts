@@ -31,6 +31,14 @@ const CORE_ACTIONS: ActionDef[] = defineActions([
   { id: 'page.settings', label: 'Open settings page (G S)', menuLabel: 'Settings page', section: 'Go to', keys: null },
   { id: 'app.closedSessions', label: 'Recently closed sessions (G H)', menuLabel: 'Recently closed sessions', section: 'Go to', keys: null },
 
+  { id: 'chat.new', label: 'New chat', section: 'Chat', keys: key('KeyN', { meta: true }) },
+  { id: 'side.changes', label: "Changes of the chat's folder, in the right panel", section: 'Chat', keys: key('KeyC', { meta: true, shift: true }) },
+  { id: 'side.schema', label: 'Schema, in the right panel', section: 'Chat', keys: key('KeyS', { meta: true, shift: true }) },
+  { id: 'side.dependencies', label: 'Dependencies, in the right panel', section: 'Chat', keys: key('KeyM', { meta: true, shift: true }) },
+  { id: 'chat.pullRequests', label: "Open pull requests of the chat's repository", section: 'Chat', keys: key('KeyP', { meta: true, alt: true }) },
+  { id: 'changes.foldAll', label: 'Fold or unfold every file in Changes', section: 'Chat', keys: key('KeyF', { meta: true, alt: true }) },
+  { id: 'changes.diffStyle', label: 'Split or unified diff in Changes', section: 'Chat', keys: key('KeyS', { meta: true, alt: true }) },
+
   { id: 'zone.next', label: 'Next zone', section: 'Focus', keys: key('F6') },
   { id: 'zone.previous', label: 'Previous zone', section: 'Focus', keys: key('F6', { shift: true }) },
   { id: 'zone.nextAlt', label: 'Next zone, second key', section: 'Focus', keys: key('Backquote', { ctrl: true }) },

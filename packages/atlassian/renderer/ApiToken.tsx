@@ -44,7 +44,7 @@ export function ApiToken({ bridge, purpose }: { bridge: AtlassianBridge; purpose
             className="h-8 min-w-0 flex-1 rounded-lg bg-muted px-2.5 text-[12px] ring-1 ring-border outline-none"
           />
           {token.trim() && email.trim() ? (
-            <button onClick={() => save({ email: email.trim(), token: token.trim() })} className="h-8 rounded-lg bg-primary px-3 text-xs font-medium text-white">
+            <button onClick={() => save({ email: email.trim(), token: token.trim() })} className="h-8 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground">
               Save
             </button>
           ) : (

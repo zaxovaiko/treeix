@@ -3,7 +3,7 @@ import { Icon } from '@treeix/app/Icon'
 import { ResizeHandle } from '@treeix/app/ui'
 import { HostContext } from './index'
 import { isJson, object } from '@treeix/shared/json'
-import { actionKeys } from '@treeix/shared/keymap'
+import { actionKeys, onKeymapChange } from '@treeix/shared/keymap'
 import { keysText } from '@treeix/shared/shortcut'
 import { readStored } from '@treeix/app/storage'
 
@@ -208,6 +208,7 @@ export function usePanels(page?: string): {
   inIsland: (panel: PanelName) => boolean
   toggleZen: () => void
 } {
+  'use no memo' // the page defaults a PageLayout registers are read during render
   const activePage = useActivePage()
   const shell = useShell()
   const key = page ?? activePage
@@ -264,7 +265,7 @@ export function Zone({ id, className = '', style, children }: { id: ZoneId; clas
 }
 
 /** The top row of every pane: one height and rule everywhere, so the rules line up across panes side by side */
-export const PANE_HEADER = 'flex h-9 shrink-0 items-center border-b border-border'
+export const PANE_HEADER = 'flex h-11 shrink-0 items-center border-b border-border'
 /** A panel floating over the page, as the AI Hub's list and inspector do */
 export const ISLAND = 'rounded-xl border border-border bg-background'
 
@@ -342,7 +343,7 @@ export function PageLayout({
   const host = useContext(HostContext)
   const claimDock = useContext(DockSlot)
   useLayoutEffect(() => claimDock?.(), [claimDock])
-  const prefs = pagePanels(page)
+  const prefs = shell.pages[page] ?? { ...DEFAULT_PAGE, ...pageDefaults.get(page) }
   const listSize = prefs.listWidth ?? listWidth
   const inspectorSize = prefs.inspectorWidth ?? inspectorWidth
   const ref = useRef<HTMLDivElement>(null)
@@ -402,6 +403,7 @@ export function PageLayout({
   )
   const pill = useRef<HTMLButtonElement>(null)
   const [pillWidth, setPillWidth] = useState(0)
+  const listKeys = useSyncExternalStore(onKeymapChange, () => actionKeys('panel.list'))
   useLayoutEffect(() => setPillWidth(pill.current?.offsetWidth ?? 0), [showList, islands])
   if (islands !== undefined)
     return (
@@ -415,7 +417,7 @@ export function PageLayout({
           list !== undefined && (
             <button
               ref={pill}
-              title={`Show list (${actionKeys('panel.list')})`}
+              title={`Show list (${listKeys})`}
               onClick={() => togglePanel('list', page)}
               className={`absolute top-2 left-2 z-20 flex h-10 items-center gap-2 px-3 text-xs hover:bg-accent ${ISLAND}`}
             >
@@ -624,8 +626,8 @@ export function ListToggle({
   const inHeader = !island && !panels.inIsland(panel)
   const countToggle = useContext(PanelToggles)
   useEffect(() => (inHeader ? countToggle?.(panel) : undefined), [inHeader, countToggle, panel])
+  const keys = useSyncExternalStore(onKeymapChange, () => actionKeys(panel === 'list' ? 'panel.list' : 'panel.inspector'))
   if (!island && !inHeader) return null
-  const keys = actionKeys(panel === 'list' ? 'panel.list' : 'panel.inspector')
   const label = `${panels[panel] ? 'Hide' : 'Show'} ${panel}${keys ? ` (${keys})` : ''}`
   return (
     <button

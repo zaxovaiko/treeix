@@ -234,7 +234,7 @@ export function BranchDialog({
       )}
 
       <button onClick={() => setWorktree(!worktree)} className="mt-4 flex w-full items-center gap-2.5 text-left text-[13px]">
-        <span className={`grid size-4 place-items-center rounded ${worktree ? 'bg-primary text-white' : 'ring-1 ring-input'}`}>
+        <span className={`grid size-4 place-items-center rounded ${worktree ? 'bg-primary text-primary-foreground' : 'ring-1 ring-input'}`}>
           {worktree && <Icon name="check" className="size-3" />}
         </span>
         Check out in a new worktree
@@ -294,7 +294,7 @@ export function BranchDialog({
         <button
           onClick={submit}
           disabled={!name.trim() || invalid || busy || (!worktree && Boolean(existing))}
-          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+          className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
         >
           {busy
             ? 'Creating…'

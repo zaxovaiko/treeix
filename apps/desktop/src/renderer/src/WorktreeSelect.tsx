@@ -18,9 +18,11 @@ export function useWorktreeFolder(): [string | null, (path: string) => void] {
 export function WorktreeSelect({ value, onChange }: { value: string | null; onChange: (path: string) => void }): React.JSX.Element {
   const host = useHost()
   const repos = (host.repos ?? []).filter((repo) => !host.scopeRepoPaths || host.scopeRepoPaths.includes(repo.path))
-  const options = repos.flatMap((repo) => repo.worktrees.map((worktree) => ({ value: worktree.path, label: branchLabel(worktree), hint: baseName(repo.path) })))
+  const listed = repos.flatMap((repo) => repo.worktrees.map((worktree) => ({ value: worktree.path, label: branchLabel(worktree), hint: baseName(repo.path) })))
+  // A folder outside the scanned projects, like a chat's, shows by its own name
+  const options = value && !listed.some((option) => option.value === value) ? [{ value, label: baseName(value) }, ...listed] : listed
   return (
-    <div className="w-56 min-w-0">
+    <div className="w-40 min-w-0 shrink-0">
       <Select title="Worktree to read" placeholder="Pick a worktree" value={value} options={options} onChange={onChange} transparent />
     </div>
   )

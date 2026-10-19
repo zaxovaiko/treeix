@@ -288,7 +288,10 @@ export function FolderExplorer({
   useEffect(() => {
     setFiles(null)
     setRepoFiles(null)
-    window.api.listFiles(root).then(setRepoFiles, () => load(''))
+    window.api.listFiles(root).then(
+      (found) => (found ? setRepoFiles(found) : load('')),
+      () => load('')
+    )
   }, [root])
   const tree = useMemo(() => repoFiles ?? (files ? { files, ignored: [] } : null), [repoFiles, files])
   return (

@@ -27,7 +27,7 @@ function KeepAwake(): null {
     sessions?.subscribe ?? (() => () => undefined),
     () => sessions?.getSessions().some((session) => isAgent(session.kind) && session.status === 'running') ?? false
   )
-  const { keepAwakeEnabled, keepAwakeLidClosed } = awakeSettings.use()
+  const { keepAwakeEnabled, keepAwakeLidClosed } = awakeSettings.useValue()
   const [keepAwake, setKeepAwake] = useState(false)
   const declined = useRef(false)
 
@@ -57,8 +57,8 @@ function KeepAwake(): null {
 
 /** Always there while the plugin is on, so it's clear the Mac will stay up once an agent starts */
 function Indicator(): React.JSX.Element {
-  const { awake, lidClosed } = status.use()
-  const { keepAwakeEnabled } = awakeSettings.use()
+  const { awake, lidClosed } = status.useValue()
+  const { keepAwakeEnabled } = awakeSettings.useValue()
   const state = !keepAwakeEnabled
     ? 'Keep awake is off: the Mac may sleep while agents work'
     : lidClosed
@@ -90,7 +90,7 @@ function Indicator(): React.JSX.Element {
 }
 
 function KeepAwakeSettings(): React.JSX.Element {
-  const { keepAwakeLidClosed } = awakeSettings.use()
+  const { keepAwakeLidClosed } = awakeSettings.useValue()
   return (
     <Card title="Lid">
       <Row

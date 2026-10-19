@@ -44,23 +44,33 @@ function renderDiagram(id: string, code: string): Promise<string> {
   return result.then(({ svg }) => svg)
 }
 
+// Rendered diagrams by theme and source, so a remount (a parent's rerender, scrolling back) shows one at once
+// ponytail: never evicted, a session renders few diagrams
+const rendered = new Map<string, string>()
+
 export function Mermaid({ code }: { code: string }): React.JSX.Element {
+  'use no memo' // the active theme is read from settings during render
   const id = `mermaid-${useId().replace(/[^\w-]/g, '')}`
-  const [svg, setSvg] = useState<string | null>(null)
+  const [, setDone] = useState(0)
   const [error, setError] = useState<string | null>(null)
   useSettings()
-  const theme = activeThemeId()
+  const key = `${activeThemeId()}\n${code}`
+  const svg = rendered.get(key) ?? null
 
   useEffect(() => {
+    if (rendered.has(key)) return
     let cancelled = false
     renderDiagram(id, code).then(
-      (result) => !cancelled && setSvg(result),
+      (result) => {
+        rendered.set(key, result)
+        if (!cancelled) setDone((count) => count + 1)
+      },
       (reason: unknown) => !cancelled && setError(String(reason))
     )
     return () => {
       cancelled = true
     }
-  }, [code, id, theme])
+  }, [key, id])
 
   if (error) {
     return (
@@ -70,7 +80,13 @@ export function Mermaid({ code }: { code: string }): React.JSX.Element {
       </>
     )
   }
-  if (!svg) return <div className="py-4 text-xs text-muted-foreground">Rendering diagram...</div>
+  if (!svg) {
+    return (
+      <div role="status" className="my-3 grid h-32 place-items-center rounded-xl bg-foreground/5 font-sans text-xs text-muted-foreground">
+        <span className="shimmer">Rendering diagram…</span>
+      </div>
+    )
+  }
   // securityLevel strict makes mermaid sanitize labels, so the SVG is safe to inject
   const diagram = <div dangerouslySetInnerHTML={{ __html: svg }} />
   return (

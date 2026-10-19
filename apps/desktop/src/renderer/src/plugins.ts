@@ -107,6 +107,7 @@ export function findService<K extends keyof Services>(name: K): Services[K] | nu
 
 /** Re-renders when plugins load or unload */
 export function useService<K extends keyof Services>(name: K): Services[K] | null {
+  'use no memo' // the service is looked up in the plugin registry during render
   usePlugins()
   return findService(name)
 }

@@ -26,7 +26,7 @@ export type PlanEntry = { content: string; priority: 'high' | 'medium' | 'low'; 
 export type ChatOption = {
   id: string
   name: string
-  category: 'mode' | 'model' | 'other'
+  category: 'mode' | 'model' | 'effort' | 'other'
   currentValue: string
   values: { value: string; name: string; description: string | null }[]
 }
@@ -84,8 +84,8 @@ export type ChatSpec = {
   command: string
   /** Added to the agent's system prompt where it takes one, else put before the first message */
   instructions?: string
-  /** Model and mode set on a new conversation, by option value */
-  preset?: { model?: string; mode?: string }
+  /** Model, effort (how hard it thinks) and mode set on a new conversation, by option value */
+  preset?: { model?: string; effort?: string; mode?: string }
   /** More folders the agent loads beside its own, where it supports that: their instructions, skills and subagents */
   directories?: string[]
 }

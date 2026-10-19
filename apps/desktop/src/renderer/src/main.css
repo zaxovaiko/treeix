@@ -20,6 +20,8 @@
   --color-primary: #4f5ff0;
   /* Text on a primary fill: black or white, whichever reads on the accent (applyTheme picks it per theme) */
   --color-primary-foreground: #ffffff;
+  /* Text on a foreground fill, solid since the backdrop color takes the window's transparency */
+  --color-on-foreground: #000000;
 }
 
 /* The window never scrolls as a whole; panes scroll inside it, keeping the title bar in place */
@@ -224,6 +226,24 @@ html:not([data-translucent]) {
   animation: var(--animate-spin) !important;
 }
 
+/* And live status text: a light sweeps across it while the agent works */
+@media (prefers-reduced-motion: no-preference) {
+  .shimmer {
+    background: linear-gradient(90deg, var(--color-muted-foreground) 35%, var(--color-foreground) 50%, var(--color-muted-foreground) 65%) 0 0 / 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite !important;
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
 /* And the voice orb: it breathes, turns and bounces with each spoken word, so listening reads as live */
 @media (prefers-reduced-motion: no-preference) {
   .voice-orb {
@@ -353,20 +373,17 @@ html[data-translucent] .code-editor .monaco-editor .margin {
 .code-editor-target-line {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
-/* Monaco makes the glyph a flex row with codicon's line height, which squeezes and lowers a plain + */
+/* Monaco makes the glyph a flex row with codicon's line height, which squeezes and lowers a text +, so the + is drawn */
 .code-editor-comment-glyph::before {
-  content: '+';
-  display: grid;
-  place-items: center;
+  content: '';
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  line-height: 1;
-  font-size: 14px;
   border-radius: 4px;
-  background: var(--color-primary);
-  color: white;
-  font-weight: 600;
+  background:
+    linear-gradient(white, white) center / 8px 2px no-repeat,
+    linear-gradient(white, white) center / 2px 8px no-repeat,
+    var(--color-primary);
   cursor: pointer;
 }
 

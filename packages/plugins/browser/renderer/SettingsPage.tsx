@@ -15,7 +15,7 @@ const importLabel = (info: ImportInfo): string => (info ? `${info.browser}, ${ne
 const field = 'h-6 rounded-md bg-muted px-2 text-[11px] ring-1 ring-border outline-none focus:ring-primary'
 
 function SavedAddresses(): React.JSX.Element {
-  const { saved, searchEngine } = browserSettings.use()
+  const { saved, searchEngine } = browserSettings.useValue()
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -74,7 +74,7 @@ function SavedAddresses(): React.JSX.Element {
 }
 
 export function BrowserSettings(): React.JSX.Element {
-  const { openLinks, searchEngine, agentTools } = browserSettings.use()
+  const { openLinks, searchEngine, agentTools } = browserSettings.useValue()
   const [canImport, setCanImport] = useState(false)
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
   const [chosen, setChosen] = useState('')

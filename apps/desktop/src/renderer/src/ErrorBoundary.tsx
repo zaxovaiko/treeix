@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.error === null) return this.props.children
     const { label, root } = this.props
-    return (
+    const screen = (
       <EmptyState
         fill
         icon="alert"
@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
       >
         <button
           onClick={() => (root ? window.location.reload() : this.setState({ error: null, stack: '' }))}
-          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white"
+          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground"
         >
           {root ? 'Reload window' : 'Try again'}
         </button>
@@ -56,5 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
         </button>
       </EmptyState>
     )
+    // The root has no flex parent to fill, so it takes the window's height itself
+    return root ? <div className="flex h-screen flex-col">{screen}</div> : screen
   }
 }

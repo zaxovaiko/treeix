@@ -38,6 +38,7 @@ export function ChangedFileList({
   onFileMenu?: (event: React.MouseEvent, path: string) => void
   toggles?: FolderToggles
 }): React.JSX.Element {
+  'use no memo' // folder open state is read from settings during render
   const ownToggles = useState<Set<string>>(new Set())
   const [toggled, setToggled] = toggles ?? ownToggles
   useSettings()
