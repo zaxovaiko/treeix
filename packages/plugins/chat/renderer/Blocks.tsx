@@ -18,9 +18,12 @@ const COLLAPSED_LINES = 10
 /** Agent text can name any image URL, and loading it would leak to that server; remote ones show as their URL, data: images inline */
 const inlineOnly = (src: string): Promise<string> | null => (src.startsWith('data:') ? null : Promise.reject(new Error(src)))
 
+/** Agents wrap command output in a ```console fence, which shows as text in a plain block */
+const unfenced = (text: string): string => text.replace(/^```[\w-]*\n([\s\S]*?)(?:\n?```\s*)?$/, '$1')
+
 const texts = (call: ToolCall): string =>
   call.output
-    .map((output) => (output.type === 'text' ? output.text : ''))
+    .map((output) => (output.type === 'text' ? unfenced(output.text) : ''))
     .filter(Boolean)
     .join('\n')
 
@@ -73,10 +76,33 @@ export function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }
       </div>
     )
   }
+  return <AgentText block={block} />
+}
+
+/** The agent's reply as markdown, or as the source it wrote */
+function AgentText({ block }: { block: Extract<Block, { type: 'text' }> }): React.JSX.Element {
+  const [raw, setRaw] = useState(false)
   return (
-    <div className="text-sm select-text">
+    <div className="group/text relative text-sm select-text">
       <Images images={block.images} className="max-h-64 max-w-full" />
-      {block.text && <LazyMarkdown resolveImage={inlineOnly}>{block.text}</LazyMarkdown>}
+      {block.text && (
+        <>
+          <button
+            onClick={() => setRaw(!raw)}
+            aria-pressed={raw}
+            title={raw ? 'Show formatted' : 'Show markdown source'}
+            className={`absolute -top-1 right-0 z-10 flex h-6 items-center gap-1 rounded-full bg-background px-2 text-[11px] text-muted-foreground ring-1 ring-border group-hover/text:visible hover:text-foreground focus-visible:visible ${raw ? 'visible' : 'invisible'}`}
+          >
+            <Icon name={raw ? 'eye' : 'code'} className="size-3" />
+            {raw ? 'Preview' : 'Raw'}
+          </button>
+          {raw ? (
+            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-foreground/90">{block.text}</pre>
+          ) : (
+            <LazyMarkdown resolveImage={inlineOnly}>{block.text}</LazyMarkdown>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -92,7 +118,7 @@ export function ThoughtBlock({ block }: { block: Extract<Block, { type: 'thought
     <div className="text-xs text-muted-foreground">
       <button onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 hover:text-foreground">
         <Icon name="chevron" className={`size-3 transition-transform ${open || running ? 'rotate-90' : ''}`} />
-        {running ? <span className="animate-pulse">Thinking… {formatElapsed(seconds)}</span> : `Thought for ${formatElapsed(seconds)}`}
+        {running ? <span className="shimmer">Thinking… {formatElapsed(seconds)}</span> : `Thought for ${formatElapsed(seconds)}`}
       </button>
       {(open || running) && <div className="mt-1 border-l border-border pl-3 whitespace-pre-wrap italic select-text">{block.text}</div>}
     </div>
@@ -102,7 +128,7 @@ export function ThoughtBlock({ block }: { block: Extract<Block, { type: 'thought
 function StatusIcon({ status }: { status: ToolCall['status'] }): React.JSX.Element | null {
   if (status === 'completed') return <Icon name="check" className="size-3.5 text-emerald-400" />
   if (status === 'failed') return <Icon name="alert" className="size-3.5 text-red-400" />
-  return <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
+  return <Icon name="loader" className="size-3.5 animate-spin text-muted-foreground" />
 }
 
 function openFile(host: ReturnType<typeof useHost>, cwd: string, path: string, line: number | null): void {
@@ -142,6 +168,8 @@ const hash = (text: string): string => {
 }
 
 function DiffView({ callId, diff }: { callId: string; diff: Diff }): React.JSX.Element {
+  'use no memo' // the code theme is read from settings during render
+  useSettings()
   const oldKey = useMemo(() => hash(diff.oldText ?? ''), [diff.oldText])
   const newKey = useMemo(() => hash(diff.newText), [diff.newText])
   return (
@@ -221,7 +249,15 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
   const changes = diffs(call)
   const isEdit = call.kind === 'edit' || call.kind === 'delete' || call.kind === 'move'
   const isLookup = call.kind === 'read' || call.kind === 'search' || call.kind === 'fetch'
-  const expandable = isLookup ? output !== '' : !isEdit && call.kind !== 'execute'
+  const details = isEdit ? '' : output || (isLookup || call.kind === 'execute' ? '' : JSON.stringify(call.rawInput, null, 2) || '')
+  const expandable = isEdit ? changes.length > 0 : details !== ''
+  const total = changes.reduce(
+    (sum, diff) => {
+      const counts = diffCounts(diff.oldText, diff.newText)
+      return { added: sum.added + counts.added, removed: sum.removed + counts.removed }
+    },
+    { added: 0, removed: 0 }
+  )
   return (
     <div className="overflow-hidden rounded-lg text-xs ring-1 ring-border">
       <div
@@ -232,9 +268,11 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
         <span className={`min-w-0 truncate ${call.kind === 'execute' ? 'font-mono' : ''} text-foreground`}>{call.title}</span>
         {location && !isEdit && <Location cwd={cwd} path={location.path} line={location.line} />}
         <span className="flex-1" />
+        {changes.length > 0 && <Counts {...total} />}
         {expandable && <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />}
       </div>
       {isEdit &&
+        open &&
         changes.map((diff) => (
           <div key={diff.path} className="border-t border-border">
             <div className="flex items-center gap-2 px-3 py-1">
@@ -246,9 +284,7 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
             <DiffView callId={call.id} diff={diff} />
           </div>
         ))}
-      {call.kind === 'execute' && output !== '' && <Output text={output} collapseAfter={COLLAPSED_LINES} />}
-      {isLookup && open && <Output text={output} collapseAfter={null} />}
-      {!isLookup && !isEdit && call.kind !== 'execute' && open && <Output text={output || JSON.stringify(call.rawInput, null, 2) || ''} collapseAfter={null} />}
+      {!isEdit && open && <Output text={details} collapseAfter={call.kind === 'execute' ? COLLAPSED_LINES : null} />}
       {children}
     </div>
   )
@@ -258,17 +294,17 @@ export function PermissionCard({ permission, newest, onAnswer }: { permission: P
   const allow = firstAllow(permission.options)
   const reject = firstReject(permission.options)
   return (
-    <div className="rounded-lg bg-amber-400/5 text-xs ring-1 ring-amber-400/40">
-      <div className="flex items-center gap-2 px-3 py-1.5 text-foreground">
+    <div className="rounded-2xl bg-amber-400/5 text-xs ring-1 ring-amber-400/40">
+      <div className="flex items-center gap-2 px-3.5 py-2 text-foreground">
         <Icon name="alert" className="size-3.5 text-amber-400" />
         <span className="min-w-0 truncate">{permission.title}</span>
       </div>
-      <div className="flex flex-wrap gap-1.5 border-t border-amber-400/20 px-3 py-2">
+      <div className="flex flex-wrap gap-1.5 border-t border-amber-400/20 px-3 py-2.5">
         {permission.options.map((option) => (
           <button
             key={option.id}
             onClick={() => onAnswer(option.id)}
-            className={`h-6 rounded-md px-2.5 font-medium ${option === allow ? 'bg-primary text-white' : 'text-foreground ring-1 ring-border hover:bg-accent'}`}
+            className={`h-7 rounded-full px-3 font-medium ${option === allow ? 'bg-foreground text-on-foreground' : 'text-foreground ring-1 ring-input hover:bg-accent'}`}
           >
             {option.name}
             {newest && option === allow && <span className="ml-1.5 opacity-70">{keysText('⌘↵')}</span>}

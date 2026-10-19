@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { useHost } from '@treeix/sdk'
-import { agentOr } from '@treeix/app/agents'
+import { agentOr, useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { useSettings } from '@treeix/app/settings'
 import { worktreeLabel } from '@treeix/app/sessionUi'
@@ -25,8 +25,8 @@ function Activity({ chat }: { chat: ChatState }): React.JSX.Element {
   }
   return (
     <div role="status" className="flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground">
-      <Icon name="loader" className="size-3.5 shrink-0 animate-spin text-sky-400" />
-      <span className="min-w-0 truncate text-foreground/85">{activityOf(chat)}…</span>
+      <Icon name="loader" className="size-3.5 shrink-0 animate-spin" />
+      <span className="shimmer min-w-0 truncate text-foreground/85">{activityOf(chat)}…</span>
       {chat.turnStartedAt !== null && <span className="shrink-0 tabular-nums">{formatElapsed(seconds)}</span>}
     </div>
   )
@@ -34,7 +34,9 @@ function Activity({ chat }: { chat: ChatState }): React.JSX.Element {
 
 /** Before the first message: starting the agent, why it failed to start, or what the chat can do */
 function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cwd: string }): React.JSX.Element {
+  'use no memo' // the agent is read from settings during render
   const host = useHost()
+  useAgents()
   const agent = agentOr(chat.options?.agent ?? '')
   if (chat.error && !chat.connected) {
     return (
@@ -43,7 +45,7 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
         <div className="text-foreground">{agent.label} could not start</div>
         <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground select-text">{chat.error}</div>
         {chat.options && (
-          <button onClick={() => retry(chatId)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+          <button onClick={() => retry(chatId)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground">
             Retry
           </button>
         )}
@@ -53,8 +55,8 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
   if (!chat.connected) {
     return (
       <div role="status" className="m-auto flex flex-col items-center gap-2 px-4 text-center text-sm text-muted-foreground">
-        <Icon name="loader" className="size-5 animate-spin text-sky-400" />
-        <div className="text-foreground">Starting {agent.label}…</div>
+        <Icon name="loader" className="size-4 animate-spin" />
+        <div className="shimmer text-foreground">Starting {agent.label}…</div>
         <div className="text-xs">The first start downloads the adapter and can take a while</div>
       </div>
     )
@@ -80,6 +82,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
   const host = useHost()
   const chat = useChat(chatId)
   const { chatFullWidth } = useSettings()
+  const agents = useAgents()
   const { feed } = chat
   const width = chatFullWidth ? 'max-w-none' : 'max-w-3xl'
   const empty = feed.blocks.length === 0
@@ -105,10 +108,14 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
     return () => observer.disconnect()
   }, [])
 
-  const reply = (requestId: string, optionId: string): void => {
-    answer(chatId, requestId, optionId)
-    root.current?.querySelector('textarea')?.focus()
-  }
+  // Stable, so typing in the composer (which changes the draft, and so the chat) doesn't rerender the transcript
+  const reply = useCallback(
+    (requestId: string, optionId: string): void => {
+      answer(chatId, requestId, optionId)
+      root.current?.querySelector('textarea')?.focus()
+    },
+    [chatId]
+  )
 
   const newest = feed.blocks.map(pendingOf).findLast((permission) => permission !== null) ?? null
 
@@ -147,8 +154,8 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
       <div className={`mx-auto w-full ${width}`}>
         {!empty && isConnecting(chat) && (
           <div role="status" className="mx-4 mb-2 flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <Icon name="loader" className="size-3.5 animate-spin text-sky-400" />
-            Reconnecting to {agentOr(chat.options?.agent ?? '').label}…
+            <Icon name="loader" className="size-3.5 animate-spin" />
+            <span className="shimmer">Reconnecting to {agents.find((candidate) => candidate.id === chat.options?.agent)?.label ?? chat.options?.agent}…</span>
           </div>
         )}
         {isBusy(chat) && (
@@ -175,7 +182,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
               <li key={index} className={`flex items-center gap-2 ${entry.status === 'completed' ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
                 <Icon
                   name={entry.status === 'completed' ? 'check' : entry.status === 'in_progress' ? 'loader' : 'chevron'}
-                  className={`size-3 shrink-0 ${entry.status === 'in_progress' ? 'animate-spin text-sky-400' : 'text-muted-foreground'}`}
+                  className={`size-3 shrink-0 ${entry.status === 'in_progress' ? 'animate-spin text-foreground' : 'text-muted-foreground'}`}
                 />
                 <span className="min-w-0 truncate">{entry.content}</span>
               </li>

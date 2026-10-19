@@ -173,7 +173,7 @@ export function optionsFrom(response: unknown): ChatOption[] {
         {
           id: text(option.id),
           name: text(option.name),
-          category: option.category === 'model' ? 'model' : option.category === 'mode' ? 'mode' : 'other',
+          category: option.category === 'model' ? 'model' : option.category === 'mode' ? 'mode' : option.category === 'thought_level' ? 'effort' : 'other',
           currentValue: text(option.currentValue),
           values
         }

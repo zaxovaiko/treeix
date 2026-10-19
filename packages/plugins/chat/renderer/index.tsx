@@ -3,13 +3,23 @@ import { type ChatService, createBridge, type RendererPlugin, useHost } from '@t
 import { agentOr } from '@treeix/app/agents'
 import { notify } from '@treeix/app/notifications'
 import { Chat } from './Chat'
+import { Composer } from './ChatComposer'
 import { Transcript } from './Transcript'
-import { appendDraft, chatIds, forget, getChat, listen, send, start, statusOf, stop, subscribe, titleOf } from './store'
+import { appendDraft, carryOver, chatIds, forget, getChat, listen, send, start, statusOf, stop, subscribe, titleOf, useChat } from './store'
 
 listen(createBridge('chat'))
 
+const noop = (): void => undefined
+
+function ComposerAlone({ chatId, onSent = noop, tools }: { chatId: string; onSent?: () => void; tools?: React.ReactNode }): React.JSX.Element {
+  const host = useHost()
+  const cwd = useChat(chatId).options?.cwd ?? host.defaultCwd
+  return <Composer chatId={chatId} cwd={cwd} onSent={onSent} tools={tools} />
+}
+
 const service: ChatService = {
   View: Chat,
+  Composer: ComposerAlone,
   Transcript,
   start,
   send: (chatId, text) => send(chatId, [{ type: 'text', text }]),
@@ -21,6 +31,7 @@ const service: ChatService = {
   agentSessionId: (chatId) => getChat(chatId).agentSessionId,
   agent: (chatId) => getChat(chatId).options?.agent ?? null,
   title: (chatId) => titleOf(getChat(chatId)),
+  carryOver,
   subscribe
 }
 

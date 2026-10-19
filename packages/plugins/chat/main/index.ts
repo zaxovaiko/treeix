@@ -3,6 +3,7 @@ import type { ChatConnection, ChatContent, ChatEvent, MainPlugin } from '@treeix
 import type { StartOptions, StartResult } from '../shared/types'
 import { acpAdapter } from './acpAdapter'
 import { createBatcher } from '@treeix/host/batcher'
+import { agentDirectories } from '@treeix/host/projects'
 import { createGenerationGuard } from './generations'
 
 type Entry = { connection: ChatConnection; owner: WebContents; dispose: () => void }
@@ -37,7 +38,9 @@ const plugin: MainPlugin = {
       const token = generations.begin(chatId)
       const owner = event.sender
       const { cwd, command, instructions, preset, directories, resume, workspaceId } = options
-      const connection = await adapter.connect({ cwd, command, instructions, preset, directories, env: await context.sessionEnv(workspaceId), resume })
+      // A folder of several repos: the agent loads each one's instructions, skills and subagents too
+      const loads = directories ?? (await agentDirectories(cwd))
+      const connection = await adapter.connect({ cwd, command, instructions, preset, directories: loads, env: await context.sessionEnv(workspaceId), resume })
 
       // A newer start for this chat id arrived while connecting: let it own the map, this connection has nowhere to go
       if (!generations.isCurrent(chatId, token)) {

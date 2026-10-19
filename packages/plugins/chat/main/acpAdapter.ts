@@ -167,10 +167,11 @@ export async function connectOverStream(
     emit({ type: 'options', options: withCurrentValue(id, value) })
   }
 
-  // A resumed conversation already has its instructions, model and mode
+  // A resumed conversation already has its instructions, model, effort and mode
   let preamble = instructions && !resume && !takesSystemPrompt ? instructions : null
   if (!resume) {
-    for (const category of ['model', 'mode'] as const) {
+    // Model first: the effort levels on offer depend on it
+    for (const category of ['model', 'effort', 'mode'] as const) {
       const value = preset?.[category]
       if (!value) continue
       const option = options.find((candidate) => candidate.category === category)

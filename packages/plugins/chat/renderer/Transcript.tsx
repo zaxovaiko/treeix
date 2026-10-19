@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import { Icon } from '@treeix/app/Icon'
 import type { LoggedChatEvent } from '@treeix/sdk'
 import { ChangeSummary, ErrorBlock, PermissionCard, TextBlock, ThoughtBlock, ToolCard } from './Blocks'
@@ -85,7 +85,7 @@ function Steps(props: FeedProps): React.JSX.Element {
 }
 
 /** The feed turn by turn; every turn but the one still running folds its steps */
-export function TurnBlocks({ live, ...props }: FeedProps & { live: boolean }): React.JSX.Element {
+export const TurnBlocks = memo(function TurnBlocks({ live, ...props }: FeedProps & { live: boolean }): React.JSX.Element {
   const turns = turnsOf(props.blocks)
   return (
     <>
@@ -102,7 +102,7 @@ export function TurnBlocks({ live, ...props }: FeedProps & { live: boolean }): R
       )}
     </>
   )
-}
+})
 
 export function Transcript({
   events,

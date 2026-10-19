@@ -1,4 +1,12 @@
-import { AgentSideConnection, type ContentBlock, ndJsonStream, PROTOCOL_VERSION, RequestError, type RequestPermissionOutcome } from '@agentclientprotocol/sdk'
+import {
+  AgentSideConnection,
+  type ContentBlock,
+  ndJsonStream,
+  PROTOCOL_VERSION,
+  RequestError,
+  type RequestPermissionOutcome,
+  type SessionConfigOption
+} from '@agentclientprotocol/sdk'
 import type { ChatEvent } from '@treeix/sdk/main'
 import { expect, test } from 'bun:test'
 import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
@@ -6,10 +14,25 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { confinedPath, connectOverStream, sliceLines } from './acpAdapter'
 
-function fakeAgent(name?: string) {
+/** Config options as Claude's adapter sends them: the effort levels on offer depend on the model */
+const configOptions = (model: string, effort: string): SessionConfigOption[] => [
+  { id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: model, options: ['sonnet', 'opus'].map((value) => ({ value, name: value })) },
+  {
+    id: 'effort',
+    name: 'Effort',
+    category: 'thought_level',
+    type: 'select',
+    currentValue: effort,
+    options: (model === 'opus' ? ['low', 'high', 'max'] : ['low', 'high']).map((value) => ({ value, name: value }))
+  }
+]
+
+function fakeAgent(name?: string, configured = false) {
   const toAgent = new TransformStream<Uint8Array, Uint8Array>()
   const toClient = new TransformStream<Uint8Array, Uint8Array>()
-  const agent: { mode: string; outcome: RequestPermissionOutcome | null; meta: unknown; directories: string[] | null; prompts: ContentBlock[][] } = {
+  const config = { model: 'sonnet', effort: 'high' }
+  const agent: { config: typeof config; mode: string; outcome: RequestPermissionOutcome | null; meta: unknown; directories: string[] | null; prompts: ContentBlock[][] } = {
+    config,
     mode: 'ask',
     outcome: null,
     meta: null,
@@ -29,6 +52,7 @@ function fakeAgent(name?: string) {
       newSession: ({ _meta, additionalDirectories }) => {
         agent.meta = _meta ?? null
         agent.directories = additionalDirectories ?? null
+        if (configured) return { sessionId: 's1', configOptions: configOptions(config.model, config.effort) }
         return {
           sessionId: 's1',
           modes: {
@@ -71,6 +95,10 @@ function fakeAgent(name?: string) {
       cancel: () => cancelArrived(),
       setSessionMode: ({ modeId }) => {
         agent.mode = modeId
+      },
+      setSessionConfigOption: ({ configId, value }) => {
+        if (configId === 'model' || configId === 'effort') config[configId] = String(value)
+        return { configOptions: configOptions(config.model, config.effort) }
       }
     }),
     ndJsonStream(toClient.writable, toAgent.readable)
@@ -235,4 +263,10 @@ test('a preset sets the mode on a new conversation and reports what the agent la
   expect(agent.mode).toBe('code')
   expect(events[0]).toMatchObject({ type: 'options', options: [{ id: 'mode', currentValue: 'code' }] })
   expect(events).toContainEqual({ type: 'error', message: 'This agent offers no model "gpt-9"; using its default' })
+})
+
+test('a preset sets the model before the effort, whose levels depend on it', async () => {
+  const { clientStream, agent } = fakeAgent(undefined, true)
+  await connectOverStream(clientStream, { cwd: '/tmp', resume: null, preset: { model: 'opus', effort: 'max' }, close: () => undefined })
+  expect(agent.config).toEqual({ model: 'opus', effort: 'max' })
 })

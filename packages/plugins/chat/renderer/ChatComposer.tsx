@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatContent, ChatImage, ChatOption } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
-import { agentOr, useAgents } from '@treeix/app/agents'
+import { useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
@@ -24,13 +24,29 @@ const BARE_VALUE = /^(on|off|default|none|auto)$/i
 
 type PendingSwitch = { option: ChatOption; value: string; tokens: number | null }
 
-/** A session option (mode, model) as a button opening the app's menu; j/k or arrows move, ⏎ picks, esc closes */
-function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (value: string) => void }): React.JSX.Element {
+/** What a picker's button says for an option: its value, with the option's name when the value is bare */
+const valueName = (option: ChatOption): string => option.values.find((value) => value.value === option.currentValue)?.name ?? option.currentValue
+
+const optionLabel = (option: ChatOption): string => {
+  const shown = valueName(option)
+  return BARE_VALUE.test(shown) ? `${option.name}: ${shown}` : shown
+}
+
+/** Session options (mode, model) behind one button opening the app's menu, a section each; j/k or arrows move, ⏎ picks, esc closes */
+function OptionPicker({
+  options,
+  label,
+  title,
+  onChoose
+}: {
+  options: ChatOption[]
+  label: React.ReactNode
+  title: string
+  onChoose: (option: ChatOption, value: string) => void
+}): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLDivElement>(null)
   const menu = useRef<HTMLDivElement>(null)
-  const current = option.values.find((value) => value.value === option.currentValue)
-  const shown = current?.name ?? option.currentValue
   const close = (): void => {
     setOpen(false)
     anchor.current?.querySelector('button')?.focus()
@@ -54,11 +70,11 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
   return (
     <div ref={anchor} className="flex min-w-0">
       <button
-        title={option.name}
+        title={title}
         onClick={() => (open ? close() : setOpen(true))}
-        className="flex h-6 max-w-40 min-w-0 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex h-7 max-w-40 min-w-0 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        <span className="truncate">{BARE_VALUE.test(shown) ? `${option.name}: ${shown}` : shown}</span>
+        {label}
         <Icon name="chevron" className="size-3 shrink-0 rotate-90 text-muted-foreground/65" />
       </button>
       {open && (
@@ -67,23 +83,28 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
           anchor={anchor}
           onDismiss={close}
           onKeyDown={onKey}
-          className="max-h-72 w-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground"
+          className="max-h-96 w-64 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground"
         >
-          <div className="px-2 pt-1 pb-1.5 text-[11px] text-muted-foreground">{option.name}</div>
-          {option.values.map((value) => (
-            <button
-              key={value.value}
-              data-current={value.value === option.currentValue ? '' : undefined}
-              title={value.description ?? undefined}
-              onClick={() => {
-                close()
-                if (value.value !== option.currentValue) onChoose(value.value)
-              }}
-              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent focus:bg-accent focus:outline-none"
-            >
-              <Icon name="check" className={`size-3 shrink-0 ${value.value === option.currentValue ? '' : 'opacity-0'}`} />
-              <span className="truncate">{value.name}</span>
-            </button>
+          {options.map((option, index) => (
+            <div key={option.id}>
+              {index > 0 && <hr className="my-1 border-border" />}
+              <div className="px-2 pt-1 pb-1.5 text-[11px] text-muted-foreground">{option.name}</div>
+              {option.values.map((value) => (
+                <button
+                  key={value.value}
+                  data-current={options.length === 1 && value.value === option.currentValue ? '' : undefined}
+                  title={value.description ?? undefined}
+                  onClick={() => {
+                    close()
+                    if (value.value !== option.currentValue) onChoose(option, value.value)
+                  }}
+                  className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs hover:bg-accent focus:bg-accent focus:outline-none"
+                >
+                  <Icon name="check" className={`size-3 shrink-0 ${value.value === option.currentValue ? '' : 'opacity-0'}`} />
+                  <span className="truncate">{value.name}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </Popup>
       )}
@@ -91,15 +112,21 @@ function OptionPicker({ option, onChoose }: { option: ChatOption; onChoose: (val
   )
 }
 
+/** One option on its own button, named by its value */
+const SinglePicker = ({ option, onChoose }: { option: ChatOption; onChoose: (option: ChatOption, value: string) => void }): React.JSX.Element => (
+  <OptionPicker options={[option]} label={<span className="truncate">{optionLabel(option)}</span>} title={option.name} onChoose={onChoose} />
+)
+
 /** The chat's agent; picking another starts the chat over with it, so only a chat without a conversation offers it, and a locked one shows nothing */
 function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
   const host = useHost()
   const chat = useChat(chatId)
-  const agents = useAgents().filter((agent) => agent.chat)
+  const allAgents = useAgents()
+  const agents = allAgents.filter((agent) => agent.chat)
   const current = chat.options?.agent
   if (!current) return null
   // A plugin's agent, like an AI Hub persona, is the point of its chat
-  if (hasConversation(chat) || agents.length < 2 || agentOr(current).plugin) return null
+  if (hasConversation(chat) || agents.length < 2 || allAgents.find((agent) => agent.id === current)?.plugin) return null
   const option: ChatOption = {
     id: 'agent',
     name: 'Agent',
@@ -113,7 +140,7 @@ function AgentPicker({ chatId }: { chatId: string }): React.JSX.Element | null {
     updateSettings({ chatAgent: id })
     switchAgent(chatId, agent).catch((reason: unknown) => host.flash(errorMessage(reason)))
   }
-  return <OptionPicker option={option} onChoose={pick} />
+  return <SinglePicker option={option} onChoose={(_, id) => pick(id)} />
 }
 
 function UsageRow({ label, tokens, total }: { label: string; tokens: number; total?: number }): React.JSX.Element {
@@ -140,7 +167,7 @@ function ContextMeter({ usage, turn }: { usage: NonNullable<Feed['usage']>; turn
         ref={anchor}
         title="Context used"
         onClick={() => setOpen((value) => !value)}
-        className="flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <span className="h-1 w-12 overflow-hidden rounded-full bg-muted">
           <span className={`block h-full ${fullness > 0.8 ? 'bg-amber-400' : 'bg-foreground/40'}`} style={{ width: `${Math.min(100, fullness * 100)}%` }} />
@@ -181,9 +208,10 @@ function ContextMeter({ usage, turn }: { usage: NonNullable<Feed['usage']>; turn
 
 const preview = (content: ChatContent[]): string => content.map((item) => (item.type === 'text' ? item.text : '[image]')).join(' ')
 
-export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string; onSent: () => void }): React.JSX.Element {
+export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: string; onSent: () => void; tools?: React.ReactNode }): React.JSX.Element {
   const host = useHost()
   const chat = useChat(chatId)
+  const agents = useAgents()
   const { feed, draft } = chat
   const busy = isBusy(chat)
   const [images, setImages] = useState<ChatImage[]>([])
@@ -255,8 +283,13 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
     setOption(chatId, id, value).catch((reason: unknown) => host.flash(errorMessage(reason)))
   }
 
+  // The model keeps its own button; mode, effort and the rest share one, which shows the mode
+  const models = feed.options.filter((option) => option.category === 'model')
+  const rest = feed.options.filter((option) => option.category !== 'model')
+  const mode = rest.find((option) => option.category === 'mode')
+
   const choose = (option: ChatOption, value: string): void => {
-    const warning = option.category === 'model' ? switchWarning(feed.usage) : null
+    const warning = option.category === 'model' ? switchWarning(feed.usage, feed.blocks.length === 0) : null
     if (warning) setPendingSwitch({ option, value, tokens: warning.tokens })
     else applyOption(option.id, value)
   }
@@ -293,13 +326,8 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
     }
   }
 
-  const hint = busy
-    ? 'Esc stops the agent'
-    : fullness > 0.8 && hasCompact
-      ? 'Context is 80% full: /compact summarizes'
-      : acceptsImages
-        ? '@ adds a file, / runs a command, paste a screenshot to show the problem'
-        : '@ adds a file, / runs a command'
+  // Only something worth reading; the composer stays quiet otherwise
+  const hint = busy ? 'Esc stops the agent' : fullness > 0.8 && hasCompact ? 'Context is 80% full: /compact summarizes' : null
 
   return (
     <div className="shrink-0 px-4 pb-3">
@@ -316,7 +344,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         </div>
       )}
       {pendingSwitch && (
-        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-amber-400/5 px-3 py-2 text-xs ring-1 ring-amber-400/40">
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-amber-400/5 py-2 pr-2 pl-4 text-xs ring-1 ring-amber-400/40">
           <span className="min-w-0 flex-1 text-foreground">
             Switching re-reads the whole chat without the cache
             {pendingSwitch.tokens !== null && <span className="text-muted-foreground">, about {formatTokens(pendingSwitch.tokens)} tokens</span>}
@@ -326,7 +354,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
               setPendingSwitch(null)
               applyOption(pendingSwitch.option.id, pendingSwitch.value)
             }}
-            className="h-6 rounded-md bg-primary px-2.5 font-medium text-white"
+            className="h-6 rounded-md bg-primary px-2.5 font-medium text-primary-foreground"
           >
             Switch
           </button>
@@ -341,7 +369,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         </div>
       )}
       <div
-        className="relative rounded-lg border border-input bg-background focus-within:border-primary"
+        className="relative rounded-3xl bg-popover shadow-[inset_0_0_0_1px_var(--color-input)]"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           if (event.dataTransfer.files.length === 0) return
@@ -350,7 +378,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
         }}
       >
         {suggestions && items.length > 0 && (
-          <div className="absolute bottom-full left-0 z-10 mb-1 max-h-64 w-full overflow-auto rounded-md bg-popover py-1 text-xs ring-1 ring-border">
+          <div className="absolute bottom-full left-0 z-10 mb-1 max-h-64 w-full overflow-auto rounded-lg bg-popover p-1 text-xs ring-1 ring-border">
             {items.map((item, index) => (
               <button
                 key={item.label}
@@ -358,7 +386,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
                   event.preventDefault()
                   accept(index)
                 }}
-                className={`flex w-full items-baseline gap-3 px-3 py-1 text-left ${index === Math.min(selected, items.length - 1) ? 'bg-accent text-foreground' : 'text-foreground/85'}`}
+                className={`flex w-full items-baseline gap-3 rounded-md px-2 py-1 text-left ${index === Math.min(selected, items.length - 1) ? 'bg-accent text-foreground' : 'text-foreground/85'}`}
               >
                 <span className="shrink-0 font-mono">{item.label}</span>
                 <span className="min-w-0 truncate text-muted-foreground">{item.detail}</span>
@@ -367,14 +395,14 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
           </div>
         )}
         {images.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+          <div className="flex flex-wrap gap-1.5 px-4 pt-3">
             {images.map((image, index) => (
               <div key={index} className="group relative">
                 <ImageThumb image={image} className="h-12" />
                 <button
                   aria-label="Remove image"
                   onClick={() => setImages((current) => current.filter((_, at) => at !== index))}
-                  className="absolute -top-1.5 -right-1.5 hidden size-4 place-items-center rounded-full bg-foreground text-background group-hover:grid"
+                  className="absolute -top-1.5 -right-1.5 hidden size-4 place-items-center rounded-full bg-foreground text-on-foreground group-hover:grid"
                 >
                   <Icon name="close" className="size-2.5" />
                 </button>
@@ -387,7 +415,7 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
           autoFocus
           rows={1}
           value={draft}
-          placeholder={chat.options?.agent ? `Message ${agentOr(chat.options.agent).label}` : 'Message the agent'}
+          placeholder={chat.options?.agent ? `Message ${agents.find((agent) => agent.id === chat.options?.agent)?.label ?? chat.options.agent}` : 'Message the agent'}
           onChange={(event) => {
             setDraft(chatId, event.target.value)
             setCaret(event.target.selectionStart)
@@ -401,18 +429,18 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
             event.preventDefault()
             void addImages(event.clipboardData.files)
           }}
-          className="block max-h-[calc(8lh+1rem)] w-full resize-none bg-transparent px-3 py-2 text-sm text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
+          className="block max-h-[calc(8lh+1.5rem)] w-full resize-none bg-transparent px-4 pt-3 pb-1.5 text-sm text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
         />
-        <div className="flex items-center gap-1.5 px-2 pb-2">
+        <div className="flex items-center gap-1 px-2 pb-2">
           {acceptsImages && (
             <>
               <button
                 aria-label="Attach images"
                 title="Attach images"
                 onClick={() => picker.current?.click()}
-                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground/6 text-muted-foreground hover:text-foreground"
               >
-                <Icon name="paperclip" className="size-3.5" />
+                <Icon name="plus" />
               </button>
               <input
                 ref={picker}
@@ -427,28 +455,44 @@ export function Composer({ chatId, cwd, onSent }: { chatId: string; cwd: string;
               />
             </>
           )}
+          {tools}
           <AgentPicker chatId={chatId} />
-          {feed.options.map((option) => (
-            <OptionPicker key={option.id} option={option} onChoose={(value) => choose(option, value)} />
+          {models.map((option) => (
+            <SinglePicker key={option.id} option={option} onChoose={choose} />
           ))}
+          {rest.length > 0 && (
+            <OptionPicker
+              options={rest}
+              title={rest.map((option) => `${option.name}: ${valueName(option)}`).join('\n')}
+              label={
+                <>
+                  <Icon name="settings" className="size-3 shrink-0" />
+                  {mode && <span className="truncate">{optionLabel(mode)}</span>}
+                </>
+              }
+              onChoose={choose}
+            />
+          )}
           <span className="flex-1" />
           {feed.usage && <ContextMeter usage={feed.usage} turn={feed.turnUsage} />}
           {busy ? (
-            <button onClick={() => cancel(chatId)} className="h-6 rounded-md px-2.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-accent">
-              Stop
+            <button onClick={() => cancel(chatId)} aria-label="Stop" title="Stop" className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-on-foreground">
+              <span className="size-2.5 rounded-[2px] bg-current" />
             </button>
           ) : (
             <button
               onClick={submit}
               disabled={(!chat.connected && !chat.error) || (!draft.trim() && images.length === 0)}
-              className="h-6 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+              aria-label="Send"
+              title={chat.connected || chat.error ? 'Send' : 'Connecting…'}
+              className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-on-foreground disabled:bg-foreground/10 disabled:text-muted-foreground"
             >
-              {chat.connected || chat.error ? 'Send' : 'Connecting…'}
+              <Icon name="arrowUp" />
             </button>
           )}
         </div>
       </div>
-      <div className="mt-1.5 px-1 text-[11px] text-muted-foreground">{problem ?? hint}</div>
+      {(problem ?? hint) && <div className="mt-1.5 px-3 text-[11px] text-muted-foreground">{problem ?? hint}</div>}
     </div>
   )
 }

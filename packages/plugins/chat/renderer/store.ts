@@ -124,7 +124,7 @@ export function filesFor(chatId: string, cwd: string): Promise<string[]> {
   let files = fileLists.get(chatId)
   if (!files) {
     files = window.api.listFiles(cwd).then(
-      (listing) => listing.files,
+      (listing) => listing?.files ?? [],
       () => []
     )
     fileLists.set(chatId, files)
@@ -183,9 +183,14 @@ function replayed(chatId: string): void {
   replayWaits.delete(chatId)
 }
 
+/** The newest connect per chat; an older one that fails after it, as main supersedes it, must not mark the chat failed */
+const latestConnect = new Map<string, symbol>()
+
 /** `fresh` empties the feed once connected, for a resumed session the agent replays, and resolves once the replay is in */
 async function connect(chatId: string, options: ChatStartOptions, fresh: boolean): Promise<string> {
   if (!bridge) throw new Error('Chat is not loaded')
+  const token = Symbol(chatId)
+  latestConnect.set(chatId, token)
   update(chatId, (state) => ({ ...state, options, error: null }))
   try {
     const startOptions: StartOptions = options
@@ -206,7 +211,7 @@ async function connect(chatId: string, options: ChatStartOptions, fresh: boolean
     await replay
     return result.agentSessionId
   } catch (reason) {
-    update(chatId, (state) => ({ ...state, connected: false, error: errorMessage(reason) }))
+    if (latestConnect.get(chatId) === token) update(chatId, (state) => ({ ...state, connected: false, error: errorMessage(reason) }))
     throw reason
   }
 }
@@ -326,5 +331,25 @@ export function whenIdle(chatId: string): Promise<void> {
     }
     const unsubscribe = subscribe(() => void check())
     check()
+  })
+}
+
+/** Takes `from`'s draft now and, once `to` has its options, what `from` had picked; resolves when applied or `to` fails to start */
+export function carryOver(from: string, to: string): Promise<void> {
+  const { draft, feed } = getChat(from)
+  setDraft(to, draft)
+  const picked = feed.options.map((option) => [option.id, option.currentValue] as const)
+  return new Promise((resolve) => {
+    const apply = (): void => {
+      const { feed: target, error } = getChat(to)
+      if (target.options.length === 0 && !error) return
+      unsubscribe()
+      const changes = picked.filter(([id, value]) =>
+        target.options.some((option) => option.id === id && option.currentValue !== value && option.values.some((candidate) => candidate.value === value))
+      )
+      void Promise.all(changes.map(([id, value]) => setOption(to, id, value).catch(() => undefined))).then(() => resolve())
+    }
+    const unsubscribe = subscribe(apply)
+    apply()
   })
 }

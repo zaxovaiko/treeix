@@ -7,6 +7,7 @@ import {
   afterPrompt,
   hasConversation,
   cancel,
+  carryOver,
   type ChatState,
   emptyChat,
   getChat,
@@ -66,14 +67,19 @@ type Pending = { content: unknown; done: () => void }
 const prompts: Pending[] = []
 const sent: unknown[][] = []
 const handlers = new Map<string, (...args: unknown[]) => void>()
+const racing: { resolve: () => void; reject: () => void }[] = []
 const startResult: StartResult = { agentSessionId: 'session', capabilities: { images: false, load: false, list: false }, terminalCommand: null }
 
 listen({
   invoke: <T>(channel: string, ...args: unknown[]): Promise<T> =>
-    new Promise<unknown>((resolve) => {
-      if (channel === 'start') resolve(startResult)
+    new Promise<unknown>((resolve, reject) => {
+      if (channel === 'start' && args[0] === 'race') racing.push({ resolve: () => resolve(startResult), reject: () => reject(new Error('Superseded by a newer start')) })
+      else if (channel === 'start') resolve(startResult)
       else if (channel === 'prompt') prompts.push({ content: args[1], done: () => resolve({ stopReason: 'end_turn' }) })
-      else resolve(undefined)
+      else {
+        if (channel === 'setOption') sent.push([channel, ...args])
+        resolve(undefined)
+      }
     }) as Promise<T>,
   send: (...args) => void sent.push(args),
   on: (channel, listener) => {
@@ -104,6 +110,18 @@ test('a queued message starts in the same update the turn before it ends, so whe
   await flush()
   expect(idle).toBe(true)
   unsubscribe()
+})
+
+test('an older start that main supersedes leaves the newer one connected, without an error', async () => {
+  const options = { agent: 'claude', adapter: 'acp', command: 'x', cwd: '/repo', resume: null }
+  const older = start('race', options).catch(() => undefined)
+  const newer = start('race', options)
+  racing[1]?.resolve()
+  await newer
+  racing[0]?.reject()
+  await older
+  expect(getChat('race').connected).toBe(true)
+  expect(getChat('race').error).toBeNull()
 })
 
 test('stopping empties the queue back into the draft', async () => {
@@ -154,4 +172,25 @@ test('a chat has a conversation once anything was said or it resumes one', () =>
   expect(hasConversation(emptyChat)).toBe(false)
   expect(hasConversation({ ...emptyChat, sending: true })).toBe(true)
   expect(hasConversation({ ...emptyChat, feed: { ...emptyFeed, blocks: [{ type: 'error', message: 'x' }] } })).toBe(true)
+})
+
+test('a moved chat takes the draft at once and the picked options once it connects', async () => {
+  const model = (current: string) => ({
+    id: 'model',
+    name: 'Model',
+    category: 'model' as const,
+    currentValue: current,
+    values: ['opus', 'sonnet'].map((value) => ({ value, name: value, description: null }))
+  })
+  handlers.get('events')?.('from', [{ type: 'options', options: [model('sonnet')] }])
+  setDraft('from', 'fix the bug')
+  let done = false
+  void carryOver('from', 'to').then(() => (done = true))
+  expect(getChat('to').draft).toBe('fix the bug')
+  await flush()
+  expect(done).toBe(false)
+  handlers.get('events')?.('to', [{ type: 'options', options: [model('opus')] }])
+  await flush()
+  expect(sent).toContainEqual(['setOption', 'to', 'model', 'sonnet'])
+  expect(done).toBe(true)
 })

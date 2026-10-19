@@ -51,8 +51,9 @@ export function completion(input: string, caret: number, commands: { name: strin
   return null
 }
 
-export function switchWarning(usage: { used: number } | null): { tokens: number | null } | null {
-  if (usage === null) return { tokens: null }
+/** Worth a warning only once the chat holds context: usage when the agent reports it, else any message */
+export function switchWarning(usage: { used: number } | null, empty: boolean): { tokens: number | null } | null {
+  if (usage === null) return empty ? null : { tokens: null }
   if (usage.used < 10000) return null
   return { tokens: usage.used }
 }

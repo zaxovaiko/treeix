@@ -24,9 +24,10 @@ test('slash completion only at the start, file completion after @ anywhere', () 
 })
 
 test('switchWarning and formatTokens', () => {
-  expect(switchWarning({ used: 9000 })).toBeNull()
-  expect(switchWarning({ used: 48000 })).toEqual({ tokens: 48000 })
-  expect(switchWarning(null)).toEqual({ tokens: null })
+  expect(switchWarning({ used: 9000 }, false)).toBeNull()
+  expect(switchWarning({ used: 48000 }, false)).toEqual({ tokens: 48000 })
+  expect(switchWarning(null, false)).toEqual({ tokens: null })
+  expect(switchWarning(null, true)).toBeNull()
   expect(formatTokens(48123)).toBe('48k')
   expect(formatTokens(1234567)).toBe('1.2M')
 })
