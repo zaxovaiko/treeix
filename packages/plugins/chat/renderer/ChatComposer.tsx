@@ -7,7 +7,7 @@ import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
-import { builtinOf, completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
+import { builtinOf, completion, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
 import { cancel, clear, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 import { primaryKey } from '@treeix/shared/shortcut'
 
@@ -256,7 +256,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   }
 
   // Images the agent takes are attached; any other file goes in as an @ mention of its path, relative to the chat's folder when inside it
-  const dropFiles = useEffectEvent((list: FileList): void => {
+  const attachFiles = (list: FileList): void => {
     const all = [...list]
     const attached = acceptsImages ? all.filter((file) => file.type.startsWith('image/')) : []
     if (attached.length) void addImages(attached)
@@ -266,7 +266,8 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
       .filter(Boolean)
     if (paths.length) setDraft(chatId, withMentions(draft, paths, cwd))
     input.current?.focus()
-  })
+  }
+  const dropFiles = useEffectEvent(attachFiles)
 
   // Files drop anywhere in the page around the composer that marks itself data-drop-zone, else on the composer
   useEffect(() => {
@@ -483,29 +484,25 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
           className="block max-h-[calc(8lh+1.5rem)] w-full resize-none bg-transparent px-4 pt-3 pb-1.5 text-sm text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
         />
         <div className="flex items-center gap-1 px-2 pb-2">
-          {acceptsImages && (
-            <>
-              <button
-                aria-label="Attach images"
-                title="Attach images"
-                onClick={() => picker.current?.click()}
-                className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground/6 text-muted-foreground hover:text-foreground"
-              >
-                <Icon name="plus" />
-              </button>
-              <input
-                ref={picker}
-                type="file"
-                multiple
-                accept={IMAGE_TYPES.join(',')}
-                className="hidden"
-                onChange={(event) => {
-                  if (event.target.files) void addImages(event.target.files)
-                  event.target.value = ''
-                }}
-              />
-            </>
-          )}
+          <button
+            aria-label="Attach files"
+            title="Attach files"
+            onClick={() => picker.current?.click()}
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground/6 text-muted-foreground hover:text-foreground"
+          >
+            <Icon name="plus" />
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              if (event.target.files) attachFiles(event.target.files)
+              event.target.value = ''
+            }}
+          />
+
           {tools}
           <AgentPicker chatId={chatId} />
           {models.map((option) => (
