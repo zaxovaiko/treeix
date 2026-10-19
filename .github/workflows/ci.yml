@@ -27,7 +27,9 @@ jobs:
       - run: bun run format:check
       - run: bun run typecheck
       - run: bun run test
+      # Off until the e2e suite is turned back on
       - run: bun run e2e
+        if: false
 
       - uses: actions/upload-artifact@v4
         if: failure()

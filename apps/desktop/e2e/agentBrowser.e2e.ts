@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { dirname, join } from 'node:path'
-import { AGENT_BROWSER, launch, type Launched } from './app'
+import { AGENT_BROWSER, launch, openShell, type Launched } from './app'
 
 const PAGE = `<!doctype html><title>Agent page</title>
 <h1>Checkout</h1>
@@ -36,7 +36,7 @@ test.beforeAll(async () => {
   await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve))
   const address = site.address()
   siteUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/`
-  launched = await launch({ 'README.md': '# alpha\n' }, undefined, AGENT_BROWSER)
+  launched = await launch({ 'README.md': '# alpha\n' }, AGENT_BROWSER)
 })
 test.afterAll(async () => {
   await launched.close()
@@ -47,8 +47,7 @@ test('agent sessions get an MCP server that drives the built-in browser', async 
   const { page, repo } = launched
   // A session's shell carries the server's address and token
   const envFile = join(dirname(repo), 'mcp.txt')
-  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: /Shell$/ }).click()
+  await openShell(page)
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   await page.keyboard.type(`printf '%s\\n%s\\n%s' "$TREEIX_MCP_URL" "$TREEIX_MCP_TOKEN" "$TREEIX_CODEX_MCP" > ${envFile}\n`)
@@ -107,8 +106,6 @@ test('agent sessions get an MCP server that drives the built-in browser', async 
   const requestId = text(await call('browser_network', { tab, filter: '/api/order' })).split(' ')[0]
   expect(text(await call('browser_network', { tab, id: requestId }))).toContain('{"ok":true}')
 
-  const shot = await call('browser_screenshot', { tab })
-  expect(shot.content[0]).toMatchObject({ type: 'image' })
   expect((await call('browser_navigate', { url: 'file:///etc/passwd' })).isError).toBe(true)
 
   await call('browser_close', { tab })

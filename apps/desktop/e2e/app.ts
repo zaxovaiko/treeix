@@ -1,4 +1,4 @@
-import { type ElectronApplication, _electron as electron, type Page } from '@playwright/test'
+import { type ElectronApplication, _electron as electron, expect, type Page } from '@playwright/test'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -26,8 +26,26 @@ export const AGENT_BROWSER = { 'plugin.browser.settings': JSON.stringify({ agent
 
 export type Launched = { app: ElectronApplication; page: Page; repo: string; close: () => Promise<void> }
 
-/** The built app on a fake home, opened on `open` in the worktree's file viewer when given, with `storage` seeded into localStorage */
-export async function launch(files: Record<string, string>, open?: string, storage: Record<string, string> = {}): Promise<Launched> {
+/** Settings with the fake ACP agent as the only chat agent, so chats answer without a real one */
+export const FAKE_CHAT = {
+  settings: JSON.stringify({
+    customAgents: [
+      {
+        id: 'fake',
+        label: 'Fake',
+        mark: 'F',
+        color: '#888888',
+        command: null,
+        agent: true,
+        chat: { adapter: 'acp', command: `"${process.execPath}" "${join(__dirname, 'fakeAcpAgent.mjs')}"` }
+      }
+    ],
+    chatAgent: 'fake'
+  })
+}
+
+/** The built app on a fake home, with `storage` seeded into localStorage */
+export async function launch(files: Record<string, string>, storage: Record<string, string> = {}): Promise<Launched> {
   const { home, repo } = fakeHome(files)
   // A run killed mid-test leaves macOS window state behind, and its "reopen windows?" alert then blocks every launch
   const app = await electron.launch({
@@ -36,11 +54,8 @@ export async function launch(files: Record<string, string>, open?: string, stora
     env: { ...process.env, HOME: home, TREEIX_USER_DATA: join(home, 'user-data'), TREEIX_HEADLESS: '1' }
   })
   const page = await app.firstWindow()
-  // Without the repository scan the app starts with nothing selected and drops the seeded place
-  await page.waitForFunction(() => localStorage.getItem('scan.cache'), null, { timeout: 30_000 })
-  // Tests start on a file if asked, as if left there
-  if (open)
-    await page.evaluate((place) => localStorage.setItem('app.place@all', JSON.stringify(place)), { appTab: 'worktrees', selected: repo, viewer: { path: open, line: null } })
+  // The sidebar's search shows once the renderer is up, so seeded storage isn't written over by its first render
+  await page.getByPlaceholder('Search').first().waitFor({ timeout: 30_000 })
   await page.evaluate((entries) => entries.forEach(([key, value]) => localStorage.setItem(key, value)), Object.entries(storage))
   await page.reload()
   return {
@@ -53,4 +68,16 @@ export async function launch(files: Record<string, string>, open?: string, stora
       rmSync(home, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 })
     }
   }
+}
+
+/** ⌘J's terminal panel with a shell started in it */
+export async function openShell(page: Page): Promise<void> {
+  const shell = page.getByRole('button', { name: /Shell$/ })
+  // The key is ignored until the window has focus and the host has mounted, which a loaded machine delays
+  await expect(async () => {
+    if (!(await shell.isVisible())) await page.keyboard.press('Meta+j')
+    await expect(shell).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 30_000 })
+  await shell.click()
+  await page.locator('.xterm').first().waitFor()
 }

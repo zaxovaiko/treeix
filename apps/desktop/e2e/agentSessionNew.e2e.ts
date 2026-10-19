@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { launch, type Launched } from './app'
+import { launch, openShell, type Launched } from './app'
 
 let launched: Launched
 
@@ -16,8 +16,7 @@ test('an agent starts a session through session_new and finds it in sessions_lis
   const { page, repo } = launched
   const envFile = join(dirname(repo), 'claude-mcp.json')
   const startedFile = join(dirname(repo), 'started.txt')
-  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: /Shell$/ }).click()
+  await openShell(page)
   await page.waitForTimeout(2000)
   await page.locator('.xterm').first().click()
   await page.keyboard.type(`printf '%s' "$TREEIX_CLAUDE_MCP" > ${envFile}\n`)

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { launch, type Launched } from './app'
+import { launch, openShell, type Launched } from './app'
 
 const PRINT = `clear; for i in $(seq 1 20); do printf '\\033[3%dmline %02d ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789\\033[0m\\n' $((i%7+1)) $i; done\n`
 
@@ -11,8 +11,7 @@ test.afterAll(() => launched.close())
 
 test('a terminal still draws text after the GPU process resets', async () => {
   const { page, app } = launched
-  await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-  await page.getByRole('button', { name: /Shell$/ }).click()
+  await openShell(page)
   const panes = page.locator('.xterm')
   await expect(panes).toHaveCount(1)
   // The shell starts its prompt

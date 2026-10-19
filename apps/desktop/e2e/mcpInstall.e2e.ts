@@ -25,7 +25,7 @@ test.afterAll(async () => {
   rmSync(stubs, { recursive: true, force: true })
 })
 
-test('the plug button sets up the Treeix MCP in Claude Code and Codex, keeping the rest of their config', async () => {
+test('Settings sets up the Treeix MCP in Claude Code and Codex, keeping the rest of their config', async () => {
   const { page, repo } = launched
   const home = dirname(dirname(repo))
   // Both agents have run here before
@@ -34,9 +34,10 @@ test('the plug button sets up the Treeix MCP in Claude Code and Codex, keeping t
   writeFileSync(join(home, '.codex', 'config.toml'), 'model = "gpt-5"\n\n[mcp_servers.treeix]\ncommand = "old"\n\n[mcp_servers.other]\ncommand = "other"\n')
   await page.reload()
 
-  await page.getByRole('button', { name: 'Set up the Treeix MCP in Claude Code and Codex (outdated)' }).click()
-  // Set up, it leaves the title bar; Settings keeps the button
-  await expect(page.getByRole('button', { name: /^Set up the Treeix MCP/ })).toBeHidden({ timeout: 10_000 })
+  await page.getByRole('button', { name: /^Settings/ }).click()
+  await page.getByRole('button', { name: 'Agents', exact: true }).click()
+  await page.getByRole('button', { name: 'Set up', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Set up again' })).toBeVisible({ timeout: 10_000 })
 
   const claude = JSON.parse(readFileSync(join(home, '.claude.json'), 'utf8')) as { mcpServers: { treeix: { url: string; headers: { Authorization: string } } } }
   const codex = readFileSync(join(home, '.codex', 'config.toml'), 'utf8')

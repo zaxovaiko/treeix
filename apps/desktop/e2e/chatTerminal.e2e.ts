@@ -1,53 +1,33 @@
-import { _electron as electron, type ElectronApplication, expect, type Page, test } from '@playwright/test'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { expect, test } from '@playwright/test'
+import { FAKE_CHAT, launch, type Launched } from './app'
 
-let home: string
-let app: ElectronApplication
-let page: Page
-
-const fake = {
-  id: 'fake',
-  label: 'Fake',
-  mark: 'F',
-  color: '#888888',
-  command: null,
-  agent: true,
-  chat: { adapter: 'acp', command: `"${process.execPath}" "${join(__dirname, 'fakeAcpAgent.mjs')}"` }
-}
+let launched: Launched
 
 test.beforeAll(async () => {
-  home = realpathSync(mkdtempSync(join(tmpdir(), 'treeix-e2e-')))
-  app = await electron.launch({
-    args: [resolve(__dirname, '..'), '-ApplePersistenceIgnoreState', 'YES'],
-    env: { ...process.env, HOME: home, TREEIX_USER_DATA: join(home, 'user-data'), TREEIX_HEADLESS: '1' }
-  })
-  page = await app.firstWindow()
-  await page.evaluate((settings) => localStorage.setItem('settings', settings), JSON.stringify({ customAgents: [fake], chatAgent: 'fake' }))
-  await page.reload()
+  launched = await launch({ 'README.md': 'alpha' }, FAKE_CHAT)
 })
-test.afterAll(async () => {
-  await app.close()
-  rmSync(home, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 })
-})
+test.afterAll(() => launched.close())
 
 test("a chat's terminal button opens a shell in its folder, as tabs that split and close with keys", async () => {
+  const { page, app } = launched
   await page.getByPlaceholder('Message Fake').fill('hello')
   const send = page.getByRole('button', { name: 'Send' })
   await expect(send).toBeEnabled({ timeout: 20_000 })
   await send.click()
+  const terminal = page.getByRole('button', { name: /^Terminal/ })
 
   const panel = page.locator('aside:has([role=tablist])')
   const tabs = panel.getByRole('tab')
-  await page.getByRole('button', { name: 'Show terminal' }).click()
+  await terminal.click()
   await expect(panel.locator('.xterm')).toBeVisible({ timeout: 15_000 })
   await expect(tabs).toHaveCount(1)
   // The chat itself stays out of the terminal panel
   await expect(tabs.first()).not.toContainText('hello')
 
   // Showing it again reuses the shell
-  await page.getByRole('button', { name: 'Show terminal' }).click()
+  await terminal.click()
+  await expect(panel).toBeHidden()
+  await terminal.click()
   await expect(tabs).toHaveCount(1)
 
   await panel.locator('.xterm').first().click()

@@ -4,7 +4,7 @@ import { launch, type Launched } from './app'
 let launched: Launched
 
 test.beforeAll(async () => {
-  launched = await launch({ 'a.ts': 'const answer = 42\n' }, 'a.ts')
+  launched = await launch({ 'a.ts': 'const answer = 42\n' })
 })
 test.afterAll(() => launched.close())
 
@@ -18,6 +18,14 @@ const THEME = `{
 
 test('an imported VS Code theme colors the app and the code, and can be removed', async () => {
   const { page } = launched
+  // The code shows in the side panel, from the folder's file search, and stays while Settings is open
+  await page.getByTitle('Where the chat runs').click()
+  await page.getByPlaceholder('Search folders or type a path').fill(launched.repo)
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Meta+Shift+f')
+  await page.getByPlaceholder(/^Search in/).fill('answer')
+  await expect(page.getByText('a.ts').first()).toBeVisible()
+  await page.keyboard.press('Enter')
   const keyword = page.locator('.monaco-editor .view-line span span', { hasText: /^const$/ })
   await expect(keyword).toBeVisible()
 
@@ -28,7 +36,6 @@ test('an imported VS Code theme colors the app and the code, and can be removed'
   await expect(darkThemes.getByRole('button', { name: 'Pink', exact: true })).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--color-background'))).toBe('#101010')
 
-  await page.keyboard.press('Escape')
   await expect(keyword).toHaveCSS('color', 'rgb(255, 0, 170)')
 
   await page.getByRole('button', { name: /^Settings/ }).click()
