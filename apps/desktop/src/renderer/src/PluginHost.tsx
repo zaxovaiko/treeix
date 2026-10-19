@@ -42,6 +42,7 @@ export function PluginHost({
   search,
   onSearch,
   onSettings,
+  lead,
   children
 }: {
   page: string
@@ -56,6 +57,8 @@ export function PluginHost({
   onSearch: (open: boolean) => void
   /** Shows Settings, on the page asked for once it is up */
   onSettings: () => void
+  /** The show sidebar bar, over the panel while it fills the window */
+  lead: React.ReactNode
   children: React.ReactNode
 }): React.JSX.Element {
   const { loaded: plugins } = usePlugins()
@@ -63,6 +66,9 @@ export function PluginHost({
   const island = useSettings().islandUi
   const [sideWidth, setSideWidth] = usePersisted<number>('bots.terminalWidth', 440)
   const terminalShown = side === TERMINAL
+  // The panel in the page's place, kept only while one is open
+  const [filled, setFilled] = useState(false)
+  if (filled && !side) setFilled(false)
   const onTerminal = (shown: boolean): void => (shown ? show(TERMINAL) : terminalShown ? show(null) : undefined)
   const comments = useComments()
   // The panels shown before and after this one, like a browser's, so a jump to a definition can come back
@@ -116,7 +122,7 @@ export function PluginHost({
     (): HostApi => ({
       repos: null,
       workspaceId: currentId,
-      scopeRepoPaths: null,
+      scopeRepoPaths: [folder],
       scopeLabel: '',
       selectedWorktree: folder,
       selectedWorktreeLabel: null,
@@ -162,14 +168,25 @@ export function PluginHost({
       hidePanel: (id) => id === TERMINAL && onTerminal(false),
       isPanelVisible: (id) => id === TERMINAL && terminalShown,
       movePanel: noop,
+      panelFilled: filled,
+      fillPanel: setFilled,
       isEnabled: (pluginId) => plugins.some(({ manifest }) => manifest.id === pluginId),
       service: findService,
       onSent: () => onTerminal(true)
     }),
-    [currentId, page, folder, side, back, plugins, comments, send]
+    [currentId, page, folder, side, back, plugins, comments, send, filled]
   )
   // Plugins' keys (the terminal's ⌘T, ⌘D, ⌘[ and more) and ⌘W, which closes the focused terminal's session, else the panel
-  const keys = { host, plugins, onSearch, goBack, goForward, toggleTerminal: () => onTerminal(!terminalShown), closeSide: () => side !== null && show(null) }
+  const keys = {
+    host,
+    plugins,
+    onSearch,
+    goBack,
+    goForward,
+    toggleTerminal: () => onTerminal(!terminalShown),
+    toggleFill: () => side !== null && setFilled(!filled),
+    closeSide: () => side !== null && show(null)
+  }
   const latest = useRef(keys)
   latest.current = keys
   useEffect(() => {
@@ -183,7 +200,9 @@ export function PluginHost({
             ? latest.current.goBack
             : matchesAction(event, 'app.forward')
               ? latest.current.goForward
-              : null
+              : matchesAction(event, 'panel.fill')
+                ? latest.current.toggleFill
+                : null
       if (run && !event.defaultPrevented) {
         event.preventDefault()
         run()
@@ -198,7 +217,7 @@ export function PluginHost({
       offClose()
     }
   }, [])
-  const pageNav = { onClose: () => show(null), onBack: back.length ? goBack : null, onForward: forward.length ? goForward : null }
+  const pageNav = { onClose: () => show(null), onBack: back.length ? goBack : null, onForward: forward.length ? goForward : null, filled, onFill: setFilled }
   const Terminal = plugins.flatMap(({ plugin }) => plugin.panels ?? []).find((panel) => panel.id === TERMINAL)?.render
   const tab = typeof side === 'string' ? plugins.flatMap(({ plugin }) => plugin.tabs ?? []).find((candidate) => candidate.id === side) : undefined
   const content =
@@ -220,11 +239,15 @@ export function PluginHost({
   return (
     <HostContext.Provider value={host}>
       <div className={`flex min-h-0 min-w-0 flex-1 ${island ? 'gap-2 py-2 pr-2' : ''}`}>
-        {children}
+        {/* Hidden rather than unmounted while the panel fills the window, so the chat keeps its scroll and draft */}
+        <div className={filled ? 'hidden' : 'contents'}>{children}</div>
         {content && (
           // Shrinks before the content does when the window gets narrow
-          <aside style={{ width: sideWidth }} className={`relative flex min-w-[240px] flex-col ${island ? ISLAND : 'border-l border-border'}`}>
-            <ResizeHandle edge="left" onResize={setSideWidth} />
+          <aside
+            style={filled ? undefined : { width: sideWidth }}
+            className={`relative flex min-w-[240px] flex-col ${filled ? 'flex-1' : ''} ${island ? ISLAND : 'border-l border-border'}`}
+          >
+            {filled ? lead : <ResizeHandle edge="left" onResize={setSideWidth} />}
             <ErrorBoundary
               label={tab?.label ?? (typeof side === 'object' ? side?.title : side === CHANGES ? 'Changes' : undefined) ?? 'Terminal'}
               resetKey={typeof side === 'object' ? side?.key : (side ?? '')}
@@ -280,6 +303,8 @@ function SidePage({
   onClose,
   onBack,
   onForward,
+  filled,
+  onFill,
   children
 }: {
   title: string
@@ -287,6 +312,8 @@ function SidePage({
   onClose: () => void
   onBack: (() => void) | null
   onForward: (() => void) | null
+  filled: boolean
+  onFill: (fill: boolean) => void
   children: React.ReactNode
 }): React.JSX.Element {
   return (
@@ -304,6 +331,9 @@ function SidePage({
         )}
         <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">{icon}</span>
         <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+        <IconButton label={withKeys(filled ? 'Bring the chat back' : 'Fill the window', 'panel.fill')} active={filled} onClick={() => onFill(!filled)}>
+          <Icon name={filled ? 'minimize' : 'maximize'} className="size-3.5" />
+        </IconButton>
         <IconButton label="Close panel (⌘W)" onClick={onClose}>
           <Icon name="close" className="size-3" />
         </IconButton>

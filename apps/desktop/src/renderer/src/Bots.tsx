@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { type ClosedSessionSummary, ISLAND, type SessionSummary, type Services, updateShell, useHost } from '@treeix/sdk'
+import { type ClosedSessionSummary, getShell, ISLAND, isTyping, type SessionSummary, type Services, togglePanel, updateShell } from '@treeix/sdk'
 import { agentOr, chatAgent, useAgents } from './agents'
 import { BotAvatar } from './BotAvatar'
 import { Icon } from './Icon'
 import { JOBS } from './jobs'
 import { findService, usePlugins, useService, useSessions } from './plugins'
 import { FolderPicker } from './FolderPicker'
-import { useSettings } from './settings'
-import { withKeys } from '../../shared/keymap'
+import { stepFontSize, useSettings } from './settings'
+import { actionForEvent, onKeymapChange, withKeys } from '../../shared/keymap'
+import { primaryKey, secondaryKey } from '../../shared/shortcut'
+import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
+import { ShortcutSheet } from './Shell'
 import { CHANGES, PluginHost, PluginPage, type Side, TERMINAL } from './PluginHost'
 import { StatusDot, worktreeLabel } from './sessionUi'
 import { timeAgo } from './time'
 import logo from './assets/treeix.webp'
-import { errorMessage, IconButton, Popup, ResizeHandle, useActionKeys, useChromeless, usePersisted } from './ui'
+import { openMenu } from './contextMenu'
+import { errorMessage, IconButton, NameInput, Popup, ResizeHandle, useActionKeys, useChromeless, usePersisted } from './ui'
 
 type Bot = ReturnType<Services['bots']['list']>[number]
 
@@ -42,11 +46,41 @@ function AgentMark({ kind, className = 'size-7 text-[15px]' }: { kind: string; c
   )
 }
 
-function ChatRow({ session, active, onClick }: { session: SessionSummary; active: boolean; onClick: () => void }): React.JSX.Element {
+function ChatRow({
+  session,
+  active,
+  renaming,
+  onClick,
+  onRename,
+  onRenamed,
+  flash
+}: {
+  session: SessionSummary
+  active: boolean
+  renaming: boolean
+  onClick: () => void
+  onRename: () => void
+  onRenamed: () => void
+  flash: (message: string) => void
+}): React.JSX.Element {
+  const sessions = findService('sessions')
+  if (renaming)
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg bg-accent px-2 py-1.5">
+        <AgentMark kind={session.kind} />
+        <NameInput value={session.title} label="Chat name" onSave={(name) => sessions?.rename(session.id, name)} onClose={onRenamed} />
+      </div>
+    )
   return (
     <div className={`group relative flex items-center rounded-lg ${active ? 'bg-foreground/8' : 'hover:bg-accent'}`}>
       {/* Room for the close button on hover, so it never sits on the title */}
-      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left group-hover:pr-9">
+      <button
+        // A double click renames; the second click must not open the chat again
+        onClick={(event) => event.detail < 2 && onClick()}
+        onDoubleClick={onRename}
+        onContextMenu={(event) => sessions && openMenu(event, sessions.menu(session.id, flash, onRename))}
+        className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left group-hover:pr-9"
+      >
         <AgentMark kind={session.kind} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
@@ -98,7 +132,8 @@ function ChatThread({
   onFolder,
   onTerminal,
   onPage,
-  onSearch
+  onSearch,
+  lead
 }: {
   session: SessionSummary
   recent: string[]
@@ -110,6 +145,8 @@ function ChatThread({
   /** Toggles a plugin's page, like Schema, in the right panel */
   onPage: (id: string) => void
   onSearch: () => void
+  /** The show sidebar button while the sidebar is hidden */
+  lead: React.ReactNode
 }): React.JSX.Element {
   const { loaded } = usePlugins()
   const pages = loaded.flatMap(({ plugin }) => plugin.tabs ?? []).filter((tab) => SIDE_PAGES.has(tab.id))
@@ -126,6 +163,7 @@ function ChatThread({
   return (
     <>
       <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border px-4 [-webkit-app-region:drag]">
+        {lead}
         <AgentMark kind={session.kind} className="size-6 text-xs" />
         <span className="min-w-0 truncate text-[13px] font-medium">{session.title}</span>
         {title === null ? (
@@ -153,7 +191,6 @@ function ChatThread({
             <Icon name={tab.icon} />
           </IconButton>
         ))}
-        <PullRequestsButton folder={session.worktreePath} />
         <IconButton label={withKeys('Terminal', 'panel.terminal')} active={side === TERMINAL} onClick={onTerminal}>
           <Icon name="terminal" />
         </IconButton>
@@ -164,58 +201,7 @@ function ChatThread({
 }
 
 /** Plugin pages that read the chat's folder, offered in the chat's header and shown in the right panel */
-const SIDE_PAGES = new Set(['schema', 'dependencies'])
-
-type PullRequestList = Awaited<ReturnType<Services['pullRequests']['refresh']>>
-
-/** The open pull requests of the chat's repository, each opening in the right panel */
-function PullRequestsButton({ folder }: { folder: string }): React.JSX.Element | null {
-  const host = useHost()
-  const pullRequests = useService('pullRequests')
-  const [list, setList] = useState<PullRequestList | 'loading' | null>(null)
-  const anchor = useRef<HTMLSpanElement>(null)
-  const show = (): void => {
-    if (!pullRequests) return
-    if (list) return setList(null)
-    setList(pullRequests.cached([folder]) ?? 'loading')
-    pullRequests.refresh([folder]).then(setList, (error: unknown) => setList({ pullRequests: [], errors: [errorMessage(error)] }))
-  }
-  useActionKeys({ 'chat.pullRequests': show })
-  if (!pullRequests) return null
-  const open = list && list !== 'loading' ? list.pullRequests.filter((pr) => pr.state === 'open') : []
-  return (
-    <>
-      <span ref={anchor} className="flex">
-        <IconButton label={withKeys('Pull requests', 'chat.pullRequests')} active={list !== null} onClick={show}>
-          <Icon name="pullRequest" />
-        </IconButton>
-      </span>
-      {list && (
-        <Popup anchor={anchor} align="end" onDismiss={() => setList(null)} className="max-h-80 w-80 overflow-y-auto rounded-lg border border-input bg-popover p-1 text-foreground">
-          {list === 'loading' ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">Loading…</p>
-          ) : open.length ? (
-            open.map((pr) => (
-              <button
-                key={pr.url}
-                onClick={() => {
-                  setList(null)
-                  pullRequests.open(pr, host)
-                }}
-                className="flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
-              >
-                <span className="shrink-0 text-muted-foreground">#{pr.number}</span>
-                <span className="min-w-0 truncate">{pr.title}</span>
-              </button>
-            ))
-          ) : (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">{list.errors[0] ?? 'No open pull requests'}</p>
-          )}
-        </Popup>
-      )}
-    </>
-  )
-}
+const SIDE_PAGES = new Set(['schema', 'dependencies', 'prs'])
 
 /** A worktree this window added for a chat that has no message yet, so going back to Local can take it away again */
 type AddedWorktree = { repo: string; path: string; branch: string }
@@ -358,6 +344,62 @@ const CONFIGURE = 'hub.configure'
 const UNTITLED = /^New chat( \d+)?$/
 const isDraft = (session: { title: string }): boolean => UNTITLED.test(session.title)
 
+const fontInFocus = (): 'terminalFontSize' | 'editorFontSize' => (document.activeElement?.closest('[data-session-id]') ? 'terminalFontSize' : 'editorFontSize')
+const NUMPAD_STEPS = new Map<string, -1 | 0 | 1>([
+  ['NumpadEqual', 1],
+  ['NumpadAdd', 1],
+  ['NumpadSubtract', -1],
+  ['Numpad0', 0]
+])
+/** ⌘+ is ⇧⌘= on most layouts and the numpad has keys of its own; all of them zoom, or size the font with ⌥ */
+const extraZoomStep = (event: KeyboardEvent): -1 | 0 | 1 | undefined =>
+  primaryKey(event) && !secondaryKey(event) ? (event.code === 'Equal' && event.shiftKey ? 1 : event.shiftKey ? undefined : NUMPAD_STEPS.get(event.code)) : undefined
+
+/**
+ * Chords the whole window answers to, caught before the focused element so terminals and editors pass them on.
+ * Each one is a runner too, which lists it in the native menu and lets the menu's own items, like zoom, run it.
+ */
+function useWindowActions(actions: Record<string, () => void>): void {
+  const latest = useRef(actions)
+  latest.current = actions
+  const ids = Object.keys(actions).join()
+  useEffect(() => {
+    const drops = ids.split(',').map((id) => registerActionRunner(id, () => latest.current[id]?.()))
+    return () => drops.forEach((drop) => drop())
+  }, [ids])
+  useEffect(() => {
+    let queued = false
+    const send = (): void => {
+      if (queued) return
+      queued = true
+      queueMicrotask(() => {
+        queued = false
+        window.api.setMenuActions(menuActions())
+      })
+    }
+    send()
+    const drops = [subscribeRunners(send), onKeymapChange(send), window.api.onRunAction(runAction)]
+    return () => drops.forEach((drop) => drop())
+  }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.isComposing || getShell().recording) return
+      // Text fields keep ⌘/ and ?
+      const live = Object.keys(latest.current).filter((id) => !id.startsWith('app.shortcuts') || !isTyping(event))
+      const id = actionForEvent(event, live)
+      const step = id ? undefined : extraZoomStep(event)
+      if (!id && step === undefined) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (id) latest.current[id]()
+      else if (step !== undefined && event.altKey) stepFontSize(fontInFocus(), step)
+      else if (step !== undefined) window.api.zoom(step)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+}
+
 /** Bots listed like chats, each with its own thread, and plain chats below them; plugins run underneath for terminals and the hub */
 export function Bots(): React.JSX.Element {
   const chromeless = useChromeless()
@@ -369,9 +411,11 @@ export function Bots(): React.JSX.Element {
   const [side, setSide] = useState<Side | null>(null)
   const [search, setSearch] = useState(false)
   const [sidebarWidth, setSidebarWidth] = usePersisted<number>('bots.sidebarWidth', 240)
+  const [sidebarShown, setSidebarShown] = usePersisted<boolean>('bots.sidebarShown', true)
   const [chatFolder, setChatFolder] = usePersisted<string>('bots.chatFolder', window.api.home)
   const [added, setAdded] = useState<AddedWorktree | null>(null)
   const [problem, setProblem] = useState('')
+  const [renaming, setRenaming] = useState<string | null>(null)
   const sessions = useService('sessions')
   const chat = useService('chat')
   const canChat = chat !== null && sessions !== null
@@ -470,7 +514,24 @@ export function Bots(): React.JSX.Element {
     setSelectedId(draft.id)
   }
 
-  useActionKeys({ 'chat.new': () => setSelectedId(null) })
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const page = selectedId ?? 'home'
+  useWindowActions({
+    'app.settings': () => setSelectedId(CONFIGURE),
+    ...(canChat ? { 'chat.new': () => setSelectedId(null) } : {}),
+    'panel.list': () => setSidebarShown(!sidebarShown),
+    'panel.listAlt': () => setSidebarShown(!sidebarShown),
+    'panel.inspector': () => togglePanel('inspector', page),
+    'app.shortcuts': () => setSheetOpen(!sheetOpen),
+    'app.shortcutsBare': () => setSheetOpen(!sheetOpen),
+    'app.zoomIn': () => window.api.zoom(1),
+    'app.zoomOut': () => window.api.zoom(-1),
+    'app.zoomReset': () => window.api.zoom(0),
+    // ⌥⌘= / ⌥⌘- / ⌥⌘0 size the focused terminal's font, else the editor's
+    'app.fontBigger': () => stepFontSize(fontInFocus(), 1),
+    'app.fontSmaller': () => stepFontSize(fontInFocus(), -1),
+    'app.fontDefault': () => stepFontSize(fontInFocus(), 0)
+  })
   // ⌘, is the menu's, which sends it here
   useEffect(() => window.api.onOpenSettings(() => setSelectedId(CONFIGURE)), [])
 
@@ -483,7 +544,11 @@ export function Bots(): React.JSX.Element {
 
   const sidebar = (
     <aside style={{ width: sidebarWidth }} className={`relative flex shrink-0 flex-col ${islandUi ? '' : 'border-r border-border'}`}>
-      <div className={`flex h-10 shrink-0 items-center justify-end gap-1 px-2 ${chromeless ? '' : 'pl-[80px] [-webkit-app-region:drag]'}`}>
+      <div className={`flex h-10 shrink-0 items-center gap-1 px-2 ${chromeless ? '' : 'pl-[80px] [-webkit-app-region:drag]'}`}>
+        <IconButton label={withKeys('Hide sidebar', 'panel.list')} onClick={() => setSidebarShown(false)}>
+          <Icon name="panel" />
+        </IconButton>
+        <span className="flex-1" />
         {switches.map(({ id, Toggle }) => (
           <Toggle key={id} />
         ))}
@@ -515,7 +580,16 @@ export function Bots(): React.JSX.Element {
             {chats
               .filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title))
               .map((session) => (
-                <ChatRow key={session.id} session={session} active={session.id === selectedId} onClick={() => setSelectedId(session.id)} />
+                <ChatRow
+                  key={session.id}
+                  session={session}
+                  active={session.id === selectedId}
+                  renaming={session.id === renaming}
+                  onClick={() => setSelectedId(session.id)}
+                  onRename={() => setRenaming(session.id)}
+                  onRenamed={() => setRenaming(null)}
+                  flash={setProblem}
+                />
               ))}
           </>
         )}
@@ -546,11 +620,20 @@ export function Bots(): React.JSX.Element {
       <ResizeHandle onResize={setSidebarWidth} />
     </aside>
   )
+  // Beside the traffic lights, where the sidebar's own button was
+  const lead = sidebarShown ? null : (
+    <span className={`flex shrink-0 [-webkit-app-region:no-drag] ${chromeless ? '' : 'pl-[64px]'}`}>
+      <IconButton label={withKeys('Show sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
+        <Icon name="panel" />
+      </IconButton>
+    </span>
+  )
+  const leadBar = lead && <div className={`flex h-10 shrink-0 items-center px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'}`}>{lead}</div>
   return (
-    <div className={`flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
-      {sidebar}
+    <div className={`flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} ${islandUi && !sidebarShown ? 'pl-2' : ''} font-sans text-foreground antialiased select-none`}>
+      {sidebarShown && sidebar}
       <PluginHost
-        page={selectedId ?? 'home'}
+        page={page}
         folder={selectedChat?.worktreePath ?? chatFolder}
         side={side}
         onSide={setSide}
@@ -558,10 +641,14 @@ export function Bots(): React.JSX.Element {
         search={search}
         onSearch={setSearch}
         onSettings={() => setSelectedId(CONFIGURE)}
+        lead={leadBar}
       >
         <main className={`flex min-w-[300px] flex-1 flex-col ${islandUi ? `overflow-hidden ${ISLAND}` : ''}`}>
           {selectedId === CONFIGURE ? (
-            <PluginPage id={CONFIGURE} />
+            <>
+              {leadBar}
+              <PluginPage id={CONFIGURE} />
+            </>
           ) : selectedChat ? (
             <ChatThread
               key={selectedChat.id}
@@ -575,12 +662,16 @@ export function Bots(): React.JSX.Element {
               onTerminal={() => (side === TERMINAL ? setSide(null) : openShell(selectedChat.worktreePath))}
               onPage={(id) => setSide(side === id ? null : id)}
               onSearch={() => setSearch(true)}
+              lead={lead}
             />
           ) : selected && hub ? (
-            <hub.Thread key={selected.id} botId={selected.id} />
+            <>
+              {leadBar}
+              <hub.Thread key={selected.id} botId={selected.id} />
+            </>
           ) : (
             <>
-              <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+              {leadBar ?? <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />}
               <Home
                 draft={draft}
                 bots={bots}
@@ -597,6 +688,7 @@ export function Bots(): React.JSX.Element {
           )}
         </main>
       </PluginHost>
+      {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
     </div>
   )
 }

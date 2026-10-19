@@ -287,6 +287,9 @@ export type HostApi = {
   hidePanel: (id: string) => void
   isPanelVisible: (id: string) => boolean
   movePanel: (id: string, side: 'left' | 'right' | 'bottom') => void
+  /** Whether the docked panel fills the window in place of the page beside it */
+  panelFilled: boolean
+  fillPanel: (fill: boolean) => void
   isEnabled: (pluginId: string) => boolean
   service: <K extends keyof Services>(name: K) => Services[K] | null
   /** Called after sending comments to a session, shows the message and the terminal */

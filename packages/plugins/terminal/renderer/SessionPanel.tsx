@@ -10,7 +10,7 @@ import { baseName, branchLabel } from '@treeix/app/Sidebar'
 import { agentOr, chatAgent, useAgents } from '@treeix/app/agents'
 import { useSettings } from '@treeix/app/settings'
 import { timeAgo } from '@treeix/app/time'
-import { PANE_HEADER, runAction, useHost, usePanels } from '@treeix/sdk'
+import { PANE_HEADER, useHost, usePanels } from '@treeix/sdk'
 import { errorMessage, NameInput, ResizeGrip, useChromeless } from '@treeix/app/ui'
 import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
@@ -441,9 +441,6 @@ function SessionBar({
     <div className={`@container ${PANE_HEADER} gap-1 pr-2 pl-2 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
-          <button title={withKeys('Sidebar', 'app.sidebar')} onClick={() => runAction('app.sidebar')} className={stripButton}>
-            <Icon name="panel" className="size-3.5" />
-          </button>
           {onGoToFolder && <FolderPicker label={label} current={session?.worktreePath ?? cwd} onGo={onGoToFolder} />}
           <span className="ml-1 h-4 w-px shrink-0 bg-border" />
         </div>
@@ -533,6 +530,16 @@ function SessionBar({
           className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}
         >
           <Icon name="panel" className="size-3.5 -scale-x-100" />
+        </button>
+      )}
+      {onHide && (
+        <button
+          title={withKeys(host.panelFilled ? 'Bring the chat back' : 'Fill the window', 'panel.fill')}
+          aria-label={host.panelFilled ? 'Bring the chat back' : 'Fill the window'}
+          onClick={() => host.fillPanel(!host.panelFilled)}
+          className={`${stripButton} ${host.panelFilled ? 'text-foreground' : ''}`}
+        >
+          <Icon name={host.panelFilled ? 'minimize' : 'maximize'} className="size-3.5" />
         </button>
       )}
       {onHide && (
