@@ -107,7 +107,15 @@ function PullRequestsTab(): React.JSX.Element {
   const props = useViewProps()
   return (
     <Suspense fallback={<div className="flex-1" />}>
-      <PullRequestsView {...props} repoPaths={host.scopeRepoPaths} onOpenTab={(pr) => host.openTab(detailTab(pr))} />
+      <PullRequestsView
+        {...props}
+        repoPaths={host.scopeRepoPaths}
+        // A pull request reads best across the window; the panel's minimize button brings the chat back
+        onOpenTab={(pr) => {
+          host.openTab(detailTab(pr))
+          host.fillPanel(true)
+        }}
+      />
     </Suspense>
   )
 }

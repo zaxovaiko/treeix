@@ -71,9 +71,16 @@ export function ProviderMark({ provider, className = 'size-4' }: { provider: Pul
   )
 }
 
-export function StateBadge({ pr }: { pr: PullRequest }): React.JSX.Element {
+/** `large` is the pill that leads a pull request's page, with the pull request icon */
+export function StateBadge({ pr, large = false }: { pr: PullRequest; large?: boolean }): React.JSX.Element {
   const style = STATE_STYLE[pr.draft && pr.state === 'open' ? 'draft' : pr.state]
-  return <span className={`shrink-0 rounded-full px-2 py-px text-[11px] font-medium ${style.className}`}>{style.label}</span>
+  if (!large) return <span className={`shrink-0 rounded-full px-2 py-px text-[11px] font-medium ${style.className}`}>{style.label}</span>
+  return (
+    <span className={`flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium ${style.className}`}>
+      <Icon name="pullRequest" className="size-3.5" />
+      {style.label}
+    </span>
+  )
 }
 
 /** Reviewed by you, or your own, with nothing pushed since: the list dims these so the rest stands out */

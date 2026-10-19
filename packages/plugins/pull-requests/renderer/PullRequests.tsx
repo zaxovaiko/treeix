@@ -5,6 +5,7 @@ import type { FilePatch, Repo } from '@treeix/shared/types'
 import {
   type ConflictResult,
   type MergeMethod,
+  type Pipeline,
   type PullRequest,
   type PullRequestComment,
   type Person,
@@ -296,8 +297,21 @@ export function PullRequestsView({
   const foldAll = (): void => setFolded(anyOpen ? new Set(foldable.map((group) => group.id)) : new Set())
   // Folded groups drop out of j/k, like closed folders
   const ordered = groups.flatMap((group) => (group.label && folded.has(group.id) ? [] : group.pullRequests))
-  const selected = ordered.find((pr) => pullRequestKey(pr) === selectedKey) ?? ordered[0]
-  const nav = useListNav({ count: ordered.length, index: selected ? ordered.indexOf(selected) : -1, onSelect: (index) => setSelectedKey(pullRequestKey(ordered[index])) })
+  // The chat's side panel has room for the list alone: a pull request opens in its own tab there, filling the window
+  const wide = host.panelFilled
+  const listZone = wide ? 'list' : 'main'
+  const selected = ordered.find((pr) => pullRequestKey(pr) === selectedKey) ?? (wide ? ordered[0] : undefined)
+  const open = (pr: PullRequest): void => {
+    setSelectedKey(pullRequestKey(pr))
+    if (!wide) onOpenTab(pr)
+  }
+  const nav = useListNav({
+    zone: listZone,
+    count: ordered.length,
+    index: selected ? ordered.indexOf(selected) : -1,
+    onSelect: (index) => setSelectedKey(pullRequestKey(ordered[index])),
+    onOpen: wide ? undefined : (index) => onOpenTab(ordered[index])
+  })
 
   const focusSearch = (): void => {
     const input = (): HTMLInputElement | null => document.querySelector('[data-pr-search] input')
@@ -312,7 +326,7 @@ export function PullRequestsView({
     },
     filter: focusSearch,
     // z folds what the focused zone shows: these groups in the list, the file folders in main
-    ...(foldable.length > 1 && zone === 'list' ? { fold: foldAll } : {})
+    ...(foldable.length > 1 && zone === listZone ? { fold: foldAll } : {})
   })
 
   const row = (pr: PullRequest, index: number): React.JSX.Element => {
@@ -322,7 +336,7 @@ export function PullRequestsView({
       <div
         key={pullRequestKey(pr)}
         {...nav.rowProps(index)}
-        onClick={() => setSelectedKey(pullRequestKey(pr))}
+        onClick={() => open(pr)}
         onDoubleClick={() => onOpenTab(pr)}
         onContextMenu={(event) => {
           const addFilter = (filter: PullRequestFilter): void => setFilters([...filters, filter])
@@ -452,7 +466,18 @@ export function PullRequestsView({
             ))}
           </details>
         )}
-        {data && visible.length === 0 && <EmptyState icon="pullRequest" title={filters.length || involved ? 'No pull requests match' : 'No pull requests'} />}
+        {data && visible.length === 0 && (
+          <EmptyState
+            icon="pullRequest"
+            title={
+              filters.length || involved
+                ? 'No pull requests match'
+                : fetched.length === 0
+                  ? "No pull requests. They come from the folder's GitHub or GitLab origin remote, through the gh and glab CLIs."
+                  : 'No pull requests'
+            }
+          />
+        )}
         {groups.map((group) => (
           <div key={group.id}>
             {group.label && (
@@ -470,7 +495,13 @@ export function PullRequestsView({
 
   return (
     <>
-      {selected ? <PullRequestDetailView pr={selected} list={list} {...detailProps} /> : <PageLayout list={list} main={<div className="flex-1" />} />}
+      {!wide ? (
+        <PageLayout main={<div className="flex min-h-0 flex-1 flex-col">{list}</div>} />
+      ) : selected ? (
+        <PullRequestDetailView pr={selected} list={list} {...detailProps} />
+      ) : (
+        <PageLayout list={list} main={<div className="flex-1" />} />
+      )}
       {sortOpen && (
         <Picker
           onClose={() => setSortOpen(false)}
@@ -665,7 +696,7 @@ function ReviewerRow({
 
 function PersonRow({ person, children }: { person: Person; children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="flex h-7 min-w-0 items-center gap-2 px-3 text-xs">
+    <div className="flex h-7 min-w-0 items-center gap-2 text-xs">
       <UserAvatar name={person.login} url={person.avatarUrl} size="size-4" />
       <span title={person.login} className="min-w-0 flex-1 truncate">
         {person.login}
@@ -689,15 +720,39 @@ function AssigneeRow({ person, onRemove }: { person: Person; onRemove: () => voi
   )
 }
 
+/** A clickable row of the side rail, reaching a little past the text so its hover has room */
+const RAIL_ROW = '-mx-1.5 flex h-7 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-xs text-foreground/85 hover:bg-accent'
+
 function ActionRow({ icon, label, keys, onClick }: { icon: IconName; label: string; keys: string; onClick: () => void }): React.JSX.Element {
   return (
-    <button onClick={onClick} className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-xs text-foreground/85 hover:bg-accent">
+    <button onClick={onClick} className={RAIL_ROW}>
       <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <Kbd hint>{keys}</Kbd>
     </button>
   )
 }
+
+/** A section of the side rail beside the conversation: a quiet label, a button for it, then its rows */
+function RailSection({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <section className="min-w-0">
+      <div className="mb-1 flex h-7 items-center gap-1 text-[11px] font-medium text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+        {action}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+const CHECK_LOOK: Record<Pipeline['status'], { label: string; icon: IconName; className: string }> = {
+  passed: { label: 'Checks passed', icon: 'check', className: 'text-emerald-400' },
+  failed: { label: 'Checks failed', icon: 'close', className: 'text-red-400' },
+  running: { label: 'Checks running', icon: 'loader', className: 'animate-spin text-amber-400' }
+}
+
+const counted = (count: number, noun: string): string => `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`
 
 /** A reply or comment shown before the provider has it; kept with Retry and Discard when sending fails */
 type PendingComment = { id: string; threadId: string | null; body: string; error: string | null }
@@ -1409,10 +1464,6 @@ export function PullRequestDetailView({
       .then(refreshScope, (failure: unknown) => setError(`Not closed: ${errorMessage(failure)}`))
       .finally(() => setClosing(false))
   }
-  const showReviewers = (): void => {
-    if (!panels.inspector) panels.toggle('inspector')
-    focusZone('inspector')
-  }
 
   // Merging can't be undone, so it waits for the provider instead of showing the result early; the method used last comes first
   const [storedMethod, setMethod] = usePersisted<string>('prs.mergeMethod', 'squash')
@@ -1726,6 +1777,79 @@ export function PullRequestDetailView({
         ? { label: 'Changes requested', className: 'bg-red-400/12 text-red-400 ring-red-400/30', icon: 'alert' as const }
         : { label: 'Review', className: 'text-foreground ring-input hover:bg-accent', icon: 'eye' as const }
 
+  const primaryActions = pr.state === 'open' && (
+    <div className="flex shrink-0 items-center gap-2">
+      {isDraft && own && (
+        <button onClick={() => setDraftState(false)} className="flex h-7 items-center gap-1.5 rounded-full px-3 text-xs text-foreground ring-1 ring-input hover:bg-accent">
+          <Icon name="check" className="size-3.5" />
+          Ready for review
+          <Kbd hint>⇧R</Kbd>
+        </button>
+      )}
+      {!own && (
+        <button onClick={() => setPicker('review')} className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-xs ring-1 ${reviewLook.className}`}>
+          <Icon name={reviewLook.icon} className="size-3.5" />
+          {reviewLook.label}
+          <Kbd hint>r</Kbd>
+        </button>
+      )}
+      <button
+        onClick={() => (mergeBlocked ? host.flash(mergeBlocked) : setPicker('merge'))}
+        title={mergeBlocked ?? `Merge into ${pr.targetBranch}`}
+        className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${mergeBlocked ? 'text-muted-foreground ring-1 ring-border' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
+      >
+        <Icon name={merging ? 'loader' : 'pullRequest'} className="size-3.5" />
+        {merging ? 'Merging…' : 'Merge'}
+        <Kbd hint>m</Kbd>
+      </button>
+    </div>
+  )
+  const mergeConfirm = confirmMerge && (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-foreground/5 p-1.5">
+      <button
+        ref={mergeButton}
+        onClick={() => merge(confirmMerge)}
+        // A held Enter from the picker must not repeat into this button
+        onKeyDown={(event) => event.key === 'Enter' && event.repeat && event.preventDefault()}
+        disabled={merging}
+        className="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-visible:bg-primary/80 disabled:opacity-60"
+      >
+        <Icon name={merging ? 'loader' : 'pullRequest'} className="size-3.5 shrink-0" />
+        <span className="truncate">{merging ? 'Merging…' : `${MERGE_METHODS[confirmMerge].label} into ${pr.targetBranch}`}</span>
+        <Kbd hint>⌘↵</Kbd>
+      </button>
+      <label title={`Deletes ${pr.sourceBranch} after merging`} className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <input type="checkbox" checked={deleteBranch} onChange={() => setDeleteBranch(!deleteBranch)} className="shrink-0" />
+        <span className="truncate">Delete {pr.sourceBranch}</span>
+      </label>
+      <span className="flex-1" />
+      <button
+        onClick={cancelMerge}
+        className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent"
+      >
+        Cancel
+        <Kbd hint>esc</Kbd>
+      </button>
+    </div>
+  )
+
+  /** The agent comments for this checkout sit in the inspector */
+  const agentCommentsToggle = renderComments && (
+    <ListToggle
+      page={pageId}
+      panel="inspector"
+      badge={
+        agentComments > 0 && (
+          <span className="flex items-center gap-1 text-foreground tabular-nums">
+            <Icon name="comment" className="size-3" />
+            {agentComments}
+          </span>
+        )
+      }
+    />
+  )
+
+  /** Files changed keeps its compact header; the conversation reads as a page under this bar */
   const header = (
     <div className="shrink-0 border-b border-border">
       <div className={`${PANE_HEADER} min-w-0 gap-2 px-1.5 text-xs text-muted-foreground`}>
@@ -1739,80 +1863,16 @@ export function PullRequestDetailView({
         <ReviewMark review={pr.review} />
         <ConflictMark pr={pr} />
         <span className="flex-1" />
-        <ListToggle
-          page={pageId}
-          panel="inspector"
-          badge={
-            agentComments > 0 && (
-              <span className="flex items-center gap-1 text-foreground tabular-nums">
-                <Icon name="comment" className="size-3" />
-                {agentComments}
-              </span>
-            )
-          }
-        />
+        {agentCommentsToggle}
       </div>
       <div className="px-5 pt-3">
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
           <h1 title={pr.title} className="line-clamp-2 min-w-48 flex-1 text-base leading-6 font-semibold break-words select-text">
             {pr.title}
           </h1>
-          {pr.state === 'open' && (
-            <div className="flex shrink-0 items-center gap-2">
-              {isDraft && own && (
-                <button onClick={() => setDraftState(false)} className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-foreground ring-1 ring-input hover:bg-accent">
-                  <Icon name="check" className="size-3.5" />
-                  Ready for review
-                  <Kbd hint>⇧R</Kbd>
-                </button>
-              )}
-              {!own && (
-                <button onClick={() => setPicker('review')} className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs ring-1 ${reviewLook.className}`}>
-                  <Icon name={reviewLook.icon} className="size-3.5" />
-                  {reviewLook.label}
-                  <Kbd hint>r</Kbd>
-                </button>
-              )}
-              <button
-                onClick={() => (mergeBlocked ? host.flash(mergeBlocked) : setPicker('merge'))}
-                title={mergeBlocked ?? `Merge into ${pr.targetBranch}`}
-                className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium ${mergeBlocked ? 'text-muted-foreground ring-1 ring-border' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
-              >
-                <Icon name={merging ? 'loader' : 'pullRequest'} className="size-3.5" />
-                {merging ? 'Merging…' : 'Merge'}
-                <Kbd hint>m</Kbd>
-              </button>
-            </div>
-          )}
+          {primaryActions}
         </div>
-        {confirmMerge && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-foreground/5 p-1.5">
-            <button
-              ref={mergeButton}
-              onClick={() => merge(confirmMerge)}
-              // A held Enter from the picker must not repeat into this button
-              onKeyDown={(event) => event.key === 'Enter' && event.repeat && event.preventDefault()}
-              disabled={merging}
-              className="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-visible:bg-primary/80 disabled:opacity-60"
-            >
-              <Icon name={merging ? 'loader' : 'pullRequest'} className="size-3.5 shrink-0" />
-              <span className="truncate">{merging ? 'Merging…' : `${MERGE_METHODS[confirmMerge].label} into ${pr.targetBranch}`}</span>
-              <Kbd hint>⌘↵</Kbd>
-            </button>
-            <label title={`Deletes ${pr.sourceBranch} after merging`} className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <input type="checkbox" checked={deleteBranch} onChange={() => setDeleteBranch(!deleteBranch)} className="shrink-0" />
-              <span className="truncate">Delete {pr.sourceBranch}</span>
-            </label>
-            <span className="flex-1" />
-            <button
-              onClick={cancelMerge}
-              className="flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent"
-            >
-              Cancel
-              <Kbd hint>esc</Kbd>
-            </button>
-          </div>
-        )}
+        {mergeConfirm}
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <UserAvatar name={pr.author} url={pr.authorAvatarUrl} size="size-4" />
           <span className="max-w-full truncate text-foreground/85">{pr.author}</span>
@@ -1834,7 +1894,11 @@ export function PullRequestDetailView({
             </button>
           )}
           {detail && detail.reviewers.length > 0 && (
-            <button onClick={showReviewers} className="flex shrink-0 items-center gap-1.5 rounded px-1 hover:bg-accent hover:text-foreground">
+            <button
+              title="Reviewers in the conversation"
+              onClick={() => showView('conversation')}
+              className="flex shrink-0 items-center gap-1.5 rounded px-1 hover:bg-accent hover:text-foreground"
+            >
               reviewers
               {detail.reviewers.map((reviewer) => (
                 <span key={reviewer.login} className="relative">
@@ -1884,57 +1948,192 @@ export function PullRequestDetailView({
               {showResolved ? `Hide ${resolvedCount} resolved` : `Show ${resolvedCount} resolved`}
             </button>
           )}
-          {view === 'conversation' && <MarkdownFoldButton />}
         </div>
       </div>
     </div>
   )
 
-  const conversation = detail && (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex max-w-[860px] flex-col gap-2 px-5 py-4">
-        <ConflictNotice pr={pr} patches={patches} onOpen={showConflictFile} />
-        {/* The description reads as the page itself: the author is already in the header above */}
-        <div className="mb-2 [&_.markdown>:first-child]:mt-0">
-          {detail.body ? (
-            <Markdown baseUrl={markdownBase(pr)} resolveImage={imageResolver(pr)}>
-              {detail.body}
-            </Markdown>
-          ) : (
-            <p className="text-[13px] text-muted-foreground">No description</p>
-          )}
-        </div>
-        <LinkPreviews urls={detail.body.match(/https?:\/\/[^\s)<>\]"']+/g) ?? []} />
-        {conversationFeed(threads, detail.reviewEvents).map((entry) =>
-          'verdict' in entry ? <ReviewEventRow key={`${entry.author}:${entry.createdAt}`} event={entry} /> : <div key={entry.id}>{threadCard(entry, true)}</div>
+  const topBar = (
+    <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border px-3 py-2 text-xs text-muted-foreground @3xl:px-5">
+      {list !== undefined && <ListToggle page={pageId} />}
+      <StateBadge large pr={isDraft === pr.draft ? pr : { ...pr, draft: isDraft }} />
+      <span title={pr.repoPath} className="min-w-0 truncate">
+        {baseName(pr.repoPath)} <span className="font-mono">{prLabel(pr)}</span>
+      </span>
+      <ReviewMark review={pr.review} />
+      <ConflictMark pr={pr} />
+      {/* Wraps as one group, so the buttons stay together at the right of a narrow pane */}
+      <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <span className="flex items-center">
+          <IconButton label="Copy link (y)" onClick={copyLink}>
+            <Icon name="copy" className="size-3.5" />
+          </IconButton>
+          <IconButton label={`Open on ${providerName(pr)} (o)`} onClick={openInBrowser}>
+            <Icon name="external" className="size-3.5" />
+          </IconButton>
+          <MarkdownFoldButton />
+          {agentCommentsToggle}
+        </span>
+        {primaryActions}
+      </div>
+    </div>
+  )
+
+  const added = allPatches.reduce((sum, patch) => sum + patch.additions, 0)
+  const removed = allPatches.reduce((sum, patch) => sum + patch.deletions, 0)
+  const checks = pr.pipeline && CHECK_LOOK[pr.pipeline.status]
+  // Narrow panes stack it under the title as a two-column grid; wide ones give it a column of its own
+  const rail = detail && (
+    <aside className="grid min-w-0 grid-cols-2 content-start gap-x-5 gap-y-3 border-b border-border pb-4 @3xl:col-start-2 @3xl:row-start-2 @3xl:grid-cols-1 @3xl:gap-y-6 @3xl:border-0 @3xl:pb-0">
+      <RailSection title="Changes">
+        <button title="Show files changed" onClick={() => showView('files')} className={RAIL_ROW}>
+          <Icon name="file" className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate">{counted(allPatches.length, 'file')}</span>
+          <span className="shrink-0 font-mono text-[11px] text-emerald-400">+{added.toLocaleString()}</span>
+          <span className="shrink-0 font-mono text-[11px] text-red-400">-{removed.toLocaleString()}</span>
+          <span className="flex-1" />
+          <Kbd hint>]</Kbd>
+        </button>
+      </RailSection>
+      <RailSection title="Comments">
+        {unresolvedCount > 0 && (
+          <button title="Add every unresolved thread to agent comments" onClick={addUnresolved} className={RAIL_ROW}>
+            <Icon name="comment" className="size-3.5 shrink-0 text-amber-400" />
+            <span className="min-w-0 flex-1 truncate">{counted(unresolvedCount, 'unresolved thread')}</span>
+            <Icon name="plus" className="size-3 shrink-0 text-muted-foreground" />
+          </button>
         )}
-        {pending.some((entry) => entry.threadId === null) && (
-          <div className="overflow-hidden rounded-md border border-border bg-card">
-            {pending
-              .filter((entry) => entry.threadId === null)
-              .map((entry) => (
-                <PendingCommentView key={entry.id} comment={entry} onRetry={() => send(entry)} onDiscard={() => discard(entry)} />
-              ))}
-          </div>
+        {resolvedCount > 0 && (
+          <button onClick={() => setShowResolved(!showResolved)} className={RAIL_ROW}>
+            <Icon name="check" className="size-3.5 shrink-0 text-emerald-400" />
+            <span className="min-w-0 flex-1 truncate">{counted(resolvedCount, 'resolved thread')}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">{showResolved ? 'Hide' : 'Show'}</span>
+          </button>
         )}
-        {/* Always open, like GitHub; composing tracks whether it holds focus so page keys and Esc leave it alone */}
-        <div
-          data-new-comment
-          className="[&>div]:m-0"
-          onFocus={() => setComposing(true)}
-          onBlur={(event) => !event.currentTarget.contains(event.relatedTarget) && setComposing(false)}
+        {unresolvedCount + resolvedCount === 0 && <p className="text-xs text-muted-foreground">No review threads</p>}
+      </RailSection>
+      <RailSection title="Reviewers">
+        {detail.reviewers.map((reviewer) => (
+          <ReviewerRow key={reviewer.login} reviewer={reviewer} pr={pr} onRequested={load} onError={setError} />
+        ))}
+        {detail.reviewers.length === 0 && <p className="text-xs text-muted-foreground">No reviewers</p>}
+      </RailSection>
+      {(pr.state === 'open' || pr.pipeline) && (
+        <RailSection
+          title="Checks"
+          action={
+            pr.pipeline?.status === 'failed' && (
+              <button
+                title="Add the failed jobs' logs to agent comments, for an agent to fix"
+                onClick={() => onAddPipelineFailure(pr)}
+                className="flex h-6 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium text-foreground ring-1 ring-input hover:bg-accent"
+              >
+                <Icon name="wand" className="size-3" />
+                Fix
+              </button>
+            )
+          }
         >
-          <CommentDraft
-            key={pr.url}
-            persistent
-            label={`New comment on ${providerName(pr)}`}
-            placeholder="Write a comment"
-            submitLabel={`Comment on ${providerName(pr)}`}
-            allowAttachments={false}
-            onCancel={backToMain}
-            onSave={(body) => sendNew(body, null).then(backToMain)}
-          />
+          {pr.pipeline && checks ? (
+            <button title="Open the pipeline" onClick={() => window.open(pr.pipeline?.url)} className={RAIL_ROW}>
+              <Icon name={checks.icon} className={`size-3.5 shrink-0 ${checks.className}`} />
+              <span className="min-w-0 flex-1 truncate">{checks.label}</span>
+              <Icon name="external" className="size-3 shrink-0 text-muted-foreground" />
+            </button>
+          ) : (
+            <p className="text-xs text-muted-foreground">No checks on the latest commit</p>
+          )}
+        </RailSection>
+      )}
+      <RailSection
+        title="Assignees"
+        action={
+          pr.state === 'open' && (
+            <IconButton label="Assign people (⇧A)" onClick={openAssign}>
+              <Icon name="plus" className="size-3.5" />
+            </IconButton>
+          )
+        }
+      >
+        {assignees.map((person) => (
+          <AssigneeRow key={person.login} person={person} onRemove={() => setAssigned(person, false)} />
+        ))}
+        {assignees.length === 0 && <p className="text-xs text-muted-foreground">No one assigned</p>}
+      </RailSection>
+      <RailSection title="Actions">
+        <ActionRow icon="branch" label={local ? 'Open worktree' : `Create worktree for ${pr.sourceBranch}`} keys="w" onClick={worktree} />
+        {pr.state === 'open' && own && !isDraft && <ActionRow icon="pencil" label="Convert to draft" keys="⇧R" onClick={() => setDraftState(true)} />}
+        {pr.state === 'open' && <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />}
+      </RailSection>
+    </aside>
+  )
+
+  const conversation = (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto grid max-w-[1200px] gap-x-12 gap-y-5 px-5 py-5 @3xl:grid-cols-[minmax(0,1fr)_17rem] @3xl:px-8 @3xl:py-7">
+        <div className="min-w-0 @3xl:col-span-2">
+          <h1 className="text-xl leading-7 font-semibold text-balance break-words select-text @3xl:text-2xl @3xl:leading-8">{pr.title}</h1>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <UserAvatar name={pr.author} url={pr.authorAvatarUrl} size="size-4" />
+            <span className="max-w-full truncate text-foreground/85">{pr.author}</span>
+            <span className="whitespace-nowrap">updated {timeAgo(pr.updatedAt)} ago</span>
+            <span className="flex max-w-full min-w-0 items-center gap-1">
+              <BranchCopy branch={pr.sourceBranch} />
+              <Icon name="arrowRight" className="size-3" />
+              <BranchCopy branch={pr.targetBranch} />
+            </span>
+          </div>
+          {mergeConfirm}
         </div>
+        {rail}
+        {detail ? (
+          <div className="flex min-w-0 flex-col gap-2 @3xl:col-start-1 @3xl:row-start-2">
+            <ConflictNotice pr={pr} patches={patches} onOpen={showConflictFile} />
+            {/* The description reads as the page itself: the author is already in the header above */}
+            <div className="mb-2 [&_.markdown>:first-child]:mt-0">
+              {detail.body ? (
+                <Markdown baseUrl={markdownBase(pr)} resolveImage={imageResolver(pr)}>
+                  {detail.body}
+                </Markdown>
+              ) : (
+                <p className="text-[13px] text-muted-foreground">No description</p>
+              )}
+            </div>
+            <LinkPreviews urls={detail.body.match(/https?:\/\/[^\s)<>\]"']+/g) ?? []} />
+            {conversationFeed(threads, detail.reviewEvents).map((entry) =>
+              'verdict' in entry ? <ReviewEventRow key={`${entry.author}:${entry.createdAt}`} event={entry} /> : <div key={entry.id}>{threadCard(entry, true)}</div>
+            )}
+            {pending.some((entry) => entry.threadId === null) && (
+              <div className="overflow-hidden rounded-md border border-border bg-card">
+                {pending
+                  .filter((entry) => entry.threadId === null)
+                  .map((entry) => (
+                    <PendingCommentView key={entry.id} comment={entry} onRetry={() => send(entry)} onDiscard={() => discard(entry)} />
+                  ))}
+              </div>
+            )}
+            {/* Always open, like GitHub; composing tracks whether it holds focus so page keys and Esc leave it alone */}
+            <div
+              data-new-comment
+              className="[&>div]:m-0"
+              onFocus={() => setComposing(true)}
+              onBlur={(event) => !event.currentTarget.contains(event.relatedTarget) && setComposing(false)}
+            >
+              <CommentDraft
+                key={pr.url}
+                persistent
+                label={`New comment on ${providerName(pr)}`}
+                placeholder="Write a comment"
+                submitLabel={`Comment on ${providerName(pr)}`}
+                allowAttachments={false}
+                onCancel={backToMain}
+                onSave={(body) => sendNew(body, null).then(backToMain)}
+              />
+            </div>
+          </div>
+        ) : (
+          !error && <p className="text-[13px] text-muted-foreground">Loading...</p>
+        )}
       </div>
     </div>
   )
@@ -2019,16 +2218,16 @@ export function PullRequestDetailView({
   const main = (
     <CodeNavigationContext.Provider value={navigation}>
       <MarkdownFoldScope>
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="@container relative flex min-h-0 min-w-0 flex-1 flex-col">
           {/* The inspector has the comments panel with its own send button; without it the pill sends */}
           {renderSend && !(panels.inspector && renderComments) && <div className="absolute right-4 bottom-4 z-30">{renderSend(pr)}</div>}
-          {header}
+          {view === 'files' ? header : topBar}
           {error && (
             <Notice className="mx-5 mt-3" onDismiss={() => setError(null)}>
               {error}
             </Notice>
           )}
-          {!detail && !error && <EmptyState fill title="Loading..." />}
+          {!detail && !error && view === 'files' && <EmptyState fill title="Loading..." />}
           <ErrorBoundary label={view === 'files' ? 'Files changed' : 'Conversation'} resetKey={`${pr.url}:${view}`}>
             {view === 'files' ? files : conversation}
           </ErrorBoundary>
@@ -2037,47 +2236,13 @@ export function PullRequestDetailView({
     </CodeNavigationContext.Provider>
   )
 
-  const inspector = (
+  // The details moved into the conversation's rail; the inspector keeps the agent comments for this checkout
+  const inspector = renderComments && (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={`${PANE_HEADER} pr-1.5 pl-3`}>
-        <span className="truncate text-[11px] font-semibold text-foreground">Details</span>
-      </div>
-      <div className="max-h-[60%] shrink-0 overflow-y-auto pb-2">
-        {/* Until the details load there is nothing true to say about people, so the sections wait */}
-        {detail && (
-          <>
-            <SectionLabel>Reviewers</SectionLabel>
-            {detail.reviewers.map((reviewer) => (
-              <ReviewerRow key={reviewer.login} reviewer={reviewer} pr={pr} onRequested={load} onError={setError} />
-            ))}
-            {detail.reviewers.length === 0 && <p className="px-3 text-xs text-muted-foreground">No reviewers</p>}
-            <SectionLabel>Assignees</SectionLabel>
-            {assignees.map((person) => (
-              <AssigneeRow key={person.login} person={person} onRemove={() => setAssigned(person, false)} />
-            ))}
-            {assignees.length === 0 && <p className="px-3 text-xs text-muted-foreground">No one assigned</p>}
-          </>
-        )}
-        <SectionLabel>Actions</SectionLabel>
-        <div className="px-1.5">
-          <ActionRow icon="branch" label={local ? 'Open worktree' : `Create worktree for ${pr.sourceBranch}`} keys="w" onClick={worktree} />
-          <ActionRow icon="external" label={`Open on ${providerName(pr)}`} keys="o" onClick={openInBrowser} />
-          <ActionRow icon="copy" label="Copy link" keys="y" onClick={copyLink} />
-          {pr.state === 'open' && <ActionRow icon="user" label="Assign people" keys="⇧A" onClick={openAssign} />}
-          {pr.state === 'open' && own && !isDraft && <ActionRow icon="pencil" label="Convert to draft" keys="⇧R" onClick={() => setDraftState(true)} />}
-          {pr.state === 'open' && (
-            <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />
-          )}
-        </div>
-      </div>
-      {renderComments && (
-        <div className="flex min-h-0 flex-1 flex-col border-t border-border">
-          {renderComments(pr, (path) => {
-            setView('files')
-            openFile(path)
-          })}
-        </div>
-      )}
+      {renderComments(pr, (path) => {
+        setView('files')
+        openFile(path)
+      })}
     </div>
   )
 
@@ -2085,7 +2250,7 @@ export function PullRequestDetailView({
     <>
       <PageLayout
         id={pageId}
-        defaults={view === 'files' ? { inspector: false } : undefined}
+        defaults={{ inspector: false }}
         list={list}
         main={
           <ErrorBoundary label={`${prLabel(pr)}`} resetKey={pr.url}>
@@ -2093,9 +2258,11 @@ export function PullRequestDetailView({
           </ErrorBoundary>
         }
         inspector={
-          <ErrorBoundary label="Details" resetKey={pr.url}>
-            {inspector}
-          </ErrorBoundary>
+          inspector && (
+            <ErrorBoundary label="Agent comments" resetKey={pr.url}>
+              {inspector}
+            </ErrorBoundary>
+          )
         }
       />
       {picker && (
