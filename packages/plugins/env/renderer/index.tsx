@@ -137,7 +137,7 @@ function EnvSettings(): React.JSX.Element {
   if (repos.length === 0)
     return (
       <Card title="Copy on new worktrees">
-        <p className="px-4 py-3 text-xs text-muted-foreground">
+        <p className="px-2 py-3 text-xs text-muted-foreground">
           No repository yet. Copy env files into a new worktree with Do this for every new worktree on, and its repository shows here.
         </p>
       </Card>
