@@ -1,7 +1,7 @@
 import { isJson, isString, list, object, text } from '@treeix/shared/json'
-import { fixWorkflow } from '../shared/templates'
+import { fixWorkflow, shipsWithSkill } from '../shared/templates'
 import { type TicketCard, type TicketState, freshTicketState, isTicketState, ticketCards } from '../shared/tickets'
-import type { AgentNode, Run, Ticket, Workflow } from '../shared/workflow'
+import type { AgentNode, Run, Workflow } from '../shared/workflow'
 import { jsonList } from './store'
 
 /** CI fixes in a row before the ticket waits for a person */
@@ -11,28 +11,35 @@ export const SETTLE_MS = 5 * 60_000
 /** Replies the fix agent leaves on the pull request start with this, so they never start another fix */
 export const AGENT_REPLY = 'Agent:'
 
-export type PullStatus = { state: 'open' | 'merged' | 'closed'; sourceBranch: string; pipeline: { status: 'passed' | 'failed' | 'running' } | null }
-export type PullComment = { id: string; author: string; body: string; path: string | null; line: number | null }
+/** `changesRequestedAt`: when a reviewer last asked for changes, while one still does */
+export type PullStatus = {
+  state: 'open' | 'merged' | 'closed'
+  sourceBranch: string
+  pipeline: { status: 'passed' | 'failed' | 'running' } | null
+  changesRequestedAt?: string | null
+  /** The last comment of each thread nobody answered yet */
+  unanswered?: string[]
+}
+export type PullComment = { id: string; threadId?: string; author: string; body: string; path: string | null; line: number | null }
 export type PullAction = 'done' | 'ci' | 'review' | 'needsYou' | null
 
 const isPullStatus = (value: unknown): value is PullStatus =>
-  isJson(value) && (value.state === 'open' || value.state === 'merged' || value.state === 'closed') && isString(value.sourceBranch)
+  isJson(value) &&
+  (value.state === 'open' || value.state === 'merged' || value.state === 'closed') &&
+  isString(value.sourceBranch) &&
+  (value.changesRequestedAt == null || isString(value.changesRequestedAt))
 const isPullComment = (value: unknown): value is PullComment => isJson(value) && isString(value.id) && isString(value.body)
 
 const logged = (state: TicketState, now: number, line: string): TicketState => ({ ...state, log: [...state.log, { at: now, text: line }] })
 
 /**
  * What to do about a ticket's pull request, given what it looks like now: finish it when merged, fix failing CI (after the
- * last push settled, three times at most), or fix new review comments. Never called while a run on the ticket goes
+ * last push settled, three times at most), or address the review once a reviewer requests changes or a thread waits for an
+ * answer. Unanswered threads wait one check with nothing new, so a review with ten comments is one fix, and the same ones
+ * are never sent twice. Never called while a run on the ticket goes
  */
-export function nextAction(
-  previous: TicketState,
-  status: PullStatus,
-  comments: PullComment[],
-  settledAt: number,
-  now: number
-): { state: TicketState; action: PullAction; comments: PullComment[] } {
-  const idle = (state: TicketState, action: PullAction = null): { state: TicketState; action: PullAction; comments: PullComment[] } => ({ state, action, comments: [] })
+export function nextAction(previous: TicketState, status: PullStatus, settledAt: number, now: number): { state: TicketState; action: PullAction } {
+  const idle = (state: TicketState, action: PullAction = null): { state: TicketState; action: PullAction } => ({ state, action })
   if (status.state === 'merged') return idle(logged({ ...previous, mergedAt: now, needsYou: null }, now, 'Pull request merged'), 'done')
   if (status.state === 'closed') {
     const needsYou = 'The pull request was closed without merging'
@@ -48,16 +55,29 @@ export function nextAction(
     const needsYou = `CI still fails after ${MAX_CI_FIXES} fixes`
     if (state.needsYou !== needsYou) return idle(logged({ ...state, needsYou }, now, needsYou), 'needsYou')
   }
-  const seen = new Set(state.seenComments)
-  const fresh = comments.filter((comment) => !seen.has(comment.id) && !comment.body.trimStart().startsWith(AGENT_REPLY))
-  if (!fresh.length) return idle(state)
-  const reviewed = logged(
-    { ...state, seenComments: [...seen, ...comments.map((comment) => comment.id)] },
-    now,
-    `Review fix started for ${fresh.length} comment${fresh.length === 1 ? '' : 's'}`
-  )
-  return { state: reviewed, action: 'review', comments: fresh }
+  const unanswered = status.unanswered ?? []
+  const requested = status.changesRequestedAt ?? null
+  if (requested !== (state.changesRequestedAt ?? null)) {
+    if (requested) return idle(logged({ ...state, changesRequestedAt: requested, unanswered, answering: unanswered }, now, 'Changes requested, review fix started'), 'review')
+    state = { ...state, changesRequestedAt: null }
+  }
+  const settled = sameIds(unanswered, state.unanswered ?? [])
+  if (!settled) return idle({ ...state, unanswered })
+  if (!unanswered.length || sameIds(unanswered, state.answering ?? [])) return idle(state)
+  return idle(logged({ ...state, answering: unanswered }, now, `${unanswered.length} unanswered ${unanswered.length === 1 ? 'thread' : 'threads'}, review fix started`), 'review')
 }
+
+const sameIds = (a: string[], b: string[]): boolean => a.length === b.length && a.every((id, index) => id === b[index])
+
+/** The last comment of each thread when it isn't an agent's reply: what still waits for an answer, sorted */
+export const unansweredIds = (comments: PullComment[]): string[] =>
+  [...new Map(comments.map((comment) => [comment.threadId ?? comment.id, comment])).values()]
+    .filter((comment) => !comment.body.trimStart().startsWith(AGENT_REPLY))
+    .map((comment) => comment.id)
+    .sort()
+
+/** What the reviewers left open, without the fix agent's own replies */
+export const reviewComments = (comments: PullComment[]): PullComment[] => comments.filter((comment) => !comment.body.trimStart().startsWith(AGENT_REPLY))
 
 /** The worktree the implement step reported; it has the repository's remote, where the agent's own folder may hold many */
 const worktreeOf = (runs: Run[]): string | null => runs.map((run) => run.nodes.implement?.output?.match(/^Worktree: (.+)$/m)?.[1].trim()).find(Boolean) ?? null
@@ -80,7 +100,8 @@ export function createPullRequests(deps: {
   callTool: (name: string, args: Record<string, unknown>) => Promise<string>
   /** The flow's own folder, for when no worktree was reported */
   folder: (run: Run) => Promise<string | null>
-  launch: (title: string, workflow: Workflow, input: string, ticket: Ticket) => void
+  /** A fix runs on the same ticket, in the folder its flow ran in */
+  launch: (title: string, workflow: Workflow, input: string, about: Pick<Run, 'ticket' | 'folder'>) => void
   notify: (card: TicketCard, title: string, body: string) => void
   changed: (states: TicketState[]) => void
 }): { check: () => Promise<void>; list: () => Promise<TicketState[]> } {
@@ -94,9 +115,9 @@ export function createPullRequests(deps: {
     const args = { url: card.pullRequest, repoPath }
     const status = object(JSON.parse(await deps.callTool('pr_status', args)))
     if (!isPullStatus(status)) throw new Error('pr_status answered without a state')
-    const comments = status.state === 'open' ? list(JSON.parse(await deps.callTool('pr_comments', args))).filter(isPullComment) : []
     const settledAt = (card.runs[0].endedAt ?? 0) + SETTLE_MS
-    const { state, action, comments: fresh } = nextAction(previous, status, comments, settledAt, now)
+    const comments = status.state === 'open' ? list(JSON.parse(await deps.callTool('pr_comments', args))).filter(isPullComment) : []
+    const { state, action } = nextAction(previous, { ...status, unanswered: unansweredIds(comments) }, settledAt, now)
     if (action === 'done') {
       if (card.source === 'jira') await deps.callTool('jira_transition', { key: card.key, status: 'Done' })
       else await deps.callTool('notion_update_page', { page: card.key, properties: { Status: 'Done' } })
@@ -107,9 +128,15 @@ export function createPullRequests(deps: {
     if (action === 'ci' || action === 'review') {
       const agent = flow.workflow.nodes.find((node): node is AgentNode => node.kind === 'agent')?.agent
       if (!agent) throw new Error('Its workflow has no agent to fix it')
-      const details = action === 'ci' ? `CI failed. The failed jobs:\n\n${failedLogs(await deps.callTool('pr_failed_logs', args))}` : `Review comments:\n\n${reviewNotes(fresh)}`
+      const details =
+        action === 'ci'
+          ? `CI failed. The failed jobs:\n\n${failedLogs(await deps.callTool('pr_failed_logs', args))}`
+          : `Review comments wait for an answer. Open review comments:\n\n${reviewNotes(reviewComments(comments))}`
       const input = { key: card.key, url: card.pullRequest, repo: repoPath, sourceBranch: status.sourceBranch, details }
-      deps.launch(`${action === 'ci' ? 'Fix CI' : 'Fix review'}: ${card.key} ${card.title}`, fixWorkflow(agent), JSON.stringify(input), { key: card.key, url: card.url })
+      deps.launch(`${action === 'ci' ? 'Fix CI' : 'Fix review'}: ${card.key} ${card.title}`, fixWorkflow(agent, shipsWithSkill(flow.workflow)), JSON.stringify(input), {
+        ticket: { key: card.key, url: card.url },
+        folder: flow.folder
+      })
     }
     return state
   }

@@ -8,6 +8,20 @@ export type Subagent = {
   path: string
 }
 
+/** A subagent by name, as a workflow step picks it: each project that defines one by that name runs its own */
+export type SubagentRole = { name: string; description: string; projects: string[] }
+
+/** One role per name, the first description found, and the projects (folder names) that define it */
+export const subagentRoles = (subagents: Subagent[]): SubagentRole[] =>
+  [...Map.groupBy(subagents, (subagent) => subagent.name)].map(([name, found]) => ({
+    name,
+    description: found.find((subagent) => subagent.description)?.description ?? '',
+    projects: [...new Set(found.map((subagent) => subagent.folder.split('/').pop() ?? subagent.folder))]
+  }))
+
+/** The role a step's `subagent` names: itself, or a pinned file's name */
+export const roleName = (subagent: string): string => (subagent.includes('/') ? (subagent.split('/').pop() ?? subagent).replace(/\.(md|toml)$/, '') : subagent)
+
 const unquote = (value: string): string => value.replace(/^['"]|['"]$/g, '').trim()
 
 /**

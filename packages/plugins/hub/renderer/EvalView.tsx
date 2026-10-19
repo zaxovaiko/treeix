@@ -26,7 +26,7 @@ const blankCheck = (kind: EvalCheck['kind'], agent: string): EvalCheck => {
 }
 
 function CheckFields({ check, onChange }: { check: EvalCheck; onChange: (check: EvalCheck) => void }): React.JSX.Element {
-  const agents = hubAgents.use()
+  const agents = hubAgents.useValue()
   switch (check.kind) {
     case 'contains':
     case 'regex':
@@ -95,7 +95,7 @@ function CaseCard({
   onChange: (item: EvalCase) => void
   onRemove: () => void
 }): React.JSX.Element {
-  const agents = hubAgents.use()
+  const agents = hubAgents.useValue()
   const [open, setOpen] = useState(item.input === '')
   const setCheck = (next: EvalCheck): void => onChange({ ...item, checks: item.checks.map((check) => (check.id === next.id ? next : check)) })
   const outcome = (check: string) => result?.checks.find((entry) => entry.check === check) ?? null
@@ -200,9 +200,9 @@ function CaseCard({
 /** A suite: its cases and their checks, editable, with how its runs went */
 export function EvalView({ suite }: { suite: EvalSuite }): React.JSX.Element {
   const host = useHost()
-  const agents = hubAgents.use()
-  const workflows = hubWorkflows.use()
-  const running = hubEvalsRunning.use().includes(suite.id)
+  const agents = hubAgents.useValue()
+  const workflows = hubWorkflows.useValue()
+  const running = hubEvalsRunning.useValue().includes(suite.id)
   const [draft, setDraft] = useState(suite)
   const [results, setResults] = useState<EvalResult[]>([])
 

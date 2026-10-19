@@ -1,6 +1,6 @@
 import { isJson, parseJson } from '@treeix/shared/json'
 import { references } from './template'
-import type { Workflow, WorkflowNode } from './workflow'
+import { isCodingAgent, type Workflow, type WorkflowNode } from './workflow'
 
 /** Something that keeps a workflow from running; `node` is null when it's about the whole workflow */
 export type Problem = { node: string | null; message: string }
@@ -55,7 +55,7 @@ export function validate(workflow: Workflow, agents: string[]): Problem[] {
     const before = ancestors(workflow, node.id)
     if (before.has(node.id)) add('Loops back to itself')
     if (node.kind !== 'input' && before.size === 0) add('Connect a step to it')
-    if ((node.kind === 'agent' || node.kind === 'judge') && !agents.includes(node.agent)) add('Pick an agent')
+    if ((node.kind === 'agent' || node.kind === 'judge') && !agents.includes(node.agent) && !isCodingAgent(node.agent)) add('Pick an agent')
     if (node.kind === 'judge' && !node.rubric.trim()) add('Say what to judge it by')
     if ((node.kind === 'judge' || node.kind === 'approval') && node.retryStep) {
       const retry = workflow.nodes.find((candidate) => candidate.id === node.retryStep)

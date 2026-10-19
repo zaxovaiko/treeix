@@ -73,7 +73,7 @@ function PromptForm({
         <button onClick={onClose} className="h-7 rounded-md px-3 text-foreground hover:bg-accent">
           Cancel
         </button>
-        <button onClick={send} disabled={!ready} className="h-7 rounded-md bg-primary px-3 font-medium text-white disabled:bg-muted disabled:text-muted-foreground">
+        <button onClick={send} disabled={!ready} className="h-7 rounded-md bg-primary px-3 font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground">
           {optional ? 'Run' : 'Ask'}
         </button>
       </div>
@@ -84,9 +84,9 @@ function PromptForm({
 /** Asks an agent or runs a workflow with what the user types */
 export function AskDialog(): React.JSX.Element | null {
   const host = useHost()
-  const request = asking.use()
-  const agents = hubAgents.use()
-  const workflows = hubWorkflows.use()
+  const request = asking.useValue()
+  const agents = hubAgents.useValue()
+  const workflows = hubWorkflows.useValue()
   if (!request) return null
   const close = (): void => asking.set(null)
   const follow = (started: Promise<string>): Promise<void> =>

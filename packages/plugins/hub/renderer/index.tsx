@@ -1,14 +1,16 @@
-import { lazy, Suspense, useEffect } from 'react'
-import { type RendererPlugin, useHost } from '@treeix/sdk'
+import { type ComponentType, lazy, Suspense, useEffect, useSyncExternalStore } from 'react'
+import { createStore, type RendererPlugin, useHost } from '@treeix/sdk'
 import { type Agent, useAgents } from '@treeix/app/agents'
-import { subscribeSettings } from '@treeix/app/settings'
+import { subscribeSettings, useSettings } from '@treeix/app/settings'
 import { notify } from '@treeix/app/notifications'
-import { type AgentRuntime, isWaiting, type Run } from '../shared/workflow'
+import { type AgentRuntime, isCodingAgent, isWaiting, type Run } from '../shared/workflow'
 import { AskDialog } from './AskDialog'
+import { Configure } from './Configure'
 import { HubSettings } from './Settings'
 import {
   asAgent,
   asking,
+  chatIdOf,
   followAgents,
   followChats,
   followRuns,
@@ -20,6 +22,7 @@ import {
   hubRuns,
   followEvals,
   hubSelection,
+  hubSettings,
   hubWorkflows,
   onOpenRun,
   TAB_ID
@@ -29,6 +32,59 @@ import {
 const HubPage = lazy(() => import('./HubPage').then((module) => ({ default: module.HubPage })))
 // The editor only loads once an agent is being created or edited
 const HubEditor = lazy(() => import('./HubPage').then((module) => ({ default: module.HubEditor })))
+
+/** A bot as the Bots window lists it: what it is doing now, else its last conversation's first message */
+export type BotSummary = {
+  id: string
+  name: string
+  look: { color: string; mark: string }
+  status: 'idle' | 'running' | 'attention'
+  preview: string
+  updatedAt: number | null
+}
+
+declare module '@treeix/sdk' {
+  interface Services {
+    /** Provided by the hub: its bots, last active first, and a bot's chat */
+    bots: { list: () => BotSummary[]; subscribe: (listener: () => void) => () => void; Thread: ComponentType<{ botId: string }> }
+  }
+}
+
+const noSubscription = (): (() => void) => () => undefined
+
+// Root keeps it current, so the Bots window reads it without hooks of the hub's own
+const botList = createStore<BotSummary[]>([])
+
+function useBots(): BotSummary[] {
+  const chat = useHost().service('chat')
+  const agents = hubAgents.useValue()
+  const { chats } = hubSettings.useValue()
+  const statuses = useSyncExternalStore(chat?.subscribe ?? noSubscription, () => agents.map((agent) => chat?.status(chatIdOf(agent)) ?? 'idle').join(' ')).split(' ')
+  return agents
+    .map((agent, index): BotSummary => {
+      const last = chats.find((entry) => entry.agentId === agent.id)
+      const status = statuses[index] === 'input' ? 'attention' : statuses[index] === 'running' ? 'running' : 'idle'
+      return {
+        id: agent.id,
+        name: agent.name,
+        look: { color: agent.color, mark: agent.mark ?? '' },
+        status,
+        preview: status === 'attention' ? 'Needs you' : status === 'running' ? 'Working…' : (last?.title ?? 'No conversations yet'),
+        updatedAt: last?.updatedAt ?? null
+      }
+    })
+    .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+}
+
+const BotThread = lazy(() => import('./HubPage').then((module) => ({ default: module.BotThread })))
+
+function Thread({ botId }: { botId: string }): React.JSX.Element {
+  return (
+    <Suspense fallback={<div className="flex-1" />}>
+      <BotThread botId={botId} />
+    </Suspense>
+  )
+}
 
 function Tab(): React.JSX.Element {
   return (
@@ -40,13 +96,22 @@ function Tab(): React.JSX.Element {
 
 /** Tells main how each agent chats, which only the registry here knows, so runs can start agents */
 function useRuntimes(): void {
+  'use no memo' // each agent's chat spec is read from the agent registry during render
   const host = useHost()
-  const agents = hubAgents.use()
-  useAgents()
-  const runtimes = agents.flatMap((agent): AgentRuntime[] => {
-    const chat = asAgent(agent)?.chat
-    return chat ? [{ ...chat, agent: agent.id, cwd: agent.folder ?? host.defaultCwd }] : []
-  })
+  const agents = hubAgents.useValue()
+  const registry = useAgents()
+  const { claudeSkipPermissions, codexSkipPermissions } = useSettings()
+  const skips = { claude: claudeSkipPermissions, codex: codexSkipPermissions }
+  const runtimes = [
+    ...agents.flatMap((agent): AgentRuntime[] => {
+      const chat = asAgent(agent)?.chat
+      return chat ? [{ ...chat, agent: agent.id, cwd: agent.folder ?? host.defaultCwd }] : []
+    }),
+    // Steps on Claude or Codex as they are allow what their Settings switch lets them
+    ...registry.flatMap((agent): AgentRuntime[] =>
+      isCodingAgent(agent.id) && agent.chat ? [{ ...agent.chat, agent: agent.id, cwd: host.defaultCwd, autoApprove: skips[agent.id] }] : []
+    )
+  ]
   const key = JSON.stringify(runtimes)
   // Before the agents load the list is empty, which must not wipe what main saved
   useEffect(() => void (runtimes.length && hubApi.setRuntimes(runtimes)), [key])
@@ -94,7 +159,7 @@ function useRunNotifications(): void {
 
 function Root(): React.JSX.Element {
   const chat = useHost().service('chat')
-  const editing = hubEditing.use()
+  const editing = hubEditing.useValue()
   useEffect(followAgents, [])
   useEffect(() => (chat ? followChats(chat) : undefined), [chat])
   useEffect(followWorkflows, [])
@@ -103,6 +168,8 @@ function Root(): React.JSX.Element {
   useEffect(followEvals, [])
   useRuntimes()
   useRunNotifications()
+  const bots = useBots()
+  useEffect(() => botList.set(bots), [JSON.stringify(bots)])
   return (
     <>
       <AskDialog />
@@ -123,9 +190,11 @@ const plugin: RendererPlugin = {
       icon: 'sparkles',
       order: 30,
       render: Tab
-    }
+    },
+    { id: 'hub.configure', label: 'Configure', icon: 'settings', order: 31, render: Configure, hidden: true }
   ],
   Root,
+  services: { bots: { list: botList.get, subscribe: botList.subscribe, Thread } },
   Settings: HubSettings,
   commands: () => [
     ...hubAgents.get().map((agent) => ({

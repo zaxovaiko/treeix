@@ -12,7 +12,10 @@ export type AgentNode = {
   retries: number
   onError: 'stop' | 'continue'
   timeoutMin: number
-  /** Path of a subagent the agent's project defines; the step runs with that subagent's prompt and model */
+  /**
+   * Name of a subagent the projects define; the step runs with the prompt and model of the one its repo defines.
+   * A path, from before names, pins that one file
+   */
   subagent?: string | null
 }
 
@@ -51,6 +54,57 @@ export type Watch = {
   enabled: boolean
 }
 
+/** Tickets a workflow's watches run at a time unless it says otherwise; the rest wait their turn */
+export const WATCH_AT_ONCE = 2
+export const MAX_AT_ONCE = 10
+
+/**
+ * Where a watched ticket runs: `match` is a Jira project key or a label, `folder` the repo every step works and finds subagents in,
+ * `subagents` which of the repo's subagents a step (by id) runs as, over the step's own pick
+ */
+export type ProjectRule = { match: string; folder: string; subagents?: Record<string, string> }
+
+const isProjectRule = (value: unknown): value is ProjectRule =>
+  isJson(value) && isString(value.match) && isString(value.folder) && (value.subagents === undefined || (isJson(value.subagents) && Object.values(value.subagents).every(isString)))
+
+/** Names as projects, labels and folders compare: any case, without spaces or punctuation, so "Social Win" names social-win */
+const projectName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]/g, '')
+const ticketNames = (ticket: { key: string; labels: string[] }): Set<string> => new Set([ticket.key.split('-')[0], ...ticket.labels].map(projectName).filter(Boolean))
+
+/** The first rule naming the ticket's Jira project (its key's prefix) or one of its labels; null when none does */
+export function projectFor(rules: ProjectRule[], ticket: { key: string; labels: string[] }): ProjectRule | null {
+  const names = ticketNames(ticket)
+  return rules.find((rule) => rule.folder && names.has(projectName(rule.match))) ?? null
+}
+
+/** The workflow as a project runs it: each step its project picked a subagent for runs as that one */
+export const withSubagents = (workflow: Workflow, picks: Record<string, string> = {}): Workflow => ({
+  ...workflow,
+  nodes: workflow.nodes.map((node) => (node.kind === 'agent' && picks[node.id] ? { ...node, subagent: picks[node.id] } : node))
+})
+
+/** Else the first of `folders` named like the ticket's project or one of its labels, so a project next to a listed one needs no rule */
+export function folderNamed(folders: string[], ticket: { key: string; labels: string[] }): string | null {
+  const names = ticketNames(ticket)
+  return folders.find((folder) => names.has(projectName(folder.split('/').pop() ?? ''))) ?? null
+}
+
+/** A ticket's branch: its Jira key, or a Notion task's title and the start of its page id, since that id is all its key is */
+export const ticketBranch = (ticket: { source: Watch['source']; key: string; title: string }): string =>
+  ticket.source === 'jira'
+    ? ticket.key.toLowerCase()
+    : [
+        ticket.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 40)
+          .replace(/-$/, ''),
+        ticket.key.slice(0, 6)
+      ]
+        .filter(Boolean)
+        .join('-')
+
 /** What a new watch looks for: items marked for an agent, yours, not done */
 export const WATCH_QUERY: Record<Watch['source'], string> = {
   jira: 'labels = agent-ready AND assignee = currentUser() AND statusCategory != Done',
@@ -83,19 +137,39 @@ export function ticketOf(run: Pick<Run, 'title' | 'ticket'>): { source: TicketSo
   return { source: JIRA_KEY.test(run.ticket.key) ? 'jira' : 'notion', key: run.ticket.key }
 }
 
+/** The event the Slack plugin hands its batches on; a workflow listing it in `events` starts on Slack messages */
+export const SLACK_EVENT = 'slack.messages'
+export const MAX_SLACK_INTERVAL_MIN = 1440
+
+/** How often Slack batches come and whether your own messages are in them; the Slack plugin reads it through hub_workflows */
+export type SlackTrigger = { intervalMin: number; includeOwn: boolean }
+export const SLACK_TRIGGER: SlackTrigger = { intervalMin: 15, includeOwn: true }
+
+export const isSlackTrigger = (value: unknown): value is SlackTrigger =>
+  isJson(value) &&
+  Number.isInteger(value.intervalMin) &&
+  Number(value.intervalMin) >= 1 &&
+  Number(value.intervalMin) <= MAX_SLACK_INTERVAL_MIN &&
+  typeof value.includeOwn === 'boolean'
+
 export type TicketDetail = { title: string; url: string | null; body: string; comments: { author: string; created: string; body: string }[] }
 
 export type WorkflowNode =
   /**
    * `schedules` start the workflow on their own while Treeix runs, each with its prompt as the input; `events` start it when a plugin emits one,
-   * with the event's JSON as the input; `watches` start it once per new ticket, with the ticket's JSON as the input
+   * with the event's JSON as the input; `watches` start it once per new ticket, with the ticket's JSON as the input, at most `atOnce`
+   * tickets running at a time (missing is WATCH_AT_ONCE), each in the folder of the first of `projects` it matches, else its agents' own.
+   * `slack` is what starting on SLACK_EVENT asks of the batches; missing is SLACK_TRIGGER
    */
   | {
       id: string
       kind: 'input'
       schedules?: Schedule[]
       events?: string[]
+      slack?: SlackTrigger
       watches?: Watch[]
+      atOnce?: number
+      projects?: ProjectRule[]
     }
   | AgentNode
   | { id: string; kind: 'merge' | 'output'; template: string }
@@ -145,7 +219,10 @@ export const isWorkflow = (value: unknown): value is Workflow =>
       KINDS.includes(node.kind) &&
       (node.schedules === undefined || (Array.isArray(node.schedules) && node.schedules.every(isSchedule))) &&
       (node.events === undefined || (Array.isArray(node.events) && node.events.every(isString))) &&
-      (node.watches === undefined || (Array.isArray(node.watches) && node.watches.every(isWatch)))
+      (node.slack === undefined || isSlackTrigger(node.slack)) &&
+      (node.watches === undefined || (Array.isArray(node.watches) && node.watches.every(isWatch))) &&
+      (node.atOnce === undefined || (Number.isInteger(node.atOnce) && Number(node.atOnce) >= 1)) &&
+      (node.projects === undefined || (Array.isArray(node.projects) && node.projects.every(isProjectRule)))
   ) &&
   Array.isArray(value.edges) &&
   value.edges.every((edge) => isJson(edge) && typeof edge.from === 'string' && typeof edge.to === 'string') &&
@@ -209,6 +286,8 @@ export type Run = {
   output: string | null
   /** Set when a watch started the run */
   ticket?: Ticket | null
+  /** The project folder its ticket matched, which every step works in unless the step names its own */
+  folder?: string | null
 }
 
 /** One logged chat event of a node, as stored and streamed */
@@ -216,8 +295,16 @@ export type RunEvent = { node: string; at: number; event: ChatEvent }
 
 export const isRunEvent = (value: unknown): value is RunEvent => isJson(value) && typeof value.node === 'string' && typeof value.at === 'number' && isJson(value.event)
 
-/** How an agent chats and where it works, as the renderer last reported */
-export type AgentRuntime = ChatSpec & { agent: string; cwd: string }
+/** How an agent chats and where it works, as the renderer last reported; `autoApprove` for Claude and Codex as they are */
+export type AgentRuntime = ChatSpec & { agent: string; cwd: string; autoApprove?: boolean }
+
+/** Claude and Codex as they are, so a step can run without a bot, e.g. as a project's subagent */
+export const CODING_AGENTS = { claude: 'Claude', codex: 'Codex' } as const
+
+export const isCodingAgent = (id: string): id is keyof typeof CODING_AGENTS => Object.hasOwn(CODING_AGENTS, id)
+
+/** What a step can run on: Claude and Codex, then the bots */
+export const stepAgents = (bots: { id: string; name: string }[]): { id: string; name: string }[] => [...Object.entries(CODING_AGENTS).map(([id, name]) => ({ id, name })), ...bots]
 
 export const ASK_TIMEOUT_MIN = 10
 

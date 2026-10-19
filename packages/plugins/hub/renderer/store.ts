@@ -27,8 +27,11 @@ export const hubApi = {
   removeRun: (id: string) => bridge.invoke<void>('deleteRun', id),
   /** Starts a recorded one-off question; resolves with the run id */
   ask: (agent: string, message: string) => bridge.invoke<string>('ask', agent, message),
-  /** The subagents the agent's project defines, which a workflow step can run as */
-  subagents: (agent: string) => bridge.invoke<Subagent[]>('subagents', agent),
+  /** The subagents the agent's folder and the workflow's projects define, which a workflow step can run as */
+  subagents: (agent: string, projects: string[] = []) => bridge.invoke<Subagent[]>('subagents', agent, projects),
+  /** The subagents a folder (the home folder when null) and the user's own config define, for a bot to start from */
+  folderSubagents: (folder: string | null) => bridge.invoke<Subagent[]>('folderSubagents', folder),
+  readSubagent: (path: string) => bridge.invoke<{ instructions: string; model: string | null } | null>('readSubagent', path),
   workflows: () => bridge.invoke<Workflow[]>('workflows'),
   saveWorkflow: (workflow: Workflow) => bridge.invoke<void>('saveWorkflow', workflow),
   removeWorkflow: (id: string) => bridge.invoke<void>('deleteWorkflow', id),
@@ -258,7 +261,7 @@ export function runtimeLabel(runtime: Runtime): string {
 export function asAgent(agent: HubAgent): Agent | null {
   const base = runtimeSpec(agent.runtime)
   if (!base) return null
-  const preset = agent.model ? { model: agent.model } : {}
+  const preset = { ...(agent.model && { model: agent.model }), ...(agent.effort && { effort: agent.effort }) }
   return {
     id: registryId(agent),
     label: agent.name,

@@ -42,10 +42,14 @@ export type HubAgent = {
   name: string
   /** One glyph, shown on tabs and badges */
   icon: string
+  /** Its avatar's mark, one of the app's BOT_MARKS; missing on agents saved before marks */
+  mark?: string
   color: string
   runtime: Runtime
   /** A model the runtime offers; null keeps its default */
   model: string | null
+  /** How hard it thinks, a level its runtime offers for the model; missing or null keeps the default */
+  effort?: string | null
   instructions: string
   /** Where it works; null is the selected worktree */
   folder: string | null
@@ -79,6 +83,8 @@ export const isHubAgent = (value: unknown): value is HubAgent =>
   ['id', 'name', 'icon', 'color', 'instructions'].every((key) => isString(value[key])) &&
   ['model', 'folder'].every((key) => isNullableString(value[key])) &&
   isRuntime(value.runtime) &&
+  (value.mark === undefined || isString(value.mark)) &&
+  (value.effort === undefined || isNullableString(value.effort)) &&
   (value.autoApprove === undefined || typeof value.autoApprove === 'boolean') &&
   (value.schedules === undefined || (Array.isArray(value.schedules) && value.schedules.every(isSchedule))) &&
   typeof value.updatedAt === 'number'

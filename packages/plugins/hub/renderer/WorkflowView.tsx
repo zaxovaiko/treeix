@@ -17,15 +17,32 @@ import {
   useStore
 } from '@xyflow/react'
 import { ISLAND, usePanels, useHost, Zone, PANE_HEADER } from '@treeix/sdk'
+import { useSettings } from '@treeix/app/settings'
 import { actionKeys } from '@treeix/shared/keymap'
 import { Icon, type IconName } from '@treeix/app/Icon'
 import { FLOW_THEME, prettify } from '@treeix/app/flow'
 import { timeAgo } from '@treeix/app/time'
 import { errorMessage, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import { Picker, Select } from '@treeix/app/Picker'
-import type { Subagent } from '../shared/subagents'
+import { setPluginEnabled } from '@treeix/app/plugins'
+import { Switch } from '@treeix/app/settingsUi'
+import { roleName, type Subagent, subagentRoles } from '../shared/subagents'
 import { ancestors, type Problem, validate } from '../shared/validate'
-import { ASK_TIMEOUT_MIN, KIND_LABEL, MAX_ROUNDS, MAX_SCORE, type NodeRun, type Watch, WATCH_QUERY, type Workflow, type WorkflowNode } from '../shared/workflow'
+import {
+  ASK_TIMEOUT_MIN,
+  KIND_LABEL,
+  stepAgents,
+  MAX_ROUNDS,
+  MAX_SCORE,
+  MAX_SLACK_INTERVAL_MIN,
+  type NodeRun,
+  SLACK_EVENT,
+  SLACK_TRIGGER,
+  type Watch,
+  WATCH_QUERY,
+  type Workflow,
+  type WorkflowNode
+} from '../shared/workflow'
 import { AgentAvatar, Schedules, WholeNumber } from './AgentEditor'
 import { MAX_TIMEOUT_MIN } from '../shared/types'
 import { shownNode, StatusIcon } from './RunView'
@@ -33,6 +50,7 @@ import { asking, hubAgents, hubApi, hubRunStep, hubRuns, hubSelection } from './
 import { keysText } from '@treeix/shared/shortcut'
 
 type StepNode = FlowNode<{ step: WorkflowNode }, 'step'>
+type InputStep = Extract<WorkflowNode, { kind: 'input' }>
 
 const SAVE_DELAY_MS = 500
 const COLUMN = 260
@@ -101,15 +119,21 @@ function blankStep(kind: Exclude<WorkflowNode['kind'], 'input'>, id: string, age
 
 function StepCard({ id, data: { step }, selected }: NodeProps<StepNode>): React.JSX.Element {
   const { run, problems } = useContext(CanvasContext)
-  const agent = hubAgents.use().find((candidate) => step.kind === 'agent' && candidate.id === step.agent)
+  const agents = hubAgents.useValue()
+  const agent = agents.find((candidate) => step.kind === 'agent' && candidate.id === step.agent)
   const state = run[id]
   const issues = problems.get(id)
-  const title = step.kind === 'agent' ? (agent?.name ?? 'Pick an agent') : step.kind === 'tool' ? step.tool || 'Pick a tool' : KIND_LABEL[step.kind]
+  const title =
+    step.kind === 'agent'
+      ? (stepAgents(agents).find((candidate) => candidate.id === step.agent)?.name ?? 'Pick an agent')
+      : step.kind === 'tool'
+        ? step.tool || 'Pick a tool'
+        : KIND_LABEL[step.kind]
   const detail =
     step.kind === 'input'
       ? [
           ...(step.schedules ?? []).filter((schedule) => schedule.enabled).map((schedule) => [schedule.cron, schedule.command].filter(Boolean).join(' · ')),
-          ...(step.events ?? []),
+          ...(step.events ?? []).map((name) => (name === SLACK_EVENT ? `Slack every ${(step.slack ?? SLACK_TRIGGER).intervalMin} min` : name)),
           ...(step.watches ?? []).filter((watch) => watch.enabled).map((watch) => `${WATCH_LABEL[watch.source]}: ${watch.query}`)
         ].join('; ') || 'What the run starts with'
       : step.kind === 'agent'
@@ -305,13 +329,60 @@ function EventsField({ events, onChange }: { events: string[]; onChange: (events
               .filter(Boolean)
           )
         }
-        placeholder="meetings.transcribed, slack.messages"
+        placeholder="meetings.transcribed"
         className={`${FIELD} h-8 font-mono text-xs`}
       />
       <span>
         Each event's payload becomes {'{{input}}'}; read its fields as {'{{input.title}}'}.
       </span>
     </label>
+  )
+}
+
+/** Slack messages as the trigger, in batches; picking it turns the Slack plugin on, and with several such workflows the shortest interval wins */
+function SlackField({ step, onChange }: { step: InputStep; onChange: (step: InputStep) => void }): React.JSX.Element {
+  const host = useHost()
+  const events = step.events ?? []
+  const on = events.includes(SLACK_EVENT)
+  const trigger = step.slack ?? SLACK_TRIGGER
+  const toggle = (): void => {
+    if (on) return onChange({ ...step, events: events.filter((name) => name !== SLACK_EVENT) })
+    setPluginEnabled('slack', true)
+    onChange({ ...step, events: [...events, SLACK_EVENT], slack: trigger })
+  }
+  return (
+    <div className={LABEL}>
+      <span className="flex items-center justify-between">
+        Slack messages
+        <Switch checked={on} onChange={toggle} label="Start on Slack messages" />
+      </span>
+      {on ? (
+        <>
+          <label className="flex items-center gap-2">
+            <span className="flex-1">Every, min</span>
+            <WholeNumber
+              min={1}
+              max={MAX_SLACK_INTERVAL_MIN}
+              value={trigger.intervalMin}
+              onChange={(intervalMin) => onChange({ ...step, slack: { ...trigger, intervalMin } })}
+              className={`${FIELD} h-8 w-20`}
+            />
+          </label>
+          <span className="flex items-center gap-2">
+            <span className="flex-1">Include my own messages</span>
+            <Switch checked={trigger.includeOwn} onChange={() => onChange({ ...step, slack: { ...trigger, includeOwn: !trigger.includeOwn } })} label="Include my own messages" />
+          </span>
+          <span>
+            Each batch becomes {'{{input}}'}: {'{{input.text}}'}, {'{{input.title}}'}.{' '}
+            <button onClick={() => host.openSettings('plugin:slack')} className="underline hover:text-foreground">
+              Slack tokens
+            </button>
+          </span>
+        </>
+      ) : (
+        <span className="text-[11px]">Off. Runs the workflow on what you can see in Slack, a batch every few minutes, while Treeix is open.</span>
+      )}
+    </div>
   )
 }
 
@@ -326,7 +397,7 @@ function Inspector({
   onChange: (step: WorkflowNode) => void
   onDelete: () => void
 }): React.JSX.Element {
-  const agents = hubAgents.use()
+  const agents = hubAgents.useValue()
   const [subagents, setSubagents] = useState<Subagent[] | null>(null)
   return (
     <div className="flex flex-col gap-3">
@@ -342,7 +413,11 @@ function Inspector({
         <>
           <p className="text-xs text-muted-foreground">The text you run the workflow with, or a schedule starts it with. Steps read it as {'{{input}}'}.</p>
           <Schedules workflow schedules={step.schedules ?? []} onChange={(schedules) => onChange({ ...step, schedules })} />
-          <EventsField events={step.events ?? []} onChange={(events) => onChange({ ...step, events })} />
+          <SlackField step={step} onChange={onChange} />
+          <EventsField
+            events={(step.events ?? []).filter((name) => name !== SLACK_EVENT)}
+            onChange={(events) => onChange({ ...step, events: step.events?.includes(SLACK_EVENT) ? [...events, SLACK_EVENT] : events })}
+          />
           <WatchesField watches={step.watches ?? []} onChange={(watches) => onChange({ ...step, watches })} />
         </>
       )}
@@ -352,40 +427,34 @@ function Inspector({
             Agent
             <Select
               title="The agent this step asks"
-              value={agents.some((agent) => agent.id === step.agent) ? step.agent : null}
+              value={stepAgents(agents).some((agent) => agent.id === step.agent) ? step.agent : null}
               placeholder="Pick an agent"
-              options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
-              onChange={(agent) => onChange({ ...step, agent, subagent: null })}
+              options={stepAgents(agents).map((agent) => ({ value: agent.id, label: agent.name }))}
+              onChange={(agent) => onChange({ ...step, agent })}
             />
           </div>
           <div className={LABEL}>
             Subagent
             <Select
-              title="Runs the step with the prompt and model of a subagent the agent's project defines"
-              value={step.subagent ?? ''}
+              title="Runs the step with the prompt and model of the subagent by this name its repo defines"
+              value={step.subagent ? roleName(step.subagent) : ''}
               placeholder="The agent itself"
               note={
                 subagents === null
                   ? undefined
                   : subagents.length === 0
-                    ? "The agent's project defines none in .claude/agents, .rulesync/subagents or .codex/agents"
-                    : (subagents.find((entry) => entry.path === step.subagent)?.description ?? undefined)
+                    ? 'No repo here defines any in .claude/agents, .rulesync/subagents or .codex/agents'
+                    : (() => {
+                        const role = subagentRoles(subagents).find((entry) => step.subagent && entry.name === roleName(step.subagent))
+                        return role && `${role.description} Defined in ${role.projects.join(', ')}.`.trim()
+                      })()
               }
               options={[
                 { value: '', label: 'The agent itself' },
-                ...(subagents ?? []).map((subagent) => ({ value: subagent.path, label: subagent.name, hint: subagent.model ?? undefined })),
-                // Shown by its file name until the list loads
-                ...(step.subagent && !subagents?.some((entry) => entry.path === step.subagent)
-                  ? [
-                      {
-                        value: step.subagent,
-                        label:
-                          step.subagent
-                            .split('/')
-                            .pop()
-                            ?.replace(/\.(md|toml)$/, '') ?? step.subagent
-                      }
-                    ]
+                ...subagentRoles(subagents ?? []).map((role) => ({ value: role.name, label: role.name, hint: role.projects.join(', ') })),
+                // Shown by name until the list loads
+                ...(step.subagent && !subagents?.some((entry) => entry.name === roleName(step.subagent ?? ''))
+                  ? [{ value: roleName(step.subagent), label: roleName(step.subagent) }]
                   : [])
               ]}
               onOpen={() => void hubApi.subagents(step.agent).then(setSubagents, () => setSubagents([]))}
@@ -451,9 +520,9 @@ function Inspector({
             Agent
             <Select
               title="The agent that scores the work; another model judges more freshly"
-              value={agents.some((agent) => agent.id === step.agent) ? step.agent : null}
+              value={stepAgents(agents).some((agent) => agent.id === step.agent) ? step.agent : null}
               placeholder="Pick an agent"
-              options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+              options={stepAgents(agents).map((agent) => ({ value: agent.id, label: agent.name }))}
               onChange={(agent) => onChange({ ...step, agent })}
             />
           </div>
@@ -598,8 +667,10 @@ const fit = (room: number) => ({ maxZoom: 1, minZoom: 0.3, padding: { left: '40p
 
 /** The workflow on a canvas: steps to add, connect and fill in, saved as you go, with the last run's state on each */
 export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.Element {
+  'use no memo' // shortcut keys are read from settings during render
+  useSettings()
   const host = useHost()
-  const agents = hubAgents.use()
+  const agents = hubAgents.useValue()
   // ponytail: the open canvas owns the workflow, so its own saves coming back don't reset it and an edit from another window shows after reopening
   const [opened] = useState(workflow)
   const [name, setName] = useState(workflow.name)
@@ -614,7 +685,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
       ),
     [draft, agents]
   )
-  const lastRun = hubRuns.use().find((run) => run.kind === 'workflow' && run.workflow.id === workflow.id)
+  const lastRun = hubRuns.useValue().find((run) => run.kind === 'workflow' && run.workflow.id === workflow.id)
   const canvas = useMemo(() => {
     const byNode = new Map<string, string[]>()
     for (const problem of problems) if (problem.node) byNode.set(problem.node, [...(byNode.get(problem.node) ?? []), problem.message])
@@ -646,7 +717,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
   }, [content])
   useEffect(() => () => void latestCommit.current(), [])
   // Run from the list asks for the input first, so a still-pending edit lands before the run reads the saved workflow
-  const ask = asking.use()
+  const ask = asking.useValue()
   useEffect(() => {
     if (ask?.target === `workflow:${workflow.id}`) void latestCommit.current()
   }, [ask, workflow.id])
@@ -696,7 +767,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
 
   const selected = nodes.find((node) => node.selected) ?? null
   const labelOf = (step: WorkflowNode): string =>
-    step.kind === 'agent' ? (agents.find((agent) => agent.id === step.agent)?.name ?? step.id) : `${KIND_LABEL[step.kind]} (${step.id})`
+    step.kind === 'agent' ? (stepAgents(agents).find((agent) => agent.id === step.agent)?.name ?? step.id) : `${KIND_LABEL[step.kind]} (${step.id})`
   const sources = selected
     ? [...ancestors(draft, selected.id)].flatMap((id) => {
         const step = draft.nodes.find((node) => node.id === id)
@@ -751,7 +822,7 @@ export function WorkflowView({ workflow }: { workflow: Workflow }): React.JSX.El
       onClick={run}
       disabled={problems.length > 0}
       title={problems.map((problem) => problem.message).join('\n') || undefined}
-      className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+      className="flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
     >
       <Icon name="play" className="size-3.5" />
       Run

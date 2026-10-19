@@ -2,7 +2,7 @@ import { useHost } from '@treeix/sdk'
 import { type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { Icon } from '@treeix/app/Icon'
 import { errorMessage, IconButton } from '@treeix/app/ui'
-import { ticketWorkflow } from '../shared/templates'
+import { shipSkillWorkflow, ticketWorkflow } from '../shared/templates'
 import type { EvalSuite } from '../shared/evals'
 import { SOURCED_TITLE, type Workflow } from '../shared/workflow'
 import { AgentAvatar } from './AgentEditor'
@@ -67,7 +67,7 @@ function useOpen(): (row: string) => void {
 /** The selected row, but only while the hub shows it: the sidebar highlights what is on screen, never a page left behind */
 function useShownRow(): string | null {
   const host = useHost()
-  const selection = hubSelection.use()
+  const selection = hubSelection.useValue()
   return host.activeTab === TAB_ID ? selection : null
 }
 
@@ -81,7 +81,7 @@ export function NewAgentButton(): React.JSX.Element {
 
 export function AgentsSection(): React.JSX.Element {
   const host = useHost()
-  const agents = hubAgents.use()
+  const agents = hubAgents.useValue()
   const selection = useShownRow()
   const open = useOpen()
   return (
@@ -123,7 +123,7 @@ export function NewWorkflowButton(): React.JSX.Element {
       (reason: unknown) => host.flash(errorMessage(reason))
     )
   // Nobody watches its runs, so its watch waits until the agent may run every command without asking
-  const ship = (source: 'jira' | 'notion'): void => {
+  const ship = (source: 'jira' | 'notion', skill = false): void => {
     const agent = hubAgents.get()[0]
     const steps = [
       !agent && 'create an agent and pick it in each step',
@@ -131,7 +131,11 @@ export function NewWorkflowButton(): React.JSX.Element {
       source === 'notion' && 'pick the data source in the Input step',
       !agent?.autoApprove && 'turn the watch on in the Input step'
     ].filter(Boolean)
-    create(ticketWorkflow(source, agent?.id ?? '', agent?.autoApprove === true), steps.length ? `To start: ${steps.join(', then ')}` : 'Watching: tag a ticket agent-ready')
+    const watching = agent?.autoApprove === true
+    create(
+      skill ? shipSkillWorkflow(agent?.id ?? '', watching) : ticketWorkflow(source, agent?.id ?? '', watching),
+      steps.length ? `To start: ${steps.join(', then ')}` : 'Watching: tag a ticket agent-ready'
+    )
   }
   return (
     <IconButton
@@ -141,7 +145,8 @@ export function NewWorkflowButton(): React.JSX.Element {
           { label: 'Blank workflow', run: () => create(newWorkflow()) },
           null,
           { label: 'Ship Jira tickets', run: () => ship('jira') },
-          { label: 'Ship Notion tasks', run: () => ship('notion') }
+          { label: 'Ship Notion tasks', run: () => ship('notion') },
+          { label: "Ship Jira tickets with the repo's /ship", run: () => ship('jira', true) }
         ])
       }
     >
@@ -152,7 +157,7 @@ export function NewWorkflowButton(): React.JSX.Element {
 
 export function WorkflowsSection(): React.JSX.Element {
   const host = useHost()
-  const workflows = hubWorkflows.use()
+  const workflows = hubWorkflows.useValue()
   const selection = useShownRow()
   const open = useOpen()
   const remove = (workflow: Workflow): void =>
@@ -195,11 +200,11 @@ export function WorkflowsSection(): React.JSX.Element {
 /** Conversations and runs together, newest first, under a separator per day, then per week and month */
 export function HistorySection(): React.JSX.Element {
   const host = useHost()
-  const agents = hubAgents.use()
-  const { conversations, chats } = hubSettings.use()
+  const agents = hubAgents.useValue()
+  const { conversations, chats } = hubSettings.useValue()
   const selection = useShownRow()
   const open = useOpen()
-  const runs = hubRuns.use()
+  const runs = hubRuns.useValue()
 
   const removeChat = (entry: HubChat): void => {
     // The open conversation stays open; a new one replaces it next time the agent is picked
@@ -319,8 +324,8 @@ export function NewSuiteButton(): React.JSX.Element {
 
 export function EvalsSection(): React.JSX.Element {
   const host = useHost()
-  const suites = hubSuites.use()
-  const running = hubEvalsRunning.use()
+  const suites = hubSuites.useValue()
+  const running = hubEvalsRunning.useValue()
   const selection = useShownRow()
   const open = useOpen()
   const run = (suite: EvalSuite): void => void hubApi.runEvalSuite(suite.id).catch((reason: unknown) => host.flash(errorMessage(reason)))

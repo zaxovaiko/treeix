@@ -3,12 +3,13 @@ import { join } from 'node:path'
 import type { MainPlugin } from '@treeix/sdk/main'
 import { createSecrets } from '@treeix/host/secrets'
 import { isJson, isString, type Json, object, parseJson, text } from '@treeix/shared/json'
-import { parseSettings, type Status } from '../shared/types'
+import { type Status, type Trigger, triggerOf } from '../shared/types'
 import { isHumanMessage, type Message, permalink, render, withNames } from './messages'
 
 const API = 'https://slack.com/api'
 const TIMEOUT_MS = 30_000
 const RECONNECT_MS = [5_000, 15_000, 60_000, 300_000]
+const MINUTE_MS = 60_000
 const TOKENS = { app: 'xapp-', user: 'xoxp-' } as const
 type Token = keyof typeof TOKENS
 
@@ -30,7 +31,6 @@ const plugin: MainPlugin = {
   activate: (context) => {
     const secrets = createSecrets(join(context.dataPath, 'secrets.bin'))
     const pendingPath = join(context.dataPath, 'pending.jsonl')
-    let settings = parseSettings({})
     let status: Status = { connected: false, pending: 0, error: null, lastBatch: null }
     const setStatus = (patch: Partial<Status>): void => {
       status = { ...status, ...patch }
@@ -40,7 +40,6 @@ const plugin: MainPlugin = {
     let socket: WebSocket | null = null
     let attempt = 0
     let reconnectTimer: NodeJS.Timeout | undefined
-    let batchTimer: NodeJS.Timeout | undefined
     let batching = false
     const users = new Map<string, string>()
     const channels = new Map<string, string>()
@@ -63,6 +62,13 @@ const plugin: MainPlugin = {
         await writeFile(pendingPath, rest, { mode: 0o600 })
         setStatus({ pending: lines(rest) })
       })
+
+    /** Read from AI Hub each time, so a workflow's trigger edits apply without telling Slack; its defaults while the hub is off */
+    const trigger = (): Promise<Trigger> =>
+      context.callTool('hub_workflows', {}).then(
+        (reply) => triggerOf(parseJson(reply)),
+        () => triggerOf(null)
+      )
 
     function reconnect(): void {
       socket = null
@@ -109,6 +115,7 @@ const plugin: MainPlugin = {
         if (!data.length) return
         const userToken = await secrets.get('user')
         if (!userToken) return setStatus({ error: 'Add the user token to send messages on' })
+        const { includeOwn } = await trigger()
         const me = await slack(userToken, 'auth.test')
         const myId = text(me.user_id)
         const userName = async (id: string): Promise<string> => {
@@ -128,7 +135,7 @@ const plugin: MainPlugin = {
         }
         const messages: Message[] = []
         for (const event of data.toString().split('\n').map(parseJson).filter(isJson)) {
-          if (!settings.includeOwn && event.user === myId) continue
+          if (!includeOwn && event.user === myId) continue
           const ts = text(event.ts)
           messages.push({
             channel: await channelName(event),
@@ -149,7 +156,7 @@ const plugin: MainPlugin = {
             messages,
             text: render(messages)
           }
-          if (!(await context.emit('messages', payload))) return setStatus({ error: 'No AI Hub workflow starts on slack.messages, so messages wait for one' })
+          if (!(await context.emit('messages', payload))) return setStatus({ error: 'No AI Hub workflow starts on Slack messages, so they wait for one' })
         }
         await cut(data.length)
         setStatus({ error: null, lastBatch: Date.now() })
@@ -160,18 +167,7 @@ const plugin: MainPlugin = {
       }
     }
 
-    const schedule = (): void => {
-      clearInterval(batchTimer)
-      batchTimer = setInterval(() => void batch(), settings.intervalMin * 60_000)
-    }
-
     context.handle('status', () => status)
-    context.handle('configure', (_, stored: unknown) => {
-      const next = parseSettings(object(stored))
-      const rescheduled = next.intervalMin !== settings.intervalMin
-      settings = next
-      if (rescheduled) schedule()
-    })
     context.handle('tokens', async () => ({ app: (await secrets.get('app')) !== null, user: (await secrets.get('user')) !== null }))
     context.handle('setToken', async (_, kind: Token, token: string | null) => {
       if (token !== null) {
@@ -189,7 +185,17 @@ const plugin: MainPlugin = {
       () => undefined
     )
     void connect()
-    schedule()
+    // Counted in minutes, so a shorter interval set on a workflow takes over within one
+    let idleMin = 0
+    const batchTimer = setInterval(
+      () =>
+        void trigger().then(({ intervalMin }) => {
+          if (++idleMin < intervalMin) return
+          idleMin = 0
+          void batch()
+        }),
+      MINUTE_MS
+    )
     context.onDispose(() => {
       disposed = true
       clearTimeout(reconnectTimer)

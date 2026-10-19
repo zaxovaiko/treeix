@@ -100,7 +100,7 @@ function ApprovalBox({ runId, node, sendsBack }: { runId: string; node: string; 
         className="resize-y rounded-md bg-muted/40 px-2.5 py-2 text-[13px] ring-1 ring-border outline-none placeholder:text-muted-foreground/60 focus:ring-primary"
       />
       <div className="flex gap-2">
-        <button onClick={() => hubApi.decide(runId, node, true, reason)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white">
+        <button onClick={() => hubApi.decide(runId, node, true, reason)} className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground">
           Approve
         </button>
         <button onClick={() => hubApi.decide(runId, node, false, reason)} className="h-7 rounded-md px-3 text-xs ring-1 ring-border hover:bg-accent">
@@ -115,7 +115,7 @@ function ApprovalBox({ runId, node, sendsBack }: { runId: string; node: string; 
 export function RunView({ run }: { run: Run }): React.JSX.Element {
   const host = useHost()
   const chat = host.service('chat')
-  const agents = hubAgents.use()
+  const agents = hubAgents.useValue()
   const [events, setEvents] = useState<RunEvent[]>([])
   useEffect(() => followRunEvents(run.id, setEvents), [run.id])
 

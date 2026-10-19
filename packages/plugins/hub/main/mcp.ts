@@ -4,7 +4,7 @@ import { isJson, isString } from '@treeix/shared/json'
 import { isCron } from '../shared/cron'
 import { type HubAgent, isHubAgent, isTimeout, MAX_TIMEOUT_MIN, type Schedule } from '../shared/types'
 import { validate } from '../shared/validate'
-import { ASK_TIMEOUT_MIN, type Edge, MAX_ROUNDS, MAX_SCORE, type Run, type Workflow, type WorkflowNode } from '../shared/workflow'
+import { ASK_TIMEOUT_MIN, type Edge, isSlackTrigger, MAX_ROUNDS, MAX_SCORE, MAX_SLACK_INTERVAL_MIN, type Run, type Workflow, type WorkflowNode } from '../shared/workflow'
 import type { createEngine } from './engine'
 import { readSubagents } from './subagents'
 
@@ -92,6 +92,7 @@ export function toAgent(args: Args, agents: HubAgent[], now: number): HubAgent {
         : { kind: 'agent', agent: runtime }
       : (existing?.runtime ?? { kind: 'agent', agent: 'claude' }),
     model: nullable(args, 'model', existing?.model ?? null),
+    effort: nullable(args, 'effort', existing?.effort ?? null),
     instructions: optional(args, 'instructions') ?? existing?.instructions ?? '',
     folder: nullable(args, 'folder', existing?.folder ?? null),
     autoApprove: typeof autoApprove === 'boolean' ? autoApprove : (existing?.autoApprove ?? false),
@@ -108,14 +109,16 @@ function toNode(value: unknown, agents: HubAgent[]): WorkflowNode {
   const field = (name: string, fallback: string): string => optional(value, name) ?? fallback
   switch (value.kind) {
     case 'input': {
-      const { schedules, events } = value
+      const { schedules, events, slack } = value
       if (schedules !== undefined && !Array.isArray(schedules)) throw new Error('schedules must be a list')
       if (events !== undefined && !(Array.isArray(events) && events.every(isString))) throw new Error('events must be a list of names')
+      if (slack !== undefined && !isSlackTrigger(slack)) throw new Error(`slack must be {intervalMin: 1-${MAX_SLACK_INTERVAL_MIN}, includeOwn: true or false}`)
       return {
         id,
         kind: 'input',
         ...(schedules?.length ? { schedules: schedules.map(toSchedule) } : {}),
-        ...(events?.length ? { events: events.map((name) => name.trim()).filter(Boolean) } : {})
+        ...(events?.length ? { events: events.map((name) => name.trim()).filter(Boolean) } : {}),
+        ...(slack ? { slack } : {})
       }
     }
     case 'agent':
@@ -229,7 +232,7 @@ export function hubTools(deps: {
     {
       name: 'hub_subagents',
       description:
-        "Lists the subagents the agent's project defines (.claude/agents, .rulesync/subagents or .codex/agents) as JSON: name, description, model, folder and path. Pass a path as an agent step's `subagent` in hub_save_workflow to run that step as it.",
+        "Lists the subagents the agent's project defines (.claude/agents, .rulesync/subagents or .codex/agents) as JSON: name, description, model, folder and path. Pass a name as an agent step's `subagent` in hub_save_workflow to run that step as the subagent of that name its repo defines.",
       inputSchema: byName('The agent whose project to read'),
       run: async (args) => {
         const agent = findAgent(await deps.agents(), required(args, 'name'))
@@ -249,6 +252,7 @@ export function hubTools(deps: {
           instructions: { type: 'string', description: 'Its system prompt' },
           runtime: { type: 'string', description: "What it runs on: an agent id like 'claude' or 'codex', or an OpenAI-compatible base URL. 'claude' by default" },
           model: { type: ['string', 'null'], description: "A model the runtime offers, e.g. 'opus'; null for the runtime's default" },
+          effort: { type: ['string', 'null'], description: "How hard it thinks, a level the runtime offers for the model, e.g. 'low' or 'high'; null for the default" },
           folder: { type: ['string', 'null'], description: 'Absolute path it works in; null for the selected worktree' },
           icon: { type: 'string', description: 'One glyph; its first letter by default' },
           color: { type: 'string', description: 'A CSS color' },
@@ -331,8 +335,8 @@ export function hubTools(deps: {
       description: [
         'Creates an AI Hub workflow, or replaces the steps of the one with this name. It is saved only when it can run, else the call fails with what to fix.',
         'Steps by kind:',
-        "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}], events?: [name]}; where the run input enters; exactly one. Events are other plugins' (e.g. meetings.transcribed, slack.messages): each one starts a run with its JSON payload as the input. A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
-        '- agent: {agent: name, prompt, folder?, subagent?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output. subagent is a path from hub_subagents: the step runs with that subagent\'s prompt and model, so the project\'s own planner, builder or tester does the step and the prompt stays short.',
+        "- input: {schedules?: [{cron, prompt, command?, notify?, enabled?}], events?: [name], slack?: {intervalMin, includeOwn}}; where the run input enters; exactly one. Events are other plugins' (e.g. meetings.transcribed, slack.messages): each one starts a run with its JSON payload as the input. With slack.messages, slack sets how many minutes apart batches come (default 15) and whether the user's own messages are in them (default true). A schedule starts the workflow while Treeix runs with its prompt as the input; with a command, run in the first agent step's folder, every line it prints (`<input>` or `<input>\\t<title>`) starts a run whose input is the prompt with {{input}} = that line.",
+        '- agent: {agent: name, prompt, folder?, subagent?, retries?: 0, onError?: "stop"|"continue", timeoutMin?: 10}; one fresh session per run, its reply is the output. subagent is a name from hub_subagents: the step runs with the prompt and model of the subagent by that name in the repo it works on (a repo without one runs it as the agent itself), so each project\'s own planner, builder or tester does the step and the prompt stays short.',
         '- merge | output: {template}; at least one output, whose text is the run result.',
         '- condition: {source, test: "contains"|"equals"|"regex"|"empty", value}; edges leaving it set branch "true" or "false".',
         "- approval: {message, timeoutMin?}; waits for the user to approve (in the AI Hub, from their phone or on the run's ticket), then passes its input on. Without a reply within timeoutMin (default: the hub setting), an agent decides.",

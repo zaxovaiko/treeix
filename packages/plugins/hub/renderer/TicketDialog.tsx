@@ -10,7 +10,7 @@ import { hubApi } from './store'
 export type TicketMode = 'preview' | 'edit' | 'comment'
 
 const button = 'h-7 rounded-md px-2.5 text-xs ring-1 ring-border hover:bg-accent disabled:opacity-50'
-const primary = 'h-7 rounded-md bg-primary px-2.5 text-xs font-medium text-white disabled:opacity-50'
+const primary = 'h-7 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground disabled:opacity-50'
 
 /** A run's Jira work item or Notion page: its whole text, edited in place, and comments its workflow's agents read */
 export function TicketDialog({ source, ticketKey, mode, onClose }: { source: TicketSource; ticketKey: string; mode: TicketMode; onClose: () => void }): React.JSX.Element {

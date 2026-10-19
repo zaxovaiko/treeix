@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo } from 'react'
 import { useHost, PANE_HEADER } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
+import { BotAvatar } from '@treeix/app/BotAvatar'
 import { Icon } from '@treeix/app/Icon'
 import { EmptyState, IconButton, ResizeHandle, usePersisted } from '@treeix/app/ui'
 import type { HubAgent } from '../shared/types'
-import { AgentAvatar, AgentEditor } from './AgentEditor'
+import { AgentEditor } from './AgentEditor'
 import { Board } from './Board'
 import { RunView } from './RunView'
 import { TicketView } from './TicketView'
@@ -34,6 +35,7 @@ const WorkflowView = lazy(() => import('./WorkflowView').then((module) => ({ def
 
 /** The agent's header and its chat, on `conversation` (null for a new one) */
 function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent; conversation: string | null; onEdit: () => void; onDelete: () => void }): React.JSX.Element {
+  'use no memo' // the runtime's label is read from the agent registry during render
   const host = useHost()
   const chat = host.service('chat')
   const registry = useAgents()
@@ -78,10 +80,10 @@ function AgentChat({ agent, conversation, onEdit, onDelete }: { agent: HubAgent;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className={`${PANE_HEADER} gap-2.5 pr-1.5 pl-3`}>
-        <AgentAvatar agent={agent} size={28} />
+        <BotAvatar look={{ color: agent.color, mark: agent.mark ?? '' }} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{agent.name}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model].filter(Boolean).join(' · ')}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{[runtimeLabel(agent.runtime), agent.model, agent.effort].filter(Boolean).join(' · ')}</div>
         </div>
         <IconButton label={`Ask ${agent.name}`} onClick={() => asking.set({ target: `agent:${agent.id}`, openRun: true })}>
           <Icon name="comment" className="size-3.5" />
@@ -159,17 +161,17 @@ function Rail({ selection }: { selection: string | null }): React.JSX.Element {
 /** The Agents tab: its column of lists, and the board or whatever the column picked */
 export function HubPage(): React.JSX.Element {
   const host = useHost()
-  const agents = hubAgents.use()
-  const workflows = hubWorkflows.use()
-  const { conversations, chats } = hubSettings.use()
-  const selection = hubSelection.use()
-  const runs = hubRuns.use()
+  const agents = hubAgents.useValue()
+  const workflows = hubWorkflows.useValue()
+  const { conversations, chats } = hubSettings.useValue()
+  const selection = hubSelection.useValue()
+  const runs = hubRuns.useValue()
   const chat = chats.find((entry) => `chat:${entry.sessionId}` === selection) ?? null
   const agent = agents.find((candidate) => `agent:${candidate.id}` === selection || candidate.id === chat?.agentId) ?? null
   const workflow = workflows.find((candidate) => `workflow:${candidate.id}` === selection) ?? null
   const run = runs.find((candidate) => `run:${candidate.id}` === selection) ?? null
-  const suite = hubSuites.use().find((candidate) => `eval:${candidate.id}` === selection) ?? null
-  const states = hubTicketStates.use()
+  const suite = hubSuites.useValue().find((candidate) => `eval:${candidate.id}` === selection) ?? null
+  const states = hubTicketStates.useValue()
   const ticket = useMemo(
     () => (selection?.startsWith('ticket:') ? (ticketCards(runs, states).find((card) => `ticket:${card.key}` === selection) ?? null) : null),
     [selection, runs, states]
@@ -208,7 +210,7 @@ export function HubPage(): React.JSX.Element {
 /** The agent editor, mounted by the plugin's Root so the sidebar can open it with the page closed */
 export function HubEditor(): React.JSX.Element | null {
   const host = useHost()
-  const editing = hubEditing.use()
+  const editing = hubEditing.useValue()
   if (!editing) return null
   return (
     <AgentEditor
@@ -221,4 +223,13 @@ export function HubEditor(): React.JSX.Element | null {
       }}
     />
   )
+}
+
+/** A bot's chat on its last conversation, for the Bots window's thread */
+export function BotThread({ botId }: { botId: string }): React.JSX.Element | null {
+  const host = useHost()
+  const agent = hubAgents.useValue().find((candidate) => candidate.id === botId)
+  const { conversations } = hubSettings.useValue()
+  if (!agent) return null
+  return <AgentChat key={agent.id} agent={agent} conversation={conversations[agent.id] ?? null} onEdit={() => hubEditing.set(agent)} onDelete={() => deleteAgent(host, agent)} />
 }

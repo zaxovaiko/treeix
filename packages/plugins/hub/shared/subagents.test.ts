@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { parseSubagent, subagentBody } from './subagents'
+import { parseSubagent, roleName, type Subagent, subagentBody, subagentRoles } from './subagents'
 
 const claude = `---
 name: quality-reviewer
@@ -46,4 +46,14 @@ test('reads a Codex subagent, and falls back to the file name', () => {
 test('a subagent body drops the frontmatter, and a Codex file its key lines', () => {
   expect(subagentBody('/repo/.claude/agents/review.md', '---\nname: Reviewer\nmodel: sonnet\n---\n\nFind bugs.\nNothing else.\n')).toBe('Find bugs.\nNothing else.')
   expect(subagentBody('/repo/.codex/agents/review.toml', 'name = "Reviewer"\nmodel = "sonnet"\ninstructions = """\nFind bugs.\n"""\n')).toBe('Find bugs.')
+})
+
+test('groups subagents by name across repos', () => {
+  const at = (folder: string, name: string, description = ''): Subagent => ({ name, description, model: null, folder, path: `${folder}/.claude/agents/${name}.md` })
+  expect(subagentRoles([at('/p/api', 'planner'), at('/p/web', 'planner', 'Plans.'), at('/p/web', 'tester')])).toEqual([
+    { name: 'planner', description: 'Plans.', projects: ['api', 'web'] },
+    { name: 'tester', description: '', projects: ['web'] }
+  ])
+  expect(roleName('/p/api/.codex/agents/planner.toml')).toBe('planner')
+  expect(roleName('planner')).toBe('planner')
 })

@@ -3,12 +3,14 @@ import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { BrowserWindow, Notification, powerMonitor } from 'electron'
 import type { ChatOption, MainPlugin } from '@treeix/sdk/main'
 import { userShell } from '@treeix/host/env'
+import { addWorktree, defaultBranch } from '@treeix/host/git'
 import { readJsonFile } from '@treeix/host/paths'
+import { childProjects } from '@treeix/host/projects'
 import { createSecrets } from '@treeix/host/secrets'
 import { isJson, isString, list, text } from '@treeix/shared/json'
 import { cronMatches } from '../shared/cron'
@@ -16,10 +18,26 @@ import { type EvalSuite, isEvalSuite } from '../shared/evals'
 import { render } from '../shared/template'
 import { commandItems, type HubAgent, isHubAgent, type Schedule, toDecisionSettings } from '../shared/types'
 import { validate } from '../shared/validate'
-import { type AgentNode, type AgentRuntime, ASK_TIMEOUT_MIN, askWorkflow, type Decider, FROM_APP, isWorkflow, type Run, type TicketDetail, type Workflow } from '../shared/workflow'
+import {
+  type AgentNode,
+  type AgentRuntime,
+  ASK_TIMEOUT_MIN,
+  askWorkflow,
+  type Decider,
+  projectFor,
+  folderNamed,
+  FROM_APP,
+  isWorkflow,
+  type ProjectRule,
+  withSubagents,
+  type Run,
+  ticketBranch,
+  type TicketDetail,
+  type Workflow
+} from '../shared/workflow'
 import { createAttention } from './attention'
 import { createDecisions } from './decisions'
-import { readSubagents } from './subagents'
+import { readSubagent, readSubagents } from './subagents'
 import { createEngine } from './engine'
 import { createEvals } from './evals'
 import { createKeys } from './keys'
@@ -29,7 +47,7 @@ import { ollamaHandlers } from './ollama'
 import { createRemote, openAsks } from './remote'
 import { createRuns } from './runs'
 import { jsonList } from './store'
-import { createWatches } from './watch'
+import { createWatches, type WatchItem } from './watch'
 import { createPullRequests } from './pulls'
 
 const DETECT_TIMEOUT_MS = 60_000
@@ -184,7 +202,8 @@ const plugin: MainPlugin = {
     const engine = createEngine({
       adapter: context.chatAdapter,
       runtime: async (agent) => (await runtimes.get()).find((entry) => entry.agent === agent) ?? null,
-      autoApprove: async (agent) => (await agents.get()).find((entry) => entry.id === agent)?.autoApprove === true,
+      autoApprove: async (agent) =>
+        ((await agents.get()).find((entry) => entry.id === agent)?.autoApprove ?? (await runtimes.get()).find((entry) => entry.agent === agent)?.autoApprove) === true,
       sessionEnv: context.sessionEnv,
       callTool: context.callTool,
       runs: createRuns(join(context.dataPath, 'runs')),
@@ -230,10 +249,14 @@ const plugin: MainPlugin = {
       remote.publish({ type: 'removed', id })
     })
     context.handle('ask', (_, agent: string, message: string) => engine.ask(agent, message, null, false).id)
-    context.handle('subagents', async (_, id: string) => {
-      const agent = (await agents.get()).find((entry) => entry.id === id)
-      return agent?.folder ? readSubagents([agent.folder]) : []
+    // Where the agent's steps run and the projects a workflow routes tickets to, Claude's and Codex's included, with the repos they load
+    context.handle('subagents', async (_, id: string, projects: string[] = []) => {
+      const cwd = (await runtimes.get()).find((entry) => entry.agent === id)?.cwd
+      return readSubagents([...new Set([...(cwd ? [cwd] : []), ...projects])])
     })
+    // A new bot can start from a subagent in its folder or the user's own, in ~/.claude/agents or ~/.codex/agents
+    context.handle('folderSubagents', (_, folder: string | null) => readSubagents([...new Set([folder ?? homedir(), homedir()])]))
+    context.handle('readSubagent', (_, path: string) => readSubagent(path))
     const workflows = jsonList(join(context.dataPath, 'workflows.json'), isWorkflow)
     const writeWorkflows = async (next: Workflow[]): Promise<void> => {
       await workflows.set(next)
@@ -317,6 +340,13 @@ const plugin: MainPlugin = {
               (title, input) => void launchWorkflow(workflow, schedule, title, input)
             )
     }
+    /** A ticket works in its own worktree of its repo, on a branch named for it off the default branch, so runs never share a checkout; a folder outside git is used as is */
+    const ticketWorktree = async (folder: string | null, branch: string): Promise<string | null> =>
+      folder && addWorktree(folder, branch, (await defaultBranch(folder).catch(() => null)) ?? undefined).catch(() => folder)
+    /** The project a rule names, else one named like the ticket next to a listed project, like a Notion task tagged Betfeel finding ~/oss/betfeel */
+    const projectFolder = async (rules: ProjectRule[], ticket: WatchItem): Promise<string | null> =>
+      projectFor(rules, ticket)?.folder ??
+      folderNamed((await Promise.all([...new Set(rules.flatMap((rule) => (rule.folder ? [dirname(rule.folder)] : [])))].map(childProjects))).flat(), ticket)
     // A watched item starts its own run
     const checkWatches = createWatches({
       file: join(context.dataPath, 'watches.json'),
@@ -329,8 +359,13 @@ const plugin: MainPlugin = {
           (await agents.get()).map((agent) => agent.id)
         )[0]
         if (problem) throw new Error(problem.message)
-        const title = `${workflow.name}: ${item.key} ${item.title}`.trim().slice(0, TITLE_CHARS)
-        engine.launch('workflow', title, workflow, JSON.stringify(item), false, { ticket: { key: item.key, url: item.url } })
+        // A Notion task's key is its page id, which says nothing
+        const title = `${workflow.name}: ${item.source === 'jira' ? `${item.key} ` : ''}${item.title}`.trim().slice(0, TITLE_CHARS)
+        const projects = workflow.nodes.find((node) => node.kind === 'input')?.projects ?? []
+        engine.launch('workflow', title, withSubagents(workflow, projectFor(projects, item)?.subagents), JSON.stringify(item), false, {
+          ticket: { key: item.key, url: item.url },
+          folder: await ticketWorktree(await projectFolder(projects, item), ticketBranch(item))
+        })
       },
       failed: (workflow, message) => show(`${workflow.name} can't check its watch`, message, null)
     })
@@ -339,8 +374,8 @@ const plugin: MainPlugin = {
       file: join(context.dataPath, 'tickets.json'),
       runs: engine.list,
       callTool: context.callTool,
-      folder: (run) => workflowFolder(run.workflow),
-      launch: (title, workflow, input, ticket) => void engine.launch('workflow', title.slice(0, TITLE_CHARS), workflow, input, false, { ticket }),
+      folder: async (run) => run.folder ?? workflowFolder(run.workflow),
+      launch: (title, workflow, input, about) => void engine.launch('workflow', title.slice(0, TITLE_CHARS), workflow, input, false, about),
       notify: (card, title, body) => tell(title, body, card.runs[0].id),
       changed: (states) => (context.broadcast('tickets', states), remote.publish({ type: 'tickets', states }))
     })

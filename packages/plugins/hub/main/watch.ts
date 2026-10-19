@@ -1,9 +1,9 @@
 import { isJson, isString, list, text } from '@treeix/shared/json'
-import type { Run, Ticket, Watch, Workflow } from '../shared/workflow'
+import { type Run, type Ticket, WATCH_AT_ONCE, type Watch, type Workflow } from '../shared/workflow'
 import { jsonList } from './store'
 
 /** One item a watch's query matched */
-export type WatchItem = Ticket & { source: Watch['source']; title: string }
+export type WatchItem = Ticket & { source: Watch['source']; title: string; labels: string[] }
 
 /** What each watch matched on its last check, so only items that start matching start runs, also across relaunches */
 type Seen = { id: string; keys: string[] }
@@ -16,11 +16,23 @@ const isSeen = (value: unknown): value is Seen => isJson(value) && isString(valu
 export const entering = (previous: Set<string> | null, current: WatchItem[], running: Set<string>): WatchItem[] =>
   current.filter((item) => !previous?.has(item.key) && !running.has(item.key))
 
+/**
+ * Starts as many entering items as there is room for. The rest are left out of what was seen, so a later check,
+ * once a run has finished, finds them entering again
+ */
+export function admit(previous: Set<string> | null, current: WatchItem[], running: Set<string>, room: number): { start: WatchItem[]; seen: string[] } {
+  const fresh = entering(previous, current, running)
+  const start = fresh.slice(0, Math.max(0, room))
+  const waiting = new Set(fresh.slice(start.length).map((item) => item.key))
+  return { start, seen: current.flatMap((item) => (waiting.has(item.key) ? [] : [item.key])) }
+}
+
 /** The tool reply as items; the Jira and Notion plugins answer with JSON arrays */
 export function watchItems(source: Watch['source'], reply: string): WatchItem[] {
   return list(JSON.parse(reply)).flatMap((entry): WatchItem[] => {
     const key = text(source === 'jira' ? entry.key : entry.id)
-    return key ? [{ source, key, title: text(source === 'jira' ? entry.summary : entry.title), url: text(entry.url) || null }] : []
+    const title = text(source === 'jira' ? entry.summary : entry.title)
+    return key ? [{ source, key, title, url: text(entry.url) || null, labels: list(entry.labels, isString) }] : []
   })
 }
 
@@ -53,13 +65,17 @@ export function createWatches(deps: {
       const next: Seen[] = []
       for (const workflow of await deps.workflows()) {
         const running = new Set(runs.flatMap((run) => (run.status === 'running' && run.workflow.id === workflow.id && run.ticket ? [run.ticket.key] : [])))
-        for (const watch of workflow.nodes.flatMap((node) => (node.kind === 'input' ? (node.watches ?? []) : [])).filter(ready)) {
+        const input = workflow.nodes.find((node) => node.kind === 'input')
+        let room = (input?.atOnce ?? WATCH_AT_ONCE) - running.size
+        for (const watch of (input?.watches ?? []).filter(ready)) {
           const id = `${workflow.id}:${watch.id}`
           try {
             const items = watchItems(watch.source, await deps.callTool(...query(watch)))
             errors.delete(id)
-            for (const item of entering(stored.get(id) ?? null, items, running)) await deps.launch(workflow, item)
-            next.push({ id, keys: items.map((item) => item.key) })
+            const { start, seen: keys } = admit(stored.get(id) ?? null, items, running, room)
+            for (const item of start) await deps.launch(workflow, item)
+            room -= start.length
+            next.push({ id, keys })
           } catch (reason) {
             const message = reason instanceof Error ? reason.message : String(reason)
             if (errors.get(id) !== message) deps.failed(workflow, message)

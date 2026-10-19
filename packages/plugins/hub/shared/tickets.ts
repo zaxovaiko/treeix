@@ -24,7 +24,23 @@ export const TICKET_BADGES = [
 export type TicketBadge = (typeof TICKET_BADGES)[number]['id']
 
 /** The ticket flow's steps by the column they put the ticket in; any other step counts as In progress */
-const STAGE_COLUMN: Record<string, TicketColumn> = { plan: 'progress', asked: 'progress', implement: 'progress', built: 'progress', qa: 'qa', verified: 'qa', pr: 'pullRequest' }
+// implement, qa, verified, design and designFits are steps of flows made earlier
+const STAGE_COLUMN: Record<string, TicketColumn> = {
+  plan: 'progress',
+  asked: 'progress',
+  design: 'progress',
+  build: 'progress',
+  built: 'progress',
+  implement: 'progress',
+  test: 'qa',
+  tested: 'qa',
+  passing: 'qa',
+  designFits: 'qa',
+  review: 'qa',
+  qa: 'qa',
+  verified: 'qa',
+  pr: 'pullRequest'
+}
 
 /** The line an agent stopped the flow with, to ask a person something */
 const STOPPED = new RegExp(`^(?:${Object.values(STOP).join('|')}).*$`, 'm')
@@ -38,8 +54,12 @@ export type TicketState = {
   ci: 'passed' | 'failed' | 'running' | null
   /** CI fixes in a row that didn't turn it green */
   ciFixes: number
-  /** Pull request comments already handed to an agent, or written before it watched */
-  seenComments: string[]
+  /** When a reviewer last requested changes that an agent was sent to address; missing on states saved before it */
+  changesRequestedAt?: string | null
+  /** The last comment of each thread nobody answered yet, as of the last check */
+  unanswered?: string[]
+  /** The unanswered comments an agent was last sent to answer */
+  answering?: string[]
   needsYou: string | null
   error: string | null
   log: TicketLogEntry[]
@@ -50,7 +70,7 @@ export const freshTicketState = (key: string): TicketState => ({
   mergedAt: null,
   ci: null,
   ciFixes: 0,
-  seenComments: [],
+  changesRequestedAt: null,
   needsYou: null,
   error: null,
   log: []
@@ -58,6 +78,7 @@ export const freshTicketState = (key: string): TicketState => ({
 
 const isLogEntry = (value: unknown): value is TicketLogEntry => isJson(value) && typeof value.at === 'number' && isString(value.text)
 const orNull = (value: unknown): value is string | null => value === null || isString(value)
+const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every(isString)
 
 export const isTicketState = (value: unknown): value is TicketState =>
   isJson(value) &&
@@ -65,8 +86,9 @@ export const isTicketState = (value: unknown): value is TicketState =>
   (value.mergedAt === null || typeof value.mergedAt === 'number') &&
   (value.ci === null || value.ci === 'passed' || value.ci === 'failed' || value.ci === 'running') &&
   typeof value.ciFixes === 'number' &&
-  Array.isArray(value.seenComments) &&
-  value.seenComments.every(isString) &&
+  (value.changesRequestedAt === undefined || orNull(value.changesRequestedAt)) &&
+  (value.unanswered === undefined || isStrings(value.unanswered)) &&
+  (value.answering === undefined || isStrings(value.answering)) &&
   orNull(value.needsYou) &&
   orNull(value.error) &&
   Array.isArray(value.log) &&

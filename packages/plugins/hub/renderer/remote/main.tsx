@@ -6,7 +6,7 @@ import { isJson, isString, list, text } from '@treeix/shared/json'
 import { sseReader } from '../../main/sse'
 import { runSummary } from '../../shared/board'
 import { compact, isTicketState, runTokens, spent, TICKET_BADGES, TICKET_COLUMNS, type TicketCard, ticketCards, ticketLinks, type TicketState } from '../../shared/tickets'
-import { decisionText, isRun, isWaiting, KIND_LABEL, reviewText, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
+import { decisionText, isRun, isWaiting, KIND_LABEL, stepAgents, reviewText, type Run, SOURCED_TITLE, type WorkflowNode } from '../../shared/workflow'
 
 /** The hub's web app on the tailnet, phone first: the ticket board, what needs you, and starting a workflow */
 
@@ -366,7 +366,7 @@ function RunDetail({ run, agents }: { run: Run; agents: Named[] }): React.JSX.El
       .finally(() => setBusy(false))
   }
   const steps = run.workflow.nodes.filter((step) => run.nodes[step.id] && step.kind !== 'input')
-  const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (agents.find((agent) => agent.id === step.agent)?.name ?? 'Agent') : KIND_LABEL[step.kind])
+  const labelOf = (step: WorkflowNode): string => (step.kind === 'agent' ? (stepAgents(agents).find((agent) => agent.id === step.agent)?.name ?? 'Agent') : KIND_LABEL[step.kind])
   return (
     <>
       <div className="flex flex-col gap-1">

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
 import type { ChatAdapter, ChatConnection, ChatEvent } from '@treeix/sdk/main'
 import { createBatcher } from '@treeix/host/batcher'
+import { agentDirectories } from '@treeix/host/projects'
 import { isJson, isString } from '@treeix/shared/json'
 import { render, renderArgs, type TemplateScope } from '../shared/template'
 import { descendants } from '../shared/validate'
@@ -22,7 +24,7 @@ import {
   type Workflow
 } from '../shared/workflow'
 import { holds, isLive, nextSteps } from './schedule'
-import { readSubagent } from './subagents'
+import { resolveSubagent } from './subagents'
 import { KEEP_RUNS, mergeChunks, type Runs } from './runs'
 
 const MAX_AGENTS = 3
@@ -30,6 +32,9 @@ const EVENTS_DELAY_MS = 250
 const TITLE_CHARS = 80
 const RESUME_PROMPT = 'The app quit while you were on this. Continue where you stopped. In case the conversation is gone, the task was:'
 const JUDGE_TIMEOUT_MIN = 30
+/** A repo's subagent is written for someone at the keyboard; a step runs with nobody watching */
+const AS_SUBAGENT =
+  'You work as the repo subagent whose instructions follow. Where they clash with the task you are given, the task wins: nobody watches this run, so ask no one and wait for no approval.'
 const REPLY_JSON = /\{[\s\S]*\}/
 
 /** A judge's score from its reply; anything but a 1 to 10 score throws */
@@ -177,16 +182,17 @@ export function createEngine(deps: {
     const adapter = deps.adapter(runtime.adapter)
     if (!adapter) throw new Error(`Nothing runs ${runtime.adapter} agents; is its plugin on?`)
     const autoApprove = await deps.autoApprove(node.agent)
-    // A step can run as a subagent the project already defines, instead of the hub needing an agent per role
-    const subagent = node.subagent ? await readSubagent(node.subagent) : null
-    if (node.subagent && !subagent) throw new Error(`${node.subagent} is gone`)
+    // A step can run as a subagent the projects already define, instead of the hub needing an agent per role; a project without it gets the agent itself
+    const cwd = node.folder ?? entry.run.folder ?? runtime.cwd
+    const subagent = node.subagent ? await resolveSubagent(node.subagent, cwd) : null
     entry.log({ node: node.id, at: Date.now(), event: { type: 'message_chunk', role: 'user', content: { type: 'text', text: prompt } } })
     const connecting = adapter.connect({
       command: runtime.command,
-      instructions: subagent ? [runtime.instructions, subagent.instructions].filter(Boolean).join('\n\n') : runtime.instructions,
+      instructions: subagent ? [runtime.instructions, AS_SUBAGENT, subagent.instructions].filter(Boolean).join('\n\n') : runtime.instructions,
       preset: subagent?.model ? { ...runtime.preset, model: subagent.model } : runtime.preset,
-      directories: runtime.directories,
-      cwd: node.folder ?? runtime.cwd,
+      // A folder of several repos, or a worktree whose repo adds folders: the agent loads those too (home's are the user's own)
+      directories: runtime.directories ?? (cwd === homedir() ? undefined : await agentDirectories(cwd)),
+      cwd,
       env: entry.delegated ? {} : await deps.sessionEnv(),
       resume
     })
@@ -427,7 +433,7 @@ export function createEngine(deps: {
   /** Only approval steps hold it: nothing is lost when the app quits, so it waits on after a relaunch */
   const onlyApprovals = (run: Run): boolean => Object.values(run.nodes).every((node) => node.status !== 'running' || node.waiting === 'approval')
 
-  function launch(kind: Run['kind'], title: string, workflow: Workflow, input: string, delegated = false, about: Pick<Run, 'ticket'> = {}): Run {
+  function launch(kind: Run['kind'], title: string, workflow: Workflow, input: string, delegated = false, about: Pick<Run, 'ticket' | 'folder'> = {}): Run {
     const run: Run = {
       id: randomUUID(),
       kind,

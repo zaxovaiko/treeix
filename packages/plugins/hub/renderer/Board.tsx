@@ -19,7 +19,7 @@ export const restorableRuns = (runs: Run[]): Run[] =>
 function RestoreButton(): React.JSX.Element | null {
   const host = useHost()
   const sessions = useSessions()
-  const runs = hubRuns.use()
+  const runs = hubRuns.useValue()
   const dormant = sessions.filter((session) => session.status === 'dormant').length
   const interrupted = restorableRuns(runs)
   const count = dormant + interrupted.length
@@ -34,7 +34,7 @@ function RestoreButton(): React.JSX.Element | null {
       className="relative flex size-7 items-center justify-center rounded-md text-primary hover:bg-accent"
     >
       <Icon name="history" className="size-4" />
-      <span className="absolute -top-0.5 -right-0.5 min-w-3.5 rounded-full bg-primary px-1 text-[9px] leading-3.5 font-medium text-white">{count}</span>
+      <span className="absolute -top-0.5 -right-0.5 min-w-3.5 rounded-full bg-primary px-1 text-[9px] leading-3.5 font-medium text-primary-foreground">{count}</span>
     </button>
   )
 }
@@ -59,8 +59,8 @@ function Pick<T extends string>({ value, options, onPick }: { value: T; options:
 
 /** Every ticket an agent works on, by where it is: In progress, QA, Pull request, Done */
 export function Board(): React.JSX.Element {
-  const runs = hubRuns.use()
-  const states = hubTicketStates.use()
+  const runs = hubRuns.useValue()
+  const states = hubTicketStates.useValue()
   const [project, setProject] = usePersisted<string>('hub.board.project', 'all')
   const [badge, setBadge] = usePersisted<TicketFilter['badge']>('hub.board.badge', 'all')
   const [sort, setSort] = usePersisted<TicketFilter['sort']>('hub.board.sort', 'date')
