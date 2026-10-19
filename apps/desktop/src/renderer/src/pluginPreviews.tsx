@@ -159,7 +159,7 @@ const DRAWINGS: Record<string, React.JSX.Element> = {
   )
 }
 
-/** A plugin's preview tile; an empty tile for a plugin without a drawing, so the rows stay aligned */
+/** A plugin's logo tile; an empty tile for a plugin without a drawing, so the rows stay aligned */
 export const PluginPreview = ({ id }: { id: string }): React.JSX.Element => (
   <svg
     viewBox="0 0 64 40"
@@ -169,7 +169,7 @@ export const PluginPreview = ({ id }: { id: string }): React.JSX.Element => (
     strokeWidth={1.5}
     strokeLinecap="round"
     strokeLinejoin="round"
-    className="h-10 w-16 shrink-0 rounded-md border border-border bg-muted/40 text-muted-foreground"
+    className="size-10 shrink-0 rounded-xl bg-muted p-1 text-muted-foreground ring-1 ring-border"
   >
     {DRAWINGS[id]}
   </svg>

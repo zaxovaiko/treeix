@@ -1,5 +1,5 @@
 import { type ComponentType, useEffect, useRef, useState } from 'react'
-import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav, PANE_HEADER } from '@treeix/sdk'
+import { focusZone, getShell, isTyping, ListToggle, PageLayout, updateShell, usePanels, useListNav, PANE_HEADER, type PluginManifest } from '@treeix/sdk'
 import type { ToolStatus } from '../../shared/types'
 import { Icon, ICON_NAMES, type IconName } from './Icon'
 import { isModifierCode, keysText, type Shortcut, shortcutLabel } from '../../shared/shortcut'
@@ -8,9 +8,6 @@ import { NAVIGATION_ACTIONS } from './codeNavigation'
 import {
   BORDER_STRENGTHS,
   clampOpacity,
-  DIGIT_MODIFIERS,
-  type DigitModifier,
-  type DigitTarget,
   FONT_SIZE_RANGE,
   fontStack,
   getSettings,
@@ -26,14 +23,14 @@ import {
 } from './settings'
 import { type Agent, useAgents } from './agents'
 import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile, removeCustomTheme, type Theme } from './themes'
-import { EmptyState, Popup, useMenuKeys } from './ui'
+import { EmptyState, IconButton, Popup, useMenuKeys } from './ui'
 import { arrangeBar, WORKTREES_TAB } from './titleBarTabs'
-import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, SearchSection, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
+import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, SearchSection, Segmented, SETTING_ROW, settingMatches, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
 import { PluginPreview } from './pluginPreviews'
-import type { Brand } from './brandMarks'
+import { type Brand, BrandMark } from './brandMarks'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
-import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
-import { copyText } from './contextMenu'
+import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, showSettingsPage, takeRequestedPage } from './settingsNav'
+import { copyText, openMenu } from './contextMenu'
 import { McpSetup } from './mcpInstall'
 import { useKeyExtras, useShortcuts } from './Shell'
 import { checkForUpdates, updateSummary, useUpdates } from './updates'
@@ -274,11 +271,6 @@ function FontPicker({ value, monospace, onChange }: { value: string; monospace: 
     </div>
   )
 }
-
-const DIGIT_TARGETS: { target: DigitTarget; label: string; description: string }[] = [
-  { target: 'tabs', label: 'Tabs', description: 'Title bar pages, then open PR and plan tabs; 9 is the last tab. Off by default: G and a letter goes to a page from anywhere.' },
-  { target: 'workspaces', label: 'Workspaces', description: 'Workspaces in menu order, like G and a number. ⌃ digits also switch macOS desktops.' }
-]
 
 type SettingSpec = {
   section: SectionId
@@ -706,27 +698,6 @@ const SETTINGS: SettingSpec[] = [
       return <Segmented value={`${highlightWorkers}`} options={counts.map((count) => [count, count])} onChange={(count) => updateSettings({ highlightWorkers: Number(count) })} />
     }
   },
-  ...DIGIT_TARGETS.map(({ target, label, description }): SettingSpec => ({
-    section: 'Terminal',
-    card: 'Number shortcuts',
-    label,
-    description,
-    note: ({ digitShortcuts }) => {
-      const modifier = digitShortcuts[target]
-      const clash = modifier !== 'off' && DIGIT_TARGETS.some((other) => other.target !== target && digitShortcuts[other.target] === modifier)
-      return clash ? ' Same modifier as another row, so only one of them works.' : ''
-    },
-    Control: function DigitModifierControl() {
-      const { digitShortcuts } = useSettings()
-      return (
-        <Segmented
-          value={digitShortcuts[target]}
-          options={Object.entries(DIGIT_MODIFIERS).map(([id, name]) => [id as DigitModifier, keysText(name)])}
-          onChange={(next) => updateSettings({ digitShortcuts: { ...getSettings().digitShortcuts, [target]: next } })}
-        />
-      )
-    }
-  })),
   ...NAVIGATION_ACTIONS.map(({ kind, label, description }): SettingSpec => ({
     section: 'Keyboard',
     card: 'Code navigation',
@@ -1085,22 +1056,101 @@ const settingsOf = (loaded: LoadedPlugin[], id: string): ComponentType | undefin
 /** What the Bots window runs on: its chats, their sessions and Settings itself, so they have no switch */
 const CORE_PLUGINS = new Set(['chat', 'terminal', 'hub'])
 
-/** Everything beyond worktrees and diffs; a plugin with settings of its own keeps them on its own page */
+/** A plugin's logo: the product's own mark when its page has one, else its drawing */
+function PluginTile({ id }: { id: string }): React.JSX.Element {
+  const brand = (Object.values(BOTS_SETTINGS_PAGES) as BotsPageSpec[]).find((spec) => spec.plugins?.includes(id))?.brand
+  if (!brand) return <PluginPreview id={id} />
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground ring-1 ring-border">
+      <BrandMark brand={brand} className="size-5" />
+    </span>
+  )
+}
+
+/** One plugin in the grid: + turns it on, ⋯ opens its settings or turns it off */
+function PluginItem({ manifest, chosen }: { manifest: PluginManifest; chosen: boolean }): React.JSX.Element | null {
+  const settings = useSettings()
+  const { loaded } = usePlugins()
+  const description = `${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`
+  const hasSettings = loaded.some((entry) => entry.manifest.id === manifest.id) && Boolean(botsPageOf(manifest.id) ?? settingsOf(loaded, manifest.id))
+  if (!useSettingMatch(manifest.name, description)) return null
+  return (
+    <div data-setting={manifest.name} tabIndex={-1} className={`flex items-center gap-3 px-2 py-2 ${SETTING_ROW}`}>
+      <PluginTile id={manifest.id} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium">{manifest.name}</span>
+        <span title={description} className="mt-0.5 block truncate text-xs text-muted-foreground">
+          {description}
+        </span>
+      </span>
+      {chosen ? (
+        <IconButton
+          label={`${manifest.name} options`}
+          onClick={(event) =>
+            openMenu(event, [
+              hasSettings && { label: 'Settings', run: () => showSettingsPage(`plugin:${manifest.id}`) },
+              { label: 'Turn off', run: () => setPluginEnabled(manifest.id, false) }
+            ])
+          }
+        >
+          <Icon name="more" className="size-4" />
+        </IconButton>
+      ) : (
+        <IconButton label={`Turn on ${manifest.name}`} onClick={() => setPluginEnabled(manifest.id, true)}>
+          <Icon name="plus" className="size-4" />
+        </IconButton>
+      )}
+    </div>
+  )
+}
+
+/** Everything beyond worktrees and diffs, on or available; a plugin with settings of its own keeps them on its own page */
 function Plugins(): React.JSX.Element {
   const settings = useSettings()
+  const [query, setQuery] = useState('')
+  const plugins = PLUGINS.filter(({ manifest }) => !CORE_PLUGINS.has(manifest.id) && settingMatches(query, manifest.name, manifest.description)).map(({ manifest }) => ({
+    manifest,
+    chosen: settings.plugins[manifest.id] ?? manifest.enabledByDefault
+  }))
+  const sections = [
+    ['On', plugins.filter(({ chosen }) => chosen)],
+    ['Available', plugins.filter(({ chosen }) => !chosen)]
+  ] as const
   return (
-    <Card title="Plugins">
-      {PLUGINS.filter(({ manifest }) => !CORE_PLUGINS.has(manifest.id)).map(({ manifest }) => {
-        const chosen = settings.plugins[manifest.id] ?? manifest.enabledByDefault
-        return (
-          <SearchGroup key={manifest.id} title={`${manifest.name} ${manifest.description}`} className="border-b border-border last:border-b-0">
-            <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`} preview={<PluginPreview id={manifest.id} />}>
-              <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
-            </Row>
-          </SearchGroup>
+    <div className="mb-6">
+      <header className="mb-6 flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="min-w-48 flex-1">
+          <h1 className="text-2xl font-semibold">Plugins</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground">Bring your tools and trackers into Treeix, and leave out what you don't use.</p>
+        </div>
+        <label className="flex h-8 w-56 items-center gap-2 rounded-lg bg-muted px-2.5 ring-1 ring-border focus-within:ring-primary">
+          <Icon name="search" className="size-3.5 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search plugins"
+            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+      </header>
+      {plugins.length ? (
+        sections.map(
+          ([title, list]) =>
+            list.length > 0 && (
+              <section key={title} className={`mb-6 @container ${HIDE_WHEN_EMPTY}`}>
+                <h2 className="mb-2 text-sm font-medium">{title}</h2>
+                <div className="-mx-2 grid grid-cols-1 gap-x-6 gap-y-1 @xl:grid-cols-2">
+                  {list.map(({ manifest, chosen }) => (
+                    <PluginItem key={manifest.id} manifest={manifest} chosen={chosen} />
+                  ))}
+                </div>
+              </section>
+            )
         )
-      })}
-    </Card>
+      ) : (
+        <EmptyState icon="plug" title={`No plugin matches ${query.trim()}.`} />
+      )}
+    </div>
   )
 }
 

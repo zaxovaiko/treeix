@@ -94,6 +94,7 @@ const paths = {
     </g>
   ),
   list: <path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13" />,
+  more: <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={3} />,
   bell: (
     <>
       <path d="M10.268 21a2 2 0 0 0 3.464 0" />

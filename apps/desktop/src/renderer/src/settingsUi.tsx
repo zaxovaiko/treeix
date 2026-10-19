@@ -7,7 +7,7 @@ const SettingsQuery = createContext('')
 export const SettingsSearch = SettingsQuery.Provider
 
 /** Every word of the query appears somewhere in the texts */
-function settingMatches(query: string, ...texts: string[]): boolean {
+export function settingMatches(query: string, ...texts: string[]): boolean {
   const haystack = texts.join(' ').toLowerCase()
   return query
     .toLowerCase()
