@@ -14,6 +14,8 @@ export type Feed = {
   blocks: Block[]
   plan: PlanEntry[]
   usage: { used: number; size: number; cost: { amount: number; currency: string } | null } | null
+  /** The agent's own title for the chat, once it made one */
+  title: string | null
   /** The last turn that reported its tokens */
   turnUsage: TurnUsage | null
   options: ChatOption[]
@@ -22,7 +24,7 @@ export type Feed = {
   waiting: boolean
 }
 
-export const emptyFeed: Feed = { blocks: [], plan: [], usage: null, turnUsage: null, options: [], commands: [], running: false, waiting: false }
+export const emptyFeed: Feed = { blocks: [], plan: [], usage: null, title: null, turnUsage: null, options: [], commands: [], running: false, waiting: false }
 
 function closeThought(blocks: Block[], now: number): Block[] {
   const last = blocks[blocks.length - 1]
@@ -112,6 +114,8 @@ function reduceOwn(feed: Feed, event: ChatEvent, now: number): Feed {
       return { ...feed, plan: event.entries }
     case 'usage':
       return { ...feed, usage: { used: event.used, size: event.size, cost: event.cost } }
+    case 'title':
+      return { ...feed, title: event.title }
     case 'options':
       return { ...feed, options: event.options }
     case 'commands':

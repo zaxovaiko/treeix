@@ -10,6 +10,7 @@ import { useSettings } from '@treeix/app/settings'
 import { baseName } from '@treeix/app/Sidebar'
 import { type Block, diffCounts, fileTarget, type PendingPermission, turnChanges } from './feed'
 import { keysText } from '@treeix/shared/shortcut'
+import { parseShellPrompt } from './composer'
 
 type Diff = Extract<ToolOutput, { type: 'diff' }>
 
@@ -66,6 +67,19 @@ const Images = ({ images, className }: { images: { mimeType: string; data: strin
   )
 
 export function TextBlock({ block }: { block: Extract<Block, { type: 'text' }> }): React.JSX.Element {
+  const shell = block.role === 'user' ? parseShellPrompt(block.text) : null
+  if (shell)
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[80%] min-w-0 rounded-2xl rounded-br-md bg-muted px-3.5 py-2 font-mono text-xs text-foreground select-text">
+          <div className="break-all whitespace-pre-wrap">
+            <span className="text-muted-foreground">! </span>
+            {shell.command}
+          </div>
+          {shell.output && <pre className="mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap text-muted-foreground">{shell.output}</pre>}
+        </div>
+      </div>
+    )
   if (block.role === 'user') {
     return (
       <div className="flex justify-end">

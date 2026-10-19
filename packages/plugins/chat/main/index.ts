@@ -5,8 +5,9 @@ import { acpAdapter } from './acpAdapter'
 import { createBatcher } from '@treeix/host/batcher'
 import { agentDirectories } from '@treeix/host/projects'
 import { createGenerationGuard } from './generations'
+import { runInShell } from './shell'
 
-type Entry = { connection: ChatConnection; owner: WebContents; dispose: () => void }
+type Entry = { connection: ChatConnection; owner: WebContents; cwd: string; env: Record<string, string>; dispose: () => void }
 
 const plugin: MainPlugin = {
   chatAdapters: [acpAdapter],
@@ -40,7 +41,8 @@ const plugin: MainPlugin = {
       const { cwd, command, instructions, preset, directories, resume, workspaceId } = options
       // A folder of several repos: the agent loads each one's instructions, skills and subagents too
       const loads = directories ?? (await agentDirectories(cwd))
-      const connection = await adapter.connect({ cwd, command, instructions, preset, directories: loads, env: await context.sessionEnv(workspaceId), resume })
+      const env = await context.sessionEnv(workspaceId)
+      const connection = await adapter.connect({ cwd, command, instructions, preset, directories: loads, env, resume })
 
       // A newer start for this chat id arrived while connecting: let it own the map, this connection has nowhere to go
       if (!generations.isCurrent(chatId, token)) {
@@ -58,6 +60,8 @@ const plugin: MainPlugin = {
       const entry: Entry = {
         connection,
         owner,
+        cwd,
+        env,
         dispose: () => {
           disposers.splice(0).forEach((dispose) => dispose())
           connection.close()
@@ -91,6 +95,12 @@ const plugin: MainPlugin = {
       const entry = owned(event, chatId)
       if (!entry) throw new Error('Unknown chat')
       return entry.connection.prompt(content)
+    })
+
+    context.handle('shell', async (event, chatId: string, command: string) => {
+      const entry = owned(event, chatId)
+      if (!entry || typeof command !== 'string') throw new Error('Unknown chat')
+      return runInShell(command, entry.cwd, entry.env)
     })
 
     context.on('cancel', (event, chatId: string) => owned(event, chatId)?.connection.cancel())

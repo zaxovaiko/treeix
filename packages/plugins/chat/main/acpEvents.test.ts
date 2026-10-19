@@ -219,3 +219,8 @@ test("a subagent's updates carry the call that started it", () => {
   ])
   expect(fromSessionUpdate({ sessionUpdate: 'tool_call', toolCallId: 't1', title: 'grep', ...meta })).toMatchObject([{ type: 'tool_call', parent: 'agent1', call: { id: 't1' } }])
 })
+
+test('the agent names the session', () => {
+  expect(fromSessionUpdate({ sessionUpdate: 'session_info_update', title: '  Fix login redirect ' })).toEqual([{ type: 'title', title: 'Fix login redirect' }])
+  expect(fromSessionUpdate({ sessionUpdate: 'session_info_update', title: ' ' })).toEqual([])
+})

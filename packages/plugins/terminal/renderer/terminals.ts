@@ -11,17 +11,7 @@ import { findIssueLinks, findRowFileLinks, findWebLinks } from './fileLinks'
 import { getCurrentWorkspaceId, getWorkspaces, HOME, saveWorkspace, WORKSPACE_COLORS } from '@treeix/app/workspaces'
 import { type ChatService, createBridge, type SessionKind, type SessionPort, type SessionStatus } from '@treeix/sdk'
 import type { AgentHookStatus, HeardReply, HearMode, LiveTerminal, SessionUsage, TranscriptRef } from '../shared/types'
-import {
-  type ClosedSession,
-  isDefaultChatTitle,
-  isTerminalReply,
-  NEW_CHAT_TITLE,
-  parseClosedSession,
-  parseMeta,
-  sessionFolder,
-  type SessionMeta,
-  type SessionView
-} from './sessionMeta'
+import { type ClosedSession, isTerminalReply, NEW_CHAT_TITLE, parseClosedSession, parseMeta, sessionFolder, type SessionMeta, type SessionView } from './sessionMeta'
 import { isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
 import { fittingEdge, type PaneLayout, placePane, removePane, type SplitEdge } from './paneLayout'
@@ -550,10 +540,8 @@ async function openSession(id: string, meta: SessionMeta, output: string, exitCo
     }
     // ⌃- and ⌃⇧- are the app's Go Back and Go Forward, ⌃Tab and ⌃⇧Tab its next and previous tab, not terminal input
     if (event.ctrlKey && ((IS_MAC && event.code === 'Minus') || event.code === 'Tab')) return false
-    // ⌥ digits pick a session; the page and workspace digits are set in Settings
-    const { tabs, workspaces } = getSettings().digitShortcuts
-    const digitShortcut = (['alt', tabs, workspaces] as const).some((modifier) => digitPressed(event, modifier) !== null)
-    return !event.metaKey && !digitShortcut
+    // ⌥ digits pick a session
+    return !event.metaKey && digitPressed(event, 'alt') === null
   })
   // Programs name their window (Claude Code: the conversation topic, zsh themes: command or folder); that names the session
   terminal.onTitleChange((raw) => {
@@ -793,7 +781,8 @@ export function syncChats(): void {
     if (!chat) return session.status === 'dormant' ? session : { ...session, status: 'dormant' }
     const status = session.status === 'dormant' ? 'dormant' : connecting.has(session.id) ? 'running' : chat.status(session.id)
     const agentSessionId = chat.agentSessionId(session.id) ?? session.agentSessionId
-    const title = (isDefaultChatTitle(session.title) && chat.title(session.id)) || session.title
+    // Follows the chat (its first message, then the agent's title) until someone renames it
+    const title = (!session.renamed && chat.title(session.id)) || session.title
     const kind = chat.agent(session.id) ?? session.kind
     const same = status === session.status && agentSessionId === session.agentSessionId && title === session.title && kind === session.kind
     return same ? session : { ...session, status, agentSessionId, title, kind }

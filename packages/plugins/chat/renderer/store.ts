@@ -3,6 +3,7 @@ import type { ChatCapabilities, ChatContent, ChatEvent, ChatService, ChatSpec, S
 import type { StartOptions, StartResult } from '../shared/types'
 import { errorMessage } from '@treeix/app/ui'
 import { emptyFeed, type Feed, reduce } from './feed'
+import { parseShellPrompt, shellPrompt } from './composer'
 
 export type ChatStartOptions = Parameters<ChatService['start']>[1]
 
@@ -53,10 +54,11 @@ export function shortTitle(text: string): string | null {
   return line.length > TITLE_CHARS ? `${line.slice(0, TITLE_CHARS - 1).trimEnd()}…` : line
 }
 
-/** The chat's title: its first message with text */
+/** The chat's title: the agent's own once it made one, else its first message with text */
 export function titleOf(state: ChatState): string | null {
+  if (state.feed.title) return shortTitle(state.feed.title)
   for (const block of state.feed.blocks) {
-    const title = block.type === 'text' && block.role === 'user' ? shortTitle(block.text) : null
+    const title = block.type === 'text' && block.role === 'user' ? shortTitle(parseShellPrompt(block.text)?.command ?? block.text) : null
     if (title) return title
   }
   return null
@@ -291,6 +293,13 @@ export function send(chatId: string, content: ChatContent[]): void {
   if (isBusy(chat)) return update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
   update(chatId, (state) => beginTurn(state, content))
   prompt(chatId, content)
+}
+
+/** Runs a `!` command in the chat's folder and sends the agent what it printed */
+export async function runShell(chatId: string, command: string): Promise<void> {
+  if (!bridge) return
+  const result = await bridge.invoke<{ stdout: string; stderr: string }>('shell', chatId, command)
+  send(chatId, [{ type: 'text', text: shellPrompt(command, result) }])
 }
 
 export const unqueue = (chatId: string, index: number): void => update(chatId, (state) => ({ ...state, queue: state.queue.filter((_, at) => at !== index) }))

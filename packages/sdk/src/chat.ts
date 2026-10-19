@@ -46,6 +46,8 @@ export type ChatEvent =
   | { type: 'tool_call_update'; id: string; patch: Partial<Omit<ToolCall, 'id'>> }
   | { type: 'plan'; entries: PlanEntry[] }
   | { type: 'usage'; used: number; size: number; cost: { amount: number; currency: string } | null }
+  /** A title the agent made for the chat, like Claude's summary of what it is about */
+  | { type: 'title'; title: string }
   | { type: 'options'; options: ChatOption[] }
   | { type: 'commands'; commands: { name: string; description: string }[] }
   | { type: 'permission'; requestId: string; title: string; toolCallId: string | null; options: PermissionOption[] }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { builtinOf, completion, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
+import { builtinOf, completion, formatTokens, imageProblem, parseShellPrompt, shellCommandOf, shellPrompt, switchWarning, withBuiltins, withMentions } from './composer'
 
 test('imageProblem', () => {
   expect(imageProblem({ type: 'image/png', size: 1000 })).toBeNull()
@@ -45,4 +45,14 @@ test('withMentions appends dropped paths, relative inside the folder', () => {
   expect(withMentions('', ['/repo/src/a.ts'], '/repo')).toBe('@src/a.ts ')
   expect(withMentions('look at', ['/repo/a.ts', '/tmp/b.log'], '/repo')).toBe('look at @a.ts @/tmp/b.log ')
   expect(withMentions('see ', ['/repository/x'], '/repo')).toBe('see @/repository/x ')
+})
+
+test('a ! line is a shell command, and its prompt reads back', () => {
+  expect(shellCommandOf('! rm a.lock')).toBe('rm a.lock')
+  expect(shellCommandOf('!git status')).toBe('git status')
+  expect(shellCommandOf('!')).toBeNull()
+  expect(shellCommandOf('fix it!')).toBeNull()
+  expect(parseShellPrompt(shellPrompt('ls', { stdout: 'a\nb\n', stderr: '' }))).toEqual({ command: 'ls', output: 'a\nb' })
+  expect(parseShellPrompt(shellPrompt('rm x', { stdout: '', stderr: 'rm: x: No such file\nExit code 1' }))).toEqual({ command: 'rm x', output: 'rm: x: No such file\nExit code 1' })
+  expect(parseShellPrompt('hello')).toBeNull()
 })

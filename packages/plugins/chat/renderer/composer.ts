@@ -7,6 +7,26 @@ export function imageProblem(file: { type: string; size: number }): string | nul
   return null
 }
 
+/** `! command` runs in the chat's folder, as in Claude Code's bash mode */
+export const shellCommandOf = (text: string): string | null => /^!\s*(\S[\s\S]*)$/.exec(text.trim())?.[1] ?? null
+
+/** The command and its output in the tags Claude Code uses, so the agent reads it as something the user ran themselves */
+export const shellPrompt = (command: string, { stdout, stderr }: { stdout: string; stderr: string }): string =>
+  `<bash-input>${command}</bash-input>\n<bash-stdout>${stdout}</bash-stdout><bash-stderr>${stderr}</bash-stderr>`
+
+export function parseShellPrompt(text: string): { command: string; output: string } | null {
+  const match = /^<bash-input>([\s\S]*?)<\/bash-input>\s*<bash-stdout>([\s\S]*?)<\/bash-stdout>\s*<bash-stderr>([\s\S]*?)<\/bash-stderr>$/.exec(text.trim())
+  return match
+    ? {
+        command: match[1],
+        output: [match[2], match[3]]
+          .map((part) => part.trimEnd())
+          .filter(Boolean)
+          .join('\n')
+      }
+    : null
+}
+
 /** Commands Treeix runs itself, for agents that don't offer them over ACP */
 export const BUILTIN_COMMANDS = [{ name: 'clear', description: 'Start a new conversation with this agent' }]
 

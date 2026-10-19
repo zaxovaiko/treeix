@@ -27,3 +27,29 @@ export function killGroup(child: ChildProcessWithoutNullStreams) {
   signalGroup(child, 'SIGTERM')
   setTimeout(() => signalGroup(child, 'SIGKILL'), KILL_GRACE_MS).unref()
 }
+
+const OUTPUT_LIMIT = 30_000
+const SHELL_TIMEOUT_MS = 120_000
+
+const capped = (text: string): string => (text.length > OUTPUT_LIMIT ? `${text.slice(0, OUTPUT_LIMIT)}\n… cut at ${OUTPUT_LIMIT} characters` : text)
+
+/** Runs a command the user typed to completion, no input; one still going after two minutes is killed */
+export function runInShell(command: string, cwd: string, env: Record<string, string>): Promise<{ stdout: string; stderr: string }> {
+  const child = spawnInShell(command, cwd, env)
+  child.stdin.end()
+  let stdout = ''
+  let stderr = ''
+  child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
+  child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
+  const timer = setTimeout(() => {
+    stderr += `\nStopped after ${SHELL_TIMEOUT_MS / 1000}s`
+    killGroup(child)
+  }, SHELL_TIMEOUT_MS)
+  return new Promise((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve({ stdout: capped(stdout), stderr: capped(code ? `${stderr}${stderr ? '\n' : ''}Exit code ${code}` : stderr) })
+    })
+  })
+}

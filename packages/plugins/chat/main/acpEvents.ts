@@ -126,6 +126,7 @@ export function fromSessionUpdate(update: unknown): ChatEvent[] {
       }
     ]
   }
+  if (kind === 'session_info_update' && typeof value.title === 'string' && value.title.trim()) return [{ type: 'title', title: value.title.trim() }]
   if (kind === 'available_commands_update') {
     const commands = list(value.availableCommands).map((entry) => {
       const command = record(entry)
