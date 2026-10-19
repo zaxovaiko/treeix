@@ -138,7 +138,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
   }
 
   return (
-    <div ref={root} tabIndex={-1} className="flex h-full min-h-0 flex-col bg-background outline-none" onKeyDownCapture={onKeyDownCapture} onKeyDown={onKeyDown}>
+    <div ref={root} data-drop-zone tabIndex={-1} className="flex h-full min-h-0 flex-col bg-background outline-none" onKeyDownCapture={onKeyDownCapture} onKeyDown={onKeyDown}>
       <div
         ref={scroller}
         onScroll={(event) => {

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { builtinOf, completion, formatTokens, imageProblem, switchWarning, withBuiltins } from './composer'
+import { builtinOf, completion, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
 
 test('imageProblem', () => {
   expect(imageProblem({ type: 'image/png', size: 1000 })).toBeNull()
@@ -39,4 +39,10 @@ test('built-in /clear unless the agent has its own', () => {
   expect(builtinOf('/clear', [{ name: 'clear' }])).toBeNull()
   expect(builtinOf('/clear the cache', [])).toBeNull()
   expect(builtinOf('/compact', [])).toBeNull()
+})
+
+test('withMentions appends dropped paths, relative inside the folder', () => {
+  expect(withMentions('', ['/repo/src/a.ts'], '/repo')).toBe('@src/a.ts ')
+  expect(withMentions('look at', ['/repo/a.ts', '/tmp/b.log'], '/repo')).toBe('look at @a.ts @/tmp/b.log ')
+  expect(withMentions('see ', ['/repository/x'], '/repo')).toBe('see @/repository/x ')
 })

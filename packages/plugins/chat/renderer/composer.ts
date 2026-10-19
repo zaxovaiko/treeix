@@ -63,3 +63,7 @@ export function formatTokens(n: number): string {
   if (n >= 1000) return `${Math.round(n / 1000)}k`
   return `${n}`
 }
+
+/** The draft with an @ mention of each path appended, relative to the folder when inside it */
+export const withMentions = (draft: string, paths: string[], folder: string): string =>
+  `${draft}${draft && !/\s$/.test(draft) ? ' ' : ''}${paths.map((path) => `@${path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path} `).join('')}`

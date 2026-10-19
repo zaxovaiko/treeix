@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { ChatContent, ChatImage, ChatOption } from '@treeix/sdk'
 import { useHost } from '@treeix/sdk'
 import { useAgents } from '@treeix/app/agents'
@@ -7,7 +7,7 @@ import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
-import { builtinOf, completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning, withBuiltins } from './composer'
+import { builtinOf, completion, formatTokens, IMAGE_TYPES, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
 import { cancel, clear, filesFor, hasConversation, isBusy, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 import { primaryKey } from '@treeix/shared/shortcut'
 
@@ -221,8 +221,10 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   const [selected, setSelected] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null)
+  const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLTextAreaElement>(null)
   const picker = useRef<HTMLInputElement>(null)
+  const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let live = true
@@ -252,6 +254,57 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
       setProblem(`Could not read the image: ${errorMessage(reason)}`)
     }
   }
+
+  // Images the agent takes are attached; any other file goes in as an @ mention of its path, relative to the chat's folder when inside it
+  const dropFiles = useEffectEvent((list: FileList): void => {
+    const all = [...list]
+    const attached = acceptsImages ? all.filter((file) => file.type.startsWith('image/')) : []
+    if (attached.length) void addImages(attached)
+    const paths = all
+      .filter((file) => !attached.includes(file))
+      .map((file) => window.api.pathForFile(file))
+      .filter(Boolean)
+    if (paths.length) setDraft(chatId, withMentions(draft, paths, cwd))
+    input.current?.focus()
+  })
+
+  // Files drop anywhere in the page around the composer that marks itself data-drop-zone, else on the composer
+  useEffect(() => {
+    const zone = box.current?.closest<HTMLElement>('[data-drop-zone]') ?? box.current
+    if (!zone) return
+    let depth = 0
+    const hasFiles = (event: DragEvent): boolean => event.dataTransfer?.types.includes('Files') === true
+    const over = (event: DragEvent): void => {
+      if (hasFiles(event)) event.preventDefault()
+    }
+    const enter = (event: DragEvent): void => {
+      if (!hasFiles(event)) return
+      depth += 1
+      setDragging(true)
+    }
+    const leave = (event: DragEvent): void => {
+      if (!hasFiles(event)) return
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) setDragging(false)
+    }
+    const drop = (event: DragEvent): void => {
+      depth = 0
+      setDragging(false)
+      if (!event.dataTransfer?.files.length) return
+      event.preventDefault()
+      dropFiles(event.dataTransfer.files)
+    }
+    zone.addEventListener('dragover', over)
+    zone.addEventListener('dragenter', enter)
+    zone.addEventListener('dragleave', leave)
+    zone.addEventListener('drop', drop)
+    return () => {
+      zone.removeEventListener('dragover', over)
+      zone.removeEventListener('dragenter', enter)
+      zone.removeEventListener('dragleave', leave)
+      zone.removeEventListener('drop', drop)
+    }
+  }, [])
 
   const submit = (): void => {
     const text = draft.trim()
@@ -368,15 +421,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
           </button>
         </div>
       )}
-      <div
-        className="relative rounded-3xl bg-popover shadow-[inset_0_0_0_1px_var(--color-input)]"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          if (event.dataTransfer.files.length === 0) return
-          event.preventDefault()
-          void addImages(event.dataTransfer.files)
-        }}
-      >
+      <div ref={box} className={`relative rounded-3xl bg-popover ${dragging ? 'shadow-[inset_0_0_0_2px_var(--color-primary)]' : 'shadow-[inset_0_0_0_1px_var(--color-input)]'}`}>
         {suggestions && items.length > 0 && (
           <div className="absolute bottom-full left-0 z-10 mb-1 max-h-64 w-full overflow-auto rounded-lg bg-popover p-1 text-xs ring-1 ring-border">
             {items.map((item, index) => (
@@ -415,7 +460,13 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
           autoFocus
           rows={1}
           value={draft}
-          placeholder={chat.options?.agent ? `Message ${agents.find((agent) => agent.id === chat.options?.agent)?.label ?? chat.options.agent}` : 'Message the agent'}
+          placeholder={
+            dragging
+              ? 'Drop to attach'
+              : chat.options?.agent
+                ? `Message ${agents.find((agent) => agent.id === chat.options?.agent)?.label ?? chat.options.agent}`
+                : 'Message the agent'
+          }
           onChange={(event) => {
             setDraft(chatId, event.target.value)
             setCaret(event.target.selectionStart)

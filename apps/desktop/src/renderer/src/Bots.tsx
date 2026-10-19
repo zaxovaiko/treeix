@@ -307,7 +307,7 @@ function Home({
     box.current?.querySelector('textarea')?.focus()
   }
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 pb-[12vh]">
+    <div data-drop-zone className="flex flex-1 flex-col items-center justify-center gap-5 px-6 pb-[12vh]">
       <img src={logo} alt="Treeix" className="size-10 rounded-xl" />
       <h1 className="text-[26px] font-medium tracking-tight">What are we working on?</h1>
       <div ref={box} className="w-full max-w-[720px]">
