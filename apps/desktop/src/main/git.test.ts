@@ -129,8 +129,14 @@ test('listFiles leaves out tracked files deleted from disk', async () => {
   execFileSync('git', ['-C', root, 'add', '.'])
   rmSync(join(root, 'moved.ts'))
   writeFileSync(join(root, 'new.ts'), '')
-  expect((await listFiles(root)).files).toEqual(['kept.ts', 'new.ts'])
+  expect((await listFiles(root))?.files).toEqual(['kept.ts', 'new.ts'])
   rmSync(root, { recursive: true, force: true })
+})
+
+test('listFiles returns null outside a repository', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'treeix-plain-'))
+  expect(await listFiles(root)).toBeNull()
+  rmSync(root, { recursive: true })
 })
 
 test('readPdf reads a file inside the worktree and refuses one outside it', async () => {
@@ -168,4 +174,19 @@ test('listBranches reports tracking, merged state and remote-only branches', asy
   await deleteBranch(clone, 'merged-feature')
   await expect(deleteBranch(clone, 'ahead-feature')).rejects.toThrow()
   await expect(createBranch(clone, 'x', '--orphan')).rejects.toThrow()
+})
+
+test('a new worktree off origin/main starts from what the remote has now', async () => {
+  const origin = mkdtempSync(join(tmpdir(), 'treeix-origin-'))
+  const run = (cwd: string, ...args: string[]): string => execFileSync('git', ['-C', cwd, '-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { encoding: 'utf8' })
+  run(origin, 'init', '-q', '-b', 'main')
+  run(origin, 'commit', '-q', '--allow-empty', '-m', 'root')
+  const clone = realpathSync(mkdtempSync(join(tmpdir(), 'treeix-clone-')))
+  execFileSync('git', ['clone', '-q', origin, clone])
+  run(origin, 'commit', '-q', '--allow-empty', '-m', 'pushed later')
+
+  const path = await addWorktree(clone, 'abc-1', 'origin/main')
+  expect(run(path, 'log', '-1', '--format=%s').trim()).toBe('pushed later')
+  rmSync(origin, { recursive: true })
+  rmSync(clone, { recursive: true })
 })

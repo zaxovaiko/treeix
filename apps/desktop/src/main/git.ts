@@ -145,7 +145,9 @@ export async function diff(worktreePath: string): Promise<FilePatch[]> {
 
 const lines = (output: string): string[] => [...new Set(output.split('\n').filter(Boolean))].sort()
 
-export async function listFiles(worktreePath: string): Promise<WorktreeFiles> {
+/** null for a folder outside any repository */
+export async function listFiles(worktreePath: string): Promise<WorktreeFiles | null> {
+  if (!(await succeeds(worktreePath, ['rev-parse', '--is-inside-work-tree']))) return null
   const [files, ignored, deleted] = await Promise.all([
     git(worktreePath, ['ls-files', '--cached', '--others', '--exclude-standard']),
     git(worktreePath, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory']),
@@ -287,7 +289,7 @@ export function parseTrack(track: string): Pick<Branch, 'ahead' | 'behind' | 'go
   }
 }
 
-async function defaultBranch(repoPath: string): Promise<string | null> {
+export async function defaultBranch(repoPath: string): Promise<string | null> {
   const remoteHead = (await git(repoPath, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], [0, 1]).catch(() => '')).trim()
   if (remoteHead) return remoteHead
   for (const candidate of ['main', 'master', 'dev']) {
@@ -359,7 +361,9 @@ async function createWorktree(repoPath: string, branch: string, base?: string): 
   if (await succeeds(repoPath, ['show-ref', '--verify', '--quiet', `refs/heads/${name}`])) {
     await git(repoPath, ['worktree', 'add', path, name])
   } else {
-    await git(repoPath, ['fetch', 'origin', name]).catch(() => '')
+    // A new branch starts from the remote's latest, not from when the repo was last fetched
+    const remoteBase = base?.startsWith('origin/') ? base.slice('origin/'.length) : null
+    for (const ref of [name, ...(remoteBase ? [remoteBase] : [])]) await git(repoPath, ['fetch', 'origin', ref]).catch(() => '')
     const onRemote = await succeeds(repoPath, ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${name}`])
     await git(repoPath, ['worktree', 'add', ...(onRemote ? ['--track', '-b', name, path, `origin/${name}`] : ['-b', name, path, ...(base ? [base] : [])])])
   }
