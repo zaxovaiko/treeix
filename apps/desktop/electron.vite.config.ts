@@ -39,7 +39,8 @@ export default defineConfig({
   renderer: {
     define,
     resolve: { alias },
-    plugins: [react(), tailwindcss()],
+    // React Compiler memoizes components and hooks, so a parent's rerender (a keystroke in a composer) skips what didn't change
+    plugins: [react({ babel: { plugins: ['babel-plugin-react-compiler'] } }), tailwindcss()],
     worker: { format: 'es' },
     // electron-vite leaves renderer output unminified; main and preload stay readable for stack traces
     // remote.html is the hub's web app the phone opens over the tailnet; main serves it from the built files
