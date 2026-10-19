@@ -6,7 +6,7 @@ import { bridge, dictationSettings, history, status } from './state'
 
 // The main module trusts what its own renderer sends and so does this side
 function Sync(): null {
-  const settings = dictationSettings.use()
+  const settings = dictationSettings.useValue()
   useEffect(() => void bridge.invoke('configure', settings), [settings])
   useEffect(() => {
     void bridge.invoke<Status>('status').then(status.set)

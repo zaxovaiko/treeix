@@ -32,7 +32,7 @@ const OpenPane = ({ pane }: { pane: string }): React.JSX.Element => (
 )
 
 function Setup(): React.JSX.Element {
-  const current = status.use()
+  const current = status.useValue()
   const [permissions, setPermissions] = usePermissions()
   const problem = current && HELPER_PROBLEMS[current.helper]
   return (
@@ -97,7 +97,7 @@ function AudioRow(): React.JSX.Element {
 }
 
 function Recording(): React.JSX.Element {
-  const { auto, startDelaySec, stopDelaySec, calendar, language, folder } = meetingsSettings.use()
+  const { auto, startDelaySec, stopDelaySec, calendar, language, folder } = meetingsSettings.useValue()
   return (
     <Card title="Recording">
       <Row label="Record calls on their own" description="When a rule below matches. Off, only the Start recording command records.">
@@ -148,7 +148,7 @@ function Recording(): React.JSX.Element {
 }
 
 function Rules(): React.JSX.Element {
-  const { rules } = meetingsSettings.use()
+  const { rules } = meetingsSettings.useValue()
   const change = (index: number, patch: Partial<Rule>): void => meetingsSettings.update({ rules: rules.map((rule, at) => (at === index ? { ...rule, ...patch } : rule)) })
   return (
     <Card title="Calls">

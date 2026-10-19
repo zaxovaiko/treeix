@@ -53,6 +53,8 @@ final class Hotkey {
 
     private func handle(_ event: NSEvent) {
         if event.type == .keyDown {
+            // Our own ⌘V, typing a piece of the dictation while the keys are held
+            if event.cgEvent?.getIntegerValueField(.eventSourceUnixProcessID) == Int64(getpid()) { return }
             if event.keyCode == 53 { onEscape?() } else if held { onOtherKey?() }
             return
         }

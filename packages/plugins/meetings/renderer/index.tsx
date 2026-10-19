@@ -7,7 +7,7 @@ import { MeetingsSettings } from './Settings'
 import { bridge, meetingsSettings, revision, status, TAB_ID } from './state'
 
 function Sync(): null {
-  const settings = meetingsSettings.use()
+  const settings = meetingsSettings.useValue()
   useEffect(() => void bridge.invoke('configure', settings), [settings])
   useEffect(() => {
     void bridge.invoke<Status>('status').then(status.set)
@@ -24,7 +24,7 @@ function Sync(): null {
 /** Shown while recording: how long, and a way to stop; while a call looks on but nothing records: a way to start */
 function Recording(): React.JSX.Element | null {
   const host = useHost()
-  const current = status.use()
+  const current = status.useValue()
   const recording = current?.recording
   const [now, setNow] = useState(Date.now())
   useEffect(() => {

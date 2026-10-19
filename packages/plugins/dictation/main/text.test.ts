@@ -32,8 +32,10 @@ test('only well-formed helper messages get through', () => {
     type: 'transcript',
     id: 1,
     text: 'hi',
-    app: 'Slack'
+    app: 'Slack',
+    continues: false
   })
+  expect(parseHelperMessage('{"type":"transcript","id":2,"text":"more","app":null,"continues":true}')).toMatchObject({ continues: true })
   expect(parseHelperMessage('{"type":"models","models":[{"id":"parakeet-v3","state":"downloading","progress":0.5},{"id":"x","state":"odd"}]}')).toEqual({
     type: 'models',
     models: [{ id: 'parakeet-v3', state: 'downloading', progress: 0.5 }]

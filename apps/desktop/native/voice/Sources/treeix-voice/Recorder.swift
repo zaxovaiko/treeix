@@ -36,6 +36,11 @@ final class Recorder: @unchecked Sendable {
         self.engine = engine
     }
 
+    /// What was heard past `start`, while still recording
+    func samples(from start: Int) -> [Float] {
+        lock.withLock { samples.count > start ? Array(samples[start...]) : [] }
+    }
+
     /// The samples so far and the loudest buffer's RMS
     func stop() -> (samples: [Float], peak: Float) {
         engine?.inputNode.removeTap(onBus: 0)

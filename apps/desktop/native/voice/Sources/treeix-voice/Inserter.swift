@@ -8,6 +8,13 @@ enum InsertMethod { case paste, clipboard }
 enum Inserter {
     /// Clipboard managers skip items marked this way (nspasteboard.org)
     private static let transient = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+    /// The user's clipboard while a paste is still to be put back; a paste right after another keeps it instead of the first piece
+    private static var original: [[(NSPasteboard.PasteboardType, Data)]]?
+
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
 
     static func insert(_ text: String, into target: NSRunningApplication?) -> InsertMethod {
         let pasteboard = NSPasteboard.general
@@ -16,13 +23,15 @@ enum Inserter {
             AXIsProcessTrusted() && !IsSecureEventInputEnabled() && target != nil
             && NSWorkspace.shared.frontmostApplication?.processIdentifier == target?.processIdentifier
         guard canPaste else {
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
+            copy(text)
             return .clipboard
         }
-        let saved = (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
+        let saved =
+            original
+            ?? (pasteboard.pasteboardItems ?? []).map { item in
+                item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+            }
+        original = saved
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         pasteboard.setData(Data(), forType: transient)
@@ -30,7 +39,10 @@ enum Inserter {
         pressPaste()
         // The target reads the clipboard after it handles ⌘V, so restoring right away would paste the old contents
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            guard pasteboard.changeCount == ours, !saved.isEmpty else { return }
+            // A later paste, or the user, changed it since; the later paste puts it back
+            guard pasteboard.changeCount == ours else { return }
+            original = nil
+            guard !saved.isEmpty else { return }
             pasteboard.clearContents()
             pasteboard.writeObjects(
                 saved.map { entries in

@@ -24,8 +24,8 @@ const willRecord = (rules: Rule[], url: string | null): boolean =>
 
 /** Today's calendar events with a link, still to come or under way */
 function Upcoming(): React.JSX.Element | null {
-  const { auto, calendar, rules } = meetingsSettings.use()
-  const running = status.use()?.helper === 'running'
+  const { auto, calendar, rules } = meetingsSettings.useValue()
+  const running = status.useValue()?.helper === 'running'
   const [events, setEvents] = useState<CalendarEvent[]>([])
   useEffect(() => {
     if (!calendar || !running) return setEvents([])
@@ -61,7 +61,7 @@ function Upcoming(): React.JSX.Element | null {
 
 function MeetingView({ id }: { id: string }): React.JSX.Element {
   const host = useHost()
-  const version = revision.use()
+  const version = revision.useValue()
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null)
   useEffect(() => void bridge.invoke<MeetingDetail>('detail', id).then(setMeeting, () => setMeeting(null)), [id, version])
   if (!meeting) return <EmptyState fill title="Loading..." />
@@ -120,8 +120,8 @@ function MeetingView({ id }: { id: string }): React.JSX.Element {
 
 export function MeetingsTab(): React.JSX.Element {
   const host = useHost()
-  const version = revision.use()
-  const helper = status.use()?.helper
+  const version = revision.useValue()
+  const helper = status.useValue()?.helper
   const [query, setQuery] = useState('')
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [selected, setSelected] = useState<string | null>(null)

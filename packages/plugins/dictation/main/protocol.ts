@@ -5,7 +5,8 @@ import type { Hotkey, ModelState } from '../shared/types'
 export type HelperMessage =
   | { type: 'ready' }
   | { type: 'models'; models: ModelState[] }
-  | { type: 'transcript'; id: number; text: string; app: string | null }
+  /** `continues`: a later piece of the dictation still being spoken, typed after the earlier ones */
+  | { type: 'transcript'; id: number; text: string; app: string | null; continues: boolean }
   | { type: 'error'; message: string }
 
 /** What the helper reads on stdin */
@@ -34,7 +35,7 @@ export function parseHelperMessage(line: string): HelperMessage | null {
       return { type: 'models', models: list(message.models, isModelState) }
     case 'transcript':
       if (typeof message.id !== 'number' || typeof message.text !== 'string') return null
-      return { type: 'transcript', id: message.id, text: message.text, app: text(message.app) || null }
+      return { type: 'transcript', id: message.id, text: message.text, app: text(message.app) || null, continues: message.continues === true }
     case 'error':
       return { type: 'error', message: text(message.message) }
     default:

@@ -70,7 +70,7 @@ const plugin: MainPlugin = {
       return saving
     }
 
-    const transcribed = async (id: number, raw: string, appName: string | null): Promise<void> => {
+    const transcribed = async ({ id, text: raw, app: appName, continues }: Extract<HelperMessage, { type: 'transcript' }>): Promise<void> => {
       const current = settings ?? parseSettings({})
       let result = applyVocabulary(raw, current.vocabulary)
       if (current.formatting.enabled && current.formatting.model) {
@@ -79,8 +79,15 @@ const plugin: MainPlugin = {
         result = formatted.text
       }
       command({ type: 'insert', id, text: result })
-      await updateHistory((items) => [{ at: Date.now(), raw, text: result, app: appName }, ...items].slice(0, HISTORY_LIMIT))
+      // Pieces of one dictation are one history entry
+      await updateHistory((items) =>
+        continues && items[0]
+          ? [{ ...items[0], raw: `${items[0].raw} ${raw}`, text: `${items[0].text} ${result}` }, ...items.slice(1)]
+          : [{ at: Date.now(), raw, text: result, app: appName }, ...items].slice(0, HISTORY_LIMIT)
+      )
     }
+    // Formatting takes a different time per piece, so pieces wait their turn to be typed in the order they were said
+    let typing = Promise.resolve()
 
     const receive = (message: HelperMessage): void => {
       switch (message.type) {
@@ -90,7 +97,8 @@ const plugin: MainPlugin = {
         case 'models':
           return setStatus({ models: message.models })
         case 'transcript':
-          return void transcribed(message.id, message.text, message.app)
+          typing = typing.then(() => transcribed(message)).catch((error: unknown) => setStatus({ error: `Couldn't type it: ${String(error)}` }))
+          return
         case 'error':
           return setStatus({ error: message.message })
       }

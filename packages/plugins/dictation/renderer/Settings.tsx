@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Icon } from '@treeix/app/Icon'
 import { Select } from '@treeix/app/Picker'
 import { Card, Row, Steps, Switch } from '@treeix/app/settingsUi'
 import { CopyButton } from '@treeix/app/ui'
@@ -7,6 +8,7 @@ import { bridge, dictationSettings, history, status } from './state'
 
 const field = 'h-7 rounded-md bg-muted px-2 text-xs ring-1 ring-border outline-none focus:ring-primary'
 const button = 'h-7 rounded-md border border-border px-2.5 text-xs hover:bg-accent disabled:opacity-50'
+const iconButton = 'grid size-7 place-items-center rounded-md hover:bg-accent hover:text-foreground disabled:opacity-50'
 
 const HELPER_PROBLEMS: Partial<Record<Status['helper'], string>> = {
   unsupported: 'Dictation needs an Apple silicon Mac on macOS 14 or later.',
@@ -109,10 +111,13 @@ function HotkeyRecorder({ value, onChange }: { value: Hotkey; onChange: (hotkey:
 const saveHotkey = (hotkey: Hotkey): void => dictationSettings.update({ hotkey })
 
 function Shortcut(): React.JSX.Element {
-  const { hotkey, tapToToggle, sounds } = dictationSettings.use()
+  const { hotkey, tapToToggle, sounds } = dictationSettings.useValue()
   return (
     <Card title="Shortcut">
-      <Row label="Keys" description="Hold them and speak; release to paste. Pressing another key, or Esc, cancels. Click to record modifiers pressed together.">
+      <Row
+        label="Keys"
+        description="Hold them and speak; each pause types what you said, release types the rest. Pressing another key, or Esc, cancels. Click to record modifiers pressed together."
+      >
         <HotkeyRecorder value={hotkey} onChange={saveHotkey} />
       </Row>
       <Row label="Tap for hands-free" description="A quick tap keeps listening until you tap again.">
@@ -127,37 +132,49 @@ function Shortcut(): React.JSX.Element {
 
 function ModelControls({ id, state, selected }: { id: ModelId; state: ModelState | undefined; selected: boolean }): React.JSX.Element {
   if (!state) return <span className="text-xs text-muted-foreground">…</span>
-  const download = (
-    <button
-      className={button}
-      onClick={() => {
-        dictationSettings.update({ model: id })
-        void bridge.invoke('download', id)
-      }}
-    >
-      {state.state === 'error' ? 'Retry' : 'Download'}
-    </button>
-  )
-  if (state.state === 'missing' || state.state === 'error') return download
-  if (state.state === 'downloading') return <span className="text-xs text-muted-foreground tabular-nums">Downloading {Math.round((state.progress ?? 0) * 100)}%</span>
+  if (state.state === 'missing' || state.state === 'error') {
+    const label = state.state === 'error' ? 'Retry' : 'Download'
+    return (
+      <button
+        className={iconButton}
+        aria-label={label}
+        title={label}
+        onClick={() => {
+          dictationSettings.update({ model: id })
+          void bridge.invoke('download', id)
+        }}
+      >
+        <Icon name={state.state === 'error' ? 'refresh' : 'download'} />
+      </button>
+    )
+  }
+  if (state.state === 'downloading') return <span className="text-xs text-muted-foreground tabular-nums">{Math.round((state.progress ?? 0) * 100)}%</span>
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       {selected ? (
-        <span className="text-xs text-emerald-400">{state.state === 'loading' ? 'Loading…' : 'In use'}</span>
+        <span title={state.state === 'loading' ? 'Loading…' : 'In use'} className="grid size-7 place-items-center text-emerald-400">
+          <Icon name={state.state === 'loading' ? 'loader' : 'check'} className={`size-3.5 ${state.state === 'loading' ? 'animate-spin' : ''}`} />
+        </span>
       ) : (
-        <button className={button} onClick={() => dictationSettings.update({ model: id })}>
-          Use
+        <button className={`${iconButton} text-muted-foreground`} aria-label="Use" title="Use" onClick={() => dictationSettings.update({ model: id })}>
+          <Icon name="check" />
         </button>
       )}
-      <button className={button} disabled={state.state === 'loading'} onClick={() => void bridge.invoke('delete', id)}>
-        Delete
+      <button
+        className={`${iconButton} text-muted-foreground`}
+        aria-label="Delete"
+        title="Delete"
+        disabled={state.state === 'loading'}
+        onClick={() => void bridge.invoke('delete', id)}
+      >
+        <Icon name="trash" />
       </button>
     </div>
   )
 }
 
 function Models({ current }: { current: Status | null }): React.JSX.Element {
-  const { model } = dictationSettings.use()
+  const { model } = dictationSettings.useValue()
   return (
     <Card title="Speech model">
       {(Object.keys(MODELS) as ModelId[]).map((id) => {
@@ -169,7 +186,9 @@ function Models({ current }: { current: Status | null }): React.JSX.Element {
                 <Steps label="Quality" value={MODELS[id].quality} />
                 <Steps label="Speed" value={MODELS[id].speed} />
               </span>
-              <ModelControls id={id} state={state} selected={id === model} />
+              <span className="flex w-15 shrink-0 justify-end">
+                <ModelControls id={id} state={state} selected={id === model} />
+              </span>
             </div>
           </Row>
         )
@@ -179,7 +198,7 @@ function Models({ current }: { current: Status | null }): React.JSX.Element {
 }
 
 function Formatting(): React.JSX.Element {
-  const { formatting } = dictationSettings.use()
+  const { formatting } = dictationSettings.useValue()
   const [models, setModels] = useState<string[] | null>(null)
   const update = (patch: Partial<typeof formatting>): void => dictationSettings.update({ formatting: { ...formatting, ...patch } })
   const loadModels = (): void => {
@@ -240,7 +259,7 @@ function Formatting(): React.JSX.Element {
 }
 
 function Vocabulary(): React.JSX.Element {
-  const { vocabulary } = dictationSettings.use()
+  const { vocabulary } = dictationSettings.useValue()
   const [term, setTerm] = useState('')
   const [aliases, setAliases] = useState('')
   const add = (): void => {
@@ -286,7 +305,7 @@ function Vocabulary(): React.JSX.Element {
 
 /** Folded until asked for: dictations are private and the list is long */
 function History(): React.JSX.Element {
-  const items = history.use()
+  const items = history.useValue()
   const [open, setOpen] = useState(false)
   return (
     <Card title="History">
@@ -323,7 +342,7 @@ function History(): React.JSX.Element {
 }
 
 export function DictationSettings(): React.JSX.Element {
-  const current = status.use()
+  const current = status.useValue()
   return (
     <>
       <Setup current={current} />

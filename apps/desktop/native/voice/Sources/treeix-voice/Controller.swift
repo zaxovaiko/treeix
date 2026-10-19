@@ -9,6 +9,18 @@ private let minSamples = Recorder.sampleRate * 3 / 10
 private let silence: Float = 0.004
 /// The plugin answers a transcript with `insert`; past this it is gone and the next dictation may start
 private let insertTimeout = 20.0
+/// A pause this long while speaking types what was said so far, so text lands as you talk instead of on release
+// ponytail: fixed pause and a level floor relative to the loudest window; a VAD model if noisy rooms cut mid-word
+private let pauseSeconds = 0.8
+private let window = Recorder.sampleRate / 10
+
+/// The loudest 0.1 s window's RMS
+private func loudness(_ samples: ArraySlice<Float>) -> Float {
+    stride(from: samples.startIndex, to: samples.endIndex, by: window).map { start in
+        let part = samples[start..<min(start + window, samples.endIndex)]
+        return (part.reduce(0) { $0 + $1 * $1 } / Float(part.count)).squareRoot()
+    }.max() ?? 0
+}
 
 @MainActor
 final class Controller {
@@ -21,9 +33,21 @@ final class Controller {
     private var phase = Phase.idle
     private var pressedAt = Date()
     private var target: NSRunningApplication?
-    private var pending: [Int: NSRunningApplication?] = [:]
+    /// Transcripts sent to the plugin, by id, waiting for their `insert`
+    private var pending: [Int: (target: NSRunningApplication?, continues: Bool, dictation: Int)] = [:]
     private var nextId = 0
     private var timer: Timer?
+    private var pauseTimer: Timer?
+    /// Bumped by each dictation, so a cancelled one's late transcripts are dropped
+    private var dictation = 0
+    /// Samples already sent off as earlier pieces of this dictation
+    private var consumed = 0
+    /// Pieces being transcribed or waiting for their insert; the dictation ends once none are left
+    private var outstanding = 0
+    private var transcribing: Task<Void, Never>?
+    private var spoke = false
+    /// Pieces that couldn't be pasted, so the clipboard holds the whole dictation and not just its last piece
+    private var copied = ""
     private var tapToToggle = true
     private var sounds = true
     private var formatting = false
@@ -178,66 +202,117 @@ final class Controller {
         target = NSWorkspace.shared.frontmostApplication
         pressedAt = Date()
         phase = .recording(handsFree: false)
+        dictation += 1
+        consumed = 0
+        outstanding = 0
+        spoke = false
+        copied = ""
         if sounds { NSSound(named: "Tink")?.play() }
         hud.model.icon = target?.icon
         hud.show(.listening(handsFree: false))
         timer = Timer.scheduledTimer(withTimeInterval: maxSeconds, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.finish() } }
+        pauseTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.typeOnPause() } }
     }
 
     private func cancel() {
         timer?.invalidate()
+        pauseTimer?.invalidate()
         if case .recording = phase { _ = recorder.stop() }
+        dictation += 1
+        pending.removeAll()
         phase = .idle
         hud.hide()
     }
 
+    /// Sends what was said up to a pause, while the key is still held
+    private func typeOnPause() {
+        guard case .recording = phase else { return }
+        let fresh = recorder.samples(from: consumed)
+        let quiet = Int(pauseSeconds * 10) * window
+        guard fresh.count >= minSamples + quiet else { return }
+        let loudest = loudness(fresh[...])
+        guard loudest >= silence, loudness(fresh.suffix(quiet)) < max(silence, loudest * 0.15) else { return }
+        consumed += fresh.count
+        enqueue(fresh, last: false)
+    }
+
     private func finish() {
         timer?.invalidate()
-        let (samples, peak) = recorder.stop()
+        pauseTimer?.invalidate()
+        let (samples, _) = recorder.stop()
         if sounds { NSSound(named: "Pop")?.play() }
-        guard samples.count >= minSamples, peak >= silence else {
+        let rest = samples.count > consumed ? Array(samples[consumed...]) : []
+        phase = .busy
+        if rest.count >= minSamples, loudness(rest[...]) >= silence {
+            hud.show(.transcribing)
+            enqueue(rest, last: true)
+        } else if !spoke && outstanding == 0 {
             phase = .idle
             return hud.flash("Nothing heard")
         }
-        phase = .busy
-        hud.show(.transcribing)
+        settle()
+    }
+
+    /// Transcribes pieces one after another, so they're typed in the order they were said
+    private func enqueue(_ samples: [Float], last: Bool) {
+        outstanding += 1
+        let previous = transcribing
         let target = self.target
-        Task {
+        let dictation = self.dictation
+        transcribing = Task {
+            await previous?.value
             do {
                 let text = try await transcriber.transcribe(samples)
-                await MainActor.run { self.transcribed(text, target: target) }
+                self.transcribed(text, target: target, dictation: dictation, last: last)
             } catch {
-                await MainActor.run {
-                    self.phase = .idle
-                    self.hud.flash("Couldn't transcribe")
-                    send(["type": "error", "message": error.localizedDescription])
-                }
+                guard dictation == self.dictation else { return }
+                self.outstanding -= 1
+                send(["type": "error", "message": error.localizedDescription])
+                if case .busy = self.phase, !self.spoke { self.phase = .idle; return self.hud.flash("Couldn't transcribe") }
+                self.settle()
             }
         }
     }
 
-    private func transcribed(_ text: String, target: NSRunningApplication?) {
+    private func transcribed(_ text: String, target: NSRunningApplication?, dictation: Int, last: Bool) {
+        guard dictation == self.dictation else { return }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            phase = .idle
-            return hud.flash("Nothing heard")
+            outstanding -= 1
+            if last && !spoke && outstanding == 0 { phase = .idle; return hud.flash("Nothing heard") }
+            return settle()
         }
         nextId += 1
         let id = nextId
-        pending[id] = target
-        if formatting { hud.show(.formatting) }
-        send(["type": "transcript", "id": id, "text": text, "app": target?.localizedName ?? NSNull()])
+        let continues = spoke
+        pending[id] = (target, continues, dictation)
+        spoke = true
+        if formatting, case .busy = phase { hud.show(.formatting) }
+        send(["type": "transcript", "id": id, "text": text, "app": target?.localizedName ?? NSNull(), "continues": continues])
         DispatchQueue.main.asyncAfter(deadline: .now() + insertTimeout) { [weak self] in
             guard let self, self.pending.removeValue(forKey: id) != nil else { return }
-            self.phase = .idle
-            self.hud.hide()
+            self.outstanding -= 1
+            self.settle()
         }
     }
 
     private func insert(_ id: Int, _ text: String) {
-        guard let target = pending.removeValue(forKey: id) else { return }
+        guard let piece = pending.removeValue(forKey: id) else { return }
+        outstanding -= 1
+        if !text.isEmpty {
+            let text = piece.continues ? " " + text : text
+            if Inserter.insert(text, into: piece.target) == .clipboard {
+                copied += text
+                if copied != text { Inserter.copy(copied) }
+            }
+        }
+        settle()
+    }
+
+    /// Ends the dictation once it's released and every piece is typed
+    private func settle() {
+        guard case .busy = phase, outstanding == 0 else { return }
         phase = .idle
-        guard !text.isEmpty else { return hud.hide() }
-        if Inserter.insert(text, into: target) == .clipboard { hud.flash("Copied, press ⌘V to paste") } else { hud.hide() }
+        if copied.isEmpty { hud.hide() } else { hud.flash("Copied, press ⌘V to paste") }
     }
 }

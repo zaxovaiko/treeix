@@ -48,23 +48,37 @@ enum AudioProcesses {
     }
 }
 
-/// 16 kHz mono 16-bit PCM in CAF: what the speech models take, and readable up to the last write if the helper dies
+/// 16 kHz mono 16-bit PCM in CAF: what the speech models take, and readable up to the last write if the helper dies.
+/// Every track keeps to the meeting's clock: a late start or a device that dropped out is written as silence, so the tracks stay aligned
 final class TrackWriter {
     static let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
+    /// Buffers arrive a little late or early; only a gap longer than this is filled
+    private static let slack = AVAudioFramePosition(format.sampleRate / 5)
     private let file: AVAudioFile
-    private let converter: AVAudioConverter
+    private let start: UInt64
+    private var converter: AVAudioConverter?
+    private var written: AVAudioFramePosition = 0
 
-    init(output: URL, input: AVAudioFormat) throws {
+    /// `start` is the host time the meeting's recording began
+    init(output: URL, start: UInt64) throws {
         file = try AVAudioFile(
             forWriting: output,
             settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16_000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false],
             commonFormat: .pcmFormatFloat32, interleaved: false)
-        guard let converter = AVAudioConverter(from: input, to: Self.format) else { throw RecorderError("Can't convert audio from \(input)") }
-        converter.downmix = true
-        self.converter = converter
+        self.start = start
     }
 
-    func write(_ buffer: AVAudioPCMBuffer) {
+    /// `hostTime` is when the buffer's first sample was captured, 0 when unknown; a buffer in a new format (the device changed) gets a new converter
+    func write(_ buffer: AVAudioPCMBuffer, at hostTime: UInt64) {
+        if converter?.inputFormat != buffer.format {
+            converter = AVAudioConverter(from: buffer.format, to: Self.format)
+            converter?.downmix = true
+        }
+        guard let converter else { return }
+        if hostTime > start {
+            let due = AVAudioFramePosition(AVAudioTime.seconds(forHostTime: hostTime - start) * Self.format.sampleRate)
+            if due - written > Self.slack { writeSilence(due - written) }
+        }
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * Self.format.sampleRate / buffer.format.sampleRate) + 64
         guard let converted = AVAudioPCMBuffer(pcmFormat: Self.format, frameCapacity: capacity) else { return }
         var given = false
@@ -77,19 +91,85 @@ final class TrackWriter {
             status.pointee = .haveData
             return buffer
         }
-        if converted.frameLength > 0 { try? file.write(from: converted) }
+        append(converted)
+    }
+
+    private func writeSilence(_ frames: AVAudioFramePosition) {
+        var left = frames
+        while left > 0 {
+            let chunk = AVAudioFrameCount(min(left, AVAudioFramePosition(Self.format.sampleRate) * 10))
+            guard let silence = AVAudioPCMBuffer(pcmFormat: Self.format, frameCapacity: chunk) else { return }
+            silence.frameLength = chunk
+            append(silence)
+            left -= AVAudioFramePosition(chunk)
+        }
+    }
+
+    private func append(_ buffer: AVAudioPCMBuffer) {
+        guard buffer.frameLength > 0, (try? file.write(from: buffer)) != nil else { return }
+        written += AVAudioFramePosition(buffer.frameLength)
     }
 }
 
-/// What the call app plays, the other participants, through a Core Audio process tap
+/// What the call app plays, the other participants, through a Core Audio process tap. The tap is made again when the output device,
+/// its sample rate (AirPods switch between 48 and 24 kHz as a call takes their mic) or the app's audio processes change
 @available(macOS 14.2, *)
 final class ProcessTapRecorder {
+    private let appBundlePrefix: String
+    private let writer: TrackWriter
+    /// Opens and closes the tap and hears about device changes; the audio itself is written on `io`
+    private let control = DispatchQueue(label: "treeix.meetings.tap.control")
+    private let io = DispatchQueue(label: "treeix.meetings.tap")
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var ioProcID: AudioDeviceIOProcID?
+    private var processIDs: [AudioObjectID] = []
+    private var listeners: [(object: AudioObjectID, address: AudioObjectPropertyAddress, block: AudioObjectPropertyListenerBlock)] = []
 
-    init(appBundlePrefix: String, output: URL) throws {
-        let processIDs = AudioProcesses.all().filter { $0.bundleID.hasPrefix(appBundlePrefix) }.map(\.objectID)
+    init(appBundlePrefix: String, output: URL, start: UInt64) throws {
+        self.appBundlePrefix = appBundlePrefix
+        writer = try TrackWriter(output: output, start: start)
+        try control.sync {
+            try open()
+            let system = AudioObjectID(kAudioObjectSystemObject)
+            listen(system, kAudioHardwarePropertyDefaultSystemOutputDevice) { [weak self] in self?.reopen() }
+            listen(system, kAudioHardwarePropertyProcessObjectList) { [weak self] in
+                guard let self, self.matchingProcesses() != self.processIDs else { return }
+                self.reopen()
+            }
+        }
+    }
+
+    func stop() {
+        control.sync {
+            for listener in listeners {
+                var address = listener.address
+                AudioObjectRemovePropertyListenerBlock(listener.object, &address, control, listener.block)
+            }
+            listeners = []
+            close()
+        }
+    }
+
+    private func matchingProcesses() -> [AudioObjectID] {
+        AudioProcesses.all().filter { $0.bundleID.hasPrefix(appBundlePrefix) }.map(\.objectID).sorted()
+    }
+
+    private func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ changed: @escaping () -> Void) {
+        var address = globalAddress(selector)
+        let block: AudioObjectPropertyListenerBlock = { _, _ in changed() }
+        guard AudioObjectAddPropertyListenerBlock(object, &address, control, block) == noErr else { return }
+        listeners.append((object, address, block))
+    }
+
+    /// A tap that can't be made now, such as while the app has no audio open, waits for the next change
+    private func reopen() {
+        close()
+        try? open()
+    }
+
+    private func open() throws {
+        processIDs = matchingProcesses()
         guard !processIDs.isEmpty else { throw RecorderError("\(appBundlePrefix) has no audio open") }
 
         let tap = CATapDescription(stereoMixdownOfProcesses: processIDs)
@@ -120,20 +200,29 @@ final class ProcessTapRecorder {
             description.mSampleRate = try Self.nominalSampleRate(of: aggregateID)
             guard let format = AVAudioFormat(streamDescription: &description) else { throw RecorderError("Unknown tap format") }
 
-            let writer = try TrackWriter(output: output, input: format)
+            let writer = writer
             try check(
-                AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, DispatchQueue(label: "treeix.meetings.tap")) { _, input, _, _, _ in
+                AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, io) { _, input, inputTime, _, _ in
                     guard let buffer = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: input, deallocator: nil) else { return }
-                    writer.write(buffer)
+                    let valid = inputTime.pointee.mFlags.contains(.hostTimeValid)
+                    writer.write(buffer, at: valid ? inputTime.pointee.mHostTime : 0)
                 }, "Starting the tap")
             try check(AudioDeviceStart(aggregateID, ioProcID), "Starting the tap device")
+            listen(aggregateID, kAudioDevicePropertyNominalSampleRate) { [weak self] in self?.reopen() }
         } catch {
-            stop()
+            close()
             throw error
         }
     }
 
-    func stop() {
+    private func close() {
+        let aggregate = aggregateID
+        listeners.removeAll { listener in
+            guard listener.object == aggregate else { return false }
+            var address = listener.address
+            AudioObjectRemovePropertyListenerBlock(listener.object, &address, control, listener.block)
+            return true
+        }
         if let ioProcID {
             AudioDeviceStop(aggregateID, ioProcID)
             AudioDeviceDestroyIOProcID(aggregateID, ioProcID)
@@ -166,21 +255,52 @@ final class ProcessTapRecorder {
     }
 }
 
-/// The local microphone: you, or the whole room
+/// The local microphone: you, or the whole room. A device that changes or goes away stops the engine for good, so a new one starts on what's there now
 final class MicRecorder {
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
+    private let writer: TrackWriter
+    private var observer: NSObjectProtocol?
+    private var stopped = false
 
-    init(output: URL) throws {
+    init(output: URL, start: UInt64) throws {
+        writer = try TrackWriter(output: output, start: start)
+        try begin()
+    }
+
+    private func begin() throws {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        let writer = try TrackWriter(output: output, input: format)
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in writer.write(buffer) }
+        guard format.sampleRate > 0, format.channelCount > 0 else { throw RecorderError("No microphone") }
+        let writer = writer
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, when in writer.write(buffer, at: when.isHostTimeValid ? when.hostTime : 0) }
         try engine.start()
+        observer = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+            self?.restart()
+        }
+    }
+
+    private func end() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+    }
+
+    private func restart() {
+        guard !stopped else { return }
+        end()
+        engine = AVAudioEngine()
+        do {
+            try begin()
+        } catch {
+            // No input device for a moment, such as while AirPods reconnect
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.restart() }
+        }
     }
 
     func stop() {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        stopped = true
+        end()
     }
 }
 
@@ -201,9 +321,10 @@ final class Recording {
         self.folder = folder
         let url = URL(fileURLWithPath: folder, isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let start = mach_absolute_time()
         // The microphone first: the tap takes a few seconds to start and the call's first words are often yours
         do {
-            mic = try MicRecorder(output: url.appendingPathComponent(Track.mic))
+            mic = try MicRecorder(output: url.appendingPathComponent(Track.mic), start: start)
         } catch {
             mic = nil
             sendError("Couldn't record the microphone: \(error.localizedDescription)", folder: nil)
@@ -215,7 +336,7 @@ final class Recording {
             sendError("Recording the call audio needs macOS 14.2 or later", folder: nil)
         } else {
             do {
-                tap = try ProcessTapRecorder(appBundlePrefix: app, output: url.appendingPathComponent(Track.others))
+                tap = try ProcessTapRecorder(appBundlePrefix: app, output: url.appendingPathComponent(Track.others), start: start)
             } catch {
                 tap = nil
                 sendError("Couldn't record the call audio: \(error.localizedDescription)", folder: nil)
@@ -239,9 +360,11 @@ func mixTracks(in folder: URL) async -> Bool {
         let composition = AVMutableComposition()
         for url in tracks {
             let asset = AVURLAsset(url: url)
-            guard let source = try await asset.loadTracks(withMediaType: .audio).first else { continue }
+            let duration = try await asset.load(.duration)
+            // An empty track, such as call audio from an app that played nothing, makes the reader fail
+            guard duration > .zero, let source = try await asset.loadTracks(withMediaType: .audio).first else { continue }
             let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-            try track?.insertTimeRange(CMTimeRange(start: .zero, duration: try await asset.load(.duration)), of: source, at: .zero)
+            try track?.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: source, at: .zero)
         }
         try? FileManager.default.removeItem(at: output)
         try await writeMonoMix(of: composition, to: output)

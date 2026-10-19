@@ -21,5 +21,6 @@ let package = Package(
             dependencies: [.product(name: "FluidAudio", package: "FluidAudio")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(name: "treeix-meetings-tests", dependencies: ["treeix-meetings"], swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
