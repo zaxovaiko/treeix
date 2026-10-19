@@ -1116,9 +1116,11 @@ function Plugins(): React.JSX.Element {
     ['On', plugins.filter(({ chosen }) => chosen)],
     ['Available', plugins.filter(({ chosen }) => !chosen)]
   ] as const
+  // The settings search lists the matching plugins under its own Plugins heading
+  const whole = useSettingMatch()
   return (
     <div className="mb-6">
-      <header className="mb-6 flex flex-wrap items-start gap-x-6 gap-y-3">
+      <header className={`mb-6 flex-wrap items-start gap-x-6 gap-y-3 ${whole ? 'flex' : 'hidden'}`}>
         <div className="min-w-48 flex-1">
           <h1 className="text-2xl font-semibold">Plugins</h1>
           <p className="mt-1 text-[13px] text-muted-foreground">Bring your tools and trackers into Treeix, and leave out what you don't use.</p>
@@ -1534,6 +1536,8 @@ export function BotsWindowSettings({ page }: { page: BotsSettingsPage }): React.
   const { cards, lead: Lead, blocks = [], plugins = [], tab, framed }: BotsPageSpec = BOTS_SETTINGS_PAGES[page]
   const specs = cards.flatMap(([card, picks]) => picks.flatMap((pick) => SETTINGS.filter((spec) => picked(pick, spec)).map((spec) => ({ ...spec, card }))))
   const Tab = loaded.flatMap(({ plugin }) => plugin.tabs ?? []).find((candidate) => candidate.id === tab)?.render
+  // A search lists matching rows, not the dashboards beside them; matching no words at all means no search is on
+  const whole = useSettingMatch()
   return (
     <>
       {Lead && <Lead />}
@@ -1545,6 +1549,7 @@ export function BotsWindowSettings({ page }: { page: BotsSettingsPage }): React.
         <PluginPage key={id} id={id} />
       ))}
       {Tab &&
+        whole &&
         (framed ? (
           <div className="mt-6 flex h-[560px] flex-col overflow-hidden rounded-lg ring-1 ring-border">
             <Tab />

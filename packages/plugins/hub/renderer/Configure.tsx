@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { useHost } from '@treeix/sdk'
 import { BotAvatar, type BotLook } from '@treeix/app/BotAvatar'
 import { Icon, type IconName } from '@treeix/app/Icon'
-import { Switch } from '@treeix/app/settingsUi'
+import { HIDE_WHEN_EMPTY, SearchGroup, SearchSection, SettingsSearch, Switch } from '@treeix/app/settingsUi'
 import { botsPageOf, type BotsSettingsPage, BotsWindowSettings, PluginPage, shownBotsPages } from '@treeix/app/SettingsView'
 import { BrandMark } from '@treeix/app/brandMarks'
 import { onSettingsPage, type PageId, pluginOf, takeRequestedPage } from '@treeix/app/settingsNav'
@@ -736,7 +736,13 @@ export function Configure(): React.JSX.Element {
   const chromeless = useChromeless()
   const agents = hubAgents.useValue()
   const workflows = hubWorkflows.useValue()
-  const [selected, setSelected] = useState<Selection>(() => selectionOf(takeRequestedPage()))
+  const [selected, setSelectedState] = useState<Selection>(() => selectionOf(takeRequestedPage()))
+  const [query, setQuery] = useState('')
+  const needle = query.trim()
+  const setSelected = (next: Selection): void => {
+    setSelectedState(next)
+    setQuery('')
+  }
   useEffect(() => onSettingsPage((page) => setSelected(selectionOf(page))), [])
   // Plugins whose settings no fixed page shows; AI Hub is this window
   const { loaded } = usePlugins()
@@ -765,6 +771,22 @@ export function Configure(): React.JSX.Element {
       </header>
       <div className="flex min-h-0 flex-1">
         <nav className="flex w-[180px] shrink-0 flex-col lg:w-[220px] gap-4 overflow-y-auto border-r border-border p-2">
+          <label className="flex h-8 shrink-0 items-center gap-2 rounded-lg bg-muted px-2.5 ring-1 ring-border focus-within:ring-primary">
+            <Icon name="search" className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              value={query}
+              placeholder="Search settings"
+              spellCheck={false}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && query) {
+                  event.stopPropagation()
+                  setQuery('')
+                }
+              }}
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </label>
           {[...new Set(pages.map(([, spec]) => spec.group))].map((group) => (
             <NavGroup key={group} title={group}>
               {pages
@@ -818,7 +840,29 @@ export function Configure(): React.JSX.Element {
         </nav>
         <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[720px] px-5 py-6 select-text lg:px-8 lg:py-7">
-            {selected.kind === 'page' ? (
+            {needle ? (
+              <SettingsSearch value={needle}>
+                <div className={`peer ${HIDE_WHEN_EMPTY}`}>
+                  {pages.map(([page, { label }]) => (
+                    <SearchGroup key={page} title={label} className="mb-8">
+                      <h2 className="mb-3 text-[13px] font-medium">{label}</h2>
+                      <SearchSection value={label}>
+                        <BotsWindowSettings page={page} />
+                      </SearchSection>
+                    </SearchGroup>
+                  ))}
+                  {pluginPages.map(({ manifest }) => (
+                    <SearchGroup key={manifest.id} title={manifest.name} className="mb-8">
+                      <h2 className="mb-3 text-[13px] font-medium">{manifest.name}</h2>
+                      <SearchSection value={manifest.name}>
+                        <PluginPage id={manifest.id} />
+                      </SearchSection>
+                    </SearchGroup>
+                  ))}
+                </div>
+                <p className="hidden py-12 text-center text-[13px] break-words text-muted-foreground peer-[:not(:has([data-setting]))]:block">No settings match “{needle}”</p>
+              </SettingsSearch>
+            ) : selected.kind === 'page' ? (
               <BotsWindowSettings page={selected.page} />
             ) : selected.kind === 'plugin' ? (
               <PluginPage key={selected.id} id={selected.id} />
