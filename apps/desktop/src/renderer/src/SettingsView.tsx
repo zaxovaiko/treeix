@@ -29,6 +29,8 @@ import { addCustomTheme, allThemes, DEFAULT_THEME, isCustomTheme, parseThemeFile
 import { EmptyState, Popup, useMenuKeys } from './ui'
 import { arrangeBar, WORKTREES_TAB } from './titleBarTabs'
 import { Card, HIDE_WHEN_EMPTY, Row, SearchGroup, SearchSection, Segmented, SETTING_ROW, SettingsSearch, Switch, useSettingMatch } from './settingsUi'
+import { PluginPreview } from './pluginPreviews'
+import type { Brand } from './brandMarks'
 import { isPluginEnabled, type LoadedPlugin, PLUGINS, setPluginEnabled, usePlugins, useService } from './plugins'
 import { navRows, onSettingsPage, openablePage, type PageId, pluginOf, type SectionId, takeRequestedPage } from './settingsNav'
 import { copyText } from './contextMenu'
@@ -124,27 +126,24 @@ function FontSize({ value, fallback, label, onChange }: { value: number; fallbac
         onClick={() => step(-1)}
         disabled={value <= FONT_SIZE_RANGE.min}
         aria-label={`Smaller ${label}`}
-        className="h-6 w-7 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+        className="h-6 w-6 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
       >
         −
       </button>
-      <span className="w-12 text-center text-xs tabular-nums">{value}px</span>
+      <span className="min-w-9 text-center text-xs tabular-nums">{value}px</span>
       <button
         onClick={() => step(1)}
         disabled={value >= FONT_SIZE_RANGE.max}
         aria-label={`Larger ${label}`}
-        className="h-6 w-7 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+        className="h-6 w-6 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
       >
         +
       </button>
-      <button
-        onClick={() => onChange(fallback)}
-        disabled={value === fallback}
-        title="Reset"
-        className="grid h-6 w-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-0"
-      >
-        <Icon name="refresh" className="size-3" />
-      </button>
+      {value !== fallback && (
+        <button onClick={() => onChange(fallback)} title="Reset" className="grid h-6 w-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+          <Icon name="refresh" className="size-3" />
+        </button>
+      )}
     </div>
   )
 }
@@ -547,7 +546,7 @@ const SETTINGS: SettingSpec[] = [
     section: 'Appearance',
     card: 'Window',
     label: 'Island UI',
-    description: 'The sidebar floats over the page as a rounded island, Figma style, instead of sitting in a column beside it. Hidden, it folds to a pill.',
+    description: 'The page and the right panel float over the window as rounded islands, like Claude Desktop, instead of sitting in columns split by hairlines.',
     Control: toggle('islandUi', 'Island UI')
   },
   { section: 'Appearance', card: 'Fonts', label: 'Interface', description: "Menus, lists, markdown and everything that isn't code.", Control: fontRow('uiFont') },
@@ -843,6 +842,7 @@ function ImportTheme(): React.JSX.Element {
 }
 
 function ThemeGrid({ mode }: { mode: Theme['mode'] }): React.JSX.Element {
+  'use no memo' // the theme list is read from the theme registry during render
   const settings = useSettings()
   const current = settings[THEME_SLOT[mode]]
   const themes = allThemes().filter(([, theme]) => theme.mode === mode)
@@ -1001,6 +1001,8 @@ function ShortcutRow({ keys, action }: { keys: string; action: string }): React.
 
 /** One action: its key, recorded here or reset to the one it ships with */
 function ActionRow({ action }: { action: ActionDef }): React.JSX.Element | null {
+  'use no memo' // keys and clashes are read from the keymap during render
+  useSettings()
   const current = shortcutOf(action.id)
   const keys = current ? shortcutLabel(current) : ''
   const others = conflictsOf(action.id).flatMap((id) => actionOf(id) ?? [])
@@ -1040,6 +1042,7 @@ function ActionRow({ action }: { action: ActionDef }): React.JSX.Element | null 
 
 /** Every action with its key, rebindable; the fixed keys of the focus model and the digit rows follow them */
 function Shortcuts(): React.JSX.Element {
+  'use no memo' // the action list is read from the keymap during render
   // Rebinding writes to settings, so this re-renders with the new keys
   useSettings()
   const actions = actionList()
@@ -1079,16 +1082,19 @@ function requirementOf(id: string, chosen: boolean, choices: Settings['plugins']
 
 const settingsOf = (loaded: LoadedPlugin[], id: string): ComponentType | undefined => loaded.find((entry) => entry.manifest.id === id)?.plugin.Settings
 
+/** What the Bots window runs on: its chats, their sessions and Settings itself, so they have no switch */
+const CORE_PLUGINS = new Set(['chat', 'terminal', 'hub'])
+
 /** Everything beyond worktrees and diffs; a plugin with settings of its own keeps them on its own page */
 function Plugins(): React.JSX.Element {
   const settings = useSettings()
   return (
     <Card title="Plugins">
-      {PLUGINS.map(({ manifest }) => {
+      {PLUGINS.filter(({ manifest }) => !CORE_PLUGINS.has(manifest.id)).map(({ manifest }) => {
         const chosen = settings.plugins[manifest.id] ?? manifest.enabledByDefault
         return (
           <SearchGroup key={manifest.id} title={`${manifest.name} ${manifest.description}`} className="border-b border-border last:border-b-0">
-            <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`}>
+            <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`} preview={<PluginPreview id={manifest.id} />}>
               <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
             </Row>
           </SearchGroup>
@@ -1098,24 +1104,18 @@ function Plugins(): React.JSX.Element {
   )
 }
 
-/** One plugin's own page: its switch, then the settings it brings */
-function PluginPage({ id }: { id: string }): React.JSX.Element {
+/** One plugin's own page: the settings it brings; its switch lives in Plugins */
+export function PluginPage({ id }: { id: string }): React.JSX.Element | null {
   const settings = useSettings()
   const { loaded } = usePlugins()
   const manifest = PLUGINS.find((entry) => entry.manifest.id === id)?.manifest
   const PluginSettings = settingsOf(loaded, id)
   if (!manifest) return <EmptyState icon="plug" title={`No installed plugin answers to the id ${id}.`} />
+  if (PluginSettings) return <PluginSettings />
+  // Loaded without settings of its own, like a dashboard the page shows below
+  if (loaded.some((entry) => entry.manifest.id === id)) return null
   const chosen = settings.plugins[manifest.id] ?? manifest.enabledByDefault
-  return (
-    <>
-      <Card title={manifest.name}>
-        <Row label={manifest.name} description={`${manifest.description}${requirementOf(manifest.id, chosen, settings.plugins)}`}>
-          <Switch checked={chosen} label={manifest.name} onChange={() => setPluginEnabled(manifest.id, !chosen)} />
-        </Row>
-      </Card>
-      {PluginSettings && <PluginSettings />}
-    </>
-  )
+  return <EmptyState icon="plug" title={chosen ? `${manifest.name} is loading…` : `${manifest.name} is off. Turn it on in Plugins.`} />
 }
 
 function ToolMark({ name }: { name: string }): React.JSX.Element | null {
@@ -1346,9 +1346,7 @@ function Agents(): React.JSX.Element {
 /** Blocks after a section's own rows */
 const SECTION_EXTRAS: Partial<Record<SectionId, ComponentType>> = { Appearance, Terminal: Agents, Keyboard: Shortcuts, Plugins, Integrations: Tools }
 
-function Section({ id }: { id: SectionId }): React.JSX.Element {
-  const specs = SETTINGS.filter((spec) => spec.section === id)
-  const Extra = SECTION_EXTRAS[id]
+function SettingCards({ specs }: { specs: SettingSpec[] }): React.JSX.Element {
   return (
     <>
       {[...new Set(specs.map((spec) => spec.card))].map((card) => (
@@ -1360,7 +1358,150 @@ function Section({ id }: { id: SectionId }): React.JSX.Element {
             ))}
         </Card>
       ))}
+    </>
+  )
+}
+
+function Section({ id }: { id: SectionId }): React.JSX.Element {
+  const Extra = SECTION_EXTRAS[id]
+  return (
+    <>
+      <SettingCards specs={SETTINGS.filter((spec) => spec.section === id)} />
       {Extra && <Extra />}
+    </>
+  )
+}
+
+/**
+ * The Bots window's settings pages under their nav groups, each a few cards of the rows above picked by label (or a
+ * whole card by `card:` and its name), then blocks of their own
+ */
+export const BOTS_SETTINGS_PAGES = {
+  appearance: {
+    group: 'App',
+    label: 'Appearance',
+    icon: 'palette',
+    cards: [
+      ['Window', ['Island UI', 'Transparency', 'Borders']],
+      ['Fonts', ['Interface']]
+    ],
+    lead: Themes
+  },
+  editor: {
+    group: 'App',
+    label: 'Editor',
+    icon: 'code',
+    cards: [
+      ['Editor', ['Font', 'Minimap', 'Line numbers', 'Word wrap']],
+      ['Diffs', ['Diff view', 'Highlighting workers']],
+      ['Code navigation', ['card:Code navigation']]
+    ]
+  },
+  terminal: {
+    group: 'App',
+    label: 'Terminal',
+    icon: 'terminal',
+    cards: [
+      ['Font', ['Terminal font', 'Terminal font weight', 'Minimum contrast']],
+      ['Performance', ['Scrollback']]
+    ]
+  },
+  keyboard: {
+    group: 'App',
+    label: 'Hotkey window',
+    icon: 'keyboard',
+    cards: [['Hotkey window', ['Global shortcut', 'Hotkey window', 'Show in the menu bar', 'Hide when focus is lost']]]
+  },
+  chats: {
+    group: 'Agents',
+    label: 'Chats',
+    icon: 'comment',
+    cards: [
+      ['Chats', ['Chat width', 'Thinking in chats']],
+      ['Sessions', ['Restore sessions on launch', 'Agent notifications']]
+    ]
+  },
+  agents: {
+    group: 'Agents',
+    label: 'Agents',
+    icon: 'sparkles',
+    cards: [
+      ['Permissions', ['Skip Claude permissions', 'Skip Codex approvals and sandbox']],
+      ['Treeix MCP', ['MCP in Claude Code and Codex']]
+    ],
+    blocks: [Agents, Tools]
+  },
+  usage: { group: 'Agents', label: 'Usage', icon: 'chart', cards: [], plugins: ['usage-limits', 'agent-usage'], tab: 'agent-usage' },
+  jira: { group: 'Integrations', label: 'Jira', icon: 'kanban', brand: 'jira', cards: [], plugins: ['jira'] },
+  confluence: { group: 'Integrations', label: 'Confluence', icon: 'bookOpen', brand: 'confluence', cards: [], plugins: ['confluence'] },
+  notion: { group: 'Integrations', label: 'Notion', icon: 'bookOpen', brand: 'notion', cards: [], plugins: ['notion'] },
+  slack: { group: 'Integrations', label: 'Slack', icon: 'comment', brand: 'slack', cards: [], plugins: ['slack'] },
+  pullRequests: { group: 'Integrations', label: 'Pull requests', icon: 'pullRequest', cards: [], plugins: ['pull-requests'] },
+  browser: { group: 'Tools', label: 'Browser', icon: 'globe', cards: [], plugins: ['browser'] },
+  env: { group: 'Tools', label: 'Env', icon: 'key', cards: [], plugins: ['env'] },
+  voice: { group: 'Tools', label: 'Voice', icon: 'mic', cards: [], plugins: ['dictation'] },
+  meetings: { group: 'Tools', label: 'Meetings', icon: 'video', cards: [], plugins: ['meetings'], tab: 'meetings', framed: true },
+  keepAwake: { group: 'Tools', label: 'Keep awake', icon: 'coffee', cards: [], plugins: ['keep-awake'] },
+  plugins: { group: 'More', label: 'Plugins', icon: 'plug', cards: [], blocks: [Plugins] },
+  about: { group: 'More', label: 'About', icon: 'bookOpen', cards: [['About', ['Version', 'Feedback']]] }
+} as const satisfies Record<string, BotsPageSpec>
+
+export type BotsPageSpec = {
+  group: string
+  label: string
+  icon: IconName
+  /** The product's own logo, drawn in place of the icon */
+  brand?: Brand
+  cards: readonly (readonly [card: string, picks: readonly string[]])[]
+  /** A block above the cards, like the theme grid */
+  lead?: ComponentType
+  /** Blocks below the cards, like the agent list */
+  blocks?: readonly ComponentType[]
+  /** Plugins whose switch and own settings follow */
+  plugins?: readonly string[]
+  /** A plugin tab drawn inline, like the usage dashboard */
+  tab?: string
+  /** The tab is a two-pane page that fills its height, so it gets a box of its own */
+  framed?: boolean
+}
+
+export type BotsSettingsPage = keyof typeof BOTS_SETTINGS_PAGES
+
+/** The pages to list: one that only shows plugins goes while all of them are off */
+export const shownBotsPages = (loaded: LoadedPlugin[]): [BotsSettingsPage, BotsPageSpec][] =>
+  (Object.entries(BOTS_SETTINGS_PAGES) as [BotsSettingsPage, BotsPageSpec][]).filter(
+    ([, spec]) => spec.cards.length || spec.lead || spec.blocks || !spec.plugins || spec.plugins.some((id) => loaded.some(({ manifest }) => manifest.id === id))
+  )
+
+/** The fixed page that shows a plugin's settings; null for a plugin that gets a page of its own */
+export const botsPageOf = (plugin: string): BotsSettingsPage | null =>
+  (Object.keys(BOTS_SETTINGS_PAGES) as BotsSettingsPage[]).find((page) => (BOTS_SETTINGS_PAGES[page] as BotsPageSpec).plugins?.includes(plugin)) ?? null
+
+const picked = (pick: string, spec: SettingSpec): boolean => (pick.startsWith('card:') ? spec.card === pick.slice('card:'.length) : spec.label === pick)
+
+export function BotsWindowSettings({ page }: { page: BotsSettingsPage }): React.JSX.Element {
+  const { loaded } = usePlugins()
+  const { cards, lead: Lead, blocks = [], plugins = [], tab, framed }: BotsPageSpec = BOTS_SETTINGS_PAGES[page]
+  const specs = cards.flatMap(([card, picks]) => picks.flatMap((pick) => SETTINGS.filter((spec) => picked(pick, spec)).map((spec) => ({ ...spec, card }))))
+  const Tab = loaded.flatMap(({ plugin }) => plugin.tabs ?? []).find((candidate) => candidate.id === tab)?.render
+  return (
+    <>
+      {Lead && <Lead />}
+      <SettingCards specs={specs} />
+      {blocks.map((Block) => (
+        <Block key={Block.name} />
+      ))}
+      {plugins.map((id) => (
+        <PluginPage key={id} id={id} />
+      ))}
+      {Tab &&
+        (framed ? (
+          <div className="mt-6 flex h-[560px] flex-col overflow-hidden rounded-lg ring-1 ring-border">
+            <Tab />
+          </div>
+        ) : (
+          <Tab />
+        ))}
     </>
   )
 }

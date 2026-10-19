@@ -88,10 +88,21 @@ export function Steps({ label, value, of = 5 }: { label: string; value: number; 
 export const SETTING_ROW = 'rounded-md outline-none'
 
 /** One setting: label and description, its control beside them, or wrapped under them when the page is narrow */
-export function Row({ label, description, children }: { label: string; description: string; children: React.ReactNode }): React.JSX.Element | null {
+export function Row({
+  label,
+  description,
+  preview,
+  children
+}: {
+  label: string
+  description: string
+  preview?: React.ReactNode
+  children: React.ReactNode
+}): React.JSX.Element | null {
   if (!useSettingMatch(label, description)) return null
   return (
     <div data-setting={label} tabIndex={-1} className={`flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-2 py-3 last:border-b-0 *:max-w-full ${SETTING_ROW}`}>
+      {preview}
       <span className="min-w-48 flex-1 break-words">
         <span className="block text-[13px]">{label}</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
