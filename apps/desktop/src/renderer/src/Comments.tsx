@@ -301,7 +301,7 @@ export function CommentDraft({
       />
       <Attachments attachments={attachments} onRemove={(removed) => setAttachments(attachments.filter((file) => file !== removed))} />
       {error && <p className="px-1 pt-1.5 text-[11px] break-words text-red-400">{error}</p>}
-      <div className="flex items-center justify-end gap-1.5 pt-1.5">
+      <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1.5">
         {allowAttachments && (
           <>
             <button

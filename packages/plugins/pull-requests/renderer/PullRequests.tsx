@@ -161,6 +161,8 @@ function ConflictNotice({ pr, patches, onOpen }: { pr: PullRequest; patches: Fil
 const DETAIL_FOCUS_REFRESH_MS = 30_000
 /** Files changed remembers its panels apart from the conversation: the diff wants the inspector's width */
 const FILES_PAGE = 'prs:files'
+/** Below this width Files changed shows the file tree or the diff, not both, and diffs go unified */
+const NARROW_FILES_PX = 640
 
 /** What a pull request's detail needs from the host, bound by the plugin entry */
 export type DetailProps = {
@@ -723,11 +725,13 @@ function AssigneeRow({ person, onRemove }: { person: Person; onRemove: () => voi
 /** A clickable row of the side rail, reaching a little past the text so its hover has room */
 const RAIL_ROW = '-mx-1.5 flex h-7 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-xs text-foreground/85 hover:bg-accent'
 
-function ActionRow({ icon, label, keys, onClick }: { icon: IconName; label: string; keys: string; onClick: () => void }): React.JSX.Element {
+/** `detail` follows the label muted, and is what gives way when the rail is narrow */
+function ActionRow({ icon, label, detail, keys, onClick }: { icon: IconName; label: string; detail?: string; keys: string; onClick: () => void }): React.JSX.Element {
   return (
-    <button onClick={onClick} className={RAIL_ROW}>
+    <button onClick={onClick} title={detail && `${label} for ${detail}`} className={RAIL_ROW}>
       <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">{detail}</span>
       <Kbd hint>{keys}</Kbd>
     </button>
   )
@@ -1114,6 +1118,14 @@ export function PullRequestDetailView({
   const folderToggles = useScopedState<Set<string>>(pr.url, new Set())
   const [toggledFolders, setToggledFolders] = folderToggles
   const [filesWidth, setFilesWidth] = usePersisted<number>('prs.filesWidth', 300)
+  const mainRef = useRef<HTMLDivElement>(null)
+  const [narrow, setNarrow] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setNarrow(entry.contentRect.width < NARROW_FILES_PX))
+    if (mainRef.current) observer.observe(mainRef.current)
+    return () => observer.disconnect()
+  }, [])
   const [markdownPreview, setMarkdownPreview] = useMarkdownPreview()
   const local = localWorktreeFor(repos, pr)
   const agentComments = host.comments.filter((comment) => comment.worktreePath === (local ?? pr.repoPath)).length
@@ -1197,6 +1209,7 @@ export function PullRequestDetailView({
 
   const openFile = (path: string): void => {
     setFilePath(path)
+    setTreeOpen(false)
     if (!allFiles) return
     // Scroll the virtualized list by hand: scrollIntoView would also shift overflow-hidden ancestors
     requestAnimationFrame(() => {
@@ -1749,7 +1762,7 @@ export function PullRequestDetailView({
               }}
               options={{
                 ...codeThemeOptions(),
-                diffStyle,
+                diffStyle: narrow ? 'unified' : diffStyle,
                 disableFileHeader: true,
                 loadDiffFiles: async ({ name, prevName = name }) => {
                   const after = await readPullRequestFile(name)
@@ -1932,6 +1945,11 @@ export function PullRequestDetailView({
           />
           <Kbd hint>[</Kbd>
           <Kbd hint>]</Kbd>
+          {narrow && (
+            <IconButton label={treeOpen ? 'Show the diff' : 'Show the files'} active={treeOpen} onClick={() => setTreeOpen(!treeOpen)}>
+              <Icon name={treeOpen ? 'diff' : 'file'} className="size-3.5" />
+            </IconButton>
+          )}
           <span className="flex-1" />
           {unresolvedCount > 0 && (
             <button
@@ -2061,7 +2079,7 @@ export function PullRequestDetailView({
         {assignees.length === 0 && <p className="text-xs text-muted-foreground">No one assigned</p>}
       </RailSection>
       <RailSection title="Actions">
-        <ActionRow icon="branch" label={local ? 'Open worktree' : `Create worktree for ${pr.sourceBranch}`} keys="w" onClick={worktree} />
+        <ActionRow icon="branch" label={local ? 'Open worktree' : 'Create worktree'} detail={local ? undefined : pr.sourceBranch} keys="w" onClick={worktree} />
         {pr.state === 'open' && own && !isDraft && <ActionRow icon="pencil" label="Convert to draft" keys="⇧R" onClick={() => setDraftState(true)} />}
         {pr.state === 'open' && <ActionRow icon="close" label={closing ? 'Closing…' : `Close ${pr.provider === 'github' ? 'pull' : 'merge'} request`} keys="⇧C" onClick={close} />}
       </RailSection>
@@ -2138,9 +2156,14 @@ export function PullRequestDetailView({
     </div>
   )
 
+  // A narrow pane shows the file tree in place of the diff, kept mounted so a draft comment survives
+  const diffHidden = narrow && treeOpen
   const files = detail && (
     <div className="flex min-h-0 flex-1">
-      <nav style={{ width: filesWidth }} className="relative flex shrink-0 flex-col border-r border-border">
+      <nav
+        style={narrow ? undefined : { width: filesWidth }}
+        className={`relative flex-col ${narrow ? (treeOpen ? 'flex flex-1' : 'hidden') : 'flex shrink-0 border-r border-border'}`}
+      >
         <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3 text-[11px] text-muted-foreground`}>
           {since && (
             <button
@@ -2199,15 +2222,15 @@ export function PullRequestDetailView({
             }}
           />
         </div>
-        <ResizeHandle onResize={setFilesWidth} />
+        {!narrow && <ResizeHandle onResize={setFilesWidth} />}
       </nav>
       {allFiles ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col select-text" onContextMenu={symbols.onContextMenu}>
+        <div className={`min-h-0 min-w-0 flex-1 flex-col select-text ${diffHidden ? 'hidden' : 'flex'}`} onContextMenu={symbols.onContextMenu}>
           <Virtualizer className="pr-files-scroll min-h-0 flex-1 overflow-auto">{patches.map(renderFile)}</Virtualizer>
           {symbols.hoverCard}
         </div>
       ) : (
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto select-text" onContextMenu={symbols.onContextMenu}>
+        <div className={`min-h-0 min-w-0 flex-1 overflow-auto select-text ${diffHidden ? 'hidden' : ''}`} onContextMenu={symbols.onContextMenu}>
           {file ? renderFile(file) : <EmptyState icon="file" title={`Click a line number in a diff to comment on ${providerName(pr)}`} />}
           {symbols.hoverCard}
         </div>
@@ -2218,7 +2241,7 @@ export function PullRequestDetailView({
   const main = (
     <CodeNavigationContext.Provider value={navigation}>
       <MarkdownFoldScope>
-        <div className="@container relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div ref={mainRef} className="@container relative flex min-h-0 min-w-0 flex-1 flex-col">
           {/* The inspector has the comments panel with its own send button; without it the pill sends */}
           {renderSend && !(panels.inspector && renderComments) && <div className="absolute right-4 bottom-4 z-30">{renderSend(pr)}</div>}
           {view === 'files' ? header : topBar}
