@@ -15,3 +15,11 @@ export function placePane(layout: PaneLayout, id: string, targetId: string, edge
   else next[columnIndex].splice(next[columnIndex].indexOf(targetId) + 1, 0, id)
   return next
 }
+
+const SPLIT_MIN = { width: 240, height: 120 }
+
+/** Halves narrower than a short command line, or a few rows tall, are no use; a split right with no room goes down, as in a narrow docked panel */
+export function fittingEdge(box: { width: number; height: number }, edge: SplitEdge): SplitEdge | null {
+  const fits = (candidate: SplitEdge): boolean => (candidate === 'right' ? box.width / 2 >= SPLIT_MIN.width : box.height / 2 >= SPLIT_MIN.height)
+  return fits(edge) ? edge : edge === 'right' && fits('bottom') ? 'bottom' : null
+}

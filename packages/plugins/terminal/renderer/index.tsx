@@ -46,6 +46,7 @@ import {
   isRestored,
   focusShown,
   getPorts,
+  forgetClosedSession,
   getTerminals,
   isTerminalFocused,
   renameSession,
@@ -65,6 +66,7 @@ import {
   transcriptRef,
   syncChats,
   useTerminals,
+  wakeSession,
   whenReady
 } from './terminals'
 
@@ -143,7 +145,8 @@ function useScope(): Scope {
   const workspace = workspaceOf(workspaces, currentId)
   const state = useTerminals()
   const include = (item: { worktreePath: string; workspaceId: string }): boolean => inWorkspace(item, workspace, repos, workspaces)
-  const sessions = state.sessions.filter(include)
+  // Chats are listed and shown by the Bots shell itself, so the terminals keep to terminal sessions
+  const sessions = state.sessions.filter((session) => session.view === 'terminal' && include(session))
   const session = sessions.find((candidate) => candidate.id === state.selected[currentId]) ?? sessions[0] ?? null
   // The split the shown session is in, else the session alone
   const layout = session && state.splits[session.workspaceId]
@@ -166,7 +169,7 @@ const WaitingDot = ({ className }: { className: string }): React.JSX.Element | n
 function TerminalPage(): React.JSX.Element {
   const host = useHost()
   const { session, panes, history } = useScope()
-  const { previews, fileTabs, previewMaximized } = view.use()
+  const { previews, fileTabs, previewMaximized } = view.useValue()
   const { currentId } = useWorkspaces()
   const preview = previews[currentId] ?? null
   // Previews saved before tabs existed have no tab of their own
@@ -279,7 +282,7 @@ async function locate(targets: { path: string; line: number | null }[], bases: s
       const entry = await entryAt(direct)
       if (entry) return { absolute: direct, entry, line }
       if (/^[/~]/.test(path)) break
-      const inFiles = findInFiles(path, (await window.api.listFiles(base).catch(() => ({ files: [] }))).files)
+      const inFiles = findInFiles(path, (await window.api.listFiles(base).catch(() => null))?.files ?? [])
       if (inFiles) return { absolute: `${base}/${inFiles}`, entry: 'file', line }
     }
   return null
@@ -332,7 +335,7 @@ function useFileLinks(): void {
   )
 }
 
-function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.JSX.Element {
+function DockedTerminal(): React.JSX.Element {
   const host = useHost()
   const cwd = useTerminalCwd(host)
   const { session, panes, sessions, history } = useScope()
@@ -348,6 +351,7 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
   return (
     <WorkspaceTerminals
       session={session}
+      tabs={sessions}
       panes={panes}
       label={worktreeLabel(host.repos, cwd)}
       cwd={cwd}
@@ -355,8 +359,6 @@ function DockedTerminal({ side }: { side: 'left' | 'right' | 'bottom' }): React.
       repos={host.repos}
       page={false}
       onHide={() => host.hidePanel(TAB_ID)}
-      side={side}
-      onMove={(target) => host.movePanel(TAB_ID, target)}
     />
   )
 }
@@ -435,7 +437,7 @@ function stepSession(host: HostApi, step: 1 | -1): void {
 
 function Root(): React.JSX.Element | null {
   const host = useHost()
-  const { sessions: switcher } = dialogs.use()
+  const { sessions: switcher } = dialogs.useValue()
   const current = useScope()
   scope = current
   const { currentId } = useWorkspaces()
@@ -479,7 +481,8 @@ defineActions([
   { id: 'terminal.previousSession', label: 'Previous session', section: 'Terminal', keys: key('ArrowUp', { meta: true, ctrl: true }) },
   { id: 'terminal.nextSession', label: 'Next session', section: 'Terminal', keys: key('ArrowDown', { meta: true, ctrl: true }) },
   { id: 'terminal.newTab', label: 'New shell session', section: 'Terminal', keys: key('KeyT', { meta: true }) },
-  { id: 'terminal.newTabAlt', label: 'New shell session, second key', section: 'Terminal', keys: key('KeyN', { meta: true }) },
+  // ⌘N starts a chat now; the second key is there to be recorded
+  { id: 'terminal.newTabAlt', label: 'New shell session, second key', section: 'Terminal', keys: null },
   { id: 'terminal.newClaudeTab', label: 'New Claude session', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
   { id: 'terminal.newChat', label: 'New chat, with the agent last picked in one', section: 'Terminal', keys: key('KeyC', { meta: true, alt: true }) },
   { id: 'terminal.splitRight', label: 'Split right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
@@ -512,6 +515,8 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
   if (open.sessions) return false
   const onPage = host.activeTab === TAB_ID
   const terminal = isTerminalFocused()
+  // Splits and panes also answer while the docked panel is on screen, before a click into it
+  const splits = onPage || terminal || host.isPanelVisible(TAB_ID)
   // Keys that work from anywhere in the app
   const anywhere: Record<string, () => void> = {
     'terminal.previousSession': () => stepSession(host, -1),
@@ -530,14 +535,14 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     return true
   }
   // On the Terminal page or in a docked terminal, like iTerm's ⌘D and ⇧⌘D
-  const split = (onPage || terminal) && scope.session ? actionForEvent(event, ['terminal.splitRight', 'terminal.splitDown']) : null
+  const split = splits && scope.session ? actionForEvent(event, ['terminal.splitRight', 'terminal.splitDown']) : null
   if (split && scope.session) {
     void splitSession(scope.session.id, split === 'terminal.splitRight' ? 'right' : 'bottom', host.flash)
     return true
   }
   // Between split panes in reading order, like iTerm's ⌘[ and ⌘]
   const panes = scope.panes.flat()
-  const pane = (onPage || terminal) && panes.length > 1 ? actionForEvent(event, ['terminal.previousPane', 'terminal.nextPane']) : null
+  const pane = splits && panes.length > 1 ? actionForEvent(event, ['terminal.previousPane', 'terminal.nextPane']) : null
   if (pane) {
     const index = panes.findIndex((candidate) => candidate.id === scope.session?.id)
     focusSession(panes[(index + (pane === 'terminal.nextPane' ? 1 : -1) + panes.length) % panes.length].id)
@@ -676,7 +681,14 @@ const plugin: RendererPlugin = {
           if (now === before || !(now instanceof HTMLInputElement)) focusSession(id)
         }, 50)
       },
+      wake: wakeSession,
       close: killSession,
+      getClosed: () => getTerminals().history,
+      reopen: async (closedId) => {
+        const entry = getTerminals().history.find((candidate) => candidate.id === closedId)
+        return entry ? restoreClosedSession(entry) : null
+      },
+      forget: forgetClosedSession,
       rename: renameSession,
       menu: (id, flash, onRename) => {
         const session = getTerminals().sessions.find((candidate) => candidate.id === id)

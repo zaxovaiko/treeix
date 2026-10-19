@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Repo } from '@treeix/shared/types'
 import { useService } from '@treeix/app/plugins'
-import { actionKeys, shortcutOf } from '@treeix/shared/keymap'
+import { actionKeys, shortcutOf, withKeys } from '@treeix/shared/keymap'
 import { toAccelerator, keysText } from '@treeix/shared/shortcut'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
@@ -16,7 +16,7 @@ import { Picker, type PickerOption } from '@treeix/app/Picker'
 import { LazyMarkdown as Markdown } from '@treeix/app/LazyMarkdown'
 import { droppedPaths } from './fileLinks'
 import type { SplitEdge } from './paneLayout'
-import { pickedFolder, recentFolders, setFolderPickerOpen, setPickedFolder, useFolderPickerOpen } from './folder'
+import { setFolderPickerOpen, setPickedFolder, useFolderPickerOpen, useFolders } from './folder'
 import { renaming, startRename } from './rename'
 import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
@@ -49,9 +49,6 @@ import {
   wakeSession
 } from './terminals'
 
-type DockSide = 'left' | 'right' | 'bottom'
-const DOCK_SIDES: DockSide[] = ['bottom', 'left', 'right']
-
 const draggingFiles = (event: React.DragEvent): boolean => event.dataTransfer.types.includes('Files')
 
 const LONG_PRESS_MS = 400
@@ -68,6 +65,7 @@ export const openSession = (cwd: string, kind: SessionKind, view: SessionViewKin
 
 /** Each agent in a terminal, then a chat while the chat plugin is on */
 export function useNewSessionEntries(): NewTabEntry[] {
+  'use no memo' // the chat agent is read from settings during render
   const chat = useService('chat')
   // The chat starts with the agent last picked in one
   useSettings()
@@ -171,6 +169,67 @@ export const sessionEntries = (session: Session, flash: (message: string) => voi
   { label: 'Close session', accelerator: 'CmdOrCtrl+W', run: () => killSession(session.id) }
 ]
 
+/** The docked panel's open terminals as tabs: a click shows one, ⌘W or the cross closes it */
+function SessionTabs({
+  tabs,
+  shownId,
+  renamingId,
+  flash
+}: {
+  tabs: Session[]
+  shownId: string | null
+  renamingId: string | null
+  flash: (message: string) => void
+}): React.JSX.Element {
+  return (
+    // A mouse wheel scrolls the tabs sideways, and the shown one scrolls into view
+    <div
+      role="tablist"
+      onWheel={(event) => (event.currentTarget.scrollLeft += event.deltaY)}
+      className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [-webkit-app-region:no-drag]"
+    >
+      {tabs.map((tab) => (
+        <div
+          key={tab.id}
+          role="tab"
+          tabIndex={-1}
+          aria-selected={tab.id === shownId}
+          ref={tab.id === shownId ? (tab) => tab?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) : undefined}
+          title={`${tab.title} · ${worktreeLabel(null, tab.worktreePath)}`}
+          onClick={() => focusSession(tab.id)}
+          onAuxClick={(event) => event.button === 1 && killSession(tab.id)}
+          onDoubleClick={() => startRename(tab.id)}
+          onContextMenu={(event) => openMenu(event, sessionEntries(tab, flash))}
+          className={`group/tab flex h-7 max-w-40 min-w-0 shrink-0 cursor-default items-center gap-1.5 rounded-md pr-1 pl-2 text-xs ${
+            tab.id === shownId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+          }`}
+        >
+          <KindBadge kind={tab.kind} />
+          {renamingId === tab.id ? <SessionNameInput session={tab} /> : <span className="min-w-0 truncate">{tab.title}</span>}
+          {/* The close button takes the status dot's slot on hover */}
+          <span className="grid size-4 shrink-0 place-items-center">
+            <span className="group-hover/tab:hidden">
+              <StatusDot session={tab} />
+            </span>
+            <button
+              title="Close (⌘W)"
+              aria-label={`Close ${tab.title}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                killSession(tab.id)
+                focusShown()
+              }}
+              className="hidden size-4 place-items-center rounded hover:bg-foreground/10 group-hover/tab:grid"
+            >
+              <Icon name="close" className="size-2.5" />
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const SessionNameInput = ({ session }: { session: Session }): React.JSX.Element => (
   <NameInput value={session.title} label="Session name" onSave={(name) => renameSession(session.id, name)} onClose={() => renaming.update({ id: null })} onDone={focusShown} />
 )
@@ -244,13 +303,17 @@ function SessionView({ session }: { session: Session }): React.JSX.Element {
   )
 }
 
-const stripButton = 'grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'
+/** The app's IconButton, so the terminal's header lines up with every other panel's */
+const stripButton = 'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'
 
 const CHOOSE = 'choose:'
 const DEFAULT = 'default:'
 
 /** Where new sessions start: the workspace's checkouts, recent picks, home, or any folder (⌘O) */
 function FolderPicker({ label, current, onGo }: { label: string; current: string; onGo: (path: string) => void }): React.JSX.Element {
+  'use no memo' // shortcut labels are read from settings during render
+  useSettings()
+  const { picked: pickedFolders, recent } = useFolders()
   const host = useHost()
   const open = useFolderPickerOpen()
   const [query, setQuery] = useState('')
@@ -263,7 +326,6 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
       return { id: path, label: `${section} ${name} ${path}`, section, render: <FolderRow name={name} path={path} /> }
     }
   // Recent picks first, the likeliest next; everything below leaves them out so no folder shows twice
-  const recent = recentFolders()
   const unseen = (path: string): boolean => !recent.includes(path)
   // A project with one checkout is one row under Projects; one with worktrees gets a section, its main checkout first
   const single = inScope.filter((repo) => repo.worktrees.length <= 1 && unseen(repo.worktrees[0]?.path ?? repo.path))
@@ -285,7 +347,7 @@ function FolderPicker({ label, current, onGo }: { label: string; current: string
   })
   // A typed absolute or ~ path is an option of its own, so folders outside the lists are reachable
   const typedPath = query.startsWith('~/') ? `${home}${query.slice(1)}` : query.startsWith('/') ? query : null
-  const picked = pickedFolder(host.workspaceId)
+  const picked = pickedFolders[host.workspaceId] ?? null
   const options = [
     ...recent.map((path) => option('Recent')(path)),
     ...projectOptions,
@@ -333,28 +395,28 @@ function FolderRow({ name, path }: { name: string; path: string }): React.JSX.El
 /** The session on screen with a new session button; on the Terminal page also the sidebar, list and inspector toggles */
 function SessionBar({
   session,
+  tabs,
   label,
   cwd,
   repos,
   page,
   onHide,
-  side,
-  onMove,
   onGoToFolder
 }: {
   session: Session | null
+  tabs?: Session[]
   label: string
   cwd: string
   repos: Repo[] | null
   page: boolean
   onHide?: () => void
-  side?: DockSide
-  onMove?: (side: DockSide) => void
   onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
+  'use no memo' // shortcut labels are read from settings during render
+  useSettings()
   const host = useHost()
   const panels = usePanels()
-  const { id: renamingId } = renaming.use()
+  const { id: renamingId } = renaming.useValue()
   // In zen the page's strip moves up beside the traffic lights and drags the window, in place of the title bar
   const chromeless = useChromeless()
   const topBar = page && panels.zen && !chromeless
@@ -376,39 +438,63 @@ function SessionBar({
   const plans = useService('plans')
   const planName = session?.view === 'terminal' ? session.planName : null
   return (
-    <div className={`@container ${PANE_HEADER} gap-1 px-1.5 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
+    <div className={`@container ${PANE_HEADER} gap-1 pr-2 pl-2 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
-          <button title={`Sidebar${actionKeys('app.sidebar') ? ` (${actionKeys('app.sidebar')})` : ''}`} onClick={() => runAction('app.sidebar')} className={stripButton}>
+          <button title={withKeys('Sidebar', 'app.sidebar')} onClick={() => runAction('app.sidebar')} className={stripButton}>
             <Icon name="panel" className="size-3.5" />
           </button>
           {onGoToFolder && <FolderPicker label={label} current={session?.worktreePath ?? cwd} onGo={onGoToFolder} />}
           <span className="ml-1 h-4 w-px shrink-0 bg-border" />
         </div>
       )}
-      {session && (
-        <div
-          onContextMenu={(event) => openMenu(event, sessionEntries(session, host.flash))}
-          className="flex min-w-0 items-center gap-2 overflow-hidden [-webkit-app-region:no-drag]"
-        >
-          <KindBadge kind={session.kind} />
-          {session.view === 'chat' && <ChatMark />}
-          {renamingId === session.id ? (
-            <SessionNameInput session={session} />
-          ) : (
-            <span onDoubleClick={() => startRename(session.id)} className="min-w-0 truncate text-xs font-medium text-foreground">
-              {session.title}
-            </span>
-          )}
-          <span className="min-w-0 truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>
-          <StatusDot session={session} />
-        </div>
+      {tabs ? (
+        <SessionTabs tabs={tabs} shownId={session?.id ?? null} renamingId={renamingId} flash={host.flash} />
+      ) : (
+        session && (
+          <div
+            onContextMenu={(event) => openMenu(event, sessionEntries(session, host.flash))}
+            className="flex min-w-0 items-center gap-2 overflow-hidden [-webkit-app-region:no-drag]"
+          >
+            <KindBadge kind={session.kind} />
+            {session.view === 'chat' && <ChatMark />}
+            {renamingId === session.id ? (
+              <SessionNameInput session={session} />
+            ) : (
+              <span onDoubleClick={() => startRename(session.id)} className="min-w-0 truncate text-xs font-medium text-foreground">
+                {session.title}
+              </span>
+            )}
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">{worktreeLabel(repos, session.worktreePath)}</span>
+            <StatusDot session={session} />
+          </div>
+        )
       )}
       <span className="min-w-2 flex-1" />
       {session && <DiagramsButton session={session} />}
+      {tabs && session && (
+        <>
+          <button
+            title={withKeys('Split right', 'terminal.splitRight')}
+            aria-label="Split right"
+            onClick={() => void splitSession(session.id, 'right', host.flash)}
+            className={stripButton}
+          >
+            <Icon name="splitRight" className="size-3.5" />
+          </button>
+          <button
+            title={withKeys('Split down', 'terminal.splitDown')}
+            aria-label="Split down"
+            onClick={() => void splitSession(session.id, 'bottom', host.flash)}
+            className={stripButton}
+          >
+            <Icon name="splitDown" className="size-3.5" />
+          </button>
+        </>
+      )}
       {plans && session?.view === 'terminal' && (session.kind === 'claude' || planName) && <plans.PlanButton startedAt={session.startedAt} name={planName} />}
       <button
-        title={`New shell (${actionKeys('terminal.newTab')}); hold or right-click for Claude (${actionKeys('terminal.newClaudeTab')}) and other agents`}
+        title={withKeys('New shell; hold or right-click for Claude and other agents', 'terminal.newTab')}
         aria-label="New session"
         onPointerDown={(event) => {
           held.current = false
@@ -425,7 +511,8 @@ function SessionBar({
       >
         <Icon name="plus" className="size-3.5" />
       </button>
-      {session && (
+      {/* Docked, the cross closes the panel; the session closes from its menu or ⌘W */}
+      {session && !onHide && (
         <button
           title="Close to History (⌘W)"
           aria-label="Close session"
@@ -440,7 +527,7 @@ function SessionBar({
       )}
       {page && !panels.inIsland('inspector') && (
         <button
-          title={`${panels.inspector ? 'Hide' : 'Show'} inspector${actionKeys('panel.inspector') ? ` (${actionKeys('panel.inspector')})` : ''}`}
+          title={withKeys(`${panels.inspector ? 'Hide' : 'Show'} inspector`, 'panel.inspector')}
           aria-label="Toggle inspector"
           onClick={() => panels.toggle('inspector')}
           className={`${stripButton} ${panels.inspector ? 'text-foreground' : ''}`}
@@ -448,30 +535,9 @@ function SessionBar({
           <Icon name="panel" className="size-3.5 -scale-x-100" />
         </button>
       )}
-      {side && onMove && (
-        <button
-          title={`Docked ${side}; click to move`}
-          aria-label="Move terminal panel"
-          onClick={(event) =>
-            openMenu(
-              event,
-              DOCK_SIDES.filter((target) => target !== side).map((target) => ({ label: `Dock ${target}`, run: () => onMove(target) }))
-            )
-          }
-          className={stripButton}
-        >
-          <Icon name="panel" className={`size-3.5 ${side === 'bottom' ? 'rotate-90 -scale-x-100' : side === 'right' ? '-scale-x-100' : ''}`} />
-        </button>
-      )}
       {onHide && (
-        <button
-          title={`Hide the terminal panel${actionKeys('panel.terminal') ? ` (${actionKeys('panel.terminal')})` : ''}`}
-          aria-label="Hide terminal panel"
-          onClick={onHide}
-          className={stripButton}
-        >
-          {/* Points to the edge it folds into; a cross here would read as the session's close beside it */}
-          <Icon name="chevron" className={`size-3.5 ${side === 'bottom' ? 'rotate-90' : side === 'left' ? 'rotate-180' : ''}`} />
+        <button title={withKeys('Close the terminal panel', 'panel.terminal')} aria-label="Close terminal panel" onClick={onHide} className={stripButton}>
+          <Icon name="close" className="size-3" />
         </button>
       )}
     </div>
@@ -563,6 +629,7 @@ function EmptySessions({ label, cwd, history, repos }: { label: string; cwd: str
 /** The session the workspace has on screen, under its toolbar */
 export function WorkspaceTerminals({
   session,
+  tabs,
   panes,
   label,
   cwd,
@@ -570,12 +637,12 @@ export function WorkspaceTerminals({
   repos,
   page,
   onHide,
-  side,
-  onMove,
   onGoToFolder
 }: {
   /** The session on screen, picked in the sidebar */
   session: Session | null
+  /** Docked, the sessions shown as tabs in the bar */
+  tabs?: Session[]
   /** The sessions on screen, as columns of stacked panes: the shown session alone, or the split it is in */
   panes: Session[][]
   /** The workspace's name for the empty state */
@@ -590,8 +657,6 @@ export function WorkspaceTerminals({
   /** Closes the panel, when docked */
   onHide?: () => void
   /** Where the panel is docked, and moving it elsewhere */
-  side?: DockSide
-  onMove?: (side: DockSide) => void
   /** Goes to a folder picked from the toolbar, on the Terminal page */
   onGoToFolder?: (path: string) => void
 }): React.JSX.Element {
@@ -619,7 +684,7 @@ export function WorkspaceTerminals({
   })
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <SessionBar session={session} label={label} cwd={cwd} repos={repos} page={page} onHide={onHide} side={side} onMove={onMove} onGoToFolder={onGoToFolder} />
+      <SessionBar session={session} tabs={tabs} label={label} cwd={cwd} repos={repos} page={page} onHide={onHide} onGoToFolder={onGoToFolder} />
       {session ? (
         <div data-terminal-panes className="flex min-h-0 min-w-0 flex-1">
           {panes.map((column, index) => (

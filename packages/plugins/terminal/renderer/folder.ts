@@ -19,18 +19,19 @@ export function setPickedFolder(workspaceId: string, path: string | null): void 
 }
 
 export const pickedFolder = (workspaceId: string): string | null => folders.get().picked[workspaceId] ?? null
-export const recentFolders = (): string[] => folders.get().recent
 
 /** Where terminals start: the picked folder, else the app's default */
 export const terminalCwd = (host: HostApi): string => pickedFolder(host.workspaceId) ?? host.defaultCwd
 
 /** Rerenders on a pick; returns the folder terminals start in */
 export function useTerminalCwd(host: HostApi): string {
-  folders.use()
-  return terminalCwd(host)
+  const { picked } = folders.useValue()
+  return picked[host.workspaceId] ?? host.defaultCwd
 }
+
+export const useFolders = folders.useValue
 
 // Open from the folder button or ⌘⇧P, so the key can open the dropdown the page draws
 const pickerOpen = createStore(false)
 export const setFolderPickerOpen = pickerOpen.set
-export const useFolderPickerOpen = pickerOpen.use
+export const useFolderPickerOpen = pickerOpen.useValue

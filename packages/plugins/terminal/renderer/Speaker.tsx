@@ -67,7 +67,7 @@ function Orb({ words }: { words: number }): React.JSX.Element {
 
 export function Speaker(): React.JSX.Element | null {
   const host = useHost()
-  const current = hearing.use()
+  const current = hearing.useValue()
   const open = current !== null
   useEffect(() => {
     if (!open) return

@@ -24,7 +24,7 @@ import {
 } from './sessionMeta'
 import { isString, list, object, stringValues } from '@treeix/shared/json'
 import { readStored } from '@treeix/app/storage'
-import { type PaneLayout, placePane, removePane, type SplitEdge } from './paneLayout'
+import { fittingEdge, type PaneLayout, placePane, removePane, type SplitEdge } from './paneLayout'
 import { notify as notifyCenter } from '@treeix/app/notifications'
 import { primaryKey } from '@treeix/shared/shortcut'
 import { IS_MAC } from '@treeix/shared/platform'
@@ -398,21 +398,20 @@ export function selectSession(id: string): void {
   })
 }
 
-const SPLIT_MIN = { width: 240, height: 120 }
-
 /** New shell beside the session, in its folder, like iTerm's ⌘D and ⇧⌘D */
 export async function splitSession(anchorId: string, edge: SplitEdge, flash: (message: string) => void): Promise<void> {
   const anchor = findSession(anchorId)
   if (!anchor) return
-  // Halves narrower than a short command line, or a few rows tall, are no use; the pane on screen decides
+  // The pane on screen decides
   const box = [...document.querySelectorAll(`[data-session-id="${anchorId}"]`)].map((pane) => pane.getBoundingClientRect()).find((rect) => rect.width > 0)
-  if (box && (edge === 'right' ? box.width / 2 < SPLIT_MIN.width : box.height / 2 < SPLIT_MIN.height)) return flash(`No room to split ${edge === 'right' ? 'right' : 'down'}`)
+  const fitting = box ? fittingEdge(box, edge) : edge
+  if (!fitting) return flash(`No room to split ${edge === 'right' ? 'right' : 'down'}`)
   const id = await startSession(anchor.worktreePath, 'shell')
   const workspaceId = findSession(id)?.workspaceId
   // A session listed in this workspace but started in another can't share its split
   if (workspaceId !== anchor.workspaceId) return revealSession(id)
   const layout = state.splits[workspaceId]?.flat().includes(anchorId) ? state.splits[workspaceId] : [[anchorId]]
-  update({ splits: { ...state.splits, [workspaceId]: placePane(layout, id, anchorId, edge) } })
+  update({ splits: { ...state.splits, [workspaceId]: placePane(layout, id, anchorId, fitting) } })
   // Focusing the new pane selects it, once the focus has moved, so the sidebar reads the new one
   setTimeout(() => focusSession(id))
 }
