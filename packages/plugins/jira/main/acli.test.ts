@@ -30,6 +30,7 @@ test('toWorkItem reads Jira issue JSON and builds the browse link', () => {
     assignee: null,
     assigneeAvatar: null,
     assigneeId: null,
+    labels: [],
     project: 'Openora',
     updatedAt: '2026-09-17T10:00:00.000+0000',
     url: 'https://team.atlassian.net/browse/OPN-412'

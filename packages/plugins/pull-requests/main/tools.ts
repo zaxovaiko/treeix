@@ -1,6 +1,6 @@
 import type { McpTool } from '@treeix/sdk/main'
 import { text } from '@treeix/shared/json'
-import type { PullRequest, ReviewThread } from '../shared/types'
+import type { PullRequest, ReviewEvent, ReviewThread } from '../shared/types'
 import { cli, failedJobLogs, pullRequestAt, pullRequestDetail } from './prs'
 
 export type OpenComment = { id: string; threadId: string; author: string; body: string; path: string | null; line: number | null }
@@ -14,6 +14,18 @@ export const openComments = (threads: ReviewThread[]): OpenComment[] =>
         .filter((comment) => comment.body.trim())
         .map((comment) => ({ id: comment.id, threadId: thread.id, author: comment.author, body: comment.body, path: thread.path, line: thread.line }))
     )
+
+/** When a reviewer last requested changes, among those whose latest verdict still does; null when nobody does */
+export function changesRequestedAt(events: ReviewEvent[]): string | null {
+  const latest = new Map(events.map((event) => [event.author, event]))
+  return (
+    [...latest.values()]
+      .filter((event) => event.verdict === 'changes')
+      .map((event) => event.createdAt)
+      .sort()
+      .at(-1) ?? null
+  )
+}
 
 const pullRequestArgs = {
   type: 'object',
@@ -32,12 +44,15 @@ async function pullRequest(args: Record<string, unknown>): Promise<PullRequest> 
 export const pullRequestTools: McpTool[] = [
   {
     name: 'pr_status',
-    description: 'A pull request as JSON: state (open, merged, closed), draft, branches, conflicts and the CI pipeline (passed, failed, running).',
+    description:
+      'A pull request as JSON: state (open, merged, closed), draft, branches, conflicts, the CI pipeline (passed, failed, running) and changesRequestedAt, when a reviewer last requested changes while one still does.',
     inputSchema: pullRequestArgs,
     run: (args) =>
       cli(async () => {
-        const { number, title, state, draft, sourceBranch, targetBranch, conflicts, pipeline, url } = await pullRequest(args)
-        return JSON.stringify({ number, title, state, draft, sourceBranch, targetBranch, conflicts, pipeline, url })
+        const found = await pullRequest(args)
+        const { number, title, state, draft, sourceBranch, targetBranch, conflicts, pipeline, url } = found
+        const requested = state === 'open' ? changesRequestedAt((await pullRequestDetail(found)).reviewEvents) : null
+        return JSON.stringify({ number, title, state, draft, sourceBranch, targetBranch, conflicts, pipeline, url, changesRequestedAt: requested })
       })
   },
   {

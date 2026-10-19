@@ -3,6 +3,7 @@ import { File, Virtualizer } from '@pierre/diffs/react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { codeThemeOptions, diffBackground } from '@treeix/app/FileView'
+import { useSettings } from '@treeix/app/settings'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { EmptyState, errorMessage } from '@treeix/app/ui'
 
@@ -11,6 +12,8 @@ import { EmptyState, errorMessage } from '@treeix/app/ui'
  * focus outside the zones, so the page's bare keys stay off while it is open, and hands focus back on close.
  */
 export function FullFileView({ path, subtitle, load, onClose }: { path: string; subtitle: string; load: () => Promise<string | null>; onClose: () => void }): React.JSX.Element {
+  'use no memo' // code theme is read from settings during render
+  useSettings()
   const [contents, setContents] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const dialog = useRef<HTMLDivElement>(null)

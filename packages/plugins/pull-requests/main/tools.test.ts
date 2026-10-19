@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import type { ReviewThread, ThreadComment } from '../shared/types'
-import { openComments } from './tools'
+import type { ReviewEvent, ReviewThread, ThreadComment } from '../shared/types'
+import { changesRequestedAt, openComments } from './tools'
 
 const comment = (id: string, body: string): ThreadComment => ({
   id,
@@ -31,4 +31,12 @@ test('openComments keeps the comments of open threads and the conversation, with
     ['review:2', 't1'],
     ['issue:5', 't3']
   ])
+})
+
+test('changesRequestedAt is the newest change request of reviewers who still want changes', () => {
+  const event = (author: string, verdict: ReviewEvent['verdict'], createdAt: string): ReviewEvent => ({ author, avatarUrl: null, verdict, createdAt })
+  expect(changesRequestedAt([])).toBeNull()
+  expect(changesRequestedAt([event('ana', 'changes', '2026-01-01'), event('ana', 'approved', '2026-01-02')])).toBeNull()
+  expect(changesRequestedAt([event('ana', 'changes', '2026-01-01'), event('bo', 'changes', '2026-01-03'), event('bo', 'approved', '2026-01-04')])).toBe('2026-01-01')
+  expect(changesRequestedAt([event('ana', 'changes', '2026-01-01'), event('ana', 'changes', '2026-01-05')])).toBe('2026-01-05')
 })

@@ -10,8 +10,8 @@ import type { Epic, WorkItem, WorkItemDetail, WorkItemEdit, WorkItemList } from 
 
 const LIST_LIMIT = 200
 // Search only allows the fields it can print; view takes any field
-const SEARCH_FIELDS = 'key,summary,status,issuetype,priority,assignee'
-const DETAIL_FIELDS = `${SEARCH_FIELDS},project,updated,description,reporter,labels,comment,attachment,parent`
+const SEARCH_FIELDS = 'key,summary,status,issuetype,priority,assignee,labels'
+const DETAIL_FIELDS = `${SEARCH_FIELDS},project,updated,description,reporter,comment,attachment,parent`
 /** acli processes started at once while listing epic children */
 const EPIC_CONCURRENCY = 6
 
@@ -36,6 +36,7 @@ export function toWorkItem(raw: unknown, site: string | null): WorkItem {
     assignee: orNull(text(object(fields.assignee).displayName)),
     assigneeAvatar: avatarOf(fields.assignee),
     assigneeId: orNull(text(object(fields.assignee).accountId)),
+    labels: list(fields.labels, isString),
     // Search can't return the project, so the key prefix stands in until the detail loads
     project: text(object(fields.project).name) || key.split('-')[0],
     updatedAt: text(fields.updated),

@@ -427,7 +427,7 @@ export function TicketMain({
                 trigger={
                   <span
                     aria-label={ticket.linked[0] ? 'Go to worktree' : 'Open worktree'}
-                    className="flex h-7 min-w-7 items-center justify-center gap-1.5 rounded-md bg-primary px-1.5 text-xs text-white hover:bg-primary/90"
+                    className="flex h-7 min-w-7 items-center justify-center gap-1.5 rounded-md bg-primary px-1.5 text-xs text-primary-foreground hover:bg-primary/90"
                   >
                     <Icon name="branch" className="size-3.5" />
                     <Kbd hint>w</Kbd>

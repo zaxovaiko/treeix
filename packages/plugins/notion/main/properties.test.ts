@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { pageTitle, plainProperties, toProperties, whereFilter } from './properties'
+import { pageLabels, pageTitle, plainProperties, toProperties, whereFilter } from './properties'
 
 const schema = {
   Name: { type: 'title' },
@@ -62,4 +62,15 @@ test('page properties read back as plain values', () => {
     Done: false
   })
   expect(pageTitle(properties)).toBe('Ship it')
+})
+
+test('pageLabels takes select and multi-select values, which name what a page is about', () => {
+  const properties = {
+    Name: { type: 'title', title: [{ plain_text: 'Fix it' }] },
+    Type: { type: 'select', select: { name: 'Ariex' } },
+    Agent: { type: 'select', select: null },
+    Tags: { type: 'multi_select', multi_select: [{ name: 'Betfeel' }, { name: 'Marketing' }] },
+    Status: { type: 'status', status: { name: 'Done' } }
+  }
+  expect(pageLabels(properties)).toEqual(['Ariex', 'Betfeel', 'Marketing'])
 })

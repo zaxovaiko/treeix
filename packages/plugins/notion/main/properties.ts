@@ -98,6 +98,15 @@ const plainText = (value: unknown): string =>
 const nameOf = (value: unknown): string | null => (isJson(value) && typeof value.name === 'string' ? value.name : null)
 
 /** A page's property values as plain JSON, for agents to read */
+/** A page's select and multi-select values, which say what it is about, like its project */
+export function pageLabels(properties: unknown): string[] {
+  return Object.values(isJson(properties) ? properties : {}).flatMap((property) => {
+    if (!isJson(property)) return []
+    if (property.type === 'select') return [nameOf(property.select)].filter((name) => name !== null)
+    return property.type === 'multi_select' && Array.isArray(property.multi_select) ? property.multi_select.map(nameOf).filter((name) => name !== null) : []
+  })
+}
+
 export function plainProperties(properties: unknown): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(isJson(properties) ? properties : {}).map(([name, property]): [string, unknown] => {

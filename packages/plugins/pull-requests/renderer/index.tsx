@@ -115,7 +115,7 @@ function PullRequestsTab(): React.JSX.Element {
 /** Background refresh of the current workspace's pull requests, so the tab opens on fresh data */
 function Polling(): null {
   const { scopeRepoPaths } = useHost()
-  const { prPollMinutes } = prSettings.use()
+  const { prPollMinutes } = prSettings.useValue()
   const scopeKey = scopeRepoPaths ? scopeKeyOf(scopeRepoPaths) : ''
   useEffect(() => {
     if (prPollMinutes === 0 || !scopeRepoPaths?.length) return
@@ -149,7 +149,7 @@ function PullRequestsCount(): React.JSX.Element | null {
 }
 
 function PullRequestSettings(): React.JSX.Element {
-  const { prFilesView, prPollMinutes } = prSettings.use()
+  const { prFilesView, prPollMinutes } = prSettings.useValue()
   return (
     <Card title="Review">
       <Row

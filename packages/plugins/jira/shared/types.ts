@@ -12,6 +12,8 @@ export type WorkItem = {
   assigneeAvatar: string | null
   /** Account id, which assigning needs; absent in lists cached before it was added */
   assigneeId?: string | null
+  /** Absent in lists cached before it was added */
+  labels?: string[]
   project: string
   /** Empty in search results, which can't include it */
   updatedAt: string

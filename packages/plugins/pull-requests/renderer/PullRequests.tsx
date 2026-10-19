@@ -19,7 +19,7 @@ import {
   type ThreadComment
 } from '../shared/types'
 import { allFolders, ChangedFileList, folderPaths } from '@treeix/app/ChangedFiles'
-import { groupOpen } from '@treeix/app/settings'
+import { groupOpen, useSettings } from '@treeix/app/settings'
 import { api, imageResolver, prSettings } from './api'
 import { CodeNavigationContext, useSymbolNavigation } from '@treeix/app/codeNavigation'
 import { matchesAction } from '@treeix/shared/keymap'
@@ -884,7 +884,7 @@ function ThreadCard({
                     <button
                       disabled={!editing.body.trim() || editing.body.trim() === comment.body}
                       onClick={() => onSaveEdit(comment, editing.body.trim())}
-                      className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-white disabled:bg-muted disabled:text-muted-foreground"
+                      className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
                     >
                       Save
                     </button>
@@ -1018,6 +1018,8 @@ export function PullRequestDetailView({
   /** The pull request list, when it sits beside this view */
   list?: React.ReactNode
 }): React.JSX.Element {
+  'use no memo' // folder groups and the code theme are read from settings during render
+  useSettings()
   const host = useHost()
   const { zone } = useZone()
   const [detail, setDetail] = useScopedState<PullRequestDetail | null>(pr.url, null)
@@ -1047,7 +1049,7 @@ export function PullRequestDetailView({
   const [addedThreads, setAddedThreads] = useScopedState<Set<string>>(pr.url, new Set())
   /** The file with an open whole-file comment draft */
   const [fileCommentPath, setFileCommentPath] = useScopedState<string | null>(pr.url, null)
-  const { prFilesView } = prSettings.use()
+  const { prFilesView } = prSettings.useValue()
   const allFiles = prFilesView === 'all'
   const [draft, setDraft] = useScopedState<LineRange | null>(pr.url, null)
   const [composing, setComposing] = useScopedState(pr.url, false)
@@ -1774,7 +1776,7 @@ export function PullRequestDetailView({
               <button
                 onClick={() => (mergeBlocked ? host.flash(mergeBlocked) : setPicker('merge'))}
                 title={mergeBlocked ?? `Merge into ${pr.targetBranch}`}
-                className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium ${mergeBlocked ? 'text-muted-foreground ring-1 ring-border' : 'bg-primary text-white hover:bg-primary/90'}`}
+                className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium ${mergeBlocked ? 'text-muted-foreground ring-1 ring-border' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
               >
                 <Icon name={merging ? 'loader' : 'pullRequest'} className="size-3.5" />
                 {merging ? 'Merging…' : 'Merge'}
@@ -1791,7 +1793,7 @@ export function PullRequestDetailView({
               // A held Enter from the picker must not repeat into this button
               onKeyDown={(event) => event.key === 'Enter' && event.repeat && event.preventDefault()}
               disabled={merging}
-              className="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 focus-visible:bg-primary/80 disabled:opacity-60"
+              className="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-visible:bg-primary/80 disabled:opacity-60"
             >
               <Icon name={merging ? 'loader' : 'pullRequest'} className="size-3.5 shrink-0" />
               <span className="truncate">{merging ? 'Merging…' : `${MERGE_METHODS[confirmMerge].label} into ${pr.targetBranch}`}</span>

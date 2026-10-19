@@ -86,7 +86,7 @@ const focusField = (id: string): boolean => {
 }
 
 export function JiraTasks(): React.JSX.Element {
-  const { jql, statusBuckets } = jiraSettings.use()
+  const { jql, statusBuckets } = jiraSettings.useValue()
   const host = useHost()
   const panels = usePanels()
   const { zone } = useZone()
@@ -112,7 +112,7 @@ export function JiraTasks(): React.JSX.Element {
   /** A group header under the list cursor; null while the cursor is on the selected item */
   const [cursorGroup, setCursorGroup] = useState<string | null>(null)
 
-  const requested = selection.use().key
+  const requested = selection.useValue().key
   useEffect(() => {
     if (!requested) return
     setSelectedKey(requested)

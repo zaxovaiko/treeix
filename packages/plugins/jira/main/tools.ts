@@ -9,13 +9,13 @@ const keyArg = { key: { type: 'string', description: 'Work item key, such as ABC
 export const jiraTools: McpTool[] = [
   {
     name: 'jira_search',
-    description: 'Work items a JQL query matches, up to 200, as JSON: key, summary, status, type, assignee and url.',
+    description: 'Work items a JQL query matches, up to 200, as JSON: key, summary, status, type, assignee, labels and url.',
     inputSchema: { type: 'object', properties: { jql: { type: 'string' } }, required: ['jql'] },
     run: async (args) => {
       const jql = text(args.jql).trim()
       if (!jql) throw new Error('jql is required')
       const { items } = await searchWorkItems(jql)
-      return JSON.stringify(items.map(({ key, summary, status, type, assignee, url }) => ({ key, summary, status, type, assignee, url })))
+      return JSON.stringify(items.map(({ key, summary, status, type, assignee, labels, url }) => ({ key, summary, status, type, assignee, labels, url })))
     }
   },
   {

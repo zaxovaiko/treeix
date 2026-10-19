@@ -59,7 +59,7 @@ function IssuePreview({ url }: { url: string }): React.JSX.Element {
 }
 
 function JiraSettings(): React.JSX.Element {
-  const { jql } = jiraSettings.use()
+  const { jql } = jiraSettings.useValue()
   const [draft, setDraft] = useState(jql)
   useEffect(() => setDraft(jql), [jql])
   return (

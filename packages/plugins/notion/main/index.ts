@@ -4,7 +4,7 @@ import { createSecrets } from '@treeix/host/secrets'
 import type { MainPlugin } from '@treeix/sdk/main'
 import { isJson, list, text } from '@treeix/shared/json'
 import { notion, whoIs } from './api'
-import { pageTitle, plainProperties, type Schema, toProperties, whereFilter } from './properties'
+import { pageLabels, pageTitle, plainProperties, type Schema, toProperties, whereFilter } from './properties'
 
 const PAGE_ID = /[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/i
 const COMMENT_CHARS = 2000
@@ -95,7 +95,7 @@ const plugin: MainPlugin = {
     context.mcpTool({
       name: 'notion_query',
       description:
-        'Pages of a Notion data source whose properties match `where`, as JSON: id, title and url. `where` is `Property = value`, several joined by AND; checkbox, select, status, multi-select (contains) and text properties.',
+        'Pages of a Notion data source whose properties match `where`, as JSON: id, title, url and labels (its select and multi-select values). `where` is `Property = value`, several joined by AND; checkbox, select, status, multi-select (contains) and text properties.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -116,7 +116,8 @@ const plugin: MainPlugin = {
           list(reply.results).map((page) => ({
             id: text(page.id),
             title: pageTitle(page.properties),
-            url: text(page.url)
+            url: text(page.url),
+            labels: pageLabels(page.properties)
           }))
         )
       }
