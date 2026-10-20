@@ -127,8 +127,7 @@ function ChatThread({
   onFolder,
   onTerminal,
   onPage,
-  onSearch,
-  lead
+  onSearch
 }: {
   session: SessionSummary
   recent: string[]
@@ -140,8 +139,6 @@ function ChatThread({
   /** Toggles a plugin's page, like Schema, in the right panel */
   onPage: (id: string) => void
   onSearch: () => void
-  /** The show sidebar button while the sidebar is hidden */
-  lead: React.ReactNode
 }): React.JSX.Element {
   const { loaded } = usePlugins()
   const pages = loaded.flatMap(({ plugin }) => plugin.tabs ?? []).filter((tab) => SIDE_PAGES.has(tab.id))
@@ -158,7 +155,6 @@ function ChatThread({
   return (
     <>
       <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border px-4 [-webkit-app-region:drag]">
-        {lead}
         <AgentMark kind={session.kind} className="size-6 text-xs" />
         <span className="min-w-0 truncate text-[13px] font-medium">{session.title}</span>
         {title === null ? (
@@ -543,7 +539,7 @@ export function Bots(): React.JSX.Element {
   const sidebar = (
     <aside style={{ width: sidebarWidth }} className={`relative flex shrink-0 flex-col ${islandUi ? '' : 'border-r border-border'}`}>
       <div className={`flex h-10 shrink-0 items-center gap-1 px-2 ${chromeless ? '' : 'pl-[80px] [-webkit-app-region:drag]'}`}>
-        <IconButton label={withKeys('Hide sidebar', 'panel.list')} onClick={() => setSidebarShown(false)}>
+        <IconButton label={withKeys('Collapse sidebar', 'panel.list')} onClick={() => setSidebarShown(false)}>
           <Icon name="panel" />
         </IconButton>
         <span className="flex-1" />
@@ -642,18 +638,52 @@ export function Bots(): React.JSX.Element {
       <ResizeHandle onResize={setSidebarWidth} />
     </aside>
   )
-  // Beside the traffic lights, where the sidebar's own button was
-  const lead = sidebarShown ? null : (
-    <span className={`flex shrink-0 [-webkit-app-region:no-drag] ${chromeless ? '' : 'pl-[64px]'}`}>
-      <IconButton label={withKeys('Show sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
+  // The collapsed sidebar: its chats and bots as marks, named on hover
+  const rail = (
+    <aside className={`flex w-[72px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'border-r border-border'}`}>
+      {/* Under the traffic lights */}
+      <div className={`h-10 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+      <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
         <Icon name="panel" />
       </IconButton>
-    </span>
+      {canChat && (
+        <IconButton label={withKeys('New chat', 'chat.new')} active={onHome} onClick={() => setSelectedId(null)}>
+          <Icon name="plus" />
+        </IconButton>
+      )}
+      <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-2">
+        {bots.map((bot) => (
+          <button key={bot.id} title={bot.name} onClick={() => setSelectedId(bot.id)} className={`rounded-lg p-1 ${bot.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}>
+            <BotAvatar look={bot.look} attention={bot.status === 'attention'} />
+          </button>
+        ))}
+        {canChat &&
+          chats
+            .filter((session) => session.id === selectedId || !isDraft(session))
+            .map((session) => (
+              <button
+                key={session.id}
+                title={session.title}
+                onClick={() => setSelectedId(session.id)}
+                className={`relative rounded-lg p-1.5 ${session.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}
+              >
+                <AgentMark kind={session.kind} />
+                {(session.status === 'input' || session.status === 'running') && (
+                  <span className="absolute right-0 bottom-0 rounded-full bg-background p-0.5">
+                    <StatusDot session={session} />
+                  </span>
+                )}
+              </button>
+            ))}
+      </nav>
+      <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => setSelectedId(CONFIGURE)}>
+        <Icon name="settings" />
+      </IconButton>
+    </aside>
   )
-  const leadBar = lead && <div className={`flex h-10 shrink-0 items-center px-2 ${chromeless ? '' : '[-webkit-app-region:drag]'}`}>{lead}</div>
   return (
-    <div className={`flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} ${islandUi && !sidebarShown ? 'pl-2' : ''} font-sans text-foreground antialiased select-none`}>
-      {sidebarShown && sidebar}
+    <div className={`flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
+      {sidebarShown ? sidebar : rail}
       <PluginHost
         page={page}
         folder={selectedChat?.worktreePath ?? chatFolder}
@@ -663,14 +693,10 @@ export function Bots(): React.JSX.Element {
         search={search}
         onSearch={setSearch}
         onSettings={() => setSelectedId(CONFIGURE)}
-        lead={leadBar}
       >
         <main className={`flex min-w-[300px] flex-1 flex-col ${islandUi ? `overflow-hidden ${ISLAND}` : ''}`}>
           {selectedId === CONFIGURE ? (
-            <>
-              {leadBar}
-              <PluginPage id={CONFIGURE} />
-            </>
+            <PluginPage id={CONFIGURE} />
           ) : selectedChat ? (
             <ChatThread
               key={selectedChat.id}
@@ -684,16 +710,12 @@ export function Bots(): React.JSX.Element {
               onTerminal={() => (side === TERMINAL ? setSide(null) : openShell(selectedChat.worktreePath))}
               onPage={(id) => setSide(side === id ? null : id)}
               onSearch={() => setSearch(true)}
-              lead={lead}
             />
           ) : selected && hub ? (
-            <>
-              {leadBar}
-              <hub.Thread key={selected.id} botId={selected.id} />
-            </>
+            <hub.Thread key={selected.id} botId={selected.id} />
           ) : (
             <>
-              {leadBar ?? <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />}
+              <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
               <Home
                 draft={draft}
                 bots={bots}
