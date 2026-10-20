@@ -706,13 +706,12 @@ export function Bots(): React.JSX.Element {
   )
   // Pages whose header starts at the top left keep clear of the rail's corner
   const cornerBar = sidebarShown ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-  // Right of the traffic lights: on islands a corner of the rail reaching over the page, flat a bordered title section over the
-  // rail's top. Last in the page, since the window takes drag areas in page order: one earlier would sit under the page's
-  // draggable header and its button would miss the click
+  // Right of the traffic lights, a bordered title section over the rail's top. Last in the page, since the window takes
+  // drag areas in page order: one earlier would sit under the page's draggable header and its button would miss the click
   const corner = (
     <span
-      className={`absolute top-0 z-20 flex items-center ${chromeless ? '' : '[-webkit-app-region:drag]'} ${
-        islandUi ? 'left-[52px] h-11 rounded-br-xl bg-canvas pr-1.5 pb-2 pl-7' : 'left-0 h-9 rounded-br-xl border-r border-b border-border bg-background pr-3 pl-20'
+      className={`absolute top-0 left-0 z-20 flex h-9 items-center rounded-br-xl border-r border-b border-border pr-3 pl-20 ${islandUi ? 'bg-canvas' : 'bg-background'} ${
+        chromeless ? '' : '[-webkit-app-region:drag]'
       }`}
     >
       <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
