@@ -127,7 +127,8 @@ function ChatThread({
   onFolder,
   onTerminal,
   onPage,
-  onSearch
+  onSearch,
+  cornered
 }: {
   session: SessionSummary
   recent: string[]
@@ -139,6 +140,8 @@ function ChatThread({
   /** Toggles a plugin's page, like Schema, in the right panel */
   onPage: (id: string) => void
   onSearch: () => void
+  /** The collapsed sidebar's corner sits over the header's left end */
+  cornered: boolean
 }): React.JSX.Element {
   const { loaded } = usePlugins()
   const pages = loaded.flatMap(({ plugin }) => plugin.tabs ?? []).filter((tab) => SIDE_PAGES.has(tab.id))
@@ -154,7 +157,7 @@ function ChatThread({
   })
   return (
     <>
-      <header className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border px-4 [-webkit-app-region:drag]">
+      <header className={`flex h-11 shrink-0 items-center gap-2.5 border-b border-border pr-4 [-webkit-app-region:drag] ${cornered ? 'pl-14' : 'pl-4'}`}>
         <AgentMark kind={session.kind} className="size-6 text-xs" />
         <span className="min-w-0 truncate text-[13px] font-medium">{session.title}</span>
         {title === null ? (
@@ -640,12 +643,15 @@ export function Bots(): React.JSX.Element {
   )
   // The collapsed sidebar: its chats and bots as marks, named on hover
   const rail = (
-    <aside className={`flex w-[72px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'border-r border-border'}`}>
+    <aside className={`relative flex w-[72px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'border-r border-border'}`}>
       {/* Under the traffic lights */}
       <div className={`h-10 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-      <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
-        <Icon name="panel" />
-      </IconButton>
+      {/* Right of the traffic lights, on a corner of the rail reaching over the page */}
+      <span className={`absolute top-0 left-full z-20 flex h-11 items-center pr-1.5 pb-1 pl-0.5 ${islandUi ? 'rounded-br-xl bg-canvas' : ''}`}>
+        <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
+          <Icon name="panel" />
+        </IconButton>
+      </span>
       {canChat && (
         <IconButton label={withKeys('New chat', 'chat.new')} active={onHome} onClick={() => setSelectedId(null)}>
           <Icon name="plus" />
@@ -681,6 +687,8 @@ export function Bots(): React.JSX.Element {
       </IconButton>
     </aside>
   )
+  // Pages whose header starts at the top left keep clear of the rail's corner
+  const cornerBar = sidebarShown ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
   return (
     <div className={`flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
       {sidebarShown ? sidebar : rail}
@@ -693,10 +701,14 @@ export function Bots(): React.JSX.Element {
         search={search}
         onSearch={setSearch}
         onSettings={() => setSelectedId(CONFIGURE)}
+        lead={cornerBar}
       >
         <main className={`flex min-w-[300px] flex-1 flex-col ${islandUi ? `overflow-hidden ${ISLAND}` : ''}`}>
           {selectedId === CONFIGURE ? (
-            <PluginPage id={CONFIGURE} />
+            <>
+              {cornerBar}
+              <PluginPage id={CONFIGURE} />
+            </>
           ) : selectedChat ? (
             <ChatThread
               key={selectedChat.id}
@@ -710,9 +722,13 @@ export function Bots(): React.JSX.Element {
               onTerminal={() => (side === TERMINAL ? setSide(null) : openShell(selectedChat.worktreePath))}
               onPage={(id) => setSide(side === id ? null : id)}
               onSearch={() => setSearch(true)}
+              cornered={!sidebarShown}
             />
           ) : selected && hub ? (
-            <hub.Thread key={selected.id} botId={selected.id} />
+            <>
+              {cornerBar}
+              <hub.Thread key={selected.id} botId={selected.id} />
+            </>
           ) : (
             <>
               <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />

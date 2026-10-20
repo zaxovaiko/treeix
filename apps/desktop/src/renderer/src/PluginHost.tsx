@@ -42,6 +42,7 @@ export function PluginHost({
   search,
   onSearch,
   onSettings,
+  lead,
   children
 }: {
   page: string
@@ -56,6 +57,8 @@ export function PluginHost({
   onSearch: (open: boolean) => void
   /** Shows Settings, on the page asked for once it is up */
   onSettings: () => void
+  /** Room for the collapsed sidebar's corner over the panel while it fills the window */
+  lead: React.ReactNode
   children: React.ReactNode
 }): React.JSX.Element {
   const { loaded: plugins } = usePlugins()
@@ -244,7 +247,7 @@ export function PluginHost({
             style={filled ? undefined : { width: sideWidth }}
             className={`relative flex min-w-[240px] flex-col ${filled ? 'flex-1' : ''} ${island ? ISLAND : 'border-l border-border'}`}
           >
-            {!filled && <ResizeHandle edge="left" onResize={setSideWidth} />}
+            {filled ? lead : <ResizeHandle edge="left" onResize={setSideWidth} />}
             <ErrorBoundary
               label={tab?.label ?? (typeof side === 'object' ? side?.title : side === CHANGES ? 'Changes' : undefined) ?? 'Terminal'}
               resetKey={typeof side === 'object' ? side?.key : (side ?? '')}
