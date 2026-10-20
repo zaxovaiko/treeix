@@ -50,6 +50,16 @@ function clearPermission(blocks: Block[], requestId: string | null): Block[] {
     .filter((block): block is Block => block !== null)
 }
 
+/** The tool block with this id, however deep in subagents it sits */
+export function findTool(blocks: Block[], id: string): ToolBlock | null {
+  for (const block of blocks) {
+    if (block.type !== 'tool') continue
+    const found = block.call.id === id ? block : findTool(block.children, id)
+    if (found) return found
+  }
+  return null
+}
+
 /** Applies `change` to the tool block with this id, however deep in subagents it sits; null when there is none */
 function updateTool(blocks: Block[], id: string, change: (block: ToolBlock) => ToolBlock): Block[] | null {
   for (const [index, block] of blocks.entries()) {

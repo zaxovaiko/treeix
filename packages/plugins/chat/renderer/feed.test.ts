@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ChatEvent } from '@treeix/sdk'
-import { type Block, diffCounts, emptyFeed, fileTarget, reduce, turnChanges, turnsOf } from './feed'
+import { type Block, diffCounts, emptyFeed, fileTarget, findTool, reduce, turnChanges, turnsOf } from './feed'
 
 const run = (events: ChatEvent[]) => events.reduce((feed, event, index) => reduce(feed, event, index * 1000), emptyFeed)
 
@@ -129,6 +129,8 @@ test("a subagent's text and tool calls fold under the call that started it", () 
     { type: 'text', text: 'Looking' },
     { type: 'tool', call: { id: 'grep1', status: 'completed' } }
   ])
+  expect(findTool(feed.blocks, 'grep1')?.call.status).toBe('completed')
+  expect(findTool(feed.blocks, 'missing')).toBeNull()
 })
 
 test('a turn splits at its last tool call or thought: the steps before, the reply after', () => {
