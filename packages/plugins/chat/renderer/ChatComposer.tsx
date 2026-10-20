@@ -392,7 +392,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   const hint = busy ? 'Esc stops the agent' : fullness > 0.8 && hasCompact ? 'Context is 80% full: /compact summarizes' : null
 
   return (
-    <div className="shrink-0 px-4 pb-3">
+    <div className="shrink-0 px-4 pb-6">
       {chat.queue.length > 0 && (
         // Opaque down to the box, so the messages beneath show through none of the gaps
         <div className="-mx-2 flex flex-col gap-1 bg-background px-2 pb-2">
