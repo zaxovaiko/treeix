@@ -6,8 +6,12 @@ import { isJson, isString, type Json, list, text } from '@treeix/shared/json'
  */
 export type Rule = { name: string; app: string; url: string }
 
+// Meet also opens calls at /meet/<code>; the old pattern missed those, so stored copies of it are upgraded
+const MEET_URL = '^https://meet\\.google\\.com/(?:[a-z]+/)?[a-z]{3}-[a-z]{4}-[a-z]{3}'
+const OLD_MEET_URL = '^https://meet\\.google\\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}'
+
 export const DEFAULT_RULES: Rule[] = [
-  { name: 'Google Meet', app: 'com.google.Chrome', url: '^https://meet\\.google\\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}' },
+  { name: 'Google Meet', app: 'com.google.Chrome', url: MEET_URL },
   { name: 'Slack huddle', app: 'com.tinyspeck.slackmacgap', url: '' },
   { name: 'Slack huddle', app: 'com.google.Chrome', url: '^https://app\\.slack\\.com/' },
   { name: 'Zoom', app: 'us.zoom.xos', url: '' },
@@ -69,7 +73,7 @@ const isRule = (value: unknown): value is Rule => isJson(value) && isString(valu
 
 export const parseSettings = (stored: Json): MeetingsSettings => ({
   auto: stored.auto !== false,
-  rules: Array.isArray(stored.rules) ? list(stored.rules, isRule) : DEFAULT_RULES,
+  rules: Array.isArray(stored.rules) ? list(stored.rules, isRule).map((rule) => (rule.url === OLD_MEET_URL ? { ...rule, url: MEET_URL } : rule)) : DEFAULT_RULES,
   startDelaySec: START_DELAYS.find((seconds) => seconds === stored.startDelaySec) ?? 3,
   stopDelaySec: STOP_DELAYS.find((seconds) => seconds === stored.stopDelaySec) ?? 20,
   calendar: stored.calendar !== false,

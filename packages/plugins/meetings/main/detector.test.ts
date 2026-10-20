@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { DEFAULT_RULES } from '../shared/types'
+import { DEFAULT_RULES, parseSettings } from '../shared/types'
 import { type Call, callHint, type DetectorState, detect, needsTabs, step } from './detector'
 
 const CHROME = 'com.google.Chrome.helper'
@@ -14,6 +14,12 @@ describe('detect', () => {
       url: meet.url,
       key: 'com.google.Chrome https://meet.google.com/abc-defg-hij'
     })
+  })
+
+  it('matches a Meet call opened under /meet/, also with a pattern stored before it was', () => {
+    const tab = { url: 'https://meet.google.com/meet/abc-defg-hij?pli=1&authuser=0', title: 'Meet' }
+    const stored = parseSettings({ rules: [{ name: 'Google Meet', app: 'com.google.Chrome', url: '^https://meet\\.google\\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}' }] }).rules
+    for (const rules of [DEFAULT_RULES, stored]) expect(detect(rules, [CHROME], [tab])?.key).toBe('com.google.Chrome https://meet.google.com/meet/abc-defg-hij')
   })
 
   it('ignores a Meet tab when Chrome is off the microphone, and the Meet landing page', () => {
