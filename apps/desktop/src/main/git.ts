@@ -17,7 +17,8 @@ const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
 
 async function git(cwd: string, args: string[], okExitCodes = [0]): Promise<string> {
   try {
-    const { stdout } = await exec('git', ['-C', cwd, ...args], { maxBuffer: 64 * 1024 * 1024 })
+    // Polling status must not take index.lock, or an agent's commit or rebase running at that moment fails on it
+    const { stdout } = await exec('git', ['--no-optional-locks', '-C', cwd, ...args], { maxBuffer: 64 * 1024 * 1024 })
     return stdout
   } catch (error: unknown) {
     if (isExecError(error) && okExitCodes.includes(error.code)) return error.stdout
@@ -131,7 +132,8 @@ export function splitPatch(patch: string): FilePatch[] {
 
 export async function diff(worktreePath: string): Promise<FilePatch[]> {
   const hasHead = await succeeds(worktreePath, ['rev-parse', '--verify', 'HEAD'])
-  const tracked = hasHead ? await git(worktreePath, ['diff', 'HEAD', '--no-color']) : ''
+  // Plumbing: porcelain diff rewrites the index, under its lock, whenever file times changed
+  const tracked = hasHead ? await git(worktreePath, ['diff-index', '-p', '-M', '--no-color', 'HEAD']) : ''
   const untrackedList = await git(worktreePath, ['ls-files', '--others', '--exclude-standard'])
   const untracked = await Promise.all(
     untrackedList
