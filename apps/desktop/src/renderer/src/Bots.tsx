@@ -67,7 +67,7 @@ function ChatRow({
   if (renaming)
     return (
       <div className="flex items-center gap-2.5 rounded-lg bg-accent px-2 py-1.5">
-        <AgentMark kind={session.kind} />
+        <AgentMark kind={session.kind} className="size-5 text-[11px]" />
         <NameInput value={session.title} label="Chat name" onSave={(name) => sessions?.rename(session.id, name)} onClose={onRenamed} />
       </div>
     )
@@ -81,14 +81,9 @@ function ChatRow({
         onContextMenu={(event) => sessions && openMenu(event, sessions.menu(session.id, flash, onRename))}
         className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left group-hover:pr-9"
       >
-        <AgentMark kind={session.kind} />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{session.title}</span>
-            {(session.status === 'input' || session.status === 'running') && <StatusDot session={session} />}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">{worktreeLabel(null, session.worktreePath)}</span>
-        </span>
+        <AgentMark kind={session.kind} className="size-5 text-[11px]" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{session.title}</span>
+        {(session.status === 'input' || session.status === 'running') && <StatusDot session={session} />}
       </button>
       <span className="absolute right-1 hidden group-hover:block">
         <IconButton label="Close chat" onClick={() => findService('sessions')?.close(session.id)}>
@@ -432,6 +427,9 @@ export function Bots(): React.JSX.Element {
   // Folders chats ran in, newest first, for the folder picker
   const recentFolders = [...new Set([...chats, ...allClosed].toSorted((a, b) => b.startedAt - a.startedAt).map((session) => session.worktreePath))].slice(0, 8)
   const [historyOpen, setHistoryOpen] = usePersisted<boolean>('bots.historyOpen', false)
+  // Chat folders folded shut in the sidebar, one path per line
+  const [collapsedFolders, setCollapsedFolders] = usePersisted<string>('bots.collapsedFolders', '')
+  const collapsed = collapsedFolders.split('\n').filter(Boolean)
   const selectedChat = chats.find((session) => session.id === selectedId)
   const drafts = chats.filter(isDraft)
   const draft = drafts[0] ?? null
@@ -577,20 +575,44 @@ export function Bots(): React.JSX.Element {
                 <Icon name="plus" />
               </IconButton>
             </div>
-            {chats
-              .filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title))
-              .map((session) => (
-                <ChatRow
-                  key={session.id}
-                  session={session}
-                  active={session.id === selectedId}
-                  renaming={session.id === renaming}
-                  onClick={() => setSelectedId(session.id)}
-                  onRename={() => setRenaming(session.id)}
-                  onRenamed={() => setRenaming(null)}
-                  flash={setProblem}
-                />
-              ))}
+            {Map.groupBy(
+              chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
+              (session) => session.worktreePath
+            )
+              .entries()
+              .map(([folder, group]) => {
+                // A search shows its matches in every folder
+                const open = query.trim() !== '' || !collapsed.includes(folder)
+                return (
+                  <div key={folder} className="flex flex-col gap-0.5">
+                    <button
+                      onClick={() => setCollapsedFolders((open ? [...collapsed, folder] : collapsed.filter((path) => path !== folder)).join('\n'))}
+                      aria-expanded={open}
+                      title={folder}
+                      className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <Icon name={open ? 'folderOpen' : 'folder'} className="size-3.5 shrink-0" />
+                      <span className="min-w-0 truncate">{worktreeLabel(null, folder)}</span>
+                      {!open && <span className="shrink-0 opacity-70">{group.length}</span>}
+                      <Icon name="chevron" className={`size-3 shrink-0 ${open ? 'rotate-90' : ''}`} />
+                    </button>
+                    {open &&
+                      group.map((session) => (
+                        <ChatRow
+                          key={session.id}
+                          session={session}
+                          active={session.id === selectedId}
+                          renaming={session.id === renaming}
+                          onClick={() => setSelectedId(session.id)}
+                          onRename={() => setRenaming(session.id)}
+                          onRenamed={() => setRenaming(null)}
+                          flash={setProblem}
+                        />
+                      ))}
+                  </div>
+                )
+              })
+              .toArray()}
           </>
         )}
         {canChat && closed.length > 0 && (
