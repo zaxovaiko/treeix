@@ -157,7 +157,8 @@ function ChatThread({
   })
   return (
     <>
-      <header className={`flex h-11 shrink-0 items-center gap-2.5 border-b border-border pr-4 [-webkit-app-region:drag] ${cornered ? 'pl-[84px]' : 'pl-4'}`}>
+      {/* Beside the collapsed sidebar's corner it takes the corner's height, level with the traffic lights */}
+      <header className={`flex shrink-0 items-center gap-2.5 border-b border-border pr-4 [-webkit-app-region:drag] ${cornered ? 'h-9 pl-[84px]' : 'h-11 pl-4'}`}>
         <AgentMark kind={session.kind} className="size-6 text-xs" />
         <span className="min-w-0 truncate text-[13px] font-medium">{session.title}</span>
         {title === null ? (
