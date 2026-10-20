@@ -6,6 +6,7 @@ import { createBatcher } from '@treeix/host/batcher'
 import { agentDirectories } from '@treeix/host/projects'
 import { createGenerationGuard } from './generations'
 import { runInShell } from './shell'
+import { nameChat } from './title'
 
 type Entry = { connection: ChatConnection; owner: WebContents; cwd: string; env: Record<string, string>; dispose: () => void }
 
@@ -101,6 +102,11 @@ const plugin: MainPlugin = {
       const entry = owned(event, chatId)
       if (!entry || typeof command !== 'string') throw new Error('Unknown chat')
       return runInShell(command, entry.cwd, entry.env)
+    })
+
+    context.handle('title', async (_event, message: string) => {
+      if (typeof message !== 'string') throw new Error('Invalid message')
+      return nameChat(message)
     })
 
     context.on('cancel', (event, chatId: string) => owned(event, chatId)?.connection.cancel())

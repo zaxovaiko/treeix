@@ -274,9 +274,24 @@ function prompt(chatId: string, content: ChatContent[]): void {
     })
 }
 
+/** Names a chat from its first message until the agent gives it a title of its own */
+function nameFrom(chatId: string, content: ChatContent[]): void {
+  const chat = getChat(chatId)
+  const text = content
+    .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+    .join('\n')
+    .trim()
+  if (!bridge || !text || chat.feed.title || chat.feed.blocks.some((block) => block.type === 'text' && block.role === 'user')) return
+  bridge
+    .invoke<string>('title', text)
+    .then((title) => title && !getChat(chatId).feed.title && update(chatId, (state) => ({ ...state, feed: reduce(state.feed, { type: 'title', title }, Date.now()) })))
+    .catch(() => undefined)
+}
+
 /** Sends now, queues behind the running turn, or, for a chat that lost its agent, reconnects and then sends */
 export function send(chatId: string, content: ChatContent[]): void {
   const chat = getChat(chatId)
+  nameFrom(chatId, content)
   if (!chat.connected) {
     if (!chat.error || !chat.options) return
     update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
