@@ -157,7 +157,7 @@ function ChatThread({
   })
   return (
     <>
-      <header className={`flex h-11 shrink-0 items-center gap-2.5 border-b border-border pr-4 [-webkit-app-region:drag] ${cornered ? 'pl-14' : 'pl-4'}`}>
+      <header className={`flex h-11 shrink-0 items-center gap-2.5 border-b border-border pr-4 [-webkit-app-region:drag] ${cornered ? 'pl-[68px]' : 'pl-4'}`}>
         <AgentMark kind={session.kind} className="size-6 text-xs" />
         <span className="min-w-0 truncate text-[13px] font-medium">{session.title}</span>
         {title === null ? (
@@ -541,7 +541,7 @@ export function Bots(): React.JSX.Element {
 
   const sidebar = (
     <aside style={{ width: sidebarWidth }} className={`relative flex shrink-0 flex-col ${islandUi ? '' : 'border-r border-border'}`}>
-      <div className={`flex h-10 shrink-0 items-center gap-1 px-2 ${chromeless ? '' : 'pl-[80px] [-webkit-app-region:drag]'}`}>
+      <div className={`flex h-10 shrink-0 items-center gap-1 px-2 pb-1 ${chromeless ? '' : 'pl-[80px] [-webkit-app-region:drag]'}`}>
         <IconButton label={withKeys('Collapse sidebar', 'panel.list')} onClick={() => setSidebarShown(false)}>
           <Icon name="panel" />
         </IconButton>
@@ -643,38 +643,61 @@ export function Bots(): React.JSX.Element {
   )
   // The collapsed sidebar: its chats and bots as marks, named on hover
   const rail = (
-    <aside className={`flex w-[72px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'border-r border-border'}`}>
+    // Its edge starts under the title bar, which runs on over the traffic lights unbroken
+    <aside
+      className={`relative flex w-[52px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'after:absolute after:top-11 after:right-0 after:bottom-0 after:w-px after:bg-border'}`}
+    >
       {/* Under the traffic lights */}
-      <div className={`h-10 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+      <div className={`h-11 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
       {canChat && (
         <IconButton label={withKeys('New chat', 'chat.new')} active={onHome} onClick={() => setSelectedId(null)}>
           <Icon name="plus" />
         </IconButton>
       )}
-      <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-2">
+      <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto py-1.5">
         {bots.map((bot) => (
           <button key={bot.id} title={bot.name} onClick={() => setSelectedId(bot.id)} className={`rounded-lg p-1 ${bot.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}>
             <BotAvatar look={bot.look} attention={bot.status === 'attention'} />
           </button>
         ))}
         {canChat &&
-          chats
-            .filter((session) => session.id === selectedId || !isDraft(session))
-            .map((session) => (
-              <button
-                key={session.id}
-                title={session.title}
-                onClick={() => setSelectedId(session.id)}
-                className={`relative rounded-lg p-1.5 ${session.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}
-              >
-                <AgentMark kind={session.kind} />
-                {(session.status === 'input' || session.status === 'running') && (
-                  <span className="absolute right-0 bottom-0 rounded-full bg-background p-0.5">
-                    <StatusDot session={session} />
-                  </span>
-                )}
-              </button>
-            ))}
+          Map.groupBy(
+            chats.filter((session) => session.id === selectedId || !isDraft(session)),
+            (session) => session.worktreePath
+          )
+            .entries()
+            .map(([folder, group]) =>
+              // One tile per folder; a folder folded shut in the sidebar is its icon, opening it again
+              collapsed.includes(folder) ? (
+                <button
+                  key={folder}
+                  title={`${worktreeLabel(null, folder)} (${group.length})`}
+                  onClick={() => setCollapsedFolders(collapsed.filter((path) => path !== folder).join('\n'))}
+                  className="grid size-9 shrink-0 place-items-center rounded-xl bg-foreground/5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <Icon name="folder" className="size-4" />
+                </button>
+              ) : (
+                <div key={folder} title={worktreeLabel(null, folder)} className="flex flex-col items-center gap-0.5 rounded-xl bg-foreground/5 p-0.5">
+                  {group.map((session) => (
+                    <button
+                      key={session.id}
+                      title={session.title}
+                      onClick={() => setSelectedId(session.id)}
+                      className={`relative rounded-[10px] p-1 ${session.id === selectedId ? 'bg-foreground/10' : 'hover:bg-accent'}`}
+                    >
+                      <AgentMark kind={session.kind} />
+                      {(session.status === 'input' || session.status === 'running') && (
+                        <span className="absolute -right-0.5 -bottom-0.5 rounded-full bg-background p-0.5">
+                          <StatusDot session={session} />
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )
+            )
+            .toArray()}
       </nav>
       <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => setSelectedId(CONFIGURE)}>
         <Icon name="settings" />
@@ -683,10 +706,15 @@ export function Bots(): React.JSX.Element {
   )
   // Pages whose header starts at the top left keep clear of the rail's corner
   const cornerBar = sidebarShown ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-  // Right of the traffic lights, on a corner of the rail reaching over the page. Last in the page, since the window
-  // takes drag areas in page order: one earlier would sit under the page's draggable header and miss the click
+  // Right of the traffic lights: on islands a corner of the rail reaching over the page, flat a bordered title section over the
+  // rail's top. Last in the page, since the window takes drag areas in page order: one earlier would sit under the page's
+  // draggable header and its button would miss the click
   const corner = (
-    <span className={`absolute top-0 left-[72px] z-20 flex h-11 items-center pr-1.5 pb-1 pl-0.5 [-webkit-app-region:no-drag] ${islandUi ? 'rounded-br-xl bg-canvas' : ''}`}>
+    <span
+      className={`absolute top-0 z-20 flex items-center ${chromeless ? '' : '[-webkit-app-region:drag]'} ${
+        islandUi ? 'left-[52px] h-11 rounded-br-xl bg-canvas pr-1.5 pb-2 pl-7' : 'left-0 h-9 rounded-br-xl border-r border-b border-border bg-background pr-3 pl-20'
+      }`}
+    >
       <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
         <Icon name="panel" />
       </IconButton>
