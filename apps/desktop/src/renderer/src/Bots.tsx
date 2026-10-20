@@ -643,15 +643,9 @@ export function Bots(): React.JSX.Element {
   )
   // The collapsed sidebar: its chats and bots as marks, named on hover
   const rail = (
-    <aside className={`relative flex w-[72px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'border-r border-border'}`}>
+    <aside className={`flex w-[72px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'border-r border-border'}`}>
       {/* Under the traffic lights */}
       <div className={`h-10 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-      {/* Right of the traffic lights, on a corner of the rail reaching over the page */}
-      <span className={`absolute top-0 left-full z-20 flex h-11 items-center pr-1.5 pb-1 pl-0.5 ${islandUi ? 'rounded-br-xl bg-canvas' : ''}`}>
-        <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
-          <Icon name="panel" />
-        </IconButton>
-      </span>
       {canChat && (
         <IconButton label={withKeys('New chat', 'chat.new')} active={onHome} onClick={() => setSelectedId(null)}>
           <Icon name="plus" />
@@ -689,8 +683,17 @@ export function Bots(): React.JSX.Element {
   )
   // Pages whose header starts at the top left keep clear of the rail's corner
   const cornerBar = sidebarShown ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+  // Right of the traffic lights, on a corner of the rail reaching over the page. Last in the page, since the window
+  // takes drag areas in page order: one earlier would sit under the page's draggable header and miss the click
+  const corner = (
+    <span className={`absolute top-0 left-[72px] z-20 flex h-11 items-center pr-1.5 pb-1 pl-0.5 [-webkit-app-region:no-drag] ${islandUi ? 'rounded-br-xl bg-canvas' : ''}`}>
+      <IconButton label={withKeys('Expand sidebar', 'panel.list')} onClick={() => setSidebarShown(true)}>
+        <Icon name="panel" />
+      </IconButton>
+    </span>
+  )
   return (
-    <div className={`flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
+    <div className={`relative flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
       {sidebarShown ? sidebar : rail}
       <PluginHost
         page={page}
@@ -748,6 +751,7 @@ export function Bots(): React.JSX.Element {
           )}
         </main>
       </PluginHost>
+      {!sidebarShown && corner}
       {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
     </div>
   )
