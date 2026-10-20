@@ -101,15 +101,18 @@ function AgentText({ block }: { block: Extract<Block, { type: 'text' }> }): Reac
       <Images images={block.images} className="max-h-64 max-w-full" />
       {block.text && (
         <>
-          <button
-            onClick={() => setRaw(!raw)}
-            aria-pressed={raw}
-            title={raw ? 'Show formatted' : 'Show markdown source'}
-            className={`absolute -top-1 right-0 z-10 flex h-6 items-center gap-1 rounded-full bg-background px-2 text-[11px] text-muted-foreground ring-1 ring-border group-hover/text:visible hover:text-foreground focus-visible:visible ${raw ? 'visible' : 'invisible'}`}
-          >
-            <Icon name={raw ? 'eye' : 'code'} className="size-3" />
-            {raw ? 'Preview' : 'Raw'}
-          </button>
+          {/* Beside the text, never over it; the padding bridges the gap so the hover holds on the way over */}
+          <span className="absolute top-0 left-full z-10 pl-2">
+            <button
+              onClick={() => setRaw(!raw)}
+              aria-pressed={raw}
+              title={raw ? 'Show formatted' : 'Show markdown source'}
+              className={`flex h-6 items-center gap-1 rounded-full bg-background px-2 text-[11px] text-muted-foreground ring-1 ring-border group-hover/text:visible hover:text-foreground focus-visible:visible ${raw ? 'visible' : 'invisible'}`}
+            >
+              <Icon name={raw ? 'eye' : 'code'} className="size-3" />
+              {raw ? 'Preview' : 'Raw'}
+            </button>
+          </span>
           {raw ? (
             <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-foreground/90">{block.text}</pre>
           ) : (

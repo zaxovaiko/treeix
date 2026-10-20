@@ -87,8 +87,8 @@ function SubagentPane({ chatId, callId, cwd }: { chatId: string; callId: string;
   const { feed } = useChat(chatId)
   const blocks = findTool(feed.blocks, callId)?.children ?? []
   return (
-    <div className="flex h-full min-h-0 flex-col-reverse overflow-y-auto">
-      <div className="flex flex-col gap-3 p-4">
+    <div className="flex h-full min-h-0 flex-col-reverse overflow-x-hidden overflow-y-auto">
+      <div className="flex flex-col gap-3 p-4 pr-20">
         <FeedBlocks blocks={blocks} cwd={cwd} newest={null} onAnswer={(requestId, optionId) => answer(chatId, requestId, optionId)} />
       </div>
     </div>
@@ -190,9 +190,10 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
           const element = event.currentTarget
           atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
         }}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        className="@container flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
       >
-        <div ref={content} className={`mx-auto flex w-full flex-1 ${width} flex-col gap-3 px-4 pt-4`}>
+        {/* A right gutter for the reply's Raw button whenever the margin beside the column can't hold it */}
+        <div ref={content} className={`mx-auto flex w-full flex-1 ${width} flex-col gap-3 px-4 pt-4 ${chatFullWidth ? 'pr-20' : '@max-[57rem]:pr-20'}`}>
           {empty ? (
             <EmptyState chatId={chatId} chat={chat} cwd={cwd} />
           ) : (
