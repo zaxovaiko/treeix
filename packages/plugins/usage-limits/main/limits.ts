@@ -1,7 +1,9 @@
 import { type FSWatcher, mkdirSync, unwatchFile, watch, watchFile } from 'node:fs'
-import { open, readdir, stat } from 'node:fs/promises'
+import { open, readdir, readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { promisify } from 'node:util'
+import { zstdDecompress } from 'node:zlib'
 import type { AgentLimits, LimitWindow, UsageLimits } from '../shared/types'
 import { isJson } from '@treeix/shared/json'
 import { readJsonFile } from '@treeix/host/paths'
@@ -15,6 +17,8 @@ const CODEX_SESSIONS = join(homedir(), '.codex', 'sessions')
 const TAIL_BYTES = 256 * 1024
 const FIVE_HOURS_MIN = 300
 const WEEK_MIN = 10_080
+
+const unzstd = promisify(zstdDecompress)
 
 const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
@@ -102,6 +106,9 @@ async function readClaude(statusFile: string): Promise<AgentLimits | null> {
 
 const newestNames = async (dir: string): Promise<string[]> => (await readdir(dir).catch(() => [])).sort().reverse()
 
+// Codex compresses finished rollouts, and older ones once on upgrade
+const isRollout = (name: string): boolean => name.endsWith('.jsonl') || name.endsWith('.jsonl.zst')
+
 /** Rollouts live in sessions/YYYY/MM/DD; only the newest day folders are read */
 async function recentRollouts(limit: number): Promise<string[]> {
   const files: string[] = []
@@ -109,7 +116,7 @@ async function recentRollouts(limit: number): Promise<string[]> {
     for (const month of await newestNames(join(CODEX_SESSIONS, year))) {
       for (const day of await newestNames(join(CODEX_SESSIONS, year, month))) {
         const dir = join(CODEX_SESSIONS, year, month, day)
-        const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith('.jsonl'))
+        const names = (await readdir(dir).catch(() => [])).filter(isRollout)
         const withTimes = await Promise.all(names.map(async (name) => ({ path: join(dir, name), mtime: (await stat(join(dir, name))).mtimeMs })))
         files.push(...withTimes.sort((a, b) => b.mtime - a.mtime).map((file) => file.path))
         if (files.length >= limit) return files.slice(0, limit)
@@ -126,6 +133,11 @@ async function tailLines(path: string): Promise<string[]> {
   const { mtimeMs, size } = await stat(path)
   const cached = tails.get(path)
   if (cached && cached.mtimeMs === mtimeMs && cached.size === size) return cached.lines
+  if (path.endsWith('.zst')) {
+    const lines = (await unzstd(await readFile(path))).toString('utf8').split('\n')
+    tails.set(path, { mtimeMs, size, lines })
+    return lines
+  }
   const file = await open(path)
   try {
     const start = Math.max(0, size - TAIL_BYTES)
