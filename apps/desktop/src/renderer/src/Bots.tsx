@@ -608,6 +608,11 @@ export function Bots(): React.JSX.Element {
     setFilled(false)
     setSelectedId(id)
   }
+  // A new chat has the page to itself
+  const newChat = (): void => {
+    setSide(null)
+    pick(null)
+  }
   // The sidebar comes back with zen left
   const toggleSidebar = (): void => (zen ? (updateShell({ zen: false }), setSidebarShown(true)) : setSidebarShown(!sidebarShown))
   const listed = sidebarShown && !zen
@@ -616,7 +621,7 @@ export function Bots(): React.JSX.Element {
   const page = selectedId ?? 'home'
   useWindowActions({
     'app.settings': () => pick(CONFIGURE),
-    ...(canChat ? { 'chat.new': () => pick(null) } : {}),
+    ...(canChat ? { 'chat.new': newChat } : {}),
     'panel.list': toggleSidebar,
     'panel.listAlt': toggleSidebar,
     'panel.inspector': () => togglePanel('inspector', page),
@@ -671,7 +676,7 @@ export function Bots(): React.JSX.Element {
           <>
             <div className="mt-2 flex h-7 shrink-0 items-center justify-between pl-2 text-[11px] font-medium text-muted-foreground">
               Chats
-              <NewButton onChat={() => pick(null)} onTerminal={newTerminal} />
+              <NewButton onChat={newChat} onTerminal={newTerminal} />
             </div>
             {Map.groupBy(
               chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
@@ -756,7 +761,7 @@ export function Bots(): React.JSX.Element {
     >
       {/* Under the traffic lights */}
       <div className={`h-11 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-      {canChat && <NewButton active={onHome} onChat={() => pick(null)} onTerminal={newTerminal} />}
+      {canChat && <NewButton active={onHome} onChat={newChat} onTerminal={newTerminal} />}
       <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto py-1.5">
         {bots.map((bot) => (
           <button key={bot.id} title={bot.name} onClick={() => pick(bot.id)} className={`rounded-lg p-1 ${bot.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}>
