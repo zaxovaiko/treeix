@@ -8,7 +8,7 @@ import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
 import { builtinOf, completion, shellCommandOf, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
-import { cancel, clear, filesFor, hasConversation, isBusy, runShell, send, setDraft, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
+import { cancel, clear, filesFor, getChat, hasConversation, isBusy, runShell, send, setDraft, setImages, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 import { primaryKey } from '@treeix/shared/shortcut'
 
 const readImage = (file: File): Promise<ChatImage> =>
@@ -213,9 +213,8 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   const host = useHost()
   const chat = useChat(chatId)
   const agents = useAgents()
-  const { feed, draft } = chat
+  const { feed, draft, images } = chat
   const busy = isBusy(chat)
-  const [images, setImages] = useState<ChatImage[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [files, setFiles] = useState<string[]>([])
   const [caret, setCaret] = useState(0)
@@ -250,7 +249,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
     const valid = candidates.filter((file) => imageProblem(file) === null)
     try {
       const read = await Promise.all(valid.map(readImage))
-      setImages((current) => [...current, ...read])
+      setImages(chatId, [...getChat(chatId).images, ...read])
     } catch (reason) {
       setProblem(`Could not read the image: ${errorMessage(reason)}`)
     }
@@ -326,7 +325,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
     }
     send(chatId, [...images, ...(text ? [{ type: 'text' as const, text }] : [])])
     setDraft(chatId, '')
-    setImages([])
+    setImages(chatId, [])
     setProblem(null)
     onSent()
   }
@@ -456,7 +455,12 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
                 <ImageThumb image={image} className="h-12" />
                 <button
                   aria-label="Remove image"
-                  onClick={() => setImages((current) => current.filter((_, at) => at !== index))}
+                  onClick={() =>
+                    setImages(
+                      chatId,
+                      images.filter((_, at) => at !== index)
+                    )
+                  }
                   className="absolute -top-1.5 -right-1.5 hidden size-4 place-items-center rounded-full bg-foreground text-on-foreground group-hover:grid"
                 >
                   <Icon name="close" className="size-2.5" />

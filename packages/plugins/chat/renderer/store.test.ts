@@ -14,6 +14,7 @@ import {
   listen,
   send,
   setDraft,
+  setImages,
   shortTitle,
   start,
   statusOf,
@@ -174,7 +175,9 @@ test('a chat has a conversation once anything was said or it resumes one', () =>
   expect(hasConversation({ ...emptyChat, feed: { ...emptyFeed, blocks: [{ type: 'error', message: 'x' }] } })).toBe(true)
 })
 
-test('a moved chat takes the draft at once and the picked options once it connects', async () => {
+const acp = (cwd: string) => ({ agent: 'claude', adapter: 'acp', command: 'x', cwd, resume: null })
+
+test('a moved chat holds its messages until the new one is up, then hands it those, its draft, images and picked options', async () => {
   const model = (current: string) => ({
     id: 'model',
     name: 'Model',
@@ -182,15 +185,40 @@ test('a moved chat takes the draft at once and the picked options once it connec
     currentValue: current,
     values: ['opus', 'sonnet'].map((value) => ({ value, name: value, description: null }))
   })
+  const image = { type: 'image' as const, mimeType: 'image/png', data: 'AAA' }
+  await start('from', acp('/repo'))
   handlers.get('events')?.('from', [{ type: 'options', options: [model('sonnet')] }])
   setDraft('from', 'fix the bug')
-  let done = false
-  void carryOver('from', 'to').then(() => (done = true))
-  expect(getChat('to').draft).toBe('fix the bug')
+  setImages('from', [image])
+  prompts.length = 0
+  let moved: string | null | undefined
+  void carryOver('from', Promise.resolve('to')).then((id) => (moved = id))
+  send('from', text('go'))
+  expect(getChat('from').queue).toEqual([text('go')])
+  await start('to', acp('/worktree'))
   await flush()
-  expect(done).toBe(false)
+  expect(moved).toBeUndefined()
   handlers.get('events')?.('to', [{ type: 'options', options: [model('opus')] }])
   await flush()
   expect(sent).toContainEqual(['setOption', 'to', 'model', 'sonnet'])
-  expect(done).toBe(true)
+  expect(moved).toBe('to')
+  expect(getChat('to').draft).toBe('fix the bug')
+  expect(getChat('to').images).toEqual([image])
+  expect(getChat('from').queue).toEqual([])
+  expect(prompts.map((prompt) => prompt.content)).toEqual([text('go')])
+})
+
+test('a newer move calls off the one under way, and moving nowhere sends the held messages where they were', async () => {
+  await start('stay', acp('/repo'))
+  setDraft('stay', 'draft')
+  prompts.length = 0
+  let arrive: (id: string) => void = () => undefined
+  const first = carryOver('stay', new Promise<string>((resolve) => (arrive = resolve)))
+  send('stay', text('hi'))
+  expect(await carryOver('stay', Promise.resolve(null))).toBeNull()
+  expect(prompts.map((prompt) => prompt.content)).toEqual([text('hi')])
+  arrive('gone')
+  expect(await first).toBeNull()
+  expect(getChat('gone').draft).toBe('')
+  expect(getChat('stay').draft).toBe('draft')
 })

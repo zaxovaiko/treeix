@@ -195,8 +195,11 @@ export type ChatService = {
   agent: (chatId: string) => string | null
   /** The first message, shortened, for the tab */
   title: (chatId: string) => string | null
-  /** For a chat moved before its first message: takes `from`'s draft now and, once `to` connects, the options `from` had picked */
-  carryOver: (from: string, to: string) => Promise<void>
+  /**
+   * For a chat moved before its first message: once the chat `to` starts in the new folder is up, takes over `from`'s draft, images,
+   * picked options and the messages `from` held meanwhile. Resolves with that chat, or null when there is none or a newer move took over
+   */
+  carryOver: (from: string, to: Promise<string | null>) => Promise<string | null>
   subscribe: (listener: () => void) => () => void
 }
 

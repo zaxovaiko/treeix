@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { ChatCapabilities, ChatContent, ChatEvent, ChatService, ChatSpec, SessionStatus } from '@treeix/sdk'
+import type { ChatCapabilities, ChatContent, ChatEvent, ChatImage, ChatService, ChatSpec, SessionStatus } from '@treeix/sdk'
 import type { StartOptions, StartResult } from '../shared/types'
 import { errorMessage } from '@treeix/app/ui'
 import { emptyFeed, type Feed, reduce } from './feed'
@@ -12,6 +12,8 @@ export type ChatState = {
   capabilities: ChatCapabilities | null
   terminalCommand: string | null
   draft: string
+  /** Attached to the draft, so they stay when the composer goes away or the chat moves */
+  images: ChatImage[]
   queue: ChatContent[][]
   /** Connection problem shown as a banner with Retry: a failed start or a lost connection */
   error: string | null
@@ -29,6 +31,7 @@ export const emptyChat: ChatState = {
   capabilities: null,
   terminalCommand: null,
   draft: '',
+  images: [],
   queue: [],
   error: null,
   connected: false,
@@ -115,6 +118,8 @@ type Bridge = {
 }
 
 const chats = new Map<string, ChatState>()
+/** Chats moving to another one, see `carryOver`; the newest move per chat */
+const moves = new Map<string, symbol>()
 const listeners = new Set<() => void>()
 let bridge: Bridge | null = null
 
@@ -290,6 +295,8 @@ function nameFrom(chatId: string, content: ChatContent[]): void {
 
 /** Sends now, queues behind the running turn, or, for a chat that lost its agent, reconnects and then sends */
 export function send(chatId: string, content: ChatContent[]): void {
+  // A chat moving to another holds its messages for that one, see `carryOver`
+  if (moves.has(chatId)) return update(chatId, (state) => ({ ...state, queue: [...state.queue, content] }))
   const chat = getChat(chatId)
   nameFrom(chatId, content)
   if (!chat.connected) {
@@ -321,6 +328,8 @@ export const unqueue = (chatId: string, index: number): void => update(chatId, (
 
 export const setDraft = (chatId: string, draft: string): void => update(chatId, (state) => (state.draft === draft ? state : { ...state, draft }))
 
+export const setImages = (chatId: string, images: ChatImage[]): void => update(chatId, (state) => ({ ...state, images }))
+
 /** Adds text below what is already typed, a blank line between */
 export const appendDraft = (chatId: string, text: string): void =>
   update(chatId, (state) => ({ ...state, draft: state.draft.trim() ? `${state.draft.trimEnd()}\n\n${text}` : text }))
@@ -344,36 +353,51 @@ export async function setOption(chatId: string, id: string, value: string): Prom
   await bridge.invoke('setOption', chatId, id, value)
 }
 
-/** Resolves once the chat's turn is over, for "summarize first, then switch" */
-export function whenIdle(chatId: string): Promise<void> {
+/** Resolves once `check` holds, tried again on every change */
+function when(check: () => boolean): Promise<void> {
   return new Promise((resolve) => {
-    const check = (): boolean => {
-      if (isBusy(getChat(chatId))) return false
+    const test = (): void => {
+      if (!check()) return
       unsubscribe()
       resolve()
-      return true
     }
-    const unsubscribe = subscribe(() => void check())
-    check()
+    const unsubscribe = subscribe(test)
+    test()
   })
 }
 
-/** Takes `from`'s draft now and, once `to` has its options, what `from` had picked; resolves when applied or `to` fails to start */
-export function carryOver(from: string, to: string): Promise<void> {
-  const { draft, feed } = getChat(from)
-  setDraft(to, draft)
-  const picked = feed.options.map((option) => [option.id, option.currentValue] as const)
-  return new Promise((resolve) => {
-    const apply = (): void => {
-      const { feed: target, error } = getChat(to)
-      if (target.options.length === 0 && !error) return
-      unsubscribe()
-      const changes = picked.filter(([id, value]) =>
-        target.options.some((option) => option.id === id && option.currentValue !== value && option.values.some((candidate) => candidate.value === value))
-      )
-      void Promise.all(changes.map(([id, value]) => setOption(to, id, value).catch(() => undefined))).then(() => resolve())
-    }
-    const unsubscribe = subscribe(apply)
-    apply()
-  })
+/** Resolves once the chat's turn is over, for "summarize first, then switch" */
+export const whenIdle = (chatId: string): Promise<void> => when(() => !isBusy(getChat(chatId)))
+
+/**
+ * Moves a chat without a message yet to the one `target` starts in another folder, once that one is up: what is typed, attached and
+ * picked by then, and what was sent meanwhile, which goes out there. Resolves with that chat, or null when `target` gives none or a newer
+ * move took over; a chat that stays sends what it held itself.
+ */
+export async function carryOver(from: string, target: Promise<string | null>): Promise<string | null> {
+  const move = Symbol(from)
+  moves.set(from, move)
+  listeners.forEach((listener) => listener())
+  const to = await target.catch(() => null)
+  const current = (): boolean => moves.get(from) === move
+  const picked = (): (readonly [string, string])[] => getChat(from).feed.options.map((option) => [option.id, option.currentValue] as const)
+  if (to) {
+    // Up: it failed, or it connected with the options to take the picked ones
+    await when(() => {
+      const { connected, error, feed } = getChat(to)
+      return !current() || error !== null || (connected && (feed.options.length > 0 || picked().length === 0))
+    })
+    const { options } = getChat(to).feed
+    const changes = picked().filter(([id, value]) =>
+      options.some((option) => option.id === id && option.currentValue !== value && option.values.some((candidate) => candidate.value === value))
+    )
+    if (current()) await Promise.all(changes.map(([id, value]) => setOption(to, id, value).catch(() => undefined)))
+  }
+  if (!current()) return null
+  moves.delete(from)
+  const { draft, images, queue } = getChat(from)
+  update(from, (state) => ({ ...state, queue: [] }))
+  if (to) update(to, (state) => ({ ...state, draft, images }))
+  for (const content of queue) send(to ?? from, content)
+  return to
 }

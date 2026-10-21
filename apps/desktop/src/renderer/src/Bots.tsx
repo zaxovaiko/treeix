@@ -198,8 +198,8 @@ function ChatThread({
 /** Plugin pages that read the chat's folder, offered in the chat's header and shown in the right panel */
 const SIDE_PAGES = new Set(['schema', 'dependencies', 'prs'])
 
-/** A worktree this window added for a chat that has no message yet, so going back to Local can take it away again */
-type AddedWorktree = { repo: string; path: string; branch: string }
+/** A worktree this window added for a chat that has no message yet, so moving the chat away can take it away again */
+type AddedWorktree = { repo: string; branch: string }
 
 const PILL = 'flex h-7 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground ring-1 ring-border hover:bg-accent hover:text-foreground'
 /** Like the composer's own pickers, for what sits in its toolbar */
@@ -408,7 +408,8 @@ export function Bots(): React.JSX.Element {
   const [sidebarWidth, setSidebarWidth] = usePersisted<number>('bots.sidebarWidth', 240)
   const [sidebarShown, setSidebarShown] = usePersisted<boolean>('bots.sidebarShown', true)
   const [chatFolder, setChatFolder] = usePersisted<string>('bots.chatFolder', window.api.home)
-  const [added, setAdded] = useState<AddedWorktree | null>(null)
+  // The environment picked for Home's chat while it moves there: a new worktree's branch, or null for Local
+  const [picked, setPicked] = useState<{ branch: string | null } | null>(null)
   const [problem, setProblem] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const sessions = useService('sessions')
@@ -432,7 +433,8 @@ export function Bots(): React.JSX.Element {
   const collapsed = collapsedFolders.split('\n').filter(Boolean)
   const selectedChat = chats.find((session) => session.id === selectedId)
   const drafts = chats.filter(isDraft)
-  const draft = drafts[0] ?? null
+  // A chat moving to another folder is briefly two drafts, the new one out of sight until it takes over
+  const draft = drafts.at(-1) ?? null
   const onHome = selectedId === null
   const composer = selectedChat ?? draft
   const send = chat && composer ? (prompt: string): void => chat.draft(composer.id, prompt) : null
@@ -447,69 +449,88 @@ export function Bots(): React.JSX.Element {
   }
 
   // Home always has a new chat ready, so its pickers show the agent's own models and options before the first message
-  const starting = useRef(false)
+  const starting = useRef(0)
   const draftIds = drafts.map((session) => session.id).join(' ')
   useEffect(() => {
-    // A chat moving to another folder is briefly two drafts, and starts its own
-    if (!onHome || !sessions || !canChat || starting.current) return
-    const [newest, ...stale] = draftIds ? draftIds.split(' ') : []
-    if (newest) {
-      void sessions.wake(newest)
+    // Moves start chats of their own
+    if (!onHome || !sessions || !canChat || starting.current > 0) return
+    const stale = draftIds ? draftIds.split(' ') : []
+    const oldest = stale.pop()
+    if (oldest) {
+      void sessions.wake(oldest)
       // Chats left untitled by an earlier launch
       for (const id of stale) sessions.close(id)
       return
     }
     const agent = chatAgent()
     if (!agent) return
-    starting.current = true
-    sessions.start(chatFolder, agent.id, undefined, 'chat').finally(() => (starting.current = false))
+    starting.current++
+    sessions.start(chatFolder, agent.id, undefined, 'chat').finally(() => starting.current--)
   }, [onHome, sessions, canChat, draftIds, chatFolder])
 
-  /** Before its first message a chat moves by starting over in the new folder, with its draft and picked options */
-  const moveChat = async (session: SessionSummary, cwd: string): Promise<string | null> => {
-    if (!sessions || !chat) return null
-    starting.current = true
+  // Worktrees added for chats before their first message, by path
+  const added = useRef(new Map<string, AddedWorktree>())
+  const dropWorktree = (path: string | null): void => {
+    const worktree = path === null ? undefined : added.current.get(path)
+    if (path === null || !worktree) return
+    added.current.delete(path)
+    window.api
+      .removeWorktree(path, false)
+      .then(() => window.api.deleteBranch(worktree.repo, worktree.branch))
+      .catch(() => undefined)
+  }
+  /** Before its first message a chat moves by starting over in the new folder, out of sight until that chat is up and takes over */
+  const moveChat = async (session: SessionSummary, folder: Promise<string>): Promise<void> => {
+    if (!sessions || !chat) return
+    starting.current++
+    // Moving back where it is calls off the move under way
+    const target = folder.then((cwd) => (cwd === session.worktreePath ? null : sessions.start(cwd, session.kind, undefined, 'chat')))
     try {
-      const id = await sessions.start(cwd, session.kind, undefined, 'chat')
-      void chat.carryOver(session.id, id)
-      sessions.close(session.id)
-      return id
+      const id = await chat.carryOver(session.id, target)
+      if (id) {
+        sessions.close(session.id)
+        dropWorktree(session.worktreePath)
+        setSelectedId((current) => (current === session.id ? id : current))
+        return
+      }
+      // Called off, or it failed
+      const unused = await target.catch((reason: unknown) => {
+        setProblem(errorMessage(reason))
+        return null
+      })
+      if (unused) sessions.close(unused)
+      const cwd = await folder.catch(() => null)
+      if (cwd !== session.worktreePath) dropWorktree(cwd)
     } finally {
-      starting.current = false
+      starting.current--
     }
   }
-  const dropAdded = (): void => {
-    if (!added) return
-    setAdded(null)
-    window.api
-      .removeWorktree(added.path, false)
-      .then(() => window.api.deleteBranch(added.repo, added.branch))
-      .catch(() => undefined)
+  const lastMove = useRef(0)
+  const moveDraft = (folder: Promise<string>, branch: string | null): void => {
+    if (!draft) return
+    setProblem('')
+    setPicked({ branch })
+    const move = ++lastMove.current
+    void moveChat(draft, folder).finally(() => move === lastMove.current && setPicked(null))
   }
   const pickFolder = (folder: string): void => {
     setChatFolder(folder)
-    setProblem('')
-    if (draft) void moveChat(draft, folder).then(dropAdded)
+    moveDraft(Promise.resolve(folder), null)
   }
-  const pickWorktree = async (worktree: boolean): Promise<void> => {
+  const pickWorktree = (worktree: boolean): void => {
     if (!draft) return
-    setProblem('')
-    if (!worktree) return void moveChat(draft, chatFolder).then(dropAdded)
+    if (!worktree) return moveDraft(Promise.resolve(chatFolder), null)
+    const repo = chatFolder
     const branch = `chat-${crypto.randomUUID().slice(0, 6)}`
-    try {
-      const path = await window.api.addWorktree(chatFolder, branch)
-      await moveChat(draft, path)
-      dropAdded()
-      setAdded({ repo: chatFolder, path, branch })
-    } catch (reason) {
-      setProblem(errorMessage(reason))
-    }
+    const path = window.api.addWorktree(repo, branch).then((path) => {
+      added.current.set(path, { repo, branch })
+      return path
+    })
+    moveDraft(path, branch)
   }
+  // A chat still moving opens where it moves to once that is up
   const sent = (): void => {
-    if (!draft) return
-    // The chat owns its worktree now
-    setAdded(null)
-    setSelectedId(draft.id)
+    if (draft) setSelectedId(draft.id)
   }
 
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -748,7 +769,7 @@ export function Bots(): React.JSX.Element {
               side={side}
               onFolder={(folder) => {
                 setChatFolder(folder)
-                void moveChat(selectedChat, folder).then((id) => id && setSelectedId(id))
+                void moveChat(selectedChat, Promise.resolve(folder))
               }}
               onTerminal={() => (side === TERMINAL ? setSide(null) : openShell(selectedChat.worktreePath))}
               onPage={(id) => setSide(side === id ? null : id)}
@@ -768,10 +789,10 @@ export function Bots(): React.JSX.Element {
                 bots={bots}
                 folder={chatFolder}
                 recent={recentFolders}
-                worktree={draft && draft.worktreePath !== chatFolder ? (added?.path === draft.worktreePath ? added.branch : worktreeLabel(null, draft.worktreePath)) : null}
+                worktree={picked ? picked.branch : draft && draft.worktreePath !== chatFolder ? worktreeLabel(null, draft.worktreePath) : null}
                 problem={problem}
                 onFolder={pickFolder}
-                onWorktree={(worktree) => void pickWorktree(worktree)}
+                onWorktree={pickWorktree}
                 onSent={sent}
                 onPick={setSelectedId}
               />
