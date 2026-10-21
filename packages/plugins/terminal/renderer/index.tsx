@@ -17,7 +17,7 @@ import {
   PANE_HEADER
 } from '@treeix/sdk'
 import { chatAgent, getAgents } from '@treeix/app/agents'
-import { actionForEvent, actionKeys, defineActions, key, matchesAction } from '@treeix/shared/keymap'
+import { actionForEvent, actionKeys, defineActions, key, matchesAction, NEW_TAB_ACTIONS } from '@treeix/shared/keymap'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { MarkdownFoldScope } from '@treeix/app/LazyMarkdown'
 import { useService } from '@treeix/app/plugins'
@@ -34,7 +34,6 @@ import { hearLastReply, Speaker } from './Speaker'
 import { startRename } from './rename'
 import { openSession, sessionEntries, WorkspaceTerminals } from './SessionPanel'
 import { findInFiles, resolvePath } from './fileLinks'
-import { NEW_TAB_ACTIONS } from './sessionMeta'
 import type { PaneLayout } from './paneLayout'
 import {
   activeSession,
@@ -484,6 +483,7 @@ defineActions([
   // ⌘N starts a chat now; the second key is there to be recorded
   { id: 'terminal.newTabAlt', label: 'New shell session, second key', section: 'Terminal', keys: null },
   { id: 'terminal.newClaudeTab', label: 'New Claude session', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true }) },
+  { id: 'terminal.newCodexTab', label: 'New Codex session', section: 'Terminal', keys: key('KeyT', { meta: true, alt: true, shift: true }) },
   { id: 'terminal.newChat', label: 'New chat, with the agent last picked in one', section: 'Terminal', keys: key('KeyC', { meta: true, alt: true }) },
   { id: 'terminal.splitRight', label: 'Split right with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true }) },
   { id: 'terminal.splitDown', label: 'Split down with a new shell', section: 'Terminal', keys: key('KeyD', { meta: true, shift: true }) },
@@ -524,6 +524,7 @@ function onKeyDown(event: KeyboardEvent, host: HostApi): boolean {
     'terminal.newTab': () => newSession(host, 'shell'),
     'terminal.newTabAlt': () => newSession(host, 'shell'),
     'terminal.newClaudeTab': () => newSession(host, 'claude'),
+    'terminal.newCodexTab': () => newSession(host, 'codex'),
     'terminal.newChat': () => newChat(host),
     'terminal.reopenClosed': () => reopenClosed(host),
     'terminal.hearReply': () => void hearLastReply(scope.session, 'auto', host.flash),

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { type ClosedSessionSummary, getShell, ISLAND, isTyping, type SessionSummary, type Services, togglePanel, updateShell } from '@treeix/sdk'
-import { agentOr, chatAgent, useAgents } from './agents'
+import { agentOr, chatAgent, isChatOnly, useAgents } from './agents'
 import { BotAvatar } from './BotAvatar'
 import { Icon } from './Icon'
 import { JOBS } from './jobs'
 import { findService, usePlugins, useService, useSessions } from './plugins'
 import { FolderPicker } from './FolderPicker'
 import { stepFontSize, useSettings } from './settings'
-import { actionForEvent, onKeymapChange, withKeys } from '../../shared/keymap'
+import { acceleratorOf, actionForEvent, NEW_TAB_ACTIONS, onKeymapChange, withKeys } from '../../shared/keymap'
 import { primaryKey, secondaryKey } from '../../shared/shortcut'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { ShortcutSheet } from './Shell'
@@ -109,6 +109,48 @@ function ClosedChatRow({ session, onOpen, onForget }: { session: ClosedSessionSu
         </IconButton>
       </span>
     </div>
+  )
+}
+
+const LONG_PRESS_MS = 400
+
+/** A click starts a chat; holding it or a right click offers a shell or an agent in a terminal instead */
+function NewButton({ active = false, onChat, onTerminal }: { active?: boolean; onChat: () => void; onTerminal: (kind: string) => void }): React.JSX.Element {
+  'use no memo' // the shortcut in its label is read from the keymap during render
+  const agents = useAgents().filter((agent) => !isChatOnly(agent))
+  const pressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const held = useRef(false)
+  const endPress = (): void => clearTimeout(pressTimer.current)
+  const showMenu = (event: React.MouseEvent): void =>
+    openMenu(event, [
+      { label: 'New chat', accelerator: acceleratorOf('chat.new'), run: onChat },
+      null,
+      ...agents.map((agent) => ({
+        label: agent.id === 'shell' ? 'New shell' : `New ${agent.label} terminal`,
+        accelerator: acceleratorOf(NEW_TAB_ACTIONS[agent.id]),
+        run: () => onTerminal(agent.id)
+      }))
+    ])
+  return (
+    // The click that ends a hold opens nothing more
+    <span
+      onPointerDown={(event) => {
+        held.current = false
+        pressTimer.current = setTimeout(() => {
+          held.current = true
+          showMenu(event)
+        }, LONG_PRESS_MS)
+      }}
+      onPointerUp={endPress}
+      onPointerLeave={endPress}
+      onClickCapture={(event) => held.current && event.stopPropagation()}
+      onContextMenu={showMenu}
+      className="contents"
+    >
+      <IconButton label={withKeys('New chat; hold or right-click for a shell, Claude or Codex in a terminal', 'chat.new')} active={active} onClick={onChat}>
+        <Icon name="plus" />
+      </IconButton>
+    </span>
   )
 }
 
@@ -450,6 +492,15 @@ export function Bots(): React.JSX.Element {
     else void sessions.start(folder, 'shell').then((id) => sessions.reveal(id))
   }
 
+  // Always a new one, in the folder of the chat on screen
+  const newTerminal = (kind: string): void => {
+    setSide(TERMINAL)
+    void sessions?.start(selectedChat?.worktreePath ?? chatFolder, kind).then(
+      (id) => sessions.reveal(id),
+      (reason: unknown) => setProblem(errorMessage(reason))
+    )
+  }
+
   // Home always has a new chat ready, so its pickers show the agent's own models and options before the first message
   const starting = useRef(0)
   const draftIds = drafts.map((session) => session.id).join(' ')
@@ -594,9 +645,7 @@ export function Bots(): React.JSX.Element {
           <>
             <div className="mt-2 flex h-7 shrink-0 items-center justify-between pl-2 text-[11px] font-medium text-muted-foreground">
               Chats
-              <IconButton label={withKeys('New chat', 'chat.new')} onClick={() => setSelectedId(null)}>
-                <Icon name="plus" />
-              </IconButton>
+              <NewButton onChat={() => setSelectedId(null)} onTerminal={newTerminal} />
             </div>
             {Map.groupBy(
               chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
@@ -673,11 +722,7 @@ export function Bots(): React.JSX.Element {
     >
       {/* Under the traffic lights */}
       <div className={`h-11 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-      {canChat && (
-        <IconButton label={withKeys('New chat', 'chat.new')} active={onHome} onClick={() => setSelectedId(null)}>
-          <Icon name="plus" />
-        </IconButton>
-      )}
+      {canChat && <NewButton active={onHome} onChat={() => setSelectedId(null)} onTerminal={newTerminal} />}
       <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto py-1.5">
         {bots.map((bot) => (
           <button key={bot.id} title={bot.name} onClick={() => setSelectedId(bot.id)} className={`rounded-lg p-1 ${bot.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}>

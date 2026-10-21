@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Repo } from '@treeix/shared/types'
 import { useService } from '@treeix/app/plugins'
-import { actionKeys, shortcutOf, withKeys } from '@treeix/shared/keymap'
-import { toAccelerator, keysText } from '@treeix/shared/shortcut'
+import { acceleratorOf, actionKeys, NEW_TAB_ACTIONS, withKeys } from '@treeix/shared/keymap'
+import { keysText } from '@treeix/shared/shortcut'
 import { Icon } from '@treeix/app/Icon'
 import { copyText, type MenuEntry, openMenu } from '@treeix/app/contextMenu'
 import { KindBadge, SESSION_MIME, StatusDot, worktreeLabel } from '@treeix/app/sessionUi'
@@ -18,7 +18,7 @@ import { droppedPaths } from './fileLinks'
 import type { SplitEdge } from './paneLayout'
 import { setFolderPickerOpen, setPickedFolder, useFolderPickerOpen, useFolders } from './folder'
 import { renaming, startRename } from './rename'
-import { NEW_TAB_ACTIONS, newTabEntries, type NewTabEntry } from './sessionMeta'
+import { newTabEntries, type NewTabEntry } from './sessionMeta'
 import {
   attachSession,
   releaseGpu,
@@ -52,12 +52,6 @@ import {
 const draggingFiles = (event: React.DragEvent): boolean => event.dataTransfer.types.includes('Files')
 
 const LONG_PRESS_MS = 400
-
-/** The menu shows an action's key as rebound in Settings */
-const acceleratorOf = (action: string | undefined): string | undefined => {
-  const shortcut = action ? shortcutOf(action) : null
-  return (shortcut && toAccelerator(shortcut)) ?? undefined
-}
 
 /** Starts a session in the folder, puts it on screen and focuses it */
 export const openSession = (cwd: string, kind: SessionKind, view: SessionViewKind = 'terminal'): void =>

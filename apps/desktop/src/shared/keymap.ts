@@ -1,4 +1,4 @@
-import { forPlatform, matchesShortcut, type Shortcut, shortcutLabel } from './shortcut'
+import { forPlatform, matchesShortcut, type Shortcut, shortcutLabel, toAccelerator } from './shortcut'
 
 /**
  * Every named action the keyboard can reach, with the key it ships with. The app and its plugins declare theirs
@@ -61,6 +61,15 @@ export function actionKeys(id: string): string {
   const shortcut = shortcutOf(id)
   return shortcut ? shortcutLabel(shortcut) : ''
 }
+
+/** A menu shows an action's key as rebound in Settings */
+export const acceleratorOf = (action: string | undefined): string | undefined => {
+  const shortcut = action ? shortcutOf(action) : null
+  return (shortcut && toAccelerator(shortcut)) ?? undefined
+}
+
+/** Agents with a key of their own for a new terminal session */
+export const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab', codex: 'terminal.newCodexTab' }
 
 /** "Split right (⌘D)": a tooltip shows the bracketed part as a key chip; the label alone while the action has no key */
 export const withKeys = (label: string, id: string): string => (actionKeys(id) ? `${label} (${actionKeys(id)})` : label)

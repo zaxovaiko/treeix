@@ -42,9 +42,6 @@ export const NEW_CHAT_TITLE = 'New chat'
 /** A chat still titled "New chat" or "New chat 2" takes its first message as its title */
 export const isDefaultChatTitle = (title: string): boolean => new RegExp(`^${NEW_CHAT_TITLE}( \\d+)?$`).test(title)
 
-/** Agents with a key of their own for a new tab */
-export const NEW_TAB_ACTIONS: Record<string, string> = { shell: 'terminal.newTab', claude: 'terminal.newClaudeTab' }
-
 export type NewTabEntry = { agent: string; view: SessionView; label: string }
 
 /** Each agent in a terminal (chat-only ones as a chat), then one chat, with `chat` the agent it starts with; the chat picks its agent itself */
