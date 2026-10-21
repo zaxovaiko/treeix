@@ -68,7 +68,8 @@ function textWeight(): '300' | '400' | '500' | '600' {
 function terminalTheme(): TerminalTheme {
   const theme = activeTheme()
   const { foreground, background, mode } = theme
-  const base = { background: seeThrough() ? '#00000000' : background, foreground, cursor: foreground, selectionBackground: mode === 'light' ? '#0000002e' : '#ffffff33' }
+  // See-through keeps the theme's color at zero alpha: programs asking for the background (OSC 11, Claude Code's Auto theme) get it, not black
+  const base = { background: seeThrough() ? `${background}00` : background, foreground, cursor: foreground, selectionBackground: mode === 'light' ? '#0000002e' : '#ffffff33' }
   if (palette?.theme !== theme) void loadPalette(theme)
   return { ...base, ...palette?.colors }
 }
