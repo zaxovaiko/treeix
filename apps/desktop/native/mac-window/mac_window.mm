@@ -30,6 +30,12 @@ static napi_value SetDockHidden(napi_env env, napi_callback_info info) {
   return nullptr;
 }
 
+/** Electron rounds the vibrancy view of an untitled window with a mask of its own, so its blur kept round corners on a square window */
+static void ClearVibrancyMasks(NSView *view) {
+  if ([view isKindOfClass:[NSVisualEffectView class]]) ((NSVisualEffectView *)view).maskImage = nil;
+  for (NSView *child in view.subviews) ClearVibrancyMasks(child);
+}
+
 /** setSquareCorners(nativeWindowHandle, square): drops the titled style, which is what rounds the corners */
 static napi_value SetSquareCorners(napi_env env, napi_callback_info info) {
   napi_value argv[2];
@@ -47,6 +53,7 @@ static napi_value SetSquareCorners(napi_env env, napi_callback_info info) {
     NSWindowStyleMask mask = window.styleMask;
     NSWindowStyleMask next = square ? (mask & ~NSWindowStyleMaskTitled) : (mask | NSWindowStyleMaskTitled);
     if (next != mask) window.styleMask = next;
+    if (square) ClearVibrancyMasks(window.contentView.superview ?: window.contentView);
   });
   return nullptr;
 }
