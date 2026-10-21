@@ -1,4 +1,15 @@
 {
+  // Editors type-check these files with the app's configs, which build them
+  "files": [],
+  "references": [
+    {
+      "path": "../apps/desktop/tsconfig.node.json"
+    },
+    {
+      "path": "../apps/desktop/tsconfig.web.json"
+    }
+  ],
+  // Only for bun test, which resolves imports through this file
   "compilerOptions": {
     "paths": {
       "@treeix/sdk": ["./sdk/src/index.ts"],
