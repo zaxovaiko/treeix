@@ -12,7 +12,7 @@ import { primaryKey, secondaryKey } from '../../shared/shortcut'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { ShortcutSheet } from './Shell'
 import { CHANGES, PluginHost, PluginPage, type Side, TERMINAL } from './PluginHost'
-import { projectOf, StatusDot, worktreeLabel } from './sessionUi'
+import { AgentGlyph, projectOf, StatusDot, worktreeLabel } from './sessionUi'
 import { timeAgo } from './time'
 import logo from './assets/treeix.webp'
 import { openMenu } from './contextMenu'
@@ -38,10 +38,9 @@ function BotRow({ bot, active, onClick }: { bot: Bot; active: boolean; onClick: 
 function AgentMark({ kind, className = 'size-7 text-[15px]' }: { kind: string; className?: string }): React.JSX.Element {
   'use no memo' // agent mark is read from the agents list during render
   useAgents()
-  const { mark, color } = agentOr(kind)
   return (
-    <span style={{ color }} className={`grid shrink-0 place-items-center rounded-full bg-foreground/10 ${className}`}>
-      {mark}
+    <span className={`grid shrink-0 place-items-center rounded-full bg-foreground/10 ${className}`}>
+      <AgentGlyph agent={agentOr(kind)} className="size-[58%]" />
     </span>
   )
 }

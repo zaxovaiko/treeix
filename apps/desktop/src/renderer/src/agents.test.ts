@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { BUILTIN_AGENTS } from './agents'
+import { BUILTIN_AGENTS, logoOf } from './agents'
 
 globalThis.localStorage ??= { getItem: () => null, setItem: () => undefined } as unknown as Storage
 
@@ -118,4 +118,11 @@ test("plugin agents come after the user's, never replace them, and chat-only one
   setPluginAgents([])
   expect(getAgents().map((agent) => agent.id)).not.toContain('hub.a')
   await setAgents([])
+})
+
+test('Claude and Codex wear their logos until their mark is changed', () => {
+  expect(logoOf(BUILTIN_AGENTS.claude)).toBe(BUILTIN_AGENTS.claude.logo)
+  expect(logoOf({ ...BUILTIN_AGENTS.codex, logo: undefined })).toBe(BUILTIN_AGENTS.codex.logo)
+  expect(logoOf({ ...BUILTIN_AGENTS.claude, mark: 'C' })).toBeNull()
+  expect(logoOf(BUILTIN_AGENTS.shell)).toBeNull()
 })

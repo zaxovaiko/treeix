@@ -3,7 +3,7 @@ import { type ToolCall, useHost } from '@treeix/sdk'
 import { agentOr, useAgents } from '@treeix/app/agents'
 import { Icon } from '@treeix/app/Icon'
 import { useSettings } from '@treeix/app/settings'
-import { worktreeLabel } from '@treeix/app/sessionUi'
+import { AgentGlyph, worktreeLabel } from '@treeix/app/sessionUi'
 import { firstAllow, firstReject, formatElapsed, useElapsed } from './Blocks'
 import { Composer, ContextBar } from './ChatComposer'
 import { formatTokens, modelName, valueName } from './composer'
@@ -68,8 +68,8 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
       {agent.image ? (
         <img src={agent.image} alt="" className="size-14 rounded-lg object-cover" />
       ) : (
-        <span style={{ color: agent.color }} className="text-3xl">
-          {agent.mark}
+        <span className="text-3xl">
+          <AgentGlyph agent={agent} className="size-9" />
         </span>
       )}
       <div className="text-base text-foreground">Chat with {agent.label}</div>
