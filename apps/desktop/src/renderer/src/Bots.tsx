@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { type ClosedSessionSummary, getShell, ISLAND, isTyping, type SessionSummary, type Services, togglePanel, updateShell, useShell } from '@treeix/sdk'
-import { agentOr, chatAgent, isChatOnly, useAgents } from './agents'
+import { agentOr, chatAgent, isAgent, isChatOnly, useAgents } from './agents'
 import { BotAvatar } from './BotAvatar'
 import { Icon } from './Icon'
 import { JOBS } from './jobs'
@@ -101,6 +101,7 @@ function ClosedChatRow({ session, onOpen, onForget }: { session: ClosedSessionSu
       <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 text-left group-hover:pr-9">
         <AgentMark kind={session.kind} className="size-5 text-[11px] opacity-70" />
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground group-hover:text-foreground">{session.title}</span>
+        {session.view === 'terminal' && <Icon name="terminal" className="size-3 shrink-0 text-muted-foreground" />}
         <span className="shrink-0 text-[11px] text-muted-foreground group-hover:hidden">{timeAgo(new Date(session.endedAt).toISOString())}</span>
       </button>
       <span className="absolute right-1 hidden group-hover:block">
@@ -471,7 +472,10 @@ export function Bots(): React.JSX.Element {
   const chats = useSessions()
     .filter((session) => session.view === 'chat')
     .toSorted((a, b) => b.startedAt - a.startedAt)
-  const allClosed = useSyncExternalStore(sessions?.subscribe ?? noSubscription, sessions?.getClosed ?? noClosed).filter((session) => session.view === 'chat')
+  // Agents closed in a terminal resume there; a closed shell has nothing to resume
+  const allClosed = useSyncExternalStore(sessions?.subscribe ?? noSubscription, sessions?.getClosed ?? noClosed).filter(
+    (session) => session.view === 'chat' || isAgent(session.kind)
+  )
   const closed = allClosed.filter((session) => !isDraft(session) && matches(session.title))
   // Folders chats ran in, newest first, for the folder picker
   const recentFolders = [...new Set([...chats, ...allClosed].toSorted((a, b) => b.startedAt - a.startedAt).map((session) => session.worktreePath))].slice(0, 8)
@@ -718,7 +722,15 @@ export function Bots(): React.JSX.Element {
                 <ClosedChatRow
                   key={session.id}
                   session={session}
-                  onOpen={() => void sessions?.reopen(session.id).then((id) => id && pick(id))}
+                  onOpen={() =>
+                    void sessions?.reopen(session.id).then((id) => {
+                      if (!id) return
+                      if (session.view === 'chat') return pick(id)
+                      setSide(TERMINAL)
+                      setFilled(true)
+                      sessions.reveal(id)
+                    })
+                  }
                   onForget={() => sessions?.forget(session.id)}
                 />
               ))}
