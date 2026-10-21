@@ -45,7 +45,7 @@ export function PluginHost({
   search,
   onSearch,
   onSettings,
-  lead,
+  cornered,
   children
 }: {
   page: string
@@ -63,8 +63,8 @@ export function PluginHost({
   onSearch: (open: boolean) => void
   /** Shows Settings, on the page asked for once it is up */
   onSettings: () => void
-  /** Room for the collapsed sidebar's corner over the panel while it fills the window */
-  lead: React.ReactNode
+  /** The collapsed sidebar's corner, or zen's traffic lights, sit over the page's top left */
+  cornered: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   const { loaded: plugins } = usePlugins()
@@ -175,12 +175,13 @@ export function PluginHost({
       isPanelVisible: (id) => id === TERMINAL && terminalShown,
       movePanel: noop,
       panelFilled: filled,
+      panelCornered: filled && cornered,
       fillPanel: onFill,
       isEnabled: (pluginId) => plugins.some(({ manifest }) => manifest.id === pluginId),
       service: findService,
       onSent: () => onTerminal(true)
     }),
-    [currentId, page, folder, side, back, plugins, comments, send, filled]
+    [currentId, page, folder, side, back, plugins, comments, send, filled, cornered]
   )
   // Plugins' keys (the terminal's ⌘T, ⌘D, ⌘[ and more) and ⌘W, which closes the focused terminal's session, else the panel
   const keys = {
@@ -227,7 +228,7 @@ export function PluginHost({
       offClose()
     }
   }, [])
-  const pageNav = { onClose: () => show(null), onBack: back.length ? goBack : null, onForward: forward.length ? goForward : null, filled, onFill }
+  const pageNav = { onClose: () => show(null), onBack: back.length ? goBack : null, onForward: forward.length ? goForward : null, filled, cornered: filled && cornered, onFill }
   const Terminal = plugins.flatMap(({ plugin }) => plugin.panels ?? []).find((panel) => panel.id === TERMINAL)?.render
   const tab = typeof side === 'string' ? plugins.flatMap(({ plugin }) => plugin.tabs ?? []).find((candidate) => candidate.id === side) : undefined
   const content =
@@ -257,7 +258,7 @@ export function PluginHost({
             style={filled ? undefined : { width: sideWidth }}
             className={`relative min-w-[240px] flex-col ${filled ? 'flex flex-1' : zen ? 'hidden' : 'flex'} ${island ? ISLAND : filled ? '' : 'border-l border-border'}`}
           >
-            {filled ? lead : <ResizeHandle edge="left" onResize={setSideWidth} />}
+            {!filled && <ResizeHandle edge="left" onResize={setSideWidth} />}
             <ErrorBoundary
               label={tab?.label ?? (typeof side === 'object' ? side?.title : side === CHANGES ? 'Changes' : undefined) ?? 'Terminal'}
               resetKey={typeof side === 'object' ? side?.key : (side ?? '')}
@@ -317,6 +318,7 @@ function SidePage({
   onBack,
   onForward,
   filled,
+  cornered,
   onFill,
   children
 }: {
@@ -326,12 +328,14 @@ function SidePage({
   onBack: (() => void) | null
   onForward: (() => void) | null
   filled: boolean
+  /** Beside the collapsed sidebar's corner it takes the corner's height, level with the traffic lights */
+  cornered: boolean
   onFill: (fill: boolean) => void
   children: React.ReactNode
 }): React.JSX.Element {
   return (
     <>
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border pr-2 pl-3 text-xs">
+      <header className={`flex shrink-0 items-center gap-2 border-b border-border pr-2 text-xs ${cornered ? 'h-9 pl-[84px] [-webkit-app-region:drag]' : 'h-11 pl-3'}`}>
         {(onBack || onForward) && (
           <span className="-ml-1 flex shrink-0">
             <IconButton label={withKeys('Back', 'app.back')} disabled={!onBack} onClick={() => onBack?.()}>

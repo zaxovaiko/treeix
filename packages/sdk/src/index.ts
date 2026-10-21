@@ -292,6 +292,8 @@ export type HostApi = {
   movePanel: (id: string, side: 'left' | 'right' | 'bottom') => void
   /** Whether the docked panel fills the window in place of the page beside it */
   panelFilled: boolean
+  /** Filling the window beside the collapsed sidebar's corner, or the traffic lights in zen: the panel's header sits level with them, clear of them */
+  panelCornered: boolean
   fillPanel: (fill: boolean) => void
   isEnabled: (pluginId: string) => boolean
   service: <K extends keyof Services>(name: K) => Services[K] | null

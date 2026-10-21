@@ -411,9 +411,11 @@ function SessionBar({
   const host = useHost()
   const panels = usePanels()
   const { id: renamingId } = renaming.useValue()
-  // In zen the page's strip moves up beside the traffic lights and drags the window, in place of the title bar
+  // In zen the page's strip moves up beside the traffic lights and drags the window, in place of the title bar; a docked one
+  // filling the window beside the collapsed sidebar's corner does too, at the corner's height
   const chromeless = useChromeless()
-  const topBar = page && panels.zen && !chromeless
+  const cornered = !page && host.panelCornered
+  const topBar = ((page && panels.zen) || cornered) && !chromeless
   const newSession = (kind: SessionKind, view: SessionViewKind): void => openSession(session?.worktreePath ?? cwd, kind, view)
   const entries = useNewSessionEntries()
   const menuEntry = (entry: NewTabEntry): MenuEntry => ({
@@ -432,7 +434,9 @@ function SessionBar({
   const plans = useService('plans')
   const planName = session?.view === 'terminal' ? session.planName : null
   return (
-    <div className={`@container ${PANE_HEADER} gap-1 pr-2 pl-2 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''}`}>
+    <div
+      className={`@container ${PANE_HEADER} gap-1 pr-2 pl-2 ${topBar ? 'pl-[80px] [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]' : ''} ${cornered ? 'h-9! pl-[84px]!' : ''}`}
+    >
       {page && (
         <div className="flex min-w-0 shrink-0 items-center gap-1 pr-1">
           {onGoToFolder && <FolderPicker label={label} current={session?.worktreePath ?? cwd} onGo={onGoToFolder} />}

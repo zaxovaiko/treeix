@@ -828,7 +828,7 @@ export function Bots(): React.JSX.Element {
         search={search}
         onSearch={setSearch}
         onSettings={() => pick(CONFIGURE)}
-        lead={cornerBar}
+        cornered={!listed}
       >
         <main className={`flex min-w-[300px] flex-1 flex-col ${islandUi ? `overflow-hidden ${ISLAND}` : ''}`}>
           {selectedId === CONFIGURE ? (
