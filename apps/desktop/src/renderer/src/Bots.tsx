@@ -4,7 +4,7 @@ import { agentOr, chatAgent, isAgent, isChatOnly, useAgents } from './agents'
 import { BotAvatar } from './BotAvatar'
 import { Icon } from './Icon'
 import { JOBS } from './jobs'
-import { findService, usePlugins, useService, useSessions } from './plugins'
+import { findService, useActiveSessionId, usePlugins, useService, useSessions } from './plugins'
 import { FolderPicker } from './FolderPicker'
 import { stepFontSize, useSettings } from './settings'
 import { actionForEvent, actionKeys, NEW_TAB_ACTIONS, onKeymapChange, withKeys } from '../../shared/keymap'
@@ -83,9 +83,10 @@ function ChatRow({
         <AgentMark kind={session.kind} className="size-5 text-[11px]" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{session.title}</span>
         {(session.status === 'input' || session.status === 'running') && <StatusDot session={session} />}
+        {session.view === 'terminal' && <Icon name="terminal" className="size-3 shrink-0 text-muted-foreground" />}
       </button>
       <span className="absolute right-1 hidden group-hover:block">
-        <IconButton label="Close chat" onClick={() => findService('sessions')?.close(session.id)}>
+        <IconButton label={session.view === 'chat' ? 'Close chat' : 'Close terminal'} onClick={() => findService('sessions')?.close(session.id)}>
           <Icon name="close" className="size-3" />
         </IconButton>
       </span>
@@ -476,9 +477,14 @@ export function Bots(): React.JSX.Element {
   const selected = bots.find((bot) => bot.id === selectedId)
   const matches = (text: string): boolean => text.toLowerCase().includes(query.trim().toLowerCase())
   const shown = bots.filter((bot) => matches(bot.name))
-  const chats = useSessions()
-    .filter((session) => session.view === 'chat')
-    .toSorted((a, b) => b.startedAt - a.startedAt)
+  const live = useSessions().toSorted((a, b) => b.startedAt - a.startedAt)
+  const chats = live.filter((session) => session.view === 'chat')
+  // Claude and Codex terminals are listed with the chats, so one that filled the page can be found again
+  const listedSessions = live.filter((session) => (session.view === 'chat' ? session.id === selectedId || !isDraft(session) : isAgent(session.kind)))
+  // A terminal on the whole page is the one picked in the list, in place of the chat behind it
+  const terminalPage = filled && side === TERMINAL
+  const shownTerminal = useActiveSessionId()
+  const isOpen = (session: SessionSummary): boolean => (session.view === 'chat' ? !terminalPage && session.id === selectedId : terminalPage && session.id === shownTerminal)
   // Agents closed in a terminal resume there; a closed shell has nothing to resume
   const allClosed = useSyncExternalStore(sessions?.subscribe ?? noSubscription, sessions?.getClosed ?? noClosed).filter(
     (session) => session.view === 'chat' || isAgent(session.kind)
@@ -602,10 +608,17 @@ export function Bots(): React.JSX.Element {
     if (draft) setSelectedId(draft.id)
   }
 
-  // Picking something to show docks a panel that fills the page
+  // Picking something to show docks a panel that fills the page; a terminal on the page is listed in the sidebar, so it closes instead
   const pick = (id: string | null): void => {
+    if (terminalPage) setSide(null)
     setFilled(false)
     setSelectedId(id)
+  }
+  const openSession = (session: SessionSummary): void => {
+    if (session.view === 'chat') return pick(session.id)
+    setSide(TERMINAL)
+    setFilled(true)
+    sessions?.reveal(session.id)
   }
   // A new chat has the page to itself
   const newChat = (): void => {
@@ -678,7 +691,7 @@ export function Bots(): React.JSX.Element {
               <NewButton onChat={newChat} onTerminal={newTerminal} />
             </div>
             {Map.groupBy(
-              chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
+              listedSessions.filter((session) => matches(session.title)),
               projectOfChat
             )
               .entries()
@@ -703,9 +716,9 @@ export function Bots(): React.JSX.Element {
                         <ChatRow
                           key={session.id}
                           session={session}
-                          active={session.id === selectedId}
+                          active={isOpen(session)}
                           renaming={session.id === renaming}
-                          onClick={() => pick(session.id)}
+                          onClick={() => openSession(session)}
                           onRename={() => setRenaming(session.id)}
                           onRenamed={() => setRenaming(null)}
                           flash={setProblem}
@@ -768,10 +781,7 @@ export function Bots(): React.JSX.Element {
           </button>
         ))}
         {canChat &&
-          Map.groupBy(
-            chats.filter((session) => session.id === selectedId || !isDraft(session)),
-            projectOfChat
-          )
+          Map.groupBy(listedSessions, projectOfChat)
             .entries()
             .map(([folder, group]) =>
               // One tile per folder; a folder folded shut in the sidebar is its icon, opening it again
@@ -790,8 +800,8 @@ export function Bots(): React.JSX.Element {
                     <button
                       key={session.id}
                       title={session.title}
-                      onClick={() => pick(session.id)}
-                      className={`relative rounded-[10px] p-1 ${session.id === selectedId ? 'bg-foreground/10' : 'hover:bg-accent'}`}
+                      onClick={() => openSession(session)}
+                      className={`relative rounded-[10px] p-1 ${isOpen(session) ? 'bg-foreground/10' : 'hover:bg-accent'}`}
                     >
                       <AgentMark kind={session.kind} />
                       {(session.status === 'input' || session.status === 'running') && (
