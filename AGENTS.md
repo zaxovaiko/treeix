@@ -12,3 +12,8 @@
 - Minor: `npm version --no-git-tag-version --prefix apps/desktop <x.y.0>`, commit `chore: release v<x.y.0>`, push. It must be higher than the latest tag.
 - Preview the notes before pushing: `sh apps/desktop/scripts/release-notes.sh "$(git tag -l 'v*' --sort=-v:refname | head -1)..HEAD"`.
 - Never push `v*` tags by hand; the workflow creates them. Details: `release` skill, `docs/releasing.md`.
+
+# E2E and repros
+
+- Always headless: every Electron launch (e2e, `.claude/repro` scripts, ad-hoc checks) sets `TREEIX_HEADLESS: '1'` in its env, so no window takes over the user's screen. Playwright screenshots still work hidden.
+- The one exception is a check that has to screen-capture the real window (e.g. the hotkey window's corners). Ask before running it.
