@@ -201,7 +201,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
           {empty ? (
             <EmptyState chatId={chatId} chat={chat} cwd={cwd} />
           ) : (
-            <TurnBlocks blocks={feed.blocks} cwd={cwd} newest={newest} onAnswer={reply} onOpenSubagent={openSubagent} live={feed.running} />
+            <TurnBlocks blocks={feed.blocks} cwd={cwd} newest={newest} onAnswer={reply} onOpenSubagent={openSubagent} />
           )}
         </div>
       </div>

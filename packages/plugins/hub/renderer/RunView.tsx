@@ -239,12 +239,7 @@ export function RunView({ run }: { run: Run }): React.JSX.Element {
         >
           <div ref={content} className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
             {node?.kind === 'agent' && chat ? (
-              <chat.Transcript
-                events={nodeEvents}
-                cwd={node.folder ?? host.defaultCwd}
-                live={state?.status === 'running'}
-                onAnswer={(requestId, optionId) => hubApi.answer(run.id, node.id, requestId, optionId)}
-              />
+              <chat.Transcript events={nodeEvents} cwd={node.folder ?? host.defaultCwd} onAnswer={(requestId, optionId) => hubApi.answer(run.id, node.id, requestId, optionId)} />
             ) : (
               state?.output && (
                 <div className="text-sm select-text">
