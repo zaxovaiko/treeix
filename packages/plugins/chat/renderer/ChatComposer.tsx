@@ -412,7 +412,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
         // Opaque down to the box, so the messages beneath show through none of the gaps
         <div className="-mx-2 flex flex-col gap-1 bg-background px-2 pb-2">
           {chat.queue.map((content, index) => (
-            <div key={index} className="flex items-center gap-2 rounded-md bg-popover px-3 py-1 text-xs text-muted-foreground/70 shadow-[inset_0_0_0_1px_var(--color-input)]">
+            <div key={index} className="flex items-center gap-2 rounded-2xl bg-popover px-3 py-1 text-xs text-muted-foreground/70 shadow-[inset_0_0_0_1px_var(--color-input)]">
               {content.map((item, at) => item.type === 'image' && <ImageThumb key={at} image={item} className="size-5" />)}
               <span className="min-w-0 flex-1 truncate">{preview(content)}</span>
               <button aria-label="Remove queued message" onClick={() => unqueue(chatId, index)} className="hover:text-foreground">
