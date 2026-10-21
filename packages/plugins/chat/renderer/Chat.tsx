@@ -5,9 +5,10 @@ import { Icon } from '@treeix/app/Icon'
 import { useSettings } from '@treeix/app/settings'
 import { worktreeLabel } from '@treeix/app/sessionUi'
 import { firstAllow, firstReject, formatElapsed, useElapsed } from './Blocks'
-import { Composer } from './ChatComposer'
+import { Composer, ContextBar } from './ChatComposer'
+import { formatTokens, modelName, valueName } from './composer'
 import { FeedBlocks, pendingOf, TurnBlocks } from './Transcript'
-import { findTool } from './feed'
+import { type Feed, findTool } from './feed'
 import { activityOf, answer, cancel, type ChatState, isBusy, isConnecting, retry, useChat } from './store'
 import { primaryKey, keysText } from '@treeix/shared/shortcut'
 
@@ -82,15 +83,38 @@ function EmptyState({ chatId, chat, cwd }: { chatId: string; chat: ChatState; cw
 // Space between the last message and the top of the message box (and the rows floating above it)
 const FLOAT_CLEARANCE_PX = 160
 
+/** What a subagent runs on: the model it was given, else the chat's, at the chat's effort, and once done the context it filled */
+function SubagentBar({ call, feed }: { call: ToolCall; feed: Feed }): React.JSX.Element {
+  const chatModel = feed.options.find((option) => option.category === 'model')
+  const effort = feed.options.find((option) => option.category === 'effort')
+  const input = call.rawInput
+  const asked = typeof input === 'object' && input !== null && 'model' in input && typeof input.model === 'string' ? input.model : null
+  const model = call.subagent?.model ?? asked
+  const shown = [model ? modelName(model) : chatModel && valueName(chatModel), effort && `${valueName(effort)} effort`].filter(Boolean).join(' · ')
+  const done = call.subagent
+  // Its window is the chat's only when it ran on the chat's model
+  const size = done?.model && done.model === feed.usage?.model ? feed.usage.size : 0
+  return (
+    <div className="flex h-9 shrink-0 items-center gap-1.5 border-t border-border px-4 text-[11px] text-muted-foreground">
+      <span className="truncate">{shown}</span>
+      <span className="flex-1" />
+      {done && (size ? <ContextBar used={done.tokens} size={size} /> : `${formatTokens(done.tokens)} tokens`)}
+    </div>
+  )
+}
+
 /** One subagent's log, live while it runs; column-reverse keeps the scroll on its newest step */
 function SubagentPane({ chatId, callId, cwd }: { chatId: string; callId: string; cwd: string }): React.JSX.Element {
   const { feed } = useChat(chatId)
-  const blocks = findTool(feed.blocks, callId)?.children ?? []
+  const tool = findTool(feed.blocks, callId)
   return (
-    <div className="flex h-full min-h-0 flex-col-reverse overflow-x-hidden overflow-y-auto">
-      <div className="flex flex-col gap-3 p-4 pr-20">
-        <FeedBlocks blocks={blocks} cwd={cwd} newest={null} onAnswer={(requestId, optionId) => answer(chatId, requestId, optionId)} />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col-reverse overflow-x-hidden overflow-y-auto">
+        <div className="flex flex-col gap-3 p-4 pr-20">
+          <FeedBlocks blocks={tool?.children ?? []} cwd={cwd} newest={null} onAnswer={(requestId, optionId) => answer(chatId, requestId, optionId)} />
+        </div>
       </div>
+      {tool && <SubagentBar call={tool.call} feed={feed} />}
     </div>
   )
 }
