@@ -28,6 +28,14 @@ const texts = (call: ToolCall): string =>
     .filter(Boolean)
     .join('\n')
 
+/** Why a call failed, as the agent told the model; Claude Code wraps it in <tool_use_error> */
+const failureOf = (call: ToolCall): string =>
+  call.status === 'failed'
+    ? texts(call)
+        .replace(/<\/?tool_use_error>/g, '')
+        .trim()
+    : ''
+
 const diffs = (call: ToolCall): Diff[] => call.output.filter((output): output is Diff => output.type === 'diff')
 
 export const firstAllow = (options: PermissionOption[]): PermissionOption | undefined => options.find((option) => option.kind.startsWith('allow'))
@@ -266,8 +274,9 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
   const changes = diffs(call)
   const isEdit = call.kind === 'edit' || call.kind === 'delete' || call.kind === 'move'
   const isLookup = call.kind === 'read' || call.kind === 'search' || call.kind === 'fetch'
-  const details = isEdit ? '' : output || (isLookup || call.kind === 'execute' ? '' : JSON.stringify(call.rawInput, null, 2) || '')
-  const expandable = isEdit ? changes.length > 0 : details !== ''
+  const failure = failureOf(call)
+  const details = failure || (isEdit ? '' : output || (isLookup || call.kind === 'execute' ? '' : JSON.stringify(call.rawInput, null, 2) || ''))
+  const expandable = details !== '' || (isEdit && changes.length > 0)
   const total = changes.reduce(
     (sum, diff) => {
       const counts = diffCounts(diff.oldText, diff.newText)
@@ -288,6 +297,12 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
         {changes.length > 0 && <Counts {...total} />}
         {expandable && <Icon name="chevron" className={`size-3 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />}
       </div>
+      {/* Folded, the first line of why it failed, under the title */}
+      {failure && !open && (
+        <div onClick={() => setOpen(true)} className="-mt-1 cursor-pointer truncate pr-3 pb-1.5 pl-[34px] text-red-300/80 hover:bg-accent/50">
+          {failure.split('\n')[0]}
+        </div>
+      )}
       {isEdit &&
         open &&
         changes.map((diff) => (
@@ -301,7 +316,7 @@ export function ToolCard({ call, cwd, children }: { call: ToolCall; cwd: string;
             <DiffView callId={call.id} diff={diff} />
           </div>
         ))}
-      {!isEdit && open && <Output text={details} collapseAfter={call.kind === 'execute' ? COLLAPSED_LINES : null} />}
+      {open && details !== '' && <Output text={details} collapseAfter={call.kind === 'execute' ? COLLAPSED_LINES : null} />}
       {children}
     </div>
   )
