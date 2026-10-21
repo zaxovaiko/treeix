@@ -217,7 +217,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   const busy = isBusy(chat)
   const [problem, setProblem] = useState<string | null>(null)
   const [files, setFiles] = useState<string[]>([])
-  const [caret, setCaret] = useState(0)
+  const [caret, setCaret] = useState(draft.length)
   const [selected, setSelected] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null)
@@ -225,6 +225,12 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   const input = useRef<HTMLTextAreaElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   const box = useRef<HTMLDivElement>(null)
+
+  // Opened on a draft, like one carried over to another folder while it was typed, typing goes on at its end
+  useEffect(() => {
+    const end = input.current?.value.length ?? 0
+    input.current?.setSelectionRange(end, end)
+  }, [])
 
   useEffect(() => {
     let live = true
