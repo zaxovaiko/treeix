@@ -7,7 +7,7 @@ import { JOBS } from './jobs'
 import { findService, usePlugins, useService, useSessions } from './plugins'
 import { FolderPicker } from './FolderPicker'
 import { stepFontSize, useSettings } from './settings'
-import { acceleratorOf, actionForEvent, NEW_TAB_ACTIONS, onKeymapChange, withKeys } from '../../shared/keymap'
+import { actionForEvent, actionKeys, NEW_TAB_ACTIONS, onKeymapChange, withKeys } from '../../shared/keymap'
 import { primaryKey, secondaryKey } from '../../shared/shortcut'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { ShortcutSheet } from './Shell'
@@ -113,44 +113,52 @@ function ClosedChatRow({ session, onOpen, onForget }: { session: ClosedSessionSu
   )
 }
 
-const LONG_PRESS_MS = 400
+const MENU_CLOSE_MS = 150
 
-/** A click starts a chat; holding it or a right click offers a shell or an agent in a terminal instead */
+/** A click starts a chat; hovering it offers a shell or an agent in a terminal too */
 function NewButton({ active = false, onChat, onTerminal }: { active?: boolean; onChat: () => void; onTerminal: (kind: string) => void }): React.JSX.Element {
-  'use no memo' // the shortcut in its label is read from the keymap during render
+  'use no memo' // the shortcuts in its menu are read from the keymap during render
   const agents = useAgents().filter((agent) => !isChatOnly(agent))
-  const pressTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const held = useRef(false)
-  const endPress = (): void => clearTimeout(pressTimer.current)
-  const showMenu = (event: React.MouseEvent): void =>
-    openMenu(event, [
-      { label: 'New chat', accelerator: acceleratorOf('chat.new'), run: onChat },
-      null,
-      ...agents.map((agent) => ({
-        label: agent.id === 'shell' ? 'New shell' : `New ${agent.label} terminal`,
-        accelerator: acceleratorOf(NEW_TAB_ACTIONS[agent.id]),
-        run: () => onTerminal(agent.id)
-      }))
-    ])
-  return (
-    // The click that ends a hold opens nothing more
-    <span
-      onPointerDown={(event) => {
-        held.current = false
-        pressTimer.current = setTimeout(() => {
-          held.current = true
-          showMenu(event)
-        }, LONG_PRESS_MS)
+  const anchor = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  const closing = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(closing.current), [])
+  const show = (): void => {
+    clearTimeout(closing.current)
+    setOpen(true)
+  }
+  // A moment's grace, so the pointer can cross the gap to the menu
+  const hide = (): void => {
+    clearTimeout(closing.current)
+    closing.current = setTimeout(() => setOpen(false), MENU_CLOSE_MS)
+  }
+  const item = (label: string, action: string | undefined, run: () => void): React.JSX.Element => (
+    <button
+      key={label}
+      role="menuitem"
+      onClick={() => {
+        setOpen(false)
+        run()
       }}
-      onPointerUp={endPress}
-      onPointerLeave={endPress}
-      onClickCapture={(event) => held.current && event.stopPropagation()}
-      onContextMenu={showMenu}
-      className="contents"
+      className="flex h-7 w-full items-center gap-4 rounded-md px-2 text-left text-xs hover:bg-accent"
     >
-      <IconButton label={withKeys('New chat; hold or right-click for a shell, Claude or Codex in a terminal', 'chat.new')} active={active} onClick={onChat}>
+      <span className="flex-1 truncate">{label}</span>
+      {action && <span className="shrink-0 text-muted-foreground">{actionKeys(action)}</span>}
+    </button>
+  )
+  return (
+    // React counts the portaled menu as inside for hovering; the menu says what the plus does, so its tip stays away
+    <span ref={anchor} onMouseEnter={show} onMouseLeave={hide} data-tip-off={open || undefined} className="flex">
+      <IconButton label={withKeys('New chat', 'chat.new')} active={active || open} onClick={onChat}>
         <Icon name="plus" />
       </IconButton>
+      {open && (
+        <Popup anchor={anchor} align="beside" role="menu" className="w-56 rounded-lg border border-input bg-popover p-1 text-foreground">
+          {item('New chat', 'chat.new', onChat)}
+          <hr className="my-1 border-border" />
+          {agents.map((agent) => item(agent.id === 'shell' ? 'New shell' : `New ${agent.label} terminal`, NEW_TAB_ACTIONS[agent.id], () => onTerminal(agent.id)))}
+        </Popup>
+      )}
     </span>
   )
 }
