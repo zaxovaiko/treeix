@@ -403,7 +403,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
   }
 
   // Only something worth reading; the composer stays quiet otherwise
-  const hint = busy ? 'Esc stops the agent' : fullness > 0.8 && hasCompact ? 'Context is 80% full: /compact summarizes' : null
+  const hint = !busy && fullness > 0.8 && hasCompact ? 'Context is 80% full: /compact summarizes' : null
 
   return (
     <div className="shrink-0 px-4 pb-6">
