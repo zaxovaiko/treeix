@@ -5,7 +5,7 @@ name: Release
 on:
   push:
     branches: [main]
-    paths-ignore: ['apps/landing/**', 'docs/**', 'marketing/**', '.claude/**', '**.md']
+    paths-ignore: ['apps/landing/**', 'docs/**', 'marketing/**', '.claude/**', '**.md', 'apps/next/**', 'crates/**', 'bench/**', 'Cargo.*', 'rust-toolchain.toml']
 
 permissions:
   contents: write

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main and quick terminal windows",
+  "windows": ["main", "quick"],
+  "permissions": ["core:default"]
+}

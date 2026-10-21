@@ -11,3 +11,7 @@ marketing/
 playwright-report/
 test-results/
 apps/landing/llms-full.txt
+
+# Rust
+target/
+target-*/

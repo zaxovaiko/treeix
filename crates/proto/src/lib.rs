@@ -1,0 +1,207 @@
+//! Wire protocol between the app and `treeix-ptyd`: postcard frames behind a u32 little-endian length.
+//! Only ever add variants at the end of an enum: postcard encodes variants by index.
+
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::io;
+use std::path::PathBuf;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+/// Bumped on any incompatible change; a mismatch makes the old daemon snapshot and exit
+pub const PROTO_VERSION: u32 = 1;
+/// Data dir name; `.next` while the Tauri app ships beside the Electron one
+pub const APP_ID: &str = "com.dyvertex.treeix.next";
+pub const MAX_FRAME: usize = 16 * 1024 * 1024;
+
+pub type SessionId = String;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SessionKind {
+    Shell,
+    Claude,
+    Codex,
+    Routine,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SessionStatus {
+    Running,
+    /// Agent waits for the user (permission prompt, question)
+    Needs,
+    /// Agent finished its turn
+    Done,
+    Idle,
+    Exited,
+    Error,
+    /// Came back from a snapshot after a daemon restart or reboot; no process yet
+    Restored,
+    /// The daemon died while it ran; scrollback is from the last snapshot
+    Crashed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: SessionId,
+    pub kind: SessionKind,
+    pub cwd: String,
+    pub title: String,
+    pub status: SessionStatus,
+    pub pid: Option<u32>,
+    pub exit_code: Option<i32>,
+    pub cols: u16,
+    pub rows: u16,
+    /// Unix millis
+    pub created_at: u64,
+    pub command: Vec<String>,
+    /// Bytes of output produced so far; the seq the next Data event starts at
+    pub seq: u64,
+    /// Agent conversation id (claude --resume / codex resume), when known
+    pub agent_session: Option<String>,
+    /// Routine that started this session
+    pub routine: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateSession {
+    pub kind: SessionKind,
+    /// Defaults to $HOME
+    pub cwd: Option<String>,
+    /// Defaults to the login shell
+    pub command: Vec<String>,
+    pub env: Vec<(String, String)>,
+    pub cols: u16,
+    pub rows: u16,
+    pub title: Option<String>,
+    pub routine: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Request {
+    Create(CreateSession),
+    Write { session: SessionId, data: Vec<u8> },
+    Resize { session: SessionId, cols: u16, rows: u16 },
+    /// SIGHUP to the process group, SIGKILL after a grace period
+    Kill { session: SessionId },
+    /// Forget an exited session and its snapshot
+    Remove { session: SessionId },
+    /// Start streaming Data for a session. The reply carries the screen + scrollback as ANSI
+    /// and the seq it ends at; Data events continue from there
+    Attach { session: SessionId },
+    Detach { session: SessionId },
+    /// Bytes the frontend has finished rendering; reading the PTY resumes once unacked drops below the low mark
+    Ack { session: SessionId, bytes: u64 },
+    List,
+    /// Opaque UI state (tabs, split trees, groups, collapse), persisted next to the sessions
+    GetUi,
+    PutUi { json: String },
+    /// Snapshot everything and exit (upgrade, tests)
+    Shutdown,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Response {
+    Ok,
+    Created(SessionInfo),
+    Attached { snapshot: Vec<u8>, seq: u64, info: SessionInfo },
+    Sessions(Vec<SessionInfo>),
+    Ui(Option<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Event {
+    /// Output of an attached session; `seq` is the offset of the first byte
+    Data { session: SessionId, seq: u64, bytes: Vec<u8> },
+    Status { session: SessionId, status: SessionStatus },
+    Exit { session: SessionId, code: Option<i32> },
+    Title { session: SessionId, title: String },
+    Cwd { session: SessionId, cwd: String },
+    /// OSC 9 / OSC 777 desktop notification
+    Notify { session: SessionId, title: String, body: String },
+    Bell { session: SessionId },
+    Created(SessionInfo),
+    Removed { session: SessionId },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ClientMsg {
+    Hello { proto: u32, build: String },
+    Req { id: u64, req: Request },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ServerMsg {
+    Hello { proto: u32, build: String, pid: u32 },
+    Resp { id: u64, resp: Result<Response, String> },
+    Event(Event),
+}
+
+/// `~/Library/Application Support/<APP_ID>` on macOS, `$XDG_DATA_HOME/<APP_ID>` elsewhere; `TREEIX_DATA_DIR` overrides (tests)
+pub fn data_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("TREEIX_DATA_DIR") {
+        return dir.into();
+    }
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_else(|| "/tmp".into()));
+    if cfg!(target_os = "macos") {
+        home.join("Library/Application Support").join(APP_ID)
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local/share"))
+            .join(APP_ID)
+    }
+}
+
+pub fn socket_path() -> PathBuf {
+    data_dir().join("ptyd.sock")
+}
+
+pub fn encode<T: Serialize>(msg: &T) -> io::Result<Vec<u8>> {
+    let body = postcard::to_stdvec(msg).map_err(io::Error::other)?;
+    let mut out = Vec::with_capacity(4 + body.len());
+    out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    out.extend_from_slice(&body);
+    Ok(out)
+}
+
+pub async fn write_frame<W: AsyncWrite + Unpin, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
+    w.write_all(&encode(msg)?).await
+}
+
+/// `Ok(None)` on a clean EOF between frames
+pub async fn read_frame<R: AsyncRead + Unpin, T: DeserializeOwned>(r: &mut R) -> io::Result<Option<T>> {
+    let mut len = [0u8; 4];
+    match r.read_exact(&mut len).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    let len = u32::from_le_bytes(len) as usize;
+    if len > MAX_FRAME {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame of {len} bytes")));
+    }
+    let mut body = vec![0u8; len];
+    r.read_exact(&mut body).await?;
+    postcard::from_bytes(&body).map(Some).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn frames_round_trip() {
+        let msgs = vec![
+            ServerMsg::Hello { proto: PROTO_VERSION, build: "t".into(), pid: 1 },
+            ServerMsg::Event(Event::Data { session: "s1".into(), seq: 42, bytes: b"\x1b[31mhi".to_vec() }),
+            ServerMsg::Resp { id: 7, resp: Err("no such session".into()) },
+        ];
+        let mut buf = Vec::new();
+        for m in &msgs {
+            write_frame(&mut buf, m).await.unwrap();
+        }
+        let mut r = buf.as_slice();
+        for m in &msgs {
+            assert_eq!(read_frame::<_, ServerMsg>(&mut r).await.unwrap().as_ref(), Some(m));
+        }
+        assert_eq!(read_frame::<_, ServerMsg>(&mut r).await.unwrap(), None);
+    }
+}
