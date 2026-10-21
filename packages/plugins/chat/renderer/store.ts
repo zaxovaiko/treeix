@@ -2,6 +2,8 @@ import { useSyncExternalStore } from 'react'
 import type { ChatCapabilities, ChatContent, ChatEvent, ChatImage, ChatService, ChatSpec, SessionStatus } from '@treeix/sdk'
 import type { StartOptions, StartResult } from '../shared/types'
 import { errorMessage } from '@treeix/app/ui'
+import { readStored } from '@treeix/app/storage'
+import { isJson, list } from '@treeix/shared/json'
 import { emptyFeed, type Feed, reduce } from './feed'
 import { parseShellPrompt, shellPrompt } from './composer'
 
@@ -153,12 +155,45 @@ function update(chatId: string, change: (state: ChatState) => ChatState): void {
   const next = change(current)
   if (next === current) return
   chats.set(chatId, next)
+  if (next.queue !== current.queue) saveQueue(chatId, next.queue)
   listeners.forEach((listener) => listener())
+}
+
+/** Queued messages outlive the app: kept by chat, put back on load and sent once their chat starts again */
+const QUEUES_KEY = 'chat.queues'
+
+const isContent = (value: unknown): value is ChatContent =>
+  isJson(value) && ((value.type === 'text' && typeof value.text === 'string') || (value.type === 'image' && typeof value.mimeType === 'string' && typeof value.data === 'string'))
+
+function storedQueues(): Record<string, ChatContent[][]> {
+  const stored = readStored(QUEUES_KEY)
+  if (!isJson(stored)) return {}
+  return Object.fromEntries(
+    Object.entries(stored).map(([chatId, queue]) => [chatId, list(queue, (content): content is ChatContent[] => Array.isArray(content) && content.every(isContent))])
+  )
+}
+
+function saveQueue(chatId: string, queue: ChatContent[][]): void {
+  const { [chatId]: _, ...others } = storedQueues()
+  const all = queue.length ? { ...others, [chatId]: queue } : others
+  // Images can fill the storage; then at least the texts are kept
+  const texts = Object.fromEntries(
+    Object.entries(all).map(([id, messages]) => [id, messages.map((content) => content.filter((item) => item.type === 'text')).filter((content) => content.length)])
+  )
+  for (const kept of [all, texts]) {
+    try {
+      localStorage.setItem(QUEUES_KEY, JSON.stringify(kept))
+      return
+    } catch {
+      // Full: try the smaller one
+    }
+  }
 }
 
 /** Attaches to the main module's events; call once when the plugin loads */
 export function listen(chatBridge: Bridge): void {
   bridge = chatBridge
+  for (const [chatId, queue] of Object.entries(storedQueues())) update(chatId, (state) => ({ ...state, queue }))
   // Agents from before a reload are unreachable now; chats that resume start their own
   chatBridge.send('stopAll')
   chatBridge.on('events', (chatId, events) => {
@@ -181,7 +216,17 @@ export function listen(chatBridge: Bridge): void {
   })
 }
 
-export const start = (chatId: string, options: ChatStartOptions): Promise<string> => connect(chatId, options, false)
+/** Connects, then sends what was queued before, like messages kept from before the app quit */
+export async function start(chatId: string, options: ChatStartOptions): Promise<string> {
+  const agentSessionId = await connect(chatId, options, false)
+  const chat = getChat(chatId)
+  if (chat.queue.length && !isBusy(chat) && !moves.has(chatId)) {
+    const { state, next } = afterPrompt(chat)
+    update(chatId, () => state)
+    if (next) prompt(chatId, next)
+  }
+  return agentSessionId
+}
 
 /** Resolves a fresh connect waiting for its first batch of events, which holds the replay (options always come first) */
 const replayWaits = new Map<string, () => void>()
@@ -337,6 +382,7 @@ export const appendDraft = (chatId: string, text: string): void =>
 /** Drops a closed chat's state and file list */
 export function forget(chatId: string): void {
   fileLists.delete(chatId)
+  saveQueue(chatId, [])
   if (!chats.delete(chatId)) return
   listeners.forEach((listener) => listener())
 }

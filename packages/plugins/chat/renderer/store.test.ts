@@ -71,6 +71,10 @@ const handlers = new Map<string, (...args: unknown[]) => void>()
 const racing: { resolve: () => void; reject: () => void }[] = []
 const startResult: StartResult = { agentSessionId: 'session', capabilities: { images: false, load: false, list: false }, terminalCommand: null }
 
+// A message queued when the app last quit, see the test on restoring it
+const storage = new Map<string, string>([['chat.queues', JSON.stringify({ restored: [[{ type: 'text', text: 'kept' }]], broken: [[{ type: 'nope' }], 'x'] })]])
+globalThis.localStorage = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) } as unknown as Storage
+
 listen({
   invoke: <T>(channel: string, ...args: unknown[]): Promise<T> =>
     new Promise<unknown>((resolve, reject) => {
@@ -221,4 +225,19 @@ test('a newer move calls off the one under way, and moving nowhere sends the hel
   expect(await first).toBeNull()
   expect(getChat('gone').draft).toBe('')
   expect(getChat('stay').draft).toBe('draft')
+})
+
+test('queued messages are kept through a relaunch and sent once their chat starts again', async () => {
+  expect(getChat('restored').queue).toEqual([text('kept')])
+  expect(getChat('broken').queue).toEqual([])
+  prompts.length = 0
+  await start('restored', { agent: 'claude', adapter: 'acp', command: 'x', cwd: '/repo', resume: null })
+  expect(prompts.map((prompt) => prompt.content)).toEqual([text('kept')])
+  send('restored', text('next'))
+  expect(JSON.parse(storage.get('chat.queues') ?? '{}').restored).toEqual([text('next')])
+  prompts[0]?.done()
+  await flush()
+  expect(JSON.parse(storage.get('chat.queues') ?? '{}').restored).toBeUndefined()
+  prompts[1]?.done()
+  await flush()
 })
