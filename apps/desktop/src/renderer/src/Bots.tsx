@@ -759,7 +759,7 @@ export function Bots(): React.JSX.Element {
       className={`relative flex w-[52px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'after:absolute after:top-9 after:right-0 after:bottom-0 after:w-px after:bg-border'}`}
     >
       {/* Under the traffic lights */}
-      <div className={`h-11 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+      <div className={`w-full shrink-0 ${islandUi ? 'h-[53px]' : 'h-11'} ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
       {canChat && <NewButton active={onHome} onChat={newChat} onTerminal={newTerminal} />}
       <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto py-1.5">
         {bots.map((bot) => (
@@ -814,10 +814,11 @@ export function Bots(): React.JSX.Element {
   // Pages whose header starts at the top left keep clear of the rail's corner
   const cornerBar = listed ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
   // Right of the traffic lights, a title section over the rail's top, its bottom border meeting the rail's edge. Last in the page, since the window takes
-  // drag areas in page order: one earlier would sit under the page's draggable header and its button would miss the click
+  // drag areas in page order: one earlier would sit under the page's draggable header and its button would miss the click.
+  // An island's header sits below the island's 8px gap and 1px border, so the corner grows by those 9px underneath, its button staying level with the traffic lights
   const corner = (
     <span
-      className={`absolute top-0 left-0 z-20 flex h-9 items-center border-b border-border pr-3 pl-20 ${islandUi ? 'bg-canvas' : 'bg-background'} ${
+      className={`absolute top-0 left-0 z-20 flex items-center border-b border-border pr-3 pl-20 ${islandUi ? 'h-[45px] bg-canvas pb-[9px]' : 'h-9 bg-background'} ${
         chromeless ? '' : '[-webkit-app-region:drag]'
       }`}
     >
