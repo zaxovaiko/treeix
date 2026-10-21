@@ -46,7 +46,25 @@ export function builtinOf(text: string, commands: { name: string }[]): string | 
 type CompletionItem = { label: string; detail: string; insert: string }
 export type Completion = { kind: 'command' | 'file'; query: string; start: number; items: CompletionItem[] }
 
-export function completion(input: string, caret: number, commands: { name: string; description: string }[], files: string[]): Completion | null {
+/** The @ mention the caret is in: where its @ is and what follows it */
+function mentionAt(before: string): { query: string; start: number } | null {
+  const at = before.lastIndexOf('@')
+  if (at === -1 || (at > 0 && !/\s/.test(before[at - 1] ?? '')) || before.slice(at + 1).includes(' ')) return null
+  return { query: before.slice(at + 1), start: at }
+}
+
+/** The folder a path mention browses, like `../` or `~/projects/`, as typed; null when the mention searches the chat's own files */
+export function browsedFolder(input: string, caret: number): string | null {
+  const query = mentionAt(input.slice(0, caret))?.query
+  return query && /^(~|\.{1,2})?\//.test(query) ? query.slice(0, query.lastIndexOf('/') + 1) : null
+}
+
+/** A browsed folder on disk: `~` is the home folder, a relative one starts in the chat's folder */
+export const folderPath = (folder: string, cwd: string, home: string): string =>
+  folder.startsWith('/') ? folder : folder.startsWith('~/') ? `${home}${folder.slice(1)}` : `${cwd}/${folder}`
+
+/** `entries` are the browsed folder's, folders ending in /; picking a folder keeps the mention open to browse into it */
+export function completion(input: string, caret: number, commands: { name: string; description: string }[], files: string[], entries: string[] = []): Completion | null {
   const before = input.slice(0, caret)
 
   if (before.startsWith('/') && !before.includes(' ')) {
@@ -57,15 +75,24 @@ export function completion(input: string, caret: number, commands: { name: strin
     return { kind: 'command', query, start: 0, items }
   }
 
-  const at = before.lastIndexOf('@')
-  if (at !== -1 && (at === 0 || /\s/.test(before[at - 1] ?? '')) && !before.slice(at + 1).includes(' ')) {
-    const query = before.slice(at + 1)
+  const mention = mentionAt(before)
+  if (mention) {
+    const { query, start } = mention
+    const folder = browsedFolder(input, caret)
+    if (folder !== null) {
+      const name = query.slice(folder.length).toLowerCase()
+      const items = entries
+        .filter((entry) => entry.toLowerCase().includes(name) && (name.startsWith('.') || !entry.startsWith('.')))
+        .sort((a, b) => a.localeCompare(b))
+        .map((entry) => ({ label: `${folder}${entry}`, detail: '', insert: `@${folder}${entry}${entry.endsWith('/') ? '' : ' '}` }))
+      return { kind: 'file', query, start, items }
+    }
     const items = files
       .filter((file) => file.toLowerCase().includes(query.toLowerCase()))
       .sort((a, b) => a.length - b.length)
       .slice(0, 8)
       .map((file) => ({ label: file, detail: '', insert: `@${file} ` }))
-    return { kind: 'file', query, start: at, items }
+    return { kind: 'file', query, start, items }
   }
 
   return null

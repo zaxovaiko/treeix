@@ -1,5 +1,18 @@
 import { expect, test } from 'bun:test'
-import { builtinOf, completion, formatTokens, imageProblem, parseShellPrompt, shellCommandOf, shellPrompt, switchWarning, withBuiltins, withMentions } from './composer'
+import {
+  browsedFolder,
+  builtinOf,
+  completion,
+  folderPath,
+  formatTokens,
+  imageProblem,
+  parseShellPrompt,
+  shellCommandOf,
+  shellPrompt,
+  switchWarning,
+  withBuiltins,
+  withMentions
+} from './composer'
 
 test('imageProblem', () => {
   expect(imageProblem({ type: 'image/png', size: 1000 })).toBeNull()
@@ -21,6 +34,24 @@ test('slash completion only at the start, file completion after @ anywhere', () 
     items: [{ label: 'src/pricing/Pricing.tsx', insert: '@src/pricing/Pricing.tsx ' }]
   })
   expect(completion('mail me@home', 12, [], ['home.ts'])).toBeNull()
+})
+
+test('a path mention browses folders outside the chat, opening into a picked folder', () => {
+  const entries = ['.env', 'infrastructure/', 'betfeel/', 'notes.md']
+  expect(browsedFolder('see @../infra', 13)).toBe('../')
+  expect(browsedFolder('see @~/', 7)).toBe('~/')
+  expect(browsedFolder('see @src/', 9)).toBeNull()
+  expect(completion('see @../infra', 13, [], ['infra.ts'], entries)).toMatchObject({
+    kind: 'file',
+    query: '../infra',
+    start: 4,
+    items: [{ label: '../infrastructure/', insert: '@../infrastructure/' }]
+  })
+  expect(completion('@/tmp/', 6, [], [], entries)?.items.map((item) => item.insert)).toEqual(['@/tmp/betfeel/', '@/tmp/infrastructure/', '@/tmp/notes.md '])
+  expect(completion('@../.e', 6, [], [], entries)?.items.map((item) => item.label)).toEqual(['../.env'])
+  expect(folderPath('../', '/a/b', '/home')).toBe('/a/b/../')
+  expect(folderPath('~/x/', '/a/b', '/home')).toBe('/home/x/')
+  expect(folderPath('/etc/', '/a/b', '/home')).toBe('/etc/')
 })
 
 test('switchWarning and formatTokens', () => {

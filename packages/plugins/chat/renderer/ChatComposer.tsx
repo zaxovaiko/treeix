@@ -7,7 +7,7 @@ import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
-import { builtinOf, completion, shellCommandOf, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
+import { browsedFolder, builtinOf, completion, folderPath, shellCommandOf, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
 import { cancel, clear, filesFor, getChat, hasConversation, isBusy, runShell, send, setDraft, setImages, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 import { primaryKey } from '@treeix/shared/shortcut'
 
@@ -234,7 +234,21 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
     }
   }, [chatId, cwd])
 
-  const suggestions = dismissed ? null : completion(draft, caret, withBuiltins(feed.commands), files)
+  // A mention like @../ lists that folder, read again as the mention moves into another
+  const browsed = browsedFolder(draft, caret)
+  const browsedPath = browsed === null ? null : folderPath(browsed, cwd, window.api.home)
+  const [listing, setListing] = useState<{ path: string; entries: string[] } | null>(null)
+  useEffect(() => {
+    if (browsedPath === null) return
+    let live = true
+    void window.api.listDirectory(browsedPath, '').then((entries) => live && setListing({ path: browsedPath, entries }))
+    return () => {
+      live = false
+    }
+  }, [browsedPath])
+
+  const entries = listing?.path === browsedPath ? listing.entries : []
+  const suggestions = dismissed ? null : completion(draft, caret, withBuiltins(feed.commands), files, entries)
   const items = suggestions?.items ?? []
   const acceptsImages = chat.capabilities?.images === true
   const hasCompact = feed.commands.some((command) => command.name === 'compact')
@@ -338,6 +352,7 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
     const at = suggestions.start + item.insert.length
     requestAnimationFrame(() => input.current?.setSelectionRange(at, at))
     setCaret(at)
+    setSelected(0)
   }
 
   const applyOption = (id: string, value: string): void => {
