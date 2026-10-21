@@ -108,6 +108,7 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const atBottom = useRef(true)
+  const lastTop = useRef(0)
   const floating = useRef<HTMLDivElement>(null)
 
   const toBottom = (): void => {
@@ -188,7 +189,10 @@ export function Chat({ chatId }: { chatId: string }): React.JSX.Element {
         ref={scroller}
         onScroll={(event) => {
           const element = event.currentTarget
-          atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX
+          // Only scrolling up lets go of the end: content that grows before a jump's scroll event arrives, like images loading, keeps it
+          if (element.scrollHeight - element.scrollTop - element.clientHeight < STICK_PX) atBottom.current = true
+          else if (element.scrollTop < lastTop.current) atBottom.current = false
+          lastTop.current = element.scrollTop
         }}
         className="@container flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
       >
