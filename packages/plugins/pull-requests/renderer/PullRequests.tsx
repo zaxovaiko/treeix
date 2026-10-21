@@ -26,6 +26,7 @@ import { CodeNavigationContext, useSymbolNavigation } from '@treeix/app/codeNavi
 import { matchesAction } from '@treeix/shared/keymap'
 import { CommandPalette } from '@treeix/app/CommandPalette'
 import { cachedPullRequests, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
+import { addedRepos, inScope, prRepoPaths, setAddedRepos } from './addedRepos'
 import { ErrorBoundary } from '@treeix/app/ErrorBoundary'
 import { FullFileView } from './FullFileView'
 import { isMarkdownPath, MarkdownPreview, PreviewToggle, useMarkdownPreview } from '@treeix/app/MarkdownPreview'
@@ -62,6 +63,7 @@ import { LazyMarkdown as Markdown, MarkdownFoldButton, MarkdownFoldScope } from 
 import { LinkPreviews } from '@treeix/app/LinkPreviews'
 import { FileIcon, Icon } from '@treeix/app/Icon'
 import { baseName } from '@treeix/app/Sidebar'
+import { projectOf } from '@treeix/app/sessionUi'
 import { EmptyState, errorMessage, FoldAllButton, IconButton, Notice, Popup, readStored, ResizeHandle, TextPrompt, useCopied, usePersisted } from '@treeix/app/ui'
 import { workspaceKey } from '@treeix/app/workspaces'
 import {
@@ -227,6 +229,37 @@ const SectionLabel = ({ children, open, onToggle }: { children: React.ReactNode;
 
 const parseFolded = (json: string): string[] => jsonList(parseJson(json), isString)
 
+/** Lists pull requests of repositories in other folders too, remembered for the project; picking an added one removes it */
+function RepositoriesButton({ scope }: { scope: string[] }): React.JSX.Element {
+  const add = async (): Promise<void> => {
+    const folder = await window.api.pickFolder()
+    if (folder && !inScope(scope, folder)) setAddedRepos(scope, [...addedRepos(scope).filter((path) => projectOf(path) !== projectOf(folder)), folder])
+  }
+  return (
+    <IconButton
+      label="Repositories"
+      onClick={(event) =>
+        openMenu(event, [
+          ...scope.map((path) => ({ label: baseName(projectOf(path)), checked: true, enabled: false, run: () => undefined })),
+          ...addedRepos(scope).map((path) => ({
+            label: baseName(path),
+            checked: true,
+            run: () =>
+              setAddedRepos(
+                scope,
+                addedRepos(scope).filter((added) => added !== path)
+              )
+          })),
+          null,
+          { label: 'Add repository…', run: () => void add() }
+        ])
+      }
+    >
+      <Icon name="folderPlus" className="size-3.5" />
+    </IconButton>
+  )
+}
+
 export function PullRequestsView({
   repoPaths,
   onOpenTab,
@@ -372,6 +405,7 @@ export function PullRequestsView({
         {/* Author, branch and the size of the change on one line; tags get their own line below */}
         <div className="flex min-w-0 items-center gap-1.5 pl-5.5 text-[11px] text-muted-foreground">
           <UserAvatar name={pr.author} url={pr.authorAvatarUrl} size="size-4" />
+          {repoPaths && repoPaths.length > 1 && <span className="shrink-0 text-foreground/70">{baseName(projectOf(pr.repoPath))}</span>}
           <span title={pr.sourceBranch} className="min-w-0 flex-1 truncate font-mono text-[10.5px]">
             {pr.sourceBranch}
           </span>
@@ -398,6 +432,7 @@ export function PullRequestsView({
       <div className={`${PANE_HEADER} gap-2 pr-1.5 pl-3`}>
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-foreground">Pull requests</span>
         {foldable.length > 1 && <FoldAllButton anyOpen={anyOpen} onClick={foldAll} />}
+        {host.scopeRepoPaths && <RepositoriesButton scope={host.scopeRepoPaths} />}
         <IconButton label={loading ? 'Refreshing' : 'Refresh'} onClick={refresh}>
           <Icon name={loading ? 'loader' : 'refresh'} className="size-3.5" />
         </IconButton>
@@ -1436,7 +1471,7 @@ export function PullRequestDetailView({
 
   // GitHub refuses reviews of your own pull request; the list knows it's yours before the detail has loaded
   const own = detail?.viewer ? detail.viewer === pr.author : pr.review?.state === 'yours'
-  const refreshScope = (): void => void refreshPullRequests(host.scopeRepoPaths ?? [pr.repoPath]).catch(() => undefined)
+  const refreshScope = (): void => void refreshPullRequests(prRepoPaths(host.scopeRepoPaths) ?? [pr.repoPath]).catch(() => undefined)
   // Draft flips show straight away and go back if the provider refuses
   const [draftNow, setDraftNow] = useScopedState<boolean | null>(pr.url, null)
   useEffect(() => setDraftNow(null), [pr.draft])

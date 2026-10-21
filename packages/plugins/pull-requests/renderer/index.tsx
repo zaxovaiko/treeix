@@ -6,6 +6,7 @@ import { errorMessage } from '@treeix/app/ui'
 import type { ReviewComment } from '@treeix/shared/comments'
 import type { PullRequest, PullRequestList } from '../shared/types'
 import { api, POLL_MINUTES, prSettings } from './api'
+import { prRepoPaths, usePrRepoPaths } from './addedRepos'
 import { cachedPullRequests, findCachedPullRequest, lastFetched, onPullRequestsUpdated, refreshPullRequests, scopeKeyOf } from './pullRequestCache'
 import { pullRequestCommands } from './keys'
 import type { DetailProps } from './PullRequests'
@@ -105,11 +106,12 @@ const detailTab = (pr: PullRequest): DocumentTab => ({
 function PullRequestsTab(): React.JSX.Element {
   const host = useHost()
   const props = useViewProps()
+  const repoPaths = usePrRepoPaths(host.scopeRepoPaths)
   return (
     <Suspense fallback={<div className="flex-1" />}>
       <PullRequestsView
         {...props}
-        repoPaths={host.scopeRepoPaths}
+        repoPaths={repoPaths}
         // A pull request reads best across the window; the panel's minimize button brings the chat back
         onOpenTab={(pr) => {
           host.openTab(detailTab(pr))
@@ -122,7 +124,7 @@ function PullRequestsTab(): React.JSX.Element {
 
 /** Background refresh of the current workspace's pull requests, so the tab opens on fresh data */
 function Polling(): null {
-  const { scopeRepoPaths } = useHost()
+  const scopeRepoPaths = usePrRepoPaths(useHost().scopeRepoPaths)
   const { prPollMinutes } = prSettings.useValue()
   const scopeKey = scopeRepoPaths ? scopeKeyOf(scopeRepoPaths) : ''
   useEffect(() => {
@@ -144,7 +146,7 @@ function Polling(): null {
 
 /** How many pull requests the workspace has, on the page tab like the terminal's session count */
 function PullRequestsCount(): React.JSX.Element | null {
-  const { scopeRepoPaths } = useHost()
+  const scopeRepoPaths = usePrRepoPaths(useHost().scopeRepoPaths)
   const [, bump] = useReducer((count: number) => count + 1, 0)
   useEffect(() => onPullRequestsUpdated(bump), [])
   const count = cachedPullRequests(scopeKeyOf(scopeRepoPaths ?? []))?.pullRequests.filter((pr) => pr.state === 'open').length ?? 0
@@ -194,7 +196,8 @@ const fetchLinked = async (url: string, repoPaths: string[]): Promise<PullReques
  */
 async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> {
   if (!/\/(pull|merge_requests|pipelines)\/\d+/.test(url)) return false
-  const pr = findCachedPullRequest(url) ?? (host.scopeRepoPaths ? await fetchLinked(url, host.scopeRepoPaths) : null)
+  const repoPaths = prRepoPaths(host.scopeRepoPaths)
+  const pr = findCachedPullRequest(url) ?? (repoPaths ? await fetchLinked(url, repoPaths) : null)
   if (!pr) return false
   host.openTab(detailTab(pr))
   return true
@@ -202,7 +205,7 @@ async function openPullRequestUrl(url: string, host: HostApi): Promise<boolean> 
 
 /** The workspace's fetched pull requests in the palette, each opening in its own tab */
 const listedCommands = (host: HostApi): Command[] =>
-  (cachedPullRequests(scopeKeyOf(host.scopeRepoPaths ?? []))?.pullRequests ?? []).map((pr) => ({
+  (cachedPullRequests(scopeKeyOf(prRepoPaths(host.scopeRepoPaths) ?? []))?.pullRequests ?? []).map((pr) => ({
     id: `pr:${pr.url}`,
     group: 'Pull requests',
     label: `${prLabel(pr)} ${pr.title}`,

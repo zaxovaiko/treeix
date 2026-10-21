@@ -17,6 +17,9 @@ const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
 /** Drag data of a session row, dropped on a terminal pane to open it beside that pane */
 export const SESSION_MIME = 'application/x-treeix-session'
 
+/** The project a folder belongs to: a worktree the app adds sits in its repository's .claude/worktrees */
+export const projectOf = (worktreePath: string): string => worktreePath.replace(/[/\\]\.claude[/\\]worktrees[/\\][^/\\]+$/, '')
+
 export function worktreeLabel(repos: Repo[] | null, worktreePath: string): string {
   if (worktreePath === window.api.home) return '~ home'
   const repo = repos?.find((candidate) => candidate.worktrees.some((worktree) => worktree.path === worktreePath))

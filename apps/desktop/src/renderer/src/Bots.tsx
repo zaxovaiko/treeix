@@ -12,7 +12,7 @@ import { primaryKey, secondaryKey } from '../../shared/shortcut'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { ShortcutSheet } from './Shell'
 import { CHANGES, PluginHost, PluginPage, type Side, TERMINAL } from './PluginHost'
-import { StatusDot, worktreeLabel } from './sessionUi'
+import { projectOf, StatusDot, worktreeLabel } from './sessionUi'
 import { timeAgo } from './time'
 import logo from './assets/treeix.webp'
 import { openMenu } from './contextMenu'
@@ -338,8 +338,8 @@ const CONFIGURE = 'hub.configure'
 /** The terminal plugin names a chat so until its first message; such a chat is the new chat on Home, not one in the list */
 const UNTITLED = /^New chat( \d+)?$/
 const isDraft = (session: { title: string }): boolean => UNTITLED.test(session.title)
-/** The project a chat runs in, where the sidebar groups it: a worktree the app adds sits in its repository's .claude/worktrees */
-const projectOf = (session: { worktreePath: string }): string => session.worktreePath.replace(/[/\\]\.claude[/\\]worktrees[/\\][^/\\]+$/, '')
+/** The project a chat runs in, where the sidebar groups it */
+const projectOfChat = (session: { worktreePath: string }): string => projectOf(session.worktreePath)
 
 const fontInFocus = (): 'terminalFontSize' | 'editorFontSize' => (document.activeElement?.closest('[data-session-id]') ? 'terminalFontSize' : 'editorFontSize')
 const NUMPAD_STEPS = new Map<string, -1 | 0 | 1>([
@@ -600,7 +600,7 @@ export function Bots(): React.JSX.Element {
             </div>
             {Map.groupBy(
               chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
-              projectOf
+              projectOfChat
             )
               .entries()
               .map(([folder, group]) => {
@@ -687,7 +687,7 @@ export function Bots(): React.JSX.Element {
         {canChat &&
           Map.groupBy(
             chats.filter((session) => session.id === selectedId || !isDraft(session)),
-            projectOf
+            projectOfChat
           )
             .entries()
             .map(([folder, group]) =>
