@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { type DocumentTab, HostContext, type HostApi, ISLAND } from '@treeix/sdk'
+import { type DocumentTab, getShell, HostContext, type HostApi, ISLAND, updateShell, useShell } from '@treeix/sdk'
 import { matchesAction, withKeys } from '../../shared/keymap'
 import type { Repo } from '../../shared/types'
 import './actions'
+import { registerActionRunner } from './actionRunners'
 import { addComment, Changes, clearComments, deleteComment, HostFileView, SendComments, updateComment, useComments } from './Changes'
 import type { Navigate } from './codeNavigation'
 import { CommentsPanel } from './Comments'
@@ -38,6 +39,8 @@ export function PluginHost({
   folder,
   side,
   onSide,
+  filled,
+  onFill,
   send,
   search,
   onSearch,
@@ -50,6 +53,9 @@ export function PluginHost({
   folder: string
   side: Side | null
   onSide: (side: Side | null) => void
+  /** The panel in the page's place */
+  filled: boolean
+  onFill: (fill: boolean) => void
   /** Puts text in the open chat's composer; null with no chat to take it */
   send: ((prompt: string) => void) | null
   /** The ⇧⌘F search over the folder, or every worktree of its repo */
@@ -66,15 +72,15 @@ export function PluginHost({
   const island = useSettings().islandUi
   const [sideWidth, setSideWidth] = usePersisted<number>('bots.terminalWidth', 440)
   const terminalShown = side === TERMINAL
-  // The panel in the page's place, kept only while one is open
-  const [filled, setFilled] = useState(false)
-  if (filled && !side) setFilled(false)
+  const { zen } = useShell()
   const onTerminal = (shown: boolean): void => (shown ? show(TERMINAL) : terminalShown ? show(null) : undefined)
   const comments = useComments()
   // The panels shown before and after this one, like a browser's, so a jump to a definition can come back
   const [back, setBack] = useState<Side[]>([])
   const [forward, setForward] = useState<Side[]>([])
   const show = (next: Side | null): void => {
+    // Zen hides the panel unless it fills the window, so showing one leaves zen
+    if (next && !filled && getShell().zen) updateShell({ zen: false })
     if (!next) {
       setBack([])
       setForward([])
@@ -169,7 +175,7 @@ export function PluginHost({
       isPanelVisible: (id) => id === TERMINAL && terminalShown,
       movePanel: noop,
       panelFilled: filled,
-      fillPanel: setFilled,
+      fillPanel: onFill,
       isEnabled: (pluginId) => plugins.some(({ manifest }) => manifest.id === pluginId),
       service: findService,
       onSent: () => onTerminal(true)
@@ -184,7 +190,7 @@ export function PluginHost({
     goBack,
     goForward,
     toggleTerminal: () => onTerminal(!terminalShown),
-    toggleFill: () => side !== null && setFilled(!filled),
+    toggleFill: () => side !== null && onFill(!filled),
     closeSide: () => side !== null && show(null)
   }
   const latest = useRef(keys)
@@ -202,7 +208,9 @@ export function PluginHost({
               ? latest.current.goForward
               : matchesAction(event, 'panel.fill')
                 ? latest.current.toggleFill
-                : null
+                : matchesAction(event, 'shell.zen')
+                  ? toggleZen
+                  : null
       if (run && !event.defaultPrevented) {
         event.preventDefault()
         run()
@@ -211,13 +219,15 @@ export function PluginHost({
       if (!event.defaultPrevented && plugins.some(({ plugin }) => plugin.onKeyDown?.(event, host))) event.preventDefault()
     }
     window.addEventListener('keydown', onKey)
+    const offZen = registerActionRunner('shell.zen', toggleZen)
     const offClose = window.api.onCloseShortcut(() => latest.current.plugins.some(({ plugin }) => plugin.onCloseShortcut?.(latest.current.host)) || latest.current.closeSide())
     return () => {
       window.removeEventListener('keydown', onKey)
+      offZen()
       offClose()
     }
   }, [])
-  const pageNav = { onClose: () => show(null), onBack: back.length ? goBack : null, onForward: forward.length ? goForward : null, filled, onFill: setFilled }
+  const pageNav = { onClose: () => show(null), onBack: back.length ? goBack : null, onForward: forward.length ? goForward : null, filled, onFill }
   const Terminal = plugins.flatMap(({ plugin }) => plugin.panels ?? []).find((panel) => panel.id === TERMINAL)?.render
   const tab = typeof side === 'string' ? plugins.flatMap(({ plugin }) => plugin.tabs ?? []).find((candidate) => candidate.id === side) : undefined
   const content =
@@ -245,7 +255,7 @@ export function PluginHost({
           // Shrinks before the content does when the window gets narrow
           <aside
             style={filled ? undefined : { width: sideWidth }}
-            className={`relative flex min-w-[240px] flex-col ${filled ? 'flex-1' : ''} ${island ? ISLAND : 'border-l border-border'}`}
+            className={`relative min-w-[240px] flex-col ${filled ? 'flex flex-1' : zen ? 'hidden' : 'flex'} ${island ? ISLAND : filled ? '' : 'border-l border-border'}`}
           >
             {filled ? lead : <ResizeHandle edge="left" onResize={setSideWidth} />}
             <ErrorBoundary
@@ -294,6 +304,9 @@ export function PluginHost({
     </HostContext.Provider>
   )
 }
+
+/** ⇧⌘↩, after the focused element: composers that save with it, like a review's, keep it */
+const toggleZen = (): void => updateShell({ zen: !getShell().zen })
 
 const sideKey = (side: Side): string => (typeof side === 'string' ? side : side.key)
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { type ClosedSessionSummary, getShell, ISLAND, isTyping, type SessionSummary, type Services, togglePanel, updateShell } from '@treeix/sdk'
+import { type ClosedSessionSummary, getShell, ISLAND, isTyping, type SessionSummary, type Services, togglePanel, updateShell, useShell } from '@treeix/sdk'
 import { agentOr, chatAgent, isChatOnly, useAgents } from './agents'
 import { BotAvatar } from './BotAvatar'
 import { Icon } from './Icon'
@@ -448,6 +448,10 @@ export function Bots(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [side, setSide] = useState<Side | null>(null)
+  // The right panel in the page's place, kept only while one is open
+  const [filled, setFilled] = useState(false)
+  if (filled && !side) setFilled(false)
+  const { zen } = useShell()
   const [search, setSearch] = useState(false)
   const [sidebarWidth, setSidebarWidth] = usePersisted<number>('bots.sidebarWidth', 240)
   const [sidebarShown, setSidebarShown] = usePersisted<boolean>('bots.sidebarShown', true)
@@ -492,9 +496,10 @@ export function Bots(): React.JSX.Element {
     else void sessions.start(folder, 'shell').then((id) => sessions.reveal(id))
   }
 
-  // Always a new one, in the folder of the chat on screen
+  // Always a new one, in the folder of the chat on screen, filling the page until something in the sidebar is picked
   const newTerminal = (kind: string): void => {
     setSide(TERMINAL)
+    setFilled(true)
     void sessions?.start(selectedChat?.worktreePath ?? chatFolder, kind).then(
       (id) => sessions.reveal(id),
       (reason: unknown) => setProblem(errorMessage(reason))
@@ -586,13 +591,22 @@ export function Bots(): React.JSX.Element {
     if (draft) setSelectedId(draft.id)
   }
 
+  // Picking something to show docks a panel that fills the page
+  const pick = (id: string | null): void => {
+    setFilled(false)
+    setSelectedId(id)
+  }
+  // The sidebar comes back with zen left
+  const toggleSidebar = (): void => (zen ? (updateShell({ zen: false }), setSidebarShown(true)) : setSidebarShown(!sidebarShown))
+  const listed = sidebarShown && !zen
+
   const [sheetOpen, setSheetOpen] = useState(false)
   const page = selectedId ?? 'home'
   useWindowActions({
-    'app.settings': () => setSelectedId(CONFIGURE),
-    ...(canChat ? { 'chat.new': () => setSelectedId(null) } : {}),
-    'panel.list': () => setSidebarShown(!sidebarShown),
-    'panel.listAlt': () => setSidebarShown(!sidebarShown),
+    'app.settings': () => pick(CONFIGURE),
+    ...(canChat ? { 'chat.new': () => pick(null) } : {}),
+    'panel.list': toggleSidebar,
+    'panel.listAlt': toggleSidebar,
     'panel.inspector': () => togglePanel('inspector', page),
     'app.shortcuts': () => setSheetOpen(!sheetOpen),
     'app.shortcutsBare': () => setSheetOpen(!sheetOpen),
@@ -605,7 +619,7 @@ export function Bots(): React.JSX.Element {
     'app.fontDefault': () => stepFontSize(fontInFocus(), 0)
   })
   // ⌘, is the menu's, which sends it here
-  useEffect(() => window.api.onOpenSettings(() => setSelectedId(CONFIGURE)), [])
+  useEffect(() => window.api.onOpenSettings(() => pick(CONFIGURE)), [])
 
   // Autopilot's and Keep awake's switches sit beside Settings, as they did in the old shell's title bar
   const { loaded } = usePlugins()
@@ -624,7 +638,7 @@ export function Bots(): React.JSX.Element {
         {switches.map(({ id, Toggle }) => (
           <Toggle key={id} />
         ))}
-        <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => setSelectedId(CONFIGURE)}>
+        <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => pick(CONFIGURE)}>
           <Icon name="settings" />
         </IconButton>
       </div>
@@ -639,13 +653,13 @@ export function Bots(): React.JSX.Element {
       </label>
       <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
         {shown.map((bot) => (
-          <BotRow key={bot.id} bot={bot} active={bot.id === selectedId} onClick={() => setSelectedId(bot.id)} />
+          <BotRow key={bot.id} bot={bot} active={bot.id === selectedId} onClick={() => pick(bot.id)} />
         ))}
         {canChat && (
           <>
             <div className="mt-2 flex h-7 shrink-0 items-center justify-between pl-2 text-[11px] font-medium text-muted-foreground">
               Chats
-              <NewButton onChat={() => setSelectedId(null)} onTerminal={newTerminal} />
+              <NewButton onChat={() => pick(null)} onTerminal={newTerminal} />
             </div>
             {Map.groupBy(
               chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
@@ -675,7 +689,7 @@ export function Bots(): React.JSX.Element {
                           session={session}
                           active={session.id === selectedId}
                           renaming={session.id === renaming}
-                          onClick={() => setSelectedId(session.id)}
+                          onClick={() => pick(session.id)}
                           onRename={() => setRenaming(session.id)}
                           onRenamed={() => setRenaming(null)}
                           flash={setProblem}
@@ -704,7 +718,7 @@ export function Bots(): React.JSX.Element {
                 <ClosedChatRow
                   key={session.id}
                   session={session}
-                  onOpen={() => void sessions?.reopen(session.id).then((id) => id && setSelectedId(id))}
+                  onOpen={() => void sessions?.reopen(session.id).then((id) => id && pick(id))}
                   onForget={() => sessions?.forget(session.id)}
                 />
               ))}
@@ -722,10 +736,10 @@ export function Bots(): React.JSX.Element {
     >
       {/* Under the traffic lights */}
       <div className={`h-11 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
-      {canChat && <NewButton active={onHome} onChat={() => setSelectedId(null)} onTerminal={newTerminal} />}
+      {canChat && <NewButton active={onHome} onChat={() => pick(null)} onTerminal={newTerminal} />}
       <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto py-1.5">
         {bots.map((bot) => (
-          <button key={bot.id} title={bot.name} onClick={() => setSelectedId(bot.id)} className={`rounded-lg p-1 ${bot.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}>
+          <button key={bot.id} title={bot.name} onClick={() => pick(bot.id)} className={`rounded-lg p-1 ${bot.id === selectedId ? 'bg-foreground/8' : 'hover:bg-accent'}`}>
             <BotAvatar look={bot.look} attention={bot.status === 'attention'} />
           </button>
         ))}
@@ -752,7 +766,7 @@ export function Bots(): React.JSX.Element {
                     <button
                       key={session.id}
                       title={session.title}
-                      onClick={() => setSelectedId(session.id)}
+                      onClick={() => pick(session.id)}
                       className={`relative rounded-[10px] p-1 ${session.id === selectedId ? 'bg-foreground/10' : 'hover:bg-accent'}`}
                     >
                       <AgentMark kind={session.kind} />
@@ -768,13 +782,13 @@ export function Bots(): React.JSX.Element {
             )
             .toArray()}
       </nav>
-      <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => setSelectedId(CONFIGURE)}>
+      <IconButton label={withKeys('Settings', 'app.settings')} active={selectedId === CONFIGURE} onClick={() => pick(CONFIGURE)}>
         <Icon name="settings" />
       </IconButton>
     </aside>
   )
   // Pages whose header starts at the top left keep clear of the rail's corner
-  const cornerBar = sidebarShown ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+  const cornerBar = listed ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
   // Right of the traffic lights, a title section over the rail's top, its bottom border meeting the rail's edge. Last in the page, since the window takes
   // drag areas in page order: one earlier would sit under the page's draggable header and its button would miss the click
   const corner = (
@@ -790,16 +804,18 @@ export function Bots(): React.JSX.Element {
   )
   return (
     <div className={`relative flex h-screen ${islandUi ? 'bg-canvas' : 'bg-background'} font-sans text-foreground antialiased select-none`}>
-      {sidebarShown ? sidebar : rail}
+      {zen ? null : sidebarShown ? sidebar : rail}
       <PluginHost
         page={page}
         folder={selectedChat?.worktreePath ?? chatFolder}
         side={side}
         onSide={setSide}
+        filled={filled}
+        onFill={setFilled}
         send={send}
         search={search}
         onSearch={setSearch}
-        onSettings={() => setSelectedId(CONFIGURE)}
+        onSettings={() => pick(CONFIGURE)}
         lead={cornerBar}
       >
         <main className={`flex min-w-[300px] flex-1 flex-col ${islandUi ? `overflow-hidden ${ISLAND}` : ''}`}>
@@ -821,7 +837,7 @@ export function Bots(): React.JSX.Element {
               onTerminal={() => (side === TERMINAL ? setSide(null) : openShell(selectedChat.worktreePath))}
               onPage={(id) => setSide(side === id ? null : id)}
               onSearch={() => setSearch(true)}
-              cornered={!sidebarShown}
+              cornered={!listed}
             />
           ) : selected && hub ? (
             <>
@@ -841,13 +857,13 @@ export function Bots(): React.JSX.Element {
                 onFolder={pickFolder}
                 onWorktree={pickWorktree}
                 onSent={sent}
-                onPick={setSelectedId}
+                onPick={pick}
               />
             </>
           )}
         </main>
       </PluginHost>
-      {!sidebarShown && corner}
+      {!sidebarShown && !zen && corner}
       {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
     </div>
   )

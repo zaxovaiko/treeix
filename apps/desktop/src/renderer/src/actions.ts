@@ -29,6 +29,7 @@ defineActions([
     section: 'Panels',
     keys: key('Enter', { meta: true, alt: true })
   },
+  { id: 'shell.zen', label: 'Zen: the page alone, without the sidebar and the right panel', menuLabel: 'Zen', section: 'Panels', keys: key('Enter', { meta: true, shift: true }) },
   { id: 'app.shortcuts', label: 'Keyboard sheet', section: 'Panels', keys: key('Slash', { meta: true }) },
   { id: 'app.shortcutsBare', label: 'Keyboard sheet, second key', section: 'Panels', keys: key('Slash', { shift: true }) },
 

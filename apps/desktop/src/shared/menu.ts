@@ -10,9 +10,10 @@ export const MENU_SECTIONS: [section: string, label: string][] = [
 
 /**
  * Reachable from the menu, but without its key beside it. macOS hands a menu key equivalent to the item before the
- * web contents sees the keydown, which would skip the app's filter that keeps the keyboard sheet out of text fields.
+ * web contents sees the keydown, which would skip the app's filter that keeps the keyboard sheet out of text fields,
+ * and take ⇧⌘↩ from composers that save with it.
  */
-export const NO_ACCELERATOR = new Set(['app.shortcuts'])
+export const NO_ACCELERATOR = new Set(['app.shortcuts', 'shell.zen'])
 
 /** Runnable, but not menu material: the app menu already carries Settings, and the rest are second keys for one command */
 export const NOT_IN_MENU = new Set(['app.settings', 'panel.listAlt', 'app.shortcutsBare'])

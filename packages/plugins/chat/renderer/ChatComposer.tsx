@@ -396,7 +396,8 @@ export function Composer({ chatId, cwd, onSent, tools }: { chatId: string; cwd: 
         return
       }
     }
-    if (event.key === 'Enter' && (primaryKey(event) || !event.shiftKey)) {
+    // ⌘↩ sends too; ⇧⌘↩ is zen's
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       submit()
     }
