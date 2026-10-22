@@ -55,13 +55,13 @@ jobs:
           cat "$notes"
 
       # A draft until every file is up: installed copies see the release only once latest.json is there.
-      # The tag is created on this commit when the draft is published
+      # The tag is created on this commit when the draft is published. A draft left by a failed run is moved to this commit
       - name: Open the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.pick.outputs.tag }}
         run: |
-          gh release view "$TAG" > /dev/null 2>&1 ||
+          gh release edit "$TAG" --target "$GITHUB_SHA" --notes-file "$RUNNER_TEMP/notes.md" > /dev/null 2>&1 ||
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
   # One universal app (Apple silicon and Intel), signed, notarized and stapled, as Treeix.dmg and the updater bundle
