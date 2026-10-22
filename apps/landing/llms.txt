@@ -54,9 +54,9 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## Roadmap
 
-- Sessions on your other machines over Tailscale and SSH, in the same sidebar.
-- A design pass over every screen.
+- A native phone app for your agents, chats and routines.
 - A Windows build.
+- Sessions on your other machines over Tailscale and SSH, in the same sidebar.
 - Contributions are welcome, see https://github.com/zaxovaiko/treeix/blob/main/CONTRIBUTING.md
 
 ## Links

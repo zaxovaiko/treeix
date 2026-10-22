@@ -96,9 +96,9 @@ The command line tools are optional, and a feature stays quiet without its own: 
 
 ## Roadmap
 
-- Sessions on your other machines over Tailscale and SSH, in the same sidebar.
-- A design pass over every screen, so the app feels like one product.
+- A native phone app for your agents, chats and routines.
 - A Windows build.
+- Sessions on your other machines over Tailscale and SSH, in the same sidebar.
 
 Missing something? [Open an issue](https://github.com/zaxovaiko/treeix/issues/new) and say what you'd use it for.
 
