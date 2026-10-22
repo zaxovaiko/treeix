@@ -5,6 +5,7 @@ fn main() -> anyhow::Result<()> {
     }
     treeix_ptyd::run(treeix_ptyd::Opts {
         data_dir: treeix_proto::data_dir(),
+        socket: treeix_proto::socket_path(),
         handle_signals: true,
     })
 }

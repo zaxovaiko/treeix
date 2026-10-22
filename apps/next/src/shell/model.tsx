@@ -28,6 +28,11 @@ function lead(tab: Tab, sessions: Sessions): SessionInfo | undefined {
   return all.find(isAgent) ?? all[0]
 }
 
+const LIVE = new Set<SessionStatus>(['running', 'needs', 'done', 'idle', 'error'])
+
+/** Panes with a live process across these tabs; the quick terminal's session has no tab here, so it isn't counted */
+export const liveCount = (tabs: Tab[], sessions: Sessions) => tabs.flatMap((tab) => leaves(tab.root)).filter((id) => sessions[id] && LIVE.has(sessions[id].status)).length
+
 export const tabKind = (tab: Tab, sessions: Sessions): SessionKind => lead(tab, sessions)?.kind ?? 'shell'
 export const tabTitle = (tab: Tab, sessions: Sessions) => tab.title ?? lead(tab, sessions)?.title ?? 'zsh'
 

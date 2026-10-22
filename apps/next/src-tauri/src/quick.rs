@@ -1,5 +1,6 @@
 //! The quick terminal: a hidden window summoned over any app and space by a global chord.
-//! On macOS it is a non-activating NSPanel so summoning it does not pull the main window forward.
+//! On macOS it is a non-activating NSPanel so summoning it does not pull the main window forward; elsewhere an
+//! always-on-top, undecorated, taskbar-less window. Both hide when they lose focus.
 
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
@@ -27,7 +28,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     panel::convert(&window)?;
     #[cfg(not(target_os = "macos"))]
-    let _ = window;
+    window.clone().on_window_event(move |event| {
+        if let tauri::WindowEvent::Focused(false) = event {
+            let _ = window.hide();
+        }
+    });
     Ok(())
 }
 

@@ -13,6 +13,10 @@ const TIMEOUT_MS = 10 * 60_000
 
 const RUNNERS: Record<string, () => Promise<Outcome>> = {
   bench: async () => ({ report: await (await import('./panes/terminal/bench')).runBench(await api()), code: 0 }),
+  e2e: async () => {
+    const report = await (await import('./e2e')).runE2e(await api())
+    return { report, code: report.failed.length ? 1 : 0 }
+  },
 }
 
 export async function autorun() {

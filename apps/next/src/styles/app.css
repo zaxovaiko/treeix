@@ -165,6 +165,47 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .wi b { font-weight: 600; } .wi .dim { font-size: 11px; }
 .offline { flex: none; height: 24px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11.5px; color: var(--amber); background: var(--amber-bg); }
 .offline svg { width: 12px; height: 12px; }
+.offline .btn { height: 18px; margin-left: 6px; box-shadow: inset 0 0 0 1px currentColor; }
+.wbox.down { align-items: flex-start; }
+.wbox.down > svg { width: 22px; height: 22px; color: var(--amber); margin-bottom: 4px; }
+
+/* controls */
+.btn { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 7px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--input); white-space: nowrap; flex: none; }
+.btn:hover { background: var(--accent); }
+.btn.sm { height: 22px; padding: 0 8px; font-size: 11px; border-radius: 6px; }
+.seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--muted); flex: none; }
+.seg button { height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+.seg button.on { background: var(--background); color: var(--foreground); box-shadow: 0 0 0 1px var(--input); }
+:root:not([data-mode="light"]) .seg { background: rgb(255 255 255 / 6%); }
+:root:not([data-mode="light"]) .seg button.on { background: #e8e8ee; color: #111; box-shadow: none; }
+.krec { height: 24px; min-width: 72px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; padding: 0 6px; border-radius: 6px; background: var(--muted); font-size: 11px; }
+.krec:hover { background: var(--accent); }
+.krec.on { background: var(--sky-bg); color: var(--sky); }
+.filter { margin: 0 8px 6px; height: 28px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 8px; background: var(--muted); color: var(--muted-foreground); }
+.filter input { flex: 1; min-width: 0; background: none; border: 0; color: var(--foreground); font-size: 12px; user-select: text; }
+.sfoot { flex: none; display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+.sfoot .btn { flex: 1; min-width: 0; justify-content: center; }
+[data-ui="compact"] .filter { margin-top: 6px; }
+
+/* settings page */
+.gtop { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+[data-ui="compact"] .gtop { height: 34px; }
+.setp { flex: 1; min-height: 0; display: flex; }
+.snav { width: 210px; flex: none; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 8px 0 12px; border-right: 1px solid var(--border); }
+.snav-g { padding: 12px 16px 3px; font-size: 10.5px; font-weight: 600; color: var(--muted-foreground); }
+.snav-i { width: calc(100% - 12px); height: 28px; margin: 0 6px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 6px; font-size: 12px; color: var(--muted-foreground); }
+.snav-i:hover, .snav-i.on { background: var(--accent); color: var(--foreground); }
+.scont { flex: 1; min-width: 0; overflow: auto; }
+.sinner { max-width: 700px; margin: 0 auto; padding: 18px 24px 48px; }
+.sh1 { margin: 0 0 4px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.sh1 svg { width: 16px; height: 16px; }
+.sgrp { margin-top: 18px; }
+.sgrp h3 { margin: 0; font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+.srow { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.sl { font-size: 12.5px; }
+.sd { margin-top: 2px; font-size: 11.5px; color: var(--muted-foreground); line-height: 1.4; }
+.sc { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.sc .sd { margin: 0; color: var(--red); }
 
 /* UI: islands (rounded panels on the window background) vs compact (edge to edge) */
 [data-ui="islands"] .body { gap: 6px; padding: 0 6px; }

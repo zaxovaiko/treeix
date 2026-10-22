@@ -1,18 +1,23 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
+import { IN_TAURI, pickFolder, registerQuickShortcut, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, type Sessions } from './model'
 import { isCommandId, menuChord, shortcut, type CommandId } from './shortcuts'
-import { CenterTop, HStrip, Settings, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
+import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
+import { Settings } from './Settings'
 import { TabPanes } from './Panes'
 import { Palette } from './Palette'
+import { paneGrid } from '../panes/terminal/xterm'
 
 const PERSIST_MS = 300
 const AGENT_COMMAND: Partial<Record<SessionKind, string[]>> = { claude: ['claude'], codex: ['codex'] }
 const GONE = new Set(['exited', 'restored', 'crashed'])
+/** Reconnecting this long turns the banner into "can't reach" with a Retry */
+const UNREACHABLE_MS = 15_000
 
 /** What the chrome components read and call */
 export interface ShellView {
@@ -44,6 +49,8 @@ export function Shell({ api }: { api: Api }) {
   const [places, setPlaces] = useState<Record<string, Place>>({})
   const [home, setHome] = useState('/')
   const [connected, setConnected] = useState(true)
+  /** The first load failed, or reconnecting has taken longer than UNREACHABLE_MS */
+  const [unreachable, setUnreachable] = useState(false)
   /** Bumped on reconnect so every terminal re-attaches */
   const [epoch, setEpoch] = useState(0)
   const [palette, setPalette] = useState(false)
@@ -52,19 +59,42 @@ export function Shell({ api }: { api: Api }) {
   /** Panes closed while their process still ran; forgotten once it exits */
   const closing = useRef(new Set<string>())
 
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let cancelled = false
-    void Promise.all([api.getUi(), api.sessions(), api.homeDir()]).then(([json, list, homeDir]) => {
-      if (cancelled) return
-      setHome(homeDir)
-      setSessions(byId(list))
-      dispatch({ type: 'load', ui: restore(parseUi(json), list) })
-      setLoaded(true)
-    })
+    Promise.all([api.getUi(), api.sessions(), api.homeDir()]).then(
+      ([json, list, homeDir]) => {
+        if (cancelled) return
+        const saved = parseUi(json)
+        setHome(homeDir)
+        setSessions(byId(list))
+        dispatch({ type: 'load', ui: restore(saved, list) })
+        setUnreachable(false)
+        setLoaded(true)
+        if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
+      },
+      () => !cancelled && setUnreachable(true)
+    )
     return () => {
       cancelled = true
     }
-  }, [api])
+  }, [api, attempt])
+
+  useEffect(() => {
+    if (connected) return setUnreachable(false)
+    const timer = setTimeout(() => setUnreachable(true), UNREACHABLE_MS)
+    return () => clearTimeout(timer)
+  }, [connected])
+
+  /** After a daemon restart: re-list, keep the layout, re-attach every terminal. The quick window may have a new session by now */
+  const resync = () =>
+    Promise.all([api.sessions(), api.getUi()]).then(([list, json]) => {
+      setSessions(byId(list))
+      dispatch({ type: 'load', ui: restore({ ...ui, quick: parseUi(json).quick }, list) })
+      setEpoch((n) => n + 1)
+      setConnected(true)
+    })
+  const retry = () => (loaded ? void resync().catch(() => setUnreachable(true)) : setAttempt((n) => n + 1))
 
   const patch = (id: string, change: Partial<SessionInfo>) => setSessions((all) => (all[id] ? { ...all, [id]: { ...all[id], ...change } } : all))
 
@@ -90,13 +120,8 @@ export function Shell({ api }: { api: Api }) {
         setSessions((all) => ({ ...all, [e.info.id]: e.info }))
         return
       case 'daemon':
-        setConnected(e.state === 'connected')
-        if (e.state === 'connected')
-          void api.sessions().then((list) => {
-            setSessions(byId(list))
-            dispatch({ type: 'load', ui: restore(ui, list) })
-            setEpoch((n) => n + 1)
-          })
+        if (e.state === 'connected') resync().catch(() => setUnreachable(true))
+        else setConnected(false)
     }
   })
   useEffect(() => api.onEvent(onEvent), [api])
@@ -144,11 +169,15 @@ export function Shell({ api }: { api: Api }) {
 
   // Before the terminals mount, so they open with the right colors
   useLayoutEffect(() => applyTheme(ui.theme, ui.ui), [ui.theme, ui.ui])
+  useEffect(() => {
+    if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer })
+  }, [loaded, ui.theme, ui.ui, ui.renderer])
 
   const focusCwd = () => (activeTab ? (sessions[activeTab.focus]?.cwd ?? home) : home)
 
-  const create = async (kind: SessionKind, cwd: string) => {
-    const info = await api.create({ kind, cwd, command: AGENT_COMMAND[kind], cols: 80, rows: 24 })
+  /** Created at the size of the pane it opens in, so its first output isn't drawn for another width */
+  const create = async (kind: SessionKind, cwd: string, box: { width: number; height: number } = stageBox()) => {
+    const info = await api.create({ kind, cwd, command: AGENT_COMMAND[kind], ...paneGrid(box.width, box.height) })
     setSessions((all) => ({ ...all, [info.id]: info }))
     return info
   }
@@ -162,7 +191,9 @@ export function Shell({ api }: { api: Api }) {
     if (!activeTab || !from) return newSession('shell')
     dispatch({ type: 'focus', session: from })
     const place = placeOfTab(activeTab).key
-    void create('shell', sessions[from]?.cwd ?? home).then((info) => dispatch({ type: 'split', session: info.id, dir, place }))
+    const box = paneBox(from) ?? stageBox()
+    const half = dir === 'row' ? { width: box.width / 2, height: box.height } : { width: box.width, height: box.height / 2 }
+    void create('shell', sessions[from]?.cwd ?? home, half).then((info) => dispatch({ type: 'split', session: info.id, dir, place }))
   }
 
   const closePane = (session: string) => {
@@ -198,6 +229,8 @@ export function Shell({ api }: { api: Api }) {
         return newSession('claude')
       case 'new-codex':
         return newSession('codex')
+      case 'open-folder':
+        return void pickFolder(home).then((dir) => dir && newSession('shell', dir))
       case 'split-right':
         return split('row')
       case 'split-down':
@@ -226,8 +259,10 @@ export function Shell({ api }: { api: Api }) {
   }
 
   const onKey = useEffectEvent((e: KeyboardEvent) => {
+    // The settings recorder is taking a chord
+    if (document.querySelector('.krec.on')) return
     const id = shortcut(e)
-    if (!id || ('__TAURI_INTERNALS__' in window && menuChord(e))) return
+    if (!id || (IN_TAURI && menuChord(e))) return
     e.preventDefault()
     e.stopPropagation()
     run(id)
@@ -242,12 +277,17 @@ export function Shell({ api }: { api: Api }) {
     if (isCommandId(id)) run(id)
   })
   useEffect(() => {
-    if (!('__TAURI_INTERNALS__' in window)) return
+    if (!IN_TAURI) return
     const unlisten = listen<{ id: string }>('menu', (e) => onMenu(e.payload.id))
     return () => void unlisten.then((stop) => stop())
   }, [])
 
-  if (!loaded) return <div className="win" />
+  if (!loaded)
+    return (
+      <div className="win">
+        {unreachable && <Unreachable onRetry={retry} />}
+      </div>
+    )
 
   const view: ShellView = { api, ui, dispatch, sessions, home, groups, ordered, activeTab, placeOf, placeOfTab, run, newSession, split, closePane, closeTab }
   const vertical = ui.orientation === 'vertical'
@@ -260,11 +300,16 @@ export function Shell({ api }: { api: Api }) {
       {!connected && (
         <div className="offline">
           <Icon name="alert" />
-          Reconnecting to the terminal host...
+          {unreachable ? "Can't reach the terminal host" : 'Reconnecting to the terminal host...'}
+          {unreachable && (
+            <button className="btn sm" onClick={retry}>
+              Retry
+            </button>
+          )}
         </div>
       )}
       <div className="body">
-        {vertical && ui.sidebar && !empty && (
+        {vertical && ui.sidebar && (
           <>
             <aside className="card side" style={{ width: ui.sidebarWidth }}>
               <Sidebar view={view} />
@@ -274,7 +319,7 @@ export function Shell({ api }: { api: Api }) {
         )}
         <main className="card center">
           {page === 'settings' ? (
-            <Settings onClose={() => setPage(null)} />
+            <Settings view={view} onClose={() => setPage(null)} />
           ) : empty ? (
             <Welcome view={view} />
           ) : (
@@ -291,6 +336,31 @@ export function Shell({ api }: { api: Api }) {
       </div>
       <StatusBar view={view} />
       {palette && <Palette view={view} onClose={() => setPalette(false)} />}
+    </div>
+  )
+}
+
+/** The stage, or the main card while the stage is hidden (welcome, settings) */
+function stageBox(): DOMRect {
+  const stage = document.querySelector('.stage')?.getBoundingClientRect()
+  return stage?.width ? stage : (document.querySelector('main.center')?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight))
+}
+
+const paneBox = (session: string): DOMRect | undefined =>
+  document.querySelector(`.term[data-session-id="${CSS.escape(session)}"]`)?.closest('.pane')?.getBoundingClientRect()
+
+/** First load failed: the app can't do anything without the terminal host */
+function Unreachable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="welcome">
+      <div className="wbox down">
+        <Icon name="alert" />
+        <h2>Can't reach the terminal host</h2>
+        <p className="dim">Treeix runs terminals in a background process, and it isn't answering. It restarts on its own; if this stays, quit and reopen Treeix.</p>
+        <button className="btn" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
     </div>
   )
 }

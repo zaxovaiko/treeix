@@ -1,4 +1,5 @@
 import type { Place, PlaceKind, SessionInfo } from '../ipc/api'
+import type { Renderer } from '../panes/terminal/renderer'
 
 export type SplitDir = 'row' | 'col'
 export type SplitNode = { type: 'pane'; session: string } | { type: 'split'; dir: SplitDir; ratio: number; a: SplitNode; b: SplitNode }
@@ -34,6 +35,9 @@ export interface UiState {
   recent: RecentPlace[]
   /** The quick terminal window's session; written by that window only */
   quick: string | null
+  renderer: Renderer
+  /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null keeps the built-in default */
+  quickShortcut: string | null
 }
 
 export const SIDEBAR = { min: 180, max: 520, initial: 276 }
@@ -50,6 +54,8 @@ export const initialUi: UiState = {
   theme: 'dark',
   recent: [],
   quick: null,
+  renderer: 'auto',
+  quickShortcut: null,
 }
 
 export const leaves = (node: SplitNode): string[] => (node.type === 'pane' ? [node.session] : [...leaves(node.a), ...leaves(node.b)])
@@ -101,7 +107,7 @@ export type Action =
   | { type: 'toggleCollapsed'; key: string }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'orientation' | 'ui' | 'theme'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {

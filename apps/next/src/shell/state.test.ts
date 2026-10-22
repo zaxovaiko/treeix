@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { Place, SessionInfo } from '../ipc/api'
+import { liveCount } from './model'
 import { groupTabs, initialUi, leaves, neighbor, parseUi, reducer, restore, tabPlace, type UiState } from './state'
 
 const info = (id: string, createdAt = 0): SessionInfo => ({
@@ -93,4 +94,18 @@ test('tabs group by repo, then place, in the saved order', () => {
     ['main', 2],
     ['x', 1],
   ])
+})
+
+test('older blobs get the settings defaults, and settings patch in', () => {
+  const old = parseUi(JSON.stringify({ theme: 'light' }))
+  expect(old.renderer).toBe('auto')
+  expect(old.quickShortcut).toBeNull()
+  const s = reducer(old, { type: 'set', patch: { renderer: 'dom', quickShortcut: 'Control+Backquote' } })
+  expect([s.renderer, s.quickShortcut, s.theme]).toEqual(['dom', 'Control+Backquote', 'light'])
+})
+
+test('live count: only panes in tabs with a running process, so not the quick terminal', () => {
+  const s = restore({ ...initialUi, quick: 'q' }, [info('a'), info('b'), { ...info('c'), status: 'exited' }, info('q')])
+  const sessions = Object.fromEntries([info('a'), info('b'), { ...info('c'), status: 'exited' as const }, info('q')].map((x) => [x.id, x]))
+  expect(liveCount(s.tabs, sessions)).toBe(2)
 })

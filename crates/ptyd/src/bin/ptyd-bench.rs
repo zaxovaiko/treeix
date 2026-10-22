@@ -1,8 +1,11 @@
 //! `ptyd-bench [--in-process] <file>`: throughput attached and detached (`cat <file>`), echo
-//! latency, and daemon RSS with 20 idle shells. Prints JSON.
+//! latency, and daemon RSS with 20 idle shells. Prints JSON. The RSS is always of a daemon in its own
+//! process: with `--in-process` the bench starts itself as one (`--daemon`) on a temp data dir.
 
 use anyhow::{Context, bail};
+use std::path::Path;
 use std::time::{Duration, Instant};
+use tokio::process::{Child, Command};
 use treeix_proto::{CreateSession, Event, Request, Response, SessionKind};
 use treeix_ptyd::client::Client;
 
@@ -140,10 +143,11 @@ async fn echo_latency(client: &mut Client, samples: usize) -> anyhow::Result<Vec
     Ok(times)
 }
 
-async fn idle_rss_mb(client: &mut Client, shells: usize) -> anyhow::Result<f64> {
+async fn idle_rss_mb(socket: &Path, shells: usize) -> anyhow::Result<f64> {
+    let mut client = Client::connect(socket).await?;
     let mut ids = Vec::new();
     for _ in 0..shells {
-        ids.push(start(client, &[]).await?);
+        ids.push(start(&mut client, &[]).await?);
     }
     tokio::time::sleep(Duration::from_secs(3)).await;
     let ps = std::process::Command::new("ps")
@@ -156,12 +160,37 @@ async fn idle_rss_mb(client: &mut Client, shells: usize) -> anyhow::Result<f64> 
     Ok(kb / 1024.0)
 }
 
+/// This binary as a daemon on `dir`, the same code as `treeix-ptyd`
+async fn out_of_process_daemon(dir: &Path) -> anyhow::Result<Child> {
+    let child = Command::new(std::env::current_exe()?)
+        .arg("--daemon")
+        .env("TREEIX_DATA_DIR", dir)
+        .spawn()?;
+    for _ in 0..500 {
+        if Client::connect(&dir.join("ptyd.sock")).await.is_ok() {
+            return Ok(child);
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    bail!("the bench daemon did not come up")
+}
+
 fn percentile(sorted: &[f64], p: f64) -> f64 {
     sorted[((sorted.len() - 1) as f64 * p).round() as usize]
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    if std::env::args().any(|a| a == "--daemon") {
+        return treeix_ptyd::run(treeix_ptyd::Opts {
+            data_dir: treeix_proto::data_dir(),
+            socket: treeix_proto::socket_path(),
+            handle_signals: true,
+        });
+    }
+    tokio::runtime::Runtime::new()?.block_on(bench())
+}
+
+async fn bench() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let in_process = args.iter().any(|a| a == "--in-process");
     let file = args
@@ -181,9 +210,27 @@ async fn main() -> anyhow::Result<()> {
     } else {
         treeix_proto::data_dir()
     };
-    let mut client = Client::connect(&data_dir.join("ptyd.sock")).await?;
+    let socket = if in_process {
+        data_dir.join("ptyd.sock")
+    } else {
+        treeix_proto::socket_path()
+    };
+    let mut client = Client::connect(&socket).await?;
 
-    let idle_rss = idle_rss_mb(&mut client, 20).await?;
+    let idle_rss = if in_process {
+        let dir = data_dir.with_extension("rss");
+        let mut daemon = out_of_process_daemon(&dir).await?;
+        let rss = idle_rss_mb(&dir.join("ptyd.sock"), 20).await;
+        Client::connect(&dir.join("ptyd.sock"))
+            .await?
+            .request(Request::Shutdown)
+            .await?;
+        daemon.wait().await?;
+        let _ = std::fs::remove_dir_all(&dir);
+        rss?
+    } else {
+        idle_rss_mb(&socket, 20).await?
+    };
     let attached = attached_throughput(&mut client, file).await?;
     let detached = detached_throughput(&mut client, file).await?;
     let echo = echo_latency(&mut client, 1000).await?;

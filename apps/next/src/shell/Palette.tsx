@@ -3,27 +3,29 @@ import { Icon } from '../lib/icons'
 import { paletteResults, type Command, type Result } from '../lib/paletteSearch'
 import { KIND_ICON, tabKind, tabTitle } from './model'
 import { placeLabel } from './state'
-import type { CommandId } from './shortcuts'
+import { keyHint, type CommandId } from './shortcuts'
 import type { ShellView } from './Shell'
 
-const ACTIONS: [CommandId, string, string?][] = [
-  ['new-shell', 'New shell here', '⌘T'],
+const ACTIONS: [CommandId, string][] = [
+  ['new-shell', 'New shell here'],
   ['new-claude', 'New Claude Code here'],
   ['new-codex', 'New Codex here'],
-  ['split-right', 'Split right', '⌘D'],
-  ['split-down', 'Split down', '⇧⌘D'],
-  ['close-pane', 'Close pane', '⌘W'],
+  ['open-folder', 'Open folder...'],
+  ['split-right', 'Split right'],
+  ['split-down', 'Split down'],
+  ['close-pane', 'Close pane'],
   ['toggle-tabs', 'Toggle tabs: vertical or horizontal'],
   ['toggle-ui', 'Toggle layout: Compact or Islands'],
   ['toggle-theme', 'Toggle theme: dark or light'],
-  ['toggle-sidebar', 'Toggle sidebar', '⌘\\'],
-  ['settings', 'Settings', '⌘,'],
+  ['toggle-sidebar', 'Toggle sidebar'],
+  ['settings', 'Settings'],
 ]
 
 const ACTION_ICON: Partial<Record<CommandId, Command['icon']>> = {
   'new-shell': 'terminal',
   'new-claude': 'claude',
   'new-codex': 'codex',
+  'open-folder': 'folder',
   'split-right': 'split',
   'split-down': 'splitDown',
   'close-pane': 'x',
@@ -35,7 +37,7 @@ const ACTION_ICON: Partial<Record<CommandId, Command['icon']>> = {
 }
 
 function commands(view: ShellView): Command[] {
-  const actions = ACTIONS.map(([id, label, shortcut]): Command => ({ id, group: 'Actions', label, shortcut, icon: ACTION_ICON[id], run: () => view.run(id) }))
+  const actions = ACTIONS.map(([id, label]): Command => ({ id, group: 'Actions', label, shortcut: keyHint(id), icon: ACTION_ICON[id], run: () => view.run(id) }))
   const tabs = view.ordered.map(
     (tab): Command => ({
       id: tab.id,

@@ -276,7 +276,13 @@ export function mockApi(): Api {
       const sim = get(id)
       Object.assign(sim.info, { exitCode: null, pid: 40000 + next++ })
       setStatus(sim, sim.info.kind === 'shell' ? 'idle' : 'running')
+      // Like ptyd: the old screen stays and the new run starts on a fresh line
+      emit(sim, '\x1b[0m\r\n')
       emit(sim, sim.info.kind === 'shell' ? prompt(sim.info.cwd) : banner(sim.info.kind === 'codex' ? 'codex' : 'claude', sim.info.cwd))
+    },
+    async clear(id) {
+      const sim = get(id)
+      sim.out = sim.out.slice(sim.out.lastIndexOf('\n') + 1)
     },
     getUi: async () => localStorage.getItem(UI_KEY),
     putUi: async (json) => localStorage.setItem(UI_KEY, json),

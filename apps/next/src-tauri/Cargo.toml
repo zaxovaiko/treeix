@@ -20,6 +20,9 @@ specta = { version = "=2.0.0-rc.22", features = ["derive"] }
 specta-typescript = "=0.0.9"
 tauri-plugin-global-shortcut = "=2.4.1"
 tauri-plugin-clipboard-manager = "=2.5.0"
+tauri-plugin-dialog = "=2.8.3"
+tauri-plugin-window-state = "=2.5.0"
+tauri-plugin-single-instance = "=2.5.4"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

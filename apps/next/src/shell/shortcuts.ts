@@ -5,6 +5,7 @@ export type CommandId =
   | 'new-shell'
   | 'new-claude'
   | 'new-codex'
+  | 'open-folder'
   | 'split-right'
   | 'split-down'
   | 'close-pane'
@@ -19,19 +20,28 @@ export type CommandId =
   | `tab-${number}`
   | `focus-${Direction}`
 
-const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme'])
+const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme'])
 
-/** Chords the native menu binds (src-tauri/src/menu.rs): inside Tauri the menu fires them, keydown must not too */
-export const menuChord = (e: Keys): boolean => e.metaKey && !e.altKey && !e.ctrlKey && (e.shiftKey ? e.key.toLowerCase() === 'p' : e.code === 'Backslash' || e.key === ',')
-
-export const isCommandId = (id: string): id is CommandId => MENU_IDS.has(id) || /^tab-[1-9]$/.test(id) || /^focus-(left|right|up|down)$/.test(id)
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
 type Keys = Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'shiftKey' | 'altKey' | 'ctrlKey'>
 
+/** Chords the native menu binds (src-tauri/src/menu.rs, macOS only): inside Tauri the menu fires them, keydown must not too */
+export const menuChord = (e: Keys, mac = IS_MAC): boolean =>
+  mac && e.metaKey && !e.altKey && !e.ctrlKey && (e.shiftKey ? e.key.toLowerCase() === 'p' : e.code === 'Backslash' || e.key === ',')
+
+export const isCommandId = (id: string): id is CommandId => MENU_IDS.has(id) || /^tab-[1-9]$/.test(id) || /^focus-(left|right|up|down)$/.test(id)
+
 const ARROWS: Record<string, Direction> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }
 
-// ponytail: macOS Cmd only; Linux gets Ctrl+Shift bindings when it ships
-export function shortcut(e: Keys): CommandId | null {
+/** Ctrl+Tab and Ctrl+Shift+Tab cycle tabs on every platform; the terminal hands them up (panes/terminal/keys.ts) */
+const ctrlTab = (e: Keys): CommandId | null => (e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Tab' ? (e.shiftKey ? 'prev-tab' : 'next-tab') : null)
+
+export function shortcut(e: Keys, mac = IS_MAC): CommandId | null {
+  return ctrlTab(e) ?? (mac ? macShortcut(e) : linuxShortcut(e))
+}
+
+function macShortcut(e: Keys): CommandId | null {
   if (!e.metaKey || e.ctrlKey) return null
   if (e.altKey) return ARROWS[e.key] && !e.shiftKey ? `focus-${ARROWS[e.key]}` : null
   const key = e.key.toLowerCase()
@@ -44,6 +54,70 @@ export function shortcut(e: Keys): CommandId | null {
   }
   if (/^[1-9]$/.test(e.key)) return `tab-${Number(e.key)}`
   if (e.code === 'Backslash') return 'toggle-sidebar'
-  const plain: Record<string, CommandId> = { t: 'new-shell', d: 'split-right', w: 'close-pane', k: 'palette', ',': 'settings' }
+  const plain: Record<string, CommandId> = { t: 'new-shell', o: 'open-folder', d: 'split-right', w: 'close-pane', k: 'palette', ',': 'settings' }
   return plain[key] ?? null
+}
+
+const LINUX_CTRL_SHIFT: Record<string, CommandId> = { KeyT: 'new-shell', KeyO: 'open-folder', KeyW: 'close-pane', KeyP: 'palette', KeyD: 'split-right', KeyE: 'split-down', KeyB: 'toggle-sidebar' }
+
+/** Like GNOME Terminal and Konsole: app chords are Ctrl+Shift, so plain Ctrl+<key> stays the shell's */
+function linuxShortcut(e: Keys): CommandId | null {
+  if (e.metaKey) return null
+  if (e.altKey) return !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code) ? `tab-${Number(e.code.slice(5))}` : null
+  if (!e.ctrlKey) return null
+  if (e.shiftKey) return LINUX_CTRL_SHIFT[e.code] ?? null
+  if (e.code === 'PageUp') return 'prev-tab'
+  if (e.code === 'PageDown') return 'next-tab'
+  return e.key === ',' ? 'settings' : null
+}
+
+const MAC_HINTS: Partial<Record<CommandId, string>> = {
+  'new-shell': '⌘T',
+  'open-folder': '⌘O',
+  'split-right': '⌘D',
+  'split-down': '⇧⌘D',
+  'close-pane': '⌘W',
+  palette: '⌘K',
+  'toggle-sidebar': '⌘\\',
+  settings: '⌘,',
+}
+const LINUX_HINTS: Partial<Record<CommandId, string>> = {
+  'new-shell': 'Ctrl+Shift+T',
+  'open-folder': 'Ctrl+Shift+O',
+  'split-right': 'Ctrl+Shift+D',
+  'split-down': 'Ctrl+Shift+E',
+  'close-pane': 'Ctrl+Shift+W',
+  palette: 'Ctrl+Shift+P',
+  'toggle-sidebar': 'Ctrl+Shift+B',
+  settings: 'Ctrl+,',
+}
+
+/** The chord shown next to a command in buttons, tooltips and the palette */
+export const keyHint = (id: CommandId, mac = IS_MAC): string | undefined => (mac ? MAC_HINTS : LINUX_HINTS)[id]
+
+/** `label (chord)` for a tooltip */
+export const withHint = (label: string, id: CommandId) => (keyHint(id) ? `${label} (${keyHint(id)})` : label)
+
+const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
+
+/**
+ * A global-shortcut accelerator (tauri-plugin-global-shortcut) from a recorded chord, e.g. `Control+Backquote`. Null until a
+ * non-modifier key is down with at least one modifier, F-keys aside, so a bare letter can't steal typing everywhere
+ */
+export function accelerator(e: Keys): string | null {
+  if (MODIFIER_KEYS.has(e.key) || !e.code) return null
+  const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter((m): m is string => !!m)
+  if (!mods.length && !/^F\d+$/.test(e.code)) return null
+  return [...mods, e.code].join('+')
+}
+
+const MOD_LABEL: Record<string, [mac: string, other: string]> = { Control: ['⌃', 'Ctrl+'], Alt: ['⌥', 'Alt+'], Shift: ['⇧', 'Shift+'], Super: ['⌘', 'Super+'] }
+const CODE_LABEL: Record<string, string> = { Backquote: '`', Space: 'Space', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', Escape: 'Esc', Enter: '↵' }
+
+/** How an accelerator from `accelerator` reads: ⌃` on macOS, Ctrl+` elsewhere */
+export function acceleratorLabel(accel: string, mac = IS_MAC): string {
+  const parts = accel.split('+')
+  const code = parts.pop() ?? ''
+  const key = CODE_LABEL[code] ?? code.replace(/^(Key|Digit|Numpad)/, '')
+  return parts.map((m) => MOD_LABEL[m]?.[mac ? 0 : 1] ?? `${m}+`).join('') + key
 }

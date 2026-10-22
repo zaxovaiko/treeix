@@ -48,6 +48,7 @@ export function tauriApi(): Api {
     kill: (id) => done(commands.kill(id)),
     remove: (id) => done(commands.remove(id)),
     restart: (id) => done(commands.restart(id)),
+    clear: (id) => done(commands.clear(id)),
     getUi: commands.getUi,
     putUi: (json) => done(commands.putUi(json)),
     places: commands.places,

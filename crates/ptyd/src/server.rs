@@ -1,9 +1,11 @@
 //! The socket server: handshake, requests, event fan-out, persistence timers.
 
+use crate::procinfo;
 use crate::session::Session;
 use crate::state::{self, SavedSession, State};
 use anyhow::{Context, bail};
-use nix::sys::signal::Signal;
+use nix::sys::signal::{Signal, killpg};
+use nix::unistd::{Pid, getpgid};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -53,8 +55,11 @@ impl Daemon {
             SessionStatus::Crashed
         };
         let mut sessions = HashMap::new();
-        for SavedSession { info, env } in saved.sessions {
+        for SavedSession { info, env, started } in saved.sessions {
             let was_running = !matches!(info.status, SessionStatus::Exited | SessionStatus::Error);
+            if was_running && let (Some(pid), Some(started)) = (info.pid, started) {
+                kill_orphan(pid as i32, started);
+            }
             let session = Session::new(info, env, true);
             if was_running {
                 session.set_status(revived);
@@ -115,6 +120,7 @@ impl Daemon {
             .map(|s| SavedSession {
                 info: s.info(),
                 env: s.env.clone(),
+                started: s.started(),
             })
             .collect();
         sessions.sort_by_key(|s| s.info.created_at);
@@ -212,14 +218,11 @@ impl Daemon {
         };
         let _ = outbox.send(hello);
         if proto != PROTO_VERSION || build != self.build {
-            // A newer app: step aside so the service manager starts the matching daemon
+            // The app decides: a newer one sends Shutdown, an older one must not take this daemon down
             tracing::info!(
-                "client is proto {proto} build {build}, daemon is {}; restarting",
+                "client is proto {proto} build {build}, daemon is {}",
                 self.build
             );
-            self.stop();
-            self.shutdown.notify_one();
-            return Ok(());
         }
 
         let client = self.next_client.fetch_add(1, Ordering::Relaxed);
@@ -338,6 +341,10 @@ impl Daemon {
                 self.mark_state_dirty();
                 Ok(Response::Ok)
             }
+            Request::Clear { session } => {
+                self.session(&session)?.clear();
+                Ok(Response::Ok)
+            }
         }
     }
 
@@ -378,6 +385,16 @@ impl Daemon {
         self.broadcast(Event::Created(info.clone()));
         self.mark_state_dirty();
         Ok(info)
+    }
+}
+
+/// A shell that outlived its daemon (SIGKILL, or SIGHUP ignored) has no PTY reader any more. Its group
+/// goes, but only when the pid is still that process: same start time and still its own group leader
+fn kill_orphan(pid: i32, started: u64) {
+    let target = Pid::from_raw(pid);
+    if procinfo::start_time(pid) == Some(started) && getpgid(Some(target)) == Ok(target) {
+        tracing::info!("killing orphaned process group {pid}");
+        let _ = killpg(target, Signal::SIGKILL);
     }
 }
 

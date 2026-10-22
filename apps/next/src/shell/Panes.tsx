@@ -2,6 +2,7 @@ import type { CSSProperties, PointerEvent } from 'react'
 import { TerminalPane } from '../panes/terminal'
 import { Icon } from '../lib/icons'
 import { DOT_LABEL, KIND_ICON, statusDot } from './model'
+import { withHint } from './shortcuts'
 import { paneRects, splitHandles, type Handle, type Rect, type Tab } from './state'
 import type { ShellView } from './Shell'
 
@@ -50,19 +51,19 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                 <Icon name={KIND_ICON[info?.kind ?? 'shell']} />
                 <span className="trunc grow">{info?.title ?? 'zsh'}</span>
                 {dot !== 'idle' && <span className={`st-${dot}`}>{DOT_LABEL[dot].toLowerCase()}</span>}
-                <button className="icon sm" onClick={() => view.split('row', id)} title="Split right (⌘D)">
+                <button className="icon sm" onClick={() => view.split('row', id)} title={withHint('Split right', 'split-right')}>
                   <Icon name="split" />
                 </button>
-                <button className="icon sm" onClick={() => view.split('col', id)} title="Split down (⇧⌘D)">
+                <button className="icon sm" onClick={() => view.split('col', id)} title={withHint('Split down', 'split-down')}>
                   <Icon name="splitDown" />
                 </button>
-                <button className="icon sm" onClick={() => view.closePane(id)} title="Close pane (⌘W)">
+                <button className="icon sm" onClick={() => view.closePane(id)} title={withHint('Close pane', 'close-pane')}>
                   <Icon name="x" />
                 </button>
               </div>
             )}
             <div className="pterm">
-              <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} />
+              <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} renderer={view.ui.renderer} />
             </div>
           </div>
         )

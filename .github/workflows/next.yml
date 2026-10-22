@@ -1,0 +1,122 @@
+name: Treeix Next
+
+# A universal macOS build of Treeix Next (com.dyvertex.treeix.next), published as a GitHub prerelease tagged
+# next-v<version>-<short sha>. Manual until cutover; release-notes.sh and release.yml only read v* tags, so these never
+# count as Electron releases. Without the signing secrets it still ships, unsigned
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    env:
+      TARGET: universal-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Rust for both architectures
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Pick the tag
+        id: tag
+        run: |
+          version=$(bun --print "require('./apps/next/src-tauri/tauri.conf.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=next-v$version-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # tauri bundles externalBin as binaries/<name>-<target>; a universal build takes one fat binary
+      - name: Universal treeix-ptyd sidecar
+        run: |
+          for arch in aarch64 x86_64; do cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$arch-apple-darwin"; done
+          mkdir -p apps/next/src-tauri/binaries
+          lipo -create -output "apps/next/src-tauri/binaries/treeix-ptyd-$TARGET" \
+            target/aarch64-apple-darwin/release/treeix-ptyd target/x86_64-apple-darwin/release/treeix-ptyd
+
+      - run: bun install --frozen-lockfile
+        working-directory: apps/next
+
+      - name: Check for signing secrets
+        id: signing
+        env:
+          CERT: ${{ secrets.MAC_CERT_P12 }}
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -n "$CERT" ] && [ -n "$API_KEY" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else echo "signed=false" >> "$GITHUB_OUTPUT"; fi
+
+      # The same import as release.yml. Tauri signs with APPLE_SIGNING_IDENTITY and notarizes with the API key
+      # (its APPLE_API_KEY is the key id, APPLE_API_KEY_PATH the .p8)
+      - name: Import the signing certificate
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed -e 's/^ *"//' -e 's/"$//')
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+          [ -n "$identity" ] || { echo "No Developer ID Application identity in the certificate"; exit 1; }
+          printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          {
+            echo "APPLE_SIGNING_IDENTITY=$identity"
+            echo "APPLE_API_KEY=$APPLE_API_KEY_ID"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
+          } >> "$GITHUB_ENV"
+
+      # Signed: the app and the sidecar get the hardened runtime, the app is notarized and stapled, then the DMG is made.
+      # The sidecar is already built, so only the frontend is
+      - name: Build
+        working-directory: apps/next
+        run: bun run tauri build --target "$TARGET" --bundles app,dmg --config '{"build":{"beforeBuildCommand":"bun run build"}}'
+
+      - name: Verify the signatures
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          app="target/$TARGET/release/bundle/macos/Treeix Next.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          for binary in "$app/Contents/MacOS/"*; do
+            codesign -d --verbose=2 "$binary" 2>&1 | grep -q 'flags=.*runtime' || { echo "$binary lacks the hardened runtime"; exit 1; }
+          done
+          xcrun stapler validate "$app"
+
+      - name: Notarize the DMG
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          dmg=$(ls "target/$TARGET/release/bundle/dmg/"*.dmg)
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+          xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "$dmg"
+          rm -f "$APPLE_API_KEY_PATH"
+
+      - name: Publish the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          dmg="$RUNNER_TEMP/Treeix-Next-$VERSION-universal.dmg"
+          cp "target/$TARGET/release/bundle/dmg/"*.dmg "$dmg"
+          if [ "$SIGNED" = true ]; then notes="Signed and notarized."; else notes="Unsigned: right-click the app and choose Open the first time."; fi
+          gh release create "$TAG" "$dmg" --prerelease --latest=false --target "$GITHUB_SHA" --title "Treeix Next $VERSION ($TAG)" \
+            --notes "Treeix Next preview build from $GITHUB_SHA. $notes"

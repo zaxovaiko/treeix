@@ -1,15 +1,21 @@
 import { Terminal, type ITheme } from '@xterm/xterm'
+import type { ISearchDecorationOptions } from '@xterm/addon-search'
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
+import { type Renderer, wantsWebgl } from './renderer'
 
 export const IS_MAC = /Mac/.test(navigator.userAgent)
+const IS_LINUX = /Linux/.test(navigator.userAgent)
 
-/** WebGL on macOS; Linux WebKitGTK often falls back to software GL, so it draws with the DOM renderer unless opted in */
-const useWebgl = (): boolean => !/Linux/.test(navigator.userAgent) || localStorage.getItem('treeix.webgl') === '1'
+/** Lost WebGL contexts in this window, counted across reveals */
+let webglLosses = 0
+
+export const webglFor = (renderer: Renderer): boolean => wantsWebgl(renderer, IS_LINUX, webglLosses)
 
 const ANSI_NAMES = [
   'black',
@@ -47,22 +53,50 @@ function cssTheme(host: HTMLElement): { theme: ITheme; fontFamily: string; fontS
   return { theme, fontFamily: read('--term-font') ?? 'monospace', fontSize: Number(read('--term-font-size')) || 12 }
 }
 
+/** Find highlights from --term-match and --term-match-active; decorations take #RRGGBB only */
+export function searchDecorations(host: HTMLElement): ISearchDecorationOptions {
+  const style = getComputedStyle(host)
+  const match = style.getPropertyValue('--term-match').trim()
+  const active = style.getPropertyValue('--term-match-active').trim()
+  return { matchBackground: match, matchOverviewRuler: match, activeMatchBackground: active, activeMatchColorOverviewRuler: active }
+}
+
+const LINE_HEIGHT = 1.15
+/** What a pane's header (.phd) and the xterm padding take from its box */
+const PANE_CHROME = { width: 8, height: 30 }
+
+/** The grid a pane of `width` x `height` px fits, a column short: a shell's first prompt must not wrap
+ * (zsh's PROMPT_SP mark would stay on screen) before the pane resizes the session to the exact grid */
+export function paneGrid(width: number, height: number): { cols: number; rows: number } {
+  const { fontFamily, fontSize } = cssTheme(document.documentElement)
+  const ctx = document.createElement('canvas').getContext('2d')
+  if (!ctx || width <= 0 || height <= 0) return { cols: 80, rows: 24 }
+  ctx.font = `${fontSize}px ${fontFamily}`
+  return {
+    cols: Math.max(2, Math.floor((width - PANE_CHROME.width) / ctx.measureText('W').width) - 1),
+    rows: Math.max(1, Math.floor((height - PANE_CHROME.height) / Math.ceil(fontSize * LINE_HEIGHT)))
+  }
+}
+
 export interface Xterm {
   term: Terminal
   fit: FitAddon
-  /** Re-reads the theme and font from CSS */
+  search: SearchAddon
+  /** Re-reads the theme and font from CSS; a no-op when they didn't change */
   restyle(): void
   dispose(): void
 }
 
 /** An xterm with the app's addons opened in `host`; the GPU context lives exactly as long as it does */
-export function openXterm(host: HTMLElement, webgl = useWebgl()): Xterm {
-  const { theme, fontFamily, fontSize } = cssTheme(host)
+export function openXterm(host: HTMLElement, webgl: boolean): Xterm {
+  const style = cssTheme(host)
+  let applied = JSON.stringify(style)
+  const { theme, fontFamily, fontSize } = style
   const term = new Terminal({
     theme,
     fontFamily,
     fontSize,
-    lineHeight: 1.15,
+    lineHeight: LINE_HEIGHT,
     cursorBlink: true,
     cursorStyle: 'bar',
     cursorWidth: 2,
@@ -76,6 +110,8 @@ export function openXterm(host: HTMLElement, webgl = useWebgl()): Xterm {
   })
   const fit = new FitAddon()
   term.loadAddon(fit)
+  const search = new SearchAddon()
+  term.loadAddon(search)
   term.loadAddon(new Unicode11Addon())
   term.unicode.activeVersion = '11'
   // ponytail: opens in the system browser via window.open, route through the app's link handling once it exists
@@ -85,8 +121,9 @@ export function openXterm(host: HTMLElement, webgl = useWebgl()): Xterm {
   if (webgl) {
     try {
       const addon = new WebglAddon()
-      // A lost context (GPU reset, too many contexts) falls back to the DOM renderer for the rest of this terminal's life
+      // A lost context (GPU reset, too many contexts) falls back to the DOM renderer until the next reveal
       addon.onContextLoss(() => {
+        webglLosses++
         addon.dispose()
         gl = null
       })
@@ -100,8 +137,13 @@ export function openXterm(host: HTMLElement, webgl = useWebgl()): Xterm {
   return {
     term,
     fit,
+    search,
     restyle() {
-      Object.assign(term.options, cssTheme(host))
+      const next = cssTheme(host)
+      const key = JSON.stringify(next)
+      if (key === applied) return
+      applied = key
+      Object.assign(term.options, next)
       fit.fit()
     },
     dispose() {

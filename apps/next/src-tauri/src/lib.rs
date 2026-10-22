@@ -3,11 +3,13 @@ mod daemon;
 #[cfg(target_os = "macos")]
 mod menu;
 mod quick;
+mod service;
 mod types;
 
 use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::ShortcutState;
+use tauri_plugin_window_state::StateFlags;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 fn specta() -> Builder<tauri::Wry> {
@@ -27,6 +29,7 @@ fn specta() -> Builder<tauri::Wry> {
             kill,
             remove,
             restart,
+            clear,
             get_ui,
             put_ui,
             places,
@@ -74,7 +77,23 @@ pub fn run() {
     }
 
     let builder = tauri::Builder::default()
+        // First: a second launch hands over to this one before it builds anything
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(&[quick::LABEL])
+                // A window hidden at quit must not come back invisible
+                .with_state_flags(StateFlags::all() - StateFlags::VISIBLE)
+                .build(),
+        )
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {

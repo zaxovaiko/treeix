@@ -87,6 +87,8 @@ export interface Api {
   remove(id: string): Promise<void>
   /** Runs an exited, restored or crashed session's command again in place, keeping its scrollback */
   restart(id: string): Promise<void>
+  /** Shift+Cmd+K: drops the scrollback and the lines above the cursor in the daemon too */
+  clear(id: string): Promise<void>
   /** Opaque UI state persisted by the daemon next to the sessions */
   getUi(): Promise<string | null>
   putUi(json: string): Promise<void>

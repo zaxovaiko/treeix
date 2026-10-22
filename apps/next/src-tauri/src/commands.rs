@@ -63,10 +63,7 @@ pub async fn attach(
 #[tauri::command]
 #[specta::specta]
 pub async fn detach(daemon: State<'_, Arc<Daemon>>, id: String, channel: u32) -> Result<()> {
-    match daemon.detach(id, channel).await? {
-        Response::Ok => Ok(()),
-        other => Err(unexpected(other)),
-    }
+    daemon.detach(id, channel).await
 }
 
 #[tauri::command]
@@ -197,4 +194,11 @@ pub fn autorun_done(app: AppHandle, report: String, code: i32) -> Result<String>
     std::fs::write(&path, report).map_err(|e| e.to_string())?;
     app.exit(code);
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// Shift+Cmd+K: the daemon drops the session's scrollback so a re-attach does not bring it back
+#[tauri::command]
+#[specta::specta]
+pub async fn clear(daemon: State<'_, Arc<Daemon>>, id: String) -> Result<()> {
+    ok(&daemon, Request::Clear { session: id }).await
 }

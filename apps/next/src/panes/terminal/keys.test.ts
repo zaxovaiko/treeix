@@ -17,10 +17,13 @@ test('shift+enter inserts a newline for agents', () => {
   expect(terminalKey(chord('Enter', 'Enter'), true)).toEqual({ type: 'xterm' })
 })
 
-test('mac cmd chords: copy, clear, the rest bubble to the app', () => {
-  expect(terminalKey(chord('c', 'KeyC', { metaKey: true }), true)).toEqual({ type: 'copy' })
-  expect(terminalKey(chord('k', 'KeyK', { metaKey: true }), true)).toEqual({ type: 'clear' })
+test('mac cmd chords: clear, find, the rest (copy and paste too) bubble to the app', () => {
+  expect(terminalKey(chord('k', 'KeyK', { metaKey: true, shiftKey: true }), true)).toEqual({ type: 'clear' })
+  expect(terminalKey(chord('K', 'KeyK', { ctrlKey: true, shiftKey: true }), false)).toEqual({ type: 'clear' })
+  expect(terminalKey(chord('k', 'KeyK', { metaKey: true }), true)).toEqual({ type: 'app' })
+  expect(terminalKey(chord('f', 'KeyF', { metaKey: true }), true)).toEqual({ type: 'find' })
   for (const [key, code] of [
+    ['c', 'KeyC'],
     ['t', 'KeyT'],
     ['w', 'KeyW'],
     ['d', 'KeyD'],
@@ -43,5 +46,12 @@ test('linux: plain ctrl is the shell, ctrl+shift is the app', () => {
   expect(terminalKey(chord('c', 'KeyC', { ctrlKey: true }), false)).toEqual({ type: 'xterm' })
   expect(terminalKey(chord('C', 'KeyC', { ctrlKey: true, shiftKey: true }), false)).toEqual({ type: 'copy' })
   expect(terminalKey(chord('V', 'KeyV', { ctrlKey: true, shiftKey: true }), false)).toEqual({ type: 'paste' })
+  expect(terminalKey(chord('F', 'KeyF', { ctrlKey: true, shiftKey: true }), false)).toEqual({ type: 'find' })
   expect(terminalKey(chord('T', 'KeyT', { ctrlKey: true, shiftKey: true }), false)).toEqual({ type: 'app' })
+})
+
+test('keys typed into an input method go to xterm untouched', () => {
+  expect(terminalKey(chord('Enter', 'Enter', { shiftKey: true, isComposing: true }), true)).toEqual({ type: 'xterm' })
+  expect(terminalKey(chord('Process', 'KeyK', { metaKey: true, keyCode: 229 }), true)).toEqual({ type: 'xterm' })
+  expect(terminalKey(chord('Process', 'KeyC', { ctrlKey: true, shiftKey: true, keyCode: 229 }), false)).toEqual({ type: 'xterm' })
 })

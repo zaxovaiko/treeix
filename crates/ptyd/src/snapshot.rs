@@ -1,11 +1,16 @@
 //! Serializes a terminal's screen and scrollback into ANSI bytes that rebuild it in a fresh terminal.
 
-use alacritty_terminal::grid::{Dimensions, Grid};
+use alacritty_terminal::event::EventListener;
+use alacritty_terminal::grid::{Charsets, Cursor, Dimensions, Grid};
 use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::{Cell, Flags};
+use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
 use alacritty_terminal::term::{Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color, CursorShape, CursorStyle};
+use alacritty_terminal::vte::ansi::{
+    CharsetIndex, Color, CursorShape, CursorStyle, Handler, NamedPrivateMode, PrivateMode,
+    StandardCharset,
+};
 use std::io::Write;
+use std::ops::Range;
 
 const STYLE_FLAGS: Flags = Flags::BOLD
     .union(Flags::DIM)
@@ -39,7 +44,7 @@ impl Style {
 }
 
 /// `max_history` caps the scrollback lines; the alternate screen has none
-pub fn serialize<T>(term: &mut Term<T>, max_history: usize) -> Vec<u8> {
+pub fn serialize<T: EventListener>(term: &mut Term<T>, max_history: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(64 * 1024);
     out.extend_from_slice(b"\x1bc");
     if term.mode().contains(TermMode::ALT_SCREEN) {
@@ -48,23 +53,70 @@ pub fn serialize<T>(term: &mut Term<T>, max_history: usize) -> Vec<u8> {
         let alt = term.grid().clone();
         term.swap_alt();
         write_grid(&mut out, term.grid(), max_history);
-        write_cursor(&mut out, term.grid());
+        let primary = &term.grid().cursor;
+        write_cursor(&mut out, primary, term.grid(), 0);
+        let reset_charsets = primary.charsets != Charsets::default();
         term.swap_alt();
         *term.grid_mut() = alt;
+        // 1049h saves the primary cursor, as it did in the original
         out.extend_from_slice(b"\x1b[?1049h\x1b[0m\x1b[H");
+        if reset_charsets {
+            write_charsets(&mut out, Charsets::default());
+        }
         write_grid(&mut out, term.grid(), 0);
     } else {
         write_grid(&mut out, term.grid(), max_history);
     }
-    write_cursor(&mut out, term.grid());
+    let grid = term.grid();
+    if grid.saved_cursor != Cursor::default() {
+        write_cursor(&mut out, &grid.saved_cursor, grid, 0);
+        out.extend_from_slice(b"\x1b7");
+        if grid.saved_cursor.charsets != Charsets::default() {
+            write_charsets(&mut out, Charsets::default());
+        }
+    }
+    // Both home the cursor, so they go before it
+    let region = scroll_region(term);
+    let grid = term.grid();
+    if region != (0..grid.screen_lines() as i32) {
+        let _ = write!(out, "\x1b[{};{}r", region.start + 1, region.end);
+    }
+    let origin = term.mode().contains(TermMode::ORIGIN);
+    if origin {
+        out.extend_from_slice(b"\x1b[?6h");
+    }
+    write_cursor(
+        &mut out,
+        &grid.cursor,
+        grid,
+        if origin { region.start } else { 0 },
+    );
     write_modes(&mut out, *term.mode(), term.cursor_style());
     out
+}
+
+/// DECSTBM as screen lines. Term keeps it private; origin mode reveals it through where the cursor
+/// lands, then the cursor and mode are put back
+fn scroll_region<T: EventListener>(term: &mut Term<T>) -> Range<i32> {
+    let cursor = term.grid().cursor.clone();
+    let origin = PrivateMode::Named(NamedPrivateMode::Origin);
+    let was_origin = term.mode().contains(TermMode::ORIGIN);
+    term.set_private_mode(origin);
+    let top = term.grid().cursor.point.line.0;
+    term.goto(term.screen_lines() as i32, 0);
+    let bottom = term.grid().cursor.point.line.0;
+    if !was_origin {
+        term.unset_private_mode(origin);
+    }
+    term.grid_mut().cursor = cursor;
+    top..bottom + 1
 }
 
 fn write_grid(out: &mut Vec<u8>, grid: &Grid<Cell>, max_history: usize) {
     let history = grid.history_size().min(max_history) as i32;
     let cols = grid.columns();
     let mut pen = Style::of(&Cell::default());
+    let mut link = None;
     let mut prev_wrapped = false;
     for line in -history..grid.screen_lines() as i32 {
         let row = &grid[Line(line)];
@@ -90,19 +142,27 @@ fn write_grid(out: &mut Vec<u8>, grid: &Grid<Cell>, max_history: usize) {
                 .flags
                 .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
             {
-                write_cell(out, &mut pen, cell);
+                write_cell(out, &mut pen, &mut link, cell);
             }
         }
         prev_wrapped = wrapped;
     }
+    if link.is_some() {
+        write_link(out, None);
+    }
     out.extend_from_slice(b"\x1b[0m");
 }
 
-fn write_cell(out: &mut Vec<u8>, pen: &mut Style, cell: &Cell) {
+fn write_cell(out: &mut Vec<u8>, pen: &mut Style, link: &mut Option<Hyperlink>, cell: &Cell) {
     let style = Style::of(cell);
     if style != *pen {
         write_sgr(out, &style);
         *pen = style;
+    }
+    let cell_link = cell.hyperlink();
+    if cell_link != *link {
+        write_link(out, cell_link.as_ref());
+        *link = cell_link;
     }
     let c = if cell.c == '\t' { ' ' } else { cell.c };
     let mut buf = [0u8; 4];
@@ -110,6 +170,14 @@ fn write_cell(out: &mut Vec<u8>, pen: &mut Style, cell: &Cell) {
     for c in cell.zerowidth().unwrap_or_default() {
         out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
     }
+}
+
+/// OSC 8; the id keeps cells of one link together, and alacritty made one up when the program gave none
+fn write_link(out: &mut Vec<u8>, link: Option<&Hyperlink>) {
+    let _ = match link {
+        Some(link) => write!(out, "\x1b]8;id={};{}\x1b\\", link.id(), link.uri()),
+        None => write!(out, "\x1b]8;;\x1b\\"),
+    };
 }
 
 fn write_sgr(out: &mut Vec<u8>, style: &Style) {
@@ -157,9 +225,9 @@ fn write_color(out: &mut Vec<u8>, color: Color, base: u8, bright: u8, extended: 
     };
 }
 
-fn write_cursor(out: &mut Vec<u8>, grid: &Grid<Cell>) {
-    let cursor = &grid.cursor;
-    let line = cursor.point.line.0 + 1;
+/// Positions `cursor` (line relative to `top` under origin mode) and sets its pen, link and charsets
+fn write_cursor(out: &mut Vec<u8>, cursor: &Cursor<Cell>, grid: &Grid<Cell>, top: i32) {
+    let line = cursor.point.line.0 - top + 1;
     if cursor.input_needs_wrap {
         // Rewriting the last cell leaves the receiver with the same pending wrap
         let last = grid.last_column();
@@ -169,18 +237,44 @@ fn write_cursor(out: &mut Vec<u8>, grid: &Grid<Cell>) {
             .flags
             .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
         {
-            write_cell(out, &mut Style::of(&Cell::default()), cell);
+            let mut link = None;
+            write_cell(out, &mut Style::of(&Cell::default()), &mut link, cell);
+            if link.is_some() {
+                write_link(out, None);
+            }
         }
     } else {
         let _ = write!(out, "\x1b[{line};{}H", cursor.point.column.0 + 1);
     }
     write_sgr(out, &Style::of(&cursor.template));
+    if let Some(link) = cursor.template.hyperlink() {
+        write_link(out, Some(&link));
+    }
+    if cursor.charsets != Charsets::default() {
+        write_charsets(out, cursor.charsets);
+    }
+}
+
+/// G0-G3 designations; the active set is not reachable, so a shifted-out G1 (SO) comes back as G0
+fn write_charsets(out: &mut Vec<u8>, charsets: Charsets) {
+    let sets = [
+        (CharsetIndex::G0, '('),
+        (CharsetIndex::G1, ')'),
+        (CharsetIndex::G2, '*'),
+        (CharsetIndex::G3, '+'),
+    ];
+    for (index, intro) in sets {
+        let set = match charsets[index] {
+            StandardCharset::Ascii => 'B',
+            StandardCharset::SpecialCharacterAndLineDrawing => '0',
+        };
+        let _ = write!(out, "\x1b{intro}{set}");
+    }
 }
 
 fn write_modes(out: &mut Vec<u8>, mode: TermMode, cursor: CursorStyle) {
     let private = [
         (TermMode::APP_CURSOR, 1),
-        (TermMode::ORIGIN, 6),
         (TermMode::MOUSE_REPORT_CLICK, 1000),
         (TermMode::MOUSE_DRAG, 1002),
         (TermMode::MOUSE_MOTION, 1003),
@@ -200,11 +294,19 @@ fn write_modes(out: &mut Vec<u8>, mode: TermMode, cursor: CursorStyle) {
     if mode.contains(TermMode::APP_KEYPAD) {
         out.extend_from_slice(b"\x1b=");
     }
-    if !mode.contains(TermMode::LINE_WRAP) {
-        out.extend_from_slice(b"\x1b[?7l");
+    if mode.contains(TermMode::LINE_FEED_NEW_LINE) {
+        out.extend_from_slice(b"\x1b[20h");
     }
-    if !mode.contains(TermMode::SHOW_CURSOR) {
-        out.extend_from_slice(b"\x1b[?25l");
+    let default_on = [
+        (TermMode::LINE_WRAP, 7),
+        (TermMode::SHOW_CURSOR, 25),
+        (TermMode::ALTERNATE_SCROLL, 1007),
+        (TermMode::URGENCY_HINTS, 1042),
+    ];
+    for (flag, code) in default_on {
+        if !mode.contains(flag) {
+            let _ = write!(out, "\x1b[?{code}l");
+        }
     }
     if cursor != CursorStyle::default() {
         let shape = match cursor.shape {
@@ -263,15 +365,9 @@ mod tests {
                 assert_eq!(x, y, "cell at line {line} col {col}");
             }
         }
-        assert_eq!(a.cursor.point, b.cursor.point, "cursor");
-        assert_eq!(
-            a.cursor.input_needs_wrap, b.cursor.input_needs_wrap,
-            "pending wrap"
-        );
-        assert!(
-            Style::of(&a.cursor.template) == Style::of(&b.cursor.template),
-            "pen"
-        );
+        // Position, pending wrap, pen, link and charsets
+        assert_eq!(a.cursor, b.cursor, "cursor");
+        assert_eq!(a.saved_cursor, b.saved_cursor, "saved cursor");
     }
 
     fn round_trip(input: &[u8]) {
@@ -285,6 +381,11 @@ mod tests {
         }
         assert_eq!(original.mode(), restored.mode());
         assert_eq!(original.cursor_style(), restored.cursor_style());
+        assert_eq!(
+            scroll_region(&mut original),
+            scroll_region(&mut restored),
+            "scroll region"
+        );
         // Serializing must not disturb the original
         assert_eq!(serialize(&mut original, 5000), snapshot);
     }
@@ -339,5 +440,65 @@ mod tests {
     #[test]
     fn hidden_cursor_and_no_wrap_round_trip() {
         round_trip(b"hello\x1b[?25l\x1b[?7l\x1b[4h\x1b[3;5H");
+    }
+
+    #[test]
+    fn tui_modes_round_trip() {
+        // Claude Code / Codex: bracketed paste, focus reporting, SGR mouse with motion, app cursor
+        // keys and keypad, a hidden steady bar cursor, LNM, no alternate scroll or urgency hints
+        round_trip(
+            b"prompt> \x1b[?2004h\x1b[?1004h\x1b[?1003h\x1b[?1006h\x1b[?1h\x1b=\x1b[?25l\x1b[6 q\
+              \x1b[20h\x1b[?1007l\x1b[?1042l\x1b[1;38;2;200;100;0mpen",
+        );
+        round_trip(b"\x1b[?1000h\x1b[?1005h\x1b[3 q");
+        round_trip(b"\x1b[?1002h\x1b[4 q");
+    }
+
+    #[test]
+    fn scroll_region_and_origin_round_trip() {
+        // htop / less style: a status line pinned under a scrolling region
+        let mut input = colored_history();
+        input.extend_from_slice(b"\x1b[2;8r\x1b[9;1Hstatus\x1b[8;1Hlast\r\nscrolled");
+        round_trip(&input);
+        input.extend_from_slice(b"\x1b[?6h\x1b[3;4Hin region");
+        round_trip(&input);
+        // In the alternate screen too, with a pending wrap inside the region
+        let mut alt = colored_history();
+        alt.extend_from_slice(b"\x1b[?1049h\x1b[3;6r\x1b[?6h\x1b[2;31H");
+        alt.extend_from_slice(&[b'r'; 10]);
+        round_trip(&alt);
+    }
+
+    #[test]
+    fn saved_cursor_charsets_and_links_round_trip() {
+        let mut input = colored_history();
+        // DECSC with a pen and line drawing, then a G1 designation and a box in G0
+        input.extend_from_slice(
+            b"\x1b[5;7H\x1b[1;35m\x1b(0\x1b7\x1b(B\x1b[0m\x1b[2;1H\x1b)0\x1b(0lqqk\x1b(B\r\n",
+        );
+        // OSC 8 links with and without an id, one spanning a wrapped line, one left open
+        input.extend_from_slice(
+            b"\x1b]8;id=a;https://a.example\x1b\\link a\x1b]8;;\x1b\\ \x1b]8;;file:///tmp/b\x1b\\",
+        );
+        input.extend_from_slice(&[b'b'; 50]);
+        input.extend_from_slice(b"\x1b]8;;\x1b\\ plain \x1b]8;;https://open.example\x1b\\\x1b(0");
+        round_trip(&input);
+        // The same inside vim: its own DECSC, and leaving it restores the primary's
+        let mut alt = input.clone();
+        alt.extend_from_slice(
+            b"\x1b[?1049h\x1b(B\x1b[3;3H\x1b7\x1b[H\x1b]8;;https://alt.example\x1b\\alt",
+        );
+        round_trip(&alt);
+        // Links without an id got one made up per terminal, so the original is the snapshotted one
+        let mut original = term(&alt);
+        let snapshot = serialize(&mut original, 5000);
+        let leave = |term: &mut Term<VoidListener>| {
+            Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new()
+                .advance(term, b"\x1b[?1049l");
+        };
+        leave(&mut original);
+        let mut restored = term(&snapshot);
+        leave(&mut restored);
+        assert_same_grid(&grids(&mut original)[0], &grids(&mut restored)[0]);
     }
 }

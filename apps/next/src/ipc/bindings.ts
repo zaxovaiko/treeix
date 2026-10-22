@@ -47,6 +47,12 @@ async remove(id: string) : Promise<null> {
 async restart(id: string) : Promise<null> {
     return await TAURI_INVOKE("restart", { id });
 },
+/**
+ * Shift+Cmd+K: the daemon drops the session's scrollback so a re-attach does not bring it back
+ */
+async clear(id: string) : Promise<null> {
+    return await TAURI_INVOKE("clear", { id });
+},
 async getUi() : Promise<string | null> {
     return await TAURI_INVOKE("get_ui");
 },

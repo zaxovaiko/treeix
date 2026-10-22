@@ -395,6 +395,7 @@ async fn second_daemon_exits_when_one_answers() {
     let _server = treeix_ptyd::spawn_in_process(dir.path().into());
     let opts = treeix_ptyd::Opts {
         data_dir: dir.path().into(),
+        socket: dir.path().join("ptyd.sock"),
         handle_signals: false,
     };
     std::thread::spawn(move || treeix_ptyd::run(opts))
@@ -403,5 +404,36 @@ async fn second_daemon_exits_when_one_answers() {
         .unwrap();
     let mut client = connect(dir.path()).await;
     assert!(list(&mut client).await.is_empty());
+    client.request(Request::Shutdown).await.unwrap();
+}
+
+#[tokio::test]
+async fn clear_drops_scrollback_and_keeps_the_cursor_line_on_top() {
+    let dir = tempfile::tempdir().unwrap();
+    let _server = treeix_ptyd::spawn_in_process(dir.path().into());
+    let mut client = connect(dir.path()).await;
+    let info = created(
+        &mut client,
+        r"i=0; while [ $i -lt 40 ]; do echo old$i; i=$((i+1)); done; printf 'prompt$ '; exec cat",
+    )
+    .await;
+    wait_for_info(&mut client, &info.id, |s| s.seq > 200).await;
+    assert_eq!(
+        client
+            .request(Request::Clear {
+                session: info.id.clone()
+            })
+            .await
+            .unwrap(),
+        Response::Ok
+    );
+    let (snapshot, ..) = attach(&mut client, &info.id).await;
+    let text = String::from_utf8_lossy(&snapshot);
+    assert!(!text.contains("old"), "{text:?}");
+    assert!(text.starts_with("\x1bcprompt$\r\n"), "{text:?}");
+    assert!(
+        text.contains("\x1b[1;9H"),
+        "cursor after the prompt: {text:?}"
+    );
     client.request(Request::Shutdown).await.unwrap();
 }

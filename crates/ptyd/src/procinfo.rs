@@ -1,4 +1,4 @@
-//! Working directory and name of a process (the PTY's foreground process group leader).
+//! Working directory, name and start time of a process (the PTY's foreground process group leader).
 
 #[cfg(target_os = "macos")]
 pub fn cwd(pid: i32) -> Option<String> {
@@ -30,6 +30,17 @@ pub fn name(pid: i32) -> Option<String> {
     (len > 0).then(|| String::from_utf8_lossy(&buf[..len as usize]).into_owned())
 }
 
+/// Microseconds since the epoch
+#[cfg(target_os = "macos")]
+pub fn start_time(pid: i32) -> Option<u64> {
+    let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
+    // SAFETY: the buffer is a zeroed proc_bsdinfo of exactly `size` bytes
+    let written =
+        unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, (&raw mut info).cast(), size) };
+    (written == size).then(|| info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
+}
+
 #[cfg(not(target_os = "macos"))]
 pub fn cwd(pid: i32) -> Option<String> {
     std::fs::read_link(format!("/proc/{pid}/cwd"))
@@ -43,6 +54,19 @@ pub fn name(pid: i32) -> Option<String> {
     Some(comm.trim_end().to_owned()).filter(|n| !n.is_empty())
 }
 
+/// Clock ticks since boot; only compared with itself
+#[cfg(not(target_os = "macos"))]
+pub fn start_time(pid: i32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // The name in parentheses may hold spaces; starttime is the 20th field after it
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(19)?
+        .parse()
+        .ok()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -51,5 +75,10 @@ mod tests {
         let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
         assert_eq!(super::cwd(pid).map(std::path::PathBuf::from), Some(cwd));
         assert!(super::name(pid).is_some_and(|n| !n.is_empty()));
+        let started = super::start_time(pid);
+        assert!(started.is_some_and(|t| t > 0));
+        assert_eq!(super::start_time(pid), started);
+        assert_eq!(super::start_time(1), super::start_time(1));
+        assert_ne!(super::start_time(1), started);
     }
 }

@@ -6,7 +6,8 @@ use std::io;
 use std::path::PathBuf;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-/// Bumped on any incompatible change; a mismatch makes the old daemon snapshot and exit
+/// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Shutdown,
+/// so an older app never takes down a newer daemon by connecting
 pub const PROTO_VERSION: u32 = 1;
 /// Data dir name; `.next` while the Tauri app ships beside the Electron one
 pub const APP_ID: &str = "com.dyvertex.treeix.next";
@@ -119,6 +120,11 @@ pub enum Request {
     Restart {
         session: SessionId,
     },
+    /// Shift+Cmd+K: drop the scrollback and the lines above the cursor, which moves to the top. The alternate
+    /// screen is left alone
+    Clear {
+        session: SessionId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -209,7 +215,14 @@ pub fn data_dir() -> PathBuf {
     }
 }
 
+/// `$XDG_RUNTIME_DIR/<APP_ID>.sock` on Linux when the session has one, else `<data_dir>/ptyd.sock`
 pub fn socket_path() -> PathBuf {
+    if cfg!(not(target_os = "macos"))
+        && std::env::var_os("TREEIX_DATA_DIR").is_none()
+        && let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty())
+    {
+        return PathBuf::from(runtime).join(format!("{APP_ID}.sock"));
+    }
     data_dir().join("ptyd.sock")
 }
 
@@ -286,5 +299,32 @@ mod tests {
             );
         }
         assert_eq!(read_frame::<_, ServerMsg>(&mut r).await.unwrap(), None);
+    }
+
+    /// Any app and daemon must agree on these bytes forever: they are how an app replaces a daemon of
+    /// another build
+    #[test]
+    fn handshake_and_shutdown_bytes_are_stable() {
+        let hello = ClientMsg::Hello {
+            proto: 1,
+            build: "b".into(),
+        };
+        assert_eq!(postcard::to_stdvec(&hello).unwrap(), [0, 1, 1, b'b']);
+        let hello = ServerMsg::Hello {
+            proto: 1,
+            build: "b".into(),
+            pid: 2,
+        };
+        assert_eq!(postcard::to_stdvec(&hello).unwrap(), [0, 1, 1, b'b', 2]);
+        let shutdown = ClientMsg::Req {
+            id: 3,
+            req: Request::Shutdown,
+        };
+        assert_eq!(postcard::to_stdvec(&shutdown).unwrap(), [1, 3, 11]);
+        let ok = ServerMsg::Resp {
+            id: 3,
+            resp: Ok(Response::Ok),
+        };
+        assert_eq!(postcard::to_stdvec(&ok).unwrap(), [1, 3, 0, 0]);
     }
 }

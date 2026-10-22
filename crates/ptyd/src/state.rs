@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use treeix_proto::SessionInfo;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -19,6 +20,9 @@ pub struct SavedSession {
     pub info: SessionInfo,
     /// Kept for Restart
     pub env: Vec<(String, String)>,
+    /// `procinfo::start_time` of `info.pid`, so a later daemon only kills that process and never a reused pid
+    #[serde(default)]
+    pub started: Option<u64>,
 }
 
 pub fn load(dir: &Path) -> State {
@@ -53,8 +57,11 @@ pub fn remove_snapshot(dir: &Path, session: &str) {
     let _ = fs::remove_file(snapshot_path(dir, session));
 }
 
+/// The tmp name is unique per call, so concurrent writers of one file never rename each other's tmp away
 fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let tmp = path.with_extension("tmp");
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("{}.{n}.tmp", std::process::id()));
     fs::write(&tmp, bytes)?;
     fs::rename(tmp, path)
 }

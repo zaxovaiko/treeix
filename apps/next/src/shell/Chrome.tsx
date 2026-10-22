@@ -1,7 +1,8 @@
-import type { PointerEvent } from 'react'
-import type { Place, SessionKind } from '../ipc/api'
+import { useState, type PointerEvent } from 'react'
+import type { Place } from '../ipc/api'
 import { Icon } from '../lib/icons'
-import { DOT_LABEL, Ki, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
+import { DOT_LABEL, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
+import { keyHint, withHint } from './shortcuts'
 import { leaves, placeLabel, SIDEBAR, type Group, type PlaceTabs, type Tab } from './state'
 import type { ShellView } from './Shell'
 
@@ -31,9 +32,9 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
         <div className="tb-r" data-tauri-drag-region>
           <button className="kbar mini" onClick={() => run('palette')} title="Search sessions and commands">
             <Icon name="search" />
-            <kbd>⌘K</kbd>
+            <kbd>{keyHint('palette')}</kbd>
           </button>
-          <button className="icon" onClick={() => run('settings')} title="Settings (⌘,)">
+          <button className="icon" onClick={() => run('settings')} title={withHint('Settings', 'settings')}>
             <Icon name="gear" />
           </button>
         </div>
@@ -44,7 +45,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
       <div className="tb-l" data-tauri-drag-region>
         {lights}
         {ui.orientation === 'vertical' && (
-          <button className={`icon ${ui.sidebar ? '' : 'on'}`} onClick={() => dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })} title="Toggle sessions (⌘\)">
+          <button className={`icon ${ui.sidebar ? '' : 'on'}`} onClick={() => dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })} title={withHint('Toggle sessions', 'toggle-sidebar')}>
             <Icon name="sideL" />
           </button>
         )}
@@ -52,13 +53,13 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
       <button className="kbar" onClick={() => run('palette')}>
         <Icon name="search" />
         <span>Search sessions and commands</span>
-        <kbd>⌘K</kbd>
+        <kbd>{keyHint('palette')}</kbd>
       </button>
       <div className="tb-r" data-tauri-drag-region>
         <button className="icon" onClick={() => run('toggle-theme')} title="Toggle theme">
           <Icon name="moon" />
         </button>
-        <button className="icon" onClick={() => run('settings')} title="Settings (⌘,)">
+        <button className="icon" onClick={() => run('settings')} title={withHint('Settings', 'settings')}>
           <Icon name="gear" />
         </button>
       </div>
@@ -70,6 +71,7 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
   const { ui, sessions, dispatch, closeTab } = view
   const dot = tabDot(tab, sessions)
   const panes = leaves(tab.root).length
+  const restored = leaves(tab.root).some((id) => sessions[id]?.status === 'restored')
   return (
     <div className={`trow ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })}>
       <Ki kind={tabKind(tab, sessions)} dot={dot} />
@@ -79,6 +81,8 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
         </div>
         <div className="t2">
           <span className={`st-${dot}`}>{DOT_LABEL[dot]}</span>
+          {restored && <span className="tag">restored</span>}
+          {view.placeOfTab(tab).missing && <span className="tag red">folder missing</span>}
           {panes > 1 && (
             <span className="tag">
               <Icon name="split" />
@@ -156,19 +160,46 @@ function GroupRows({ view, group }: ViewProps & { group: Group }) {
   )
 }
 
+/** Groups with only the tabs whose title or place matches `query` */
+function filterGroups(view: ShellView, query: string): Group[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return view.groups
+  const hit = (tab: Tab) => `${tabTitle(tab, view.sessions)} ${placeLabel(view.placeOfTab(tab))}`.toLowerCase().includes(q)
+  return view.groups.flatMap((group) => {
+    const places = group.places.flatMap((entry) => {
+      const tabs = entry.tabs.filter(hit)
+      return tabs.length ? [{ ...entry, tabs }] : []
+    })
+    return places.length ? [{ ...group, places }] : []
+  })
+}
+
 export function Sidebar({ view }: ViewProps) {
+  const [query, setQuery] = useState('')
+  const groups = filterGroups(view, query)
   return (
     <>
       <div className="sh">
         <h3>Sessions</h3>
-        <button className="icon sm" onClick={() => view.run('new-shell')} title="New shell (⌘T)">
+        <button className="icon sm" onClick={() => view.run('new-shell')} title={withHint('New shell', 'new-shell')}>
           <Icon name="plus" />
         </button>
       </div>
+      <label className="filter">
+        <Icon name="search" />
+        <input placeholder="Filter sessions" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQuery('')} spellCheck={false} />
+      </label>
       <div className="tree">
-        {view.groups.map((group) => (
+        {groups.map((group) => (
           <GroupRows key={group.key} view={view} group={group} />
         ))}
+        {!groups.length && <div className="empty">{query.trim() ? 'No sessions match' : 'No sessions yet'}</div>}
+      </div>
+      <div className="sfoot">
+        <button className="btn" onClick={() => view.run('open-folder')} title={withHint('Open folder', 'open-folder')}>
+          <Icon name="folder" />
+          <span className="trunc">Open folder...</span>
+        </button>
       </div>
     </>
   )
@@ -212,6 +243,7 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
                     <div key={tab.id} className={`htab ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })}>
                       <Ki kind={tabKind(tab, sessions)} dot={tabDot(tab, sessions)} sm />
                       <span className="trunc">{tabTitle(tab, sessions)}</span>
+                      {place.missing && <span className="tag red">missing</span>}
                       <button className="icon sm x" onClick={stop(() => closeTab(tab))} title="Close">
                         <Icon name="x" />
                       </button>
@@ -221,7 +253,7 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
             ]
           })
         )}
-        <button className="icon sm" onClick={() => run('new-shell')} title="New shell (⌘T)">
+        <button className="icon sm" onClick={() => run('new-shell')} title={withHint('New shell', 'new-shell')}>
           <Icon name="plus" />
         </button>
       </div>
@@ -233,10 +265,10 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
 function SplitActions({ view }: ViewProps) {
   return (
     <div className="tacts">
-      <button className="icon sm" onClick={() => view.split('row')} title="Split right (⌘D)">
+      <button className="icon sm" onClick={() => view.split('row')} title={withHint('Split right', 'split-right')}>
         <Icon name="split" />
       </button>
-      <button className="icon sm" onClick={() => view.split('col')} title="Split down (⇧⌘D)">
+      <button className="icon sm" onClick={() => view.split('col')} title={withHint('Split down', 'split-down')}>
         <Icon name="splitDown" />
       </button>
     </div>
@@ -275,11 +307,17 @@ export function StatusBar({ view }: ViewProps) {
   const needing = ordered.filter((tab) => tabDot(tab, sessions) === 'need')
   return (
     <div className="statusbar">
-      {place && (
+      {!place || place.kind === 'scratch' ? (
         <span className="sb">
+          <Icon name="home" />~ · no folder
+        </span>
+      ) : (
+        <span className={`sb ${place.missing ? 'st-err' : ''}`} title={place.missing ? 'This folder no longer exists' : tilde(place.path, view.home)}>
           <Icon name={placeIcon(place)} />
           {placeLabel(place)}
-          {place.kind === 'detached' && <span className="dim">detached</span>}
+          {place.kind === 'folder' && <span className="dim">· not a git repo</span>}
+          {place.kind === 'detached' && <span className="dim">· detached</span>}
+          {place.missing && <span>· missing</span>}
         </span>
       )}
       <span className="grow" />
@@ -290,35 +328,44 @@ export function StatusBar({ view }: ViewProps) {
       )}
       <span className="sb" title="Terminals run in a separate host process, so they survive app restarts and updates">
         <Icon name="host" />
-        {Object.keys(sessions).length} sessions
+        PTY host · {liveCount(ordered, sessions)} live
       </span>
     </div>
   )
 }
 
-const STARTERS: [SessionKind, string][] = [
-  ['shell', 'New shell'],
-  ['claude', 'Claude Code'],
-  ['codex', 'Codex'],
-]
-
 export function Welcome({ view }: ViewProps) {
-  const recent = view.ui.recent
+  const { recent } = view.ui
   return (
     <div className="welcome">
       <div className="wbox">
-        <h2>Welcome to Treeix</h2>
-        <p className="dim">Terminals keep running when the window closes. Start one in your home folder, or pick up where you left off.</p>
-        {STARTERS.map(([kind, label]) => (
-          <button key={kind} className="wi" onClick={() => view.newSession(kind, view.home)}>
-            <Ki kind={kind} />
-            <span>
-              <b>{label}</b>
-              <span className="dim">in ~</span>
-            </span>
-            {kind === 'shell' && <kbd>⌘T</kbd>}
-          </button>
-        ))}
+        <h2>Start a session</h2>
+        <p className="dim">A session runs in a folder. Git repos get worktrees, diffs and PRs. Any other folder, or ~, is just a terminal.</p>
+        <button className="wi" onClick={() => view.newSession('shell', view.home)}>
+          <Ki kind="shell" />
+          <span>
+            <b>Shell in ~</b>
+            <span className="dim">No folder, no git</span>
+          </span>
+          <kbd>{keyHint('new-shell')}</kbd>
+        </button>
+        <button className="wi" onClick={() => view.newSession('claude', view.home)}>
+          <Ki kind="claude" />
+          <span>
+            <b>Claude in ~</b>
+            <span className="dim">Ask anything, no project</span>
+          </span>
+        </button>
+        <button className="wi" onClick={() => view.run('open-folder')}>
+          <span className="ki">
+            <Icon name="folder" />
+          </span>
+          <span>
+            <b>Open folder...</b>
+            <span className="dim">A git repo or any folder</span>
+          </span>
+          <kbd>{keyHint('open-folder')}</kbd>
+        </button>
         {recent.length > 0 && <div className="mlabel">Recent places</div>}
         {recent.map((place) => (
           <button key={place.path} className="wi" onClick={() => view.newSession('shell', place.path)}>
@@ -331,26 +378,6 @@ export function Welcome({ view }: ViewProps) {
             </span>
           </button>
         ))}
-      </div>
-    </div>
-  )
-}
-
-export function Settings({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="welcome">
-      <div className="wbox">
-        <h2>Settings</h2>
-        <p className="dim">Not here yet. Theme, Compact or Islands, and tab position are in the command palette (⌘K).</p>
-        <button className="wi" onClick={onClose}>
-          <span className="ki">
-            <Icon name="left" />
-          </span>
-          <span>
-            <b>Back to terminals</b>
-          </span>
-          <kbd>⌘W</kbd>
-        </button>
       </div>
     </div>
   )

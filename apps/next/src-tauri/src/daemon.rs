@@ -1,10 +1,9 @@
 //! Client for `treeix-ptyd`: starts it when missing, replaces it on build skew, reconnects after it dies,
-//! multiplexes requests by id and relays output of attached sessions to their webview channel.
+//! multiplexes requests by id and fans output of attached sessions out to every webview channel showing them.
 
 use crate::types::{DaemonState, Frame, Hello, SessionEvent};
 use std::collections::HashMap;
 use std::io;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -20,8 +19,6 @@ pub const BUILD: &str = match option_env!("TREEIX_BUILD") {
     Some(build) => build,
     None => env!("CARGO_PKG_VERSION"),
 };
-#[cfg(target_os = "macos")]
-const LAUNCH_AGENT_PLIST: &str = "com.dyvertex.treeix.next.ptyd.plist";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 type Reply = oneshot::Sender<Result<Response, String>>;
@@ -36,10 +33,7 @@ struct Pending {
 pub struct Daemon {
     writer: tokio::sync::Mutex<Option<OwnedWriteHalf>>,
     pending: Mutex<HashMap<u64, Pending>>,
-    streams: Mutex<HashMap<SessionId, Channel<Frame>>>,
-    /// Channel of the newest attach per session. A pane hidden and shown again detaches its old channel
-    /// asynchronously; that detach must not undo the newer attach
-    latest: Mutex<HashMap<SessionId, u32>>,
+    streams: Mutex<Streams>,
     next_id: AtomicU64,
     hello: watch::Sender<Option<Hello>>,
 }
@@ -58,34 +52,54 @@ impl Daemon {
         self.send(req, None).await
     }
 
+    /// Every attach gets its own snapshot, even when another window already shows the session
     pub async fn attach(
         &self,
         session: SessionId,
         channel: Channel<Frame>,
     ) -> Result<Response, String> {
-        self.latest
-            .lock()
-            .unwrap()
-            .insert(session.clone(), channel.id());
-        self.send(
-            Request::Attach {
-                session: session.clone(),
-            },
-            Some((session, channel)),
-        )
-        .await
+        let id = channel.id();
+        self.streams.lock().unwrap().begin(&session, id);
+        let resp = self
+            .send(
+                Request::Attach {
+                    session: session.clone(),
+                },
+                Some((session.clone(), channel)),
+            )
+            .await;
+        if !matches!(resp, Ok(Response::Attached { .. }))
+            && self.streams.lock().unwrap().remove(&session, id)
+        {
+            self.detach_unwatched(session).await?;
+        }
+        resp
     }
 
-    pub async fn detach(&self, session: SessionId, channel: u32) -> Result<Response, String> {
-        {
-            let mut latest = self.latest.lock().unwrap();
-            if latest.get(&session) != Some(&channel) {
-                return Ok(Response::Ok);
-            }
-            latest.remove(&session);
+    pub async fn detach(&self, session: SessionId, channel: u32) -> Result<(), String> {
+        if self.streams.lock().unwrap().remove(&session, channel) {
+            self.detach_unwatched(session).await?;
         }
-        self.streams.lock().unwrap().remove(&session);
-        self.request(Request::Detach { session }).await
+        Ok(())
+    }
+
+    /// Detaches from the daemon unless a channel attached meanwhile. Checked under the writer lock, so an attach
+    /// that registered after the check writes its request after this Detach
+    async fn detach_unwatched(&self, session: SessionId) -> Result<(), String> {
+        let mut writer = self.writer.lock().await;
+        let Some(writer) = writer.as_mut() else {
+            // Disconnected: the daemon dropped this connection's attaches with it
+            return Ok(());
+        };
+        if self.streams.lock().unwrap().watched(&session) {
+            return Ok(());
+        }
+        // Fire and forget: the reply resolves no pending request, and the reader may be the caller
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let req = Request::Detach { session };
+        proto::write_frame(writer, &ClientMsg::Req { id, req })
+            .await
+            .map_err(|e| e.to_string())
     }
 
     async fn send(
@@ -137,7 +151,6 @@ impl Daemon {
                     *self.writer.lock().await = None;
                     self.pending.lock().unwrap().clear();
                     self.streams.lock().unwrap().clear();
-                    self.latest.lock().unwrap().clear();
                     emit(
                         &app,
                         SessionEvent::Daemon {
@@ -157,12 +170,20 @@ impl Daemon {
     async fn read(&self, mut reader: OwnedReadHalf, app: &AppHandle) {
         loop {
             match proto::read_frame::<_, ServerMsg>(&mut reader).await {
-                Ok(Some(ServerMsg::Resp { id, resp })) => self.resolve(id, resp),
+                Ok(Some(ServerMsg::Resp { id, resp })) => {
+                    if let Some(session) = self.resolve(id, resp) {
+                        self.detach_quietly(session).await;
+                    }
+                }
                 Ok(Some(ServerMsg::Event(Event::Data {
                     session,
                     seq,
                     bytes,
-                }))) => self.relay(session, seq, &bytes),
+                }))) => {
+                    if self.streams.lock().unwrap().relay(&session, seq, &bytes) {
+                        self.detach_quietly(session).await;
+                    }
+                }
                 Ok(Some(ServerMsg::Event(event))) => {
                     if let Some(event) = SessionEvent::from_proto(event) {
                         emit(app, event);
@@ -178,30 +199,106 @@ impl Daemon {
         }
     }
 
-    fn resolve(&self, id: u64, mut resp: Result<Response, String>) {
-        let Some(pending) = self.pending.lock().unwrap().remove(&id) else {
-            return;
-        };
+    async fn detach_quietly(&self, session: SessionId) {
+        if let Err(e) = self.detach_unwatched(session).await {
+            tracing::warn!("detach: {e}");
+        }
+    }
+
+    /// Answers a request; returns a session to detach when its attach landed after every channel left
+    fn resolve(&self, id: u64, mut resp: Result<Response, String>) -> Option<SessionId> {
+        let pending = self.pending.lock().unwrap().remove(&id)?;
+        let mut unwatched = None;
         if let (Some((session, channel)), Ok(Response::Attached { snapshot, seq, .. })) =
             (pending.stream, &mut resp)
         {
-            let snapshot = std::mem::take(snapshot);
-            if channel.send(Frame::snapshot(*seq, &snapshot)).is_ok() {
-                self.streams.lock().unwrap().insert(session, channel);
+            let snapshot = Frame::snapshot(*seq, &std::mem::take(snapshot));
+            if self
+                .streams
+                .lock()
+                .unwrap()
+                .ready(&session, channel, snapshot)
+            {
+                unwatched = Some(session);
             }
         }
         let _ = pending.reply.send(resp);
+        unwatched
+    }
+}
+
+/// The webview channels of each session this connection is attached to. The daemon streams a session once per
+/// connection; every channel gets each chunk and drops what its own snapshot already covered (stream.ts bytesFrom).
+/// Mutations return true when the session just lost its last channel, so the daemon attach should go too
+#[derive(Default)]
+struct Streams(HashMap<SessionId, Vec<Stream>>);
+
+struct Stream {
+    id: u32,
+    /// None until the attach answers; a pending attach still counts as watching
+    channel: Option<Channel<Frame>>,
+}
+
+impl Streams {
+    fn begin(&mut self, session: &SessionId, id: u32) {
+        let streams = self.0.entry(session.clone()).or_default();
+        if !streams.iter().any(|s| s.id == id) {
+            streams.push(Stream { id, channel: None });
+        }
     }
 
-    fn relay(&self, session: SessionId, seq: u64, bytes: &[u8]) {
-        let mut streams = self.streams.lock().unwrap();
-        let Some(channel) = streams.get(&session) else {
-            return;
+    /// Sends the snapshot first, then the channel joins the fan-out. Lost when it was detached meanwhile
+    fn ready(&mut self, session: &SessionId, channel: Channel<Frame>, snapshot: Frame) -> bool {
+        let id = channel.id();
+        let Some(stream) = self
+            .0
+            .get_mut(session)
+            .and_then(|streams| streams.iter_mut().find(|s| s.id == id))
+        else {
+            return !self.watched(session);
         };
-        // A reloaded webview drops its channels; the session keeps running and the next attach replaces it
-        if channel.send(Frame::data(seq, bytes)).is_err() {
-            streams.remove(&session);
+        if channel.send(snapshot).is_err() {
+            return self.remove(session, id);
         }
+        stream.channel = Some(channel);
+        false
+    }
+
+    fn remove(&mut self, session: &SessionId, id: u32) -> bool {
+        let Some(streams) = self.0.get_mut(session) else {
+            return false;
+        };
+        let before = streams.len();
+        streams.retain(|s| s.id != id);
+        let removed = streams.len() < before;
+        if streams.is_empty() {
+            self.0.remove(session);
+        }
+        removed && !self.watched(session)
+    }
+
+    /// A reloaded webview drops its channels; the session keeps running and its panes attach again
+    fn relay(&mut self, session: &SessionId, seq: u64, bytes: &[u8]) -> bool {
+        let Some(streams) = self.0.get_mut(session) else {
+            return false;
+        };
+        streams.retain(|s| match &s.channel {
+            Some(channel) => channel.send(Frame::data(seq, bytes)).is_ok(),
+            None => true,
+        });
+        if !streams.is_empty() {
+            return false;
+        }
+        self.0.remove(session);
+        true
+    }
+
+    fn watched(&self, session: &SessionId) -> bool {
+        self.0.contains_key(session)
+    }
+
+    fn clear(&mut self) {
+        self.0.clear();
     }
 }
 
@@ -235,7 +332,10 @@ async fn connect() -> io::Result<Connection> {
             return Err(io::Error::other("old daemon did not exit"));
         }
     }
-    start()?;
+    // launchctl and systemctl block; keep them off the runtime's threads
+    tokio::task::spawn_blocking(crate::service::start)
+        .await
+        .map_err(io::Error::other)??;
     let mut last = io::Error::other("daemon did not come up");
     for _ in 0..50 {
         sleep(Duration::from_millis(100)).await;
@@ -290,65 +390,132 @@ async fn handshake() -> io::Result<Connection> {
     }
 }
 
-/// Tauri puts the sidecar next to the app binary, in the bundle and in dev
-fn sidecar() -> io::Result<PathBuf> {
-    Ok(std::env::current_exe()?.with_file_name("treeix-ptyd"))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tauri::ipc::{InvokeResponseBody, IpcResponse};
 
-fn start() -> io::Result<()> {
-    let sidecar = sidecar()?;
-    #[cfg(target_os = "macos")]
-    if register_launch_agent(&sidecar) {
-        return Ok(());
-    }
-    spawn_detached(&sidecar)
-}
+    type Seen = Arc<Mutex<Vec<Vec<u8>>>>;
 
-/// launchd keeps the daemon alive across app quits and crashes. Only from an installed bundle with the default
-/// data dir: a LaunchAgent cannot see `TREEIX_DATA_DIR`, and dev builds must not leave one registered
-#[cfg(target_os = "macos")]
-fn register_launch_agent(sidecar: &std::path::Path) -> bool {
-    use smappservice_rs::{AppService, ServiceStatus, ServiceType};
-    let bundled = sidecar.to_string_lossy().contains(".app/Contents/MacOS/");
-    if !bundled || std::env::var_os("TREEIX_DATA_DIR").is_some() {
-        return false;
+    fn channel() -> (Channel<Frame>, Seen) {
+        let seen = Seen::default();
+        let sink = seen.clone();
+        let channel = Channel::new(move |body| {
+            if let InvokeResponseBody::Raw(bytes) = body {
+                sink.lock().unwrap().push(bytes);
+            }
+            Ok(())
+        });
+        (channel, seen)
     }
-    let service = AppService::new(ServiceType::Agent {
-        plist_name: LAUNCH_AGENT_PLIST,
-    });
-    if service.status() == ServiceStatus::Enabled {
-        // Registered but not answering: launchd gave up on it, so run one by hand
-        return false;
-    }
-    match service.register() {
-        Ok(()) => service.status() == ServiceStatus::Enabled,
-        Err(e) => {
-            tracing::warn!("launch agent registration failed, spawning the daemon: {e}");
-            false
+
+    fn raw(frame: Frame) -> Vec<u8> {
+        match frame.body().unwrap() {
+            InvokeResponseBody::Raw(bytes) => bytes,
+            InvokeResponseBody::Json(_) => unreachable!(),
         }
     }
-}
 
-fn spawn_detached(sidecar: &std::path::Path) -> io::Result<()> {
-    use std::os::unix::process::CommandExt;
-    use std::process::{Command, Stdio};
-    let mut command = Command::new(sidecar);
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    // SAFETY: setsid is async-signal-safe; the daemon leaves our session so it outlives the app and its terminal
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        });
+    fn closed() -> Channel<Frame> {
+        Channel::new(|_| Err(tauri::Error::WindowNotFound))
     }
-    let mut child = command.spawn()?;
-    tracing::info!(pid = child.id(), "spawned daemon {}", sidecar.display());
-    std::thread::spawn(move || child.wait());
-    Ok(())
+
+    fn attach(streams: &mut Streams, session: &SessionId, channel: Channel<Frame>, seq: u64) {
+        streams.begin(session, channel.id());
+        assert!(!streams.ready(session, channel, Frame::snapshot(seq, b"screen")));
+    }
+
+    #[test]
+    fn every_channel_gets_its_snapshot_then_the_shared_output() {
+        let s = "a".to_string();
+        let mut streams = Streams::default();
+        let (main, main_seen) = channel();
+        let (quick, quick_seen) = channel();
+        attach(&mut streams, &s, main, 10);
+        assert!(!streams.relay(&s, 10, b"one"));
+        attach(&mut streams, &s, quick, 13);
+        assert!(!streams.relay(&s, 13, b"two"));
+        assert_eq!(
+            *main_seen.lock().unwrap(),
+            [
+                raw(Frame::snapshot(10, b"screen")),
+                raw(Frame::data(10, b"one")),
+                raw(Frame::data(13, b"two"))
+            ]
+        );
+        assert_eq!(
+            *quick_seen.lock().unwrap(),
+            [
+                raw(Frame::snapshot(13, b"screen")),
+                raw(Frame::data(13, b"two"))
+            ]
+        );
+    }
+
+    #[test]
+    fn only_the_last_channel_leaving_detaches_the_session() {
+        let s = "a".to_string();
+        let mut streams = Streams::default();
+        let (main, _) = channel();
+        let (quick, _) = channel();
+        let (main_id, quick_id) = (main.id(), quick.id());
+        attach(&mut streams, &s, main, 0);
+        attach(&mut streams, &s, quick, 0);
+        assert!(!streams.remove(&s, main_id));
+        assert!(!streams.remove(&s, main_id), "a repeated detach is a no-op");
+        assert!(streams.remove(&s, quick_id));
+        assert!(!streams.watched(&s));
+        assert!(!streams.remove(&s, quick_id));
+    }
+
+    #[test]
+    fn a_pending_attach_keeps_the_session_attached() {
+        let s = "a".to_string();
+        let mut streams = Streams::default();
+        let (old, _) = channel();
+        let (new, new_seen) = channel();
+        let old_id = old.id();
+        attach(&mut streams, &s, old, 0);
+        streams.begin(&s, new.id());
+        // A pane shown again attaches its new channel before the old one's detach lands
+        assert!(!streams.remove(&s, old_id));
+        assert!(!streams.relay(&s, 0, b"x"), "pending channels get no data");
+        assert!(!streams.ready(&s, new, Frame::snapshot(1, b"")));
+        assert!(!streams.relay(&s, 1, b"y"));
+        assert_eq!(new_seen.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn an_attach_answered_after_its_detach_is_dropped() {
+        let s = "a".to_string();
+        let mut streams = Streams::default();
+        let (late, seen) = channel();
+        streams.begin(&s, late.id());
+        assert!(streams.remove(&s, late.id()));
+        assert!(streams.ready(&s, late, Frame::snapshot(0, b"")));
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn closed_channels_drop_out_and_the_last_one_detaches() {
+        let s = "a".to_string();
+        let mut streams = Streams::default();
+        let (live, seen) = channel();
+        attach(&mut streams, &s, live, 0);
+        streams.begin(&s, 999);
+        let dead = closed();
+        streams.begin(&s, dead.id());
+        assert!(!streams.ready(&s, dead, Frame::snapshot(0, b"")));
+        assert!(!streams.relay(&s, 0, b"x"));
+        assert_eq!(seen.lock().unwrap().len(), 2);
+        assert!(!streams.remove(&s, 999));
+
+        let mut streams = Streams::default();
+        let dead = closed();
+        let id = dead.id();
+        streams.begin(&s, id);
+        streams.0.get_mut(&s).unwrap()[0].channel = Some(dead);
+        assert!(streams.relay(&s, 0, b"x"));
+        assert!(!streams.watched(&s));
+    }
 }

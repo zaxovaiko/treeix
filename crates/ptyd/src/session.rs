@@ -5,7 +5,8 @@ use crate::server::{ClientId, Daemon, Outbox};
 use crate::{procinfo, snapshot};
 use alacritty_terminal::event::{Event as TermEvent, EventListener};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::term::{Config, Term};
+use alacritty_terminal::index::Line;
+use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
@@ -81,6 +82,7 @@ struct Process {
     master: Box<dyn MasterPty + Send>,
     input: mpsc::Sender<Vec<u8>>,
     pid: u32,
+    started: Option<u64>,
 }
 
 enum Output {
@@ -172,6 +174,11 @@ impl Session {
         lock(&self.process).is_some()
     }
 
+    /// Start time of the running process, see `SavedSession::started`
+    pub fn started(&self) -> Option<u64> {
+        lock(&self.process).as_ref().and_then(|p| p.started)
+    }
+
     /// Starts the session's command in its cwd. `restart` keeps the old screen above the new
     /// output. Must run inside the tokio runtime
     pub fn spawn(self: &Arc<Self>, daemon: &Arc<Daemon>, restart: bool) -> anyhow::Result<()> {
@@ -229,6 +236,7 @@ impl Session {
             master: pair.master,
             input,
             pid,
+            started: procinfo::start_time(pid as i32),
         });
         lock(&self.flow).closing = false;
         {
@@ -421,10 +429,16 @@ impl Session {
         let snapshot = snapshot::serialize(&mut vt.term, ATTACH_HISTORY);
         let seq = vt.seq;
         let mut flow = lock(&self.flow);
+        // A second attach on the same connection (quick terminal + main window) keeps the older from_seq, or
+        // the bytes still in the coalescer would skip the first channel; the newer one drops what it has
+        let from_seq = flow
+            .clients
+            .get(&client)
+            .map_or(seq, |c| c.from_seq.min(seq));
         flow.clients.insert(
             client,
             Attached {
-                from_seq: seq,
+                from_seq,
                 unacked: 0,
                 outbox: outbox.clone(),
             },
@@ -535,6 +549,25 @@ impl Session {
         {
             self.set_title(daemon, name);
         }
+    }
+
+    /// Ghostty's clear_screen: the scrollback and the lines above the cursor go and the cursor's line
+    /// moves to the top. The alternate screen belongs to a TUI and stays
+    pub fn clear(&self) {
+        let mut vt = lock(&self.vt);
+        vt.settle();
+        if vt.term.mode().contains(TermMode::ALT_SCREEN) {
+            return;
+        }
+        let grid = vt.term.grid_mut();
+        let above = grid.cursor.point.line.0;
+        if above > 0 {
+            grid.scroll_up(&(Line(0)..Line(grid.screen_lines() as i32)), above as usize);
+            grid.cursor.point.line = Line(0);
+            grid.saved_cursor.point.line = Line((grid.saved_cursor.point.line.0 - above).max(0));
+        }
+        grid.clear_history();
+        self.dirty.store(true, Ordering::Relaxed);
     }
 
     /// The screen + scrollback as zstd ANSI, for `sessions/<id>.ansi.zst`

@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["bun"] },
+  "include": [".", "../playwright.config.ts", "../src/ipc/mock.ts"]
+}
