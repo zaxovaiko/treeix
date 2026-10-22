@@ -24,8 +24,9 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - Open worktree: start from a branch, a pull request or a ticket from Your tickets, and copy the .env files across.
 - Pull requests panel for GitHub and GitLab through gh and glab: list, check out, open, merge, and CI checks.
 - Tickets: Jira through acli and Notion through a personal access token. Both are off until switched on in Settings.
-- Routines: an agent run on a schedule, on a GitHub or Jira event, or on a local webhook (127.0.0.1 only). They run in the repo, in a fresh worktree or in the pull request's worktree, with a turn budget and permissions. The daemon runs them, so they fire with Treeix closed.
+- Routines: an agent run on a schedule, on a GitHub or Jira event, or on a local webhook (127.0.0.1 only). They run in the repo, in a fresh worktree or in the pull request's worktree, with a turn budget and permissions. The daemon runs them, so they fire with Treeix closed. Each routine picks its result: local commits, a draft pull request, or a push to the pull request it worked on. Treeix commits, pushes and opens the pull request after a clean run; agents never get push or pull request tools.
 - Chat view for Claude and Codex next to the terminal, kept across restarts. It needs npx.
+- Phone: Settings, Phone serves a mobile page to your own Tailscale network, answered only for your Tailscale login. Answer agents that need you, type into terminals, reply in chats, run or switch routines and open the pull requests they made. Served by the daemon, so it works with Treeix closed.
 - Race: one prompt to several agents, a worktree each.
 - MCP server: agents can open files, panes and worktrees in Treeix, and drive the browser pane.
 - Browser pane: built on the system WebView instead of Chromium, with a console and network view. An error can go to the agent in one click. Agents can open pages, read them, click, type and take screenshots; Settings has a switch for that.
@@ -53,9 +54,9 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## Roadmap
 
-- A mobile app, to keep an eye on your agents away from the Mac.
+- Sessions on your other machines over Tailscale and SSH, in the same sidebar.
 - A design pass over every screen.
-- A history archive, so past agent sessions are kept, searchable and one click from reopening.
+- A Windows build.
 - Contributions are welcome, see https://github.com/zaxovaiko/treeix/blob/main/CONTRIBUTING.md
 
 ## Links

@@ -16,7 +16,7 @@
   <meta name="twitter:title" content="Treeix - your AI workspace" />
   <meta name="twitter:description" content="Your AI workspace. Everything you use daily, in one app." />
   <meta name="twitter:image" content="https://treeix.dyvertex.com/assets/og.png" />
-  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Treeix", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 13.3 or later (Apple silicon and Intel), Linux (x86_64 AppImage)", "description": "Treeix is a free, open source app for Mac and Linux. It puts every git worktree in one sidebar, shows what each Claude Code or Codex agent changed, and sends your line comments back to the agent session as its next prompt. A background daemon keeps shells and agent sessions running after you quit. GitHub and GitLab pull requests, Jira and Notion tickets, a browser pane, routines and an MCP server sit in the same window.", "url": "https://treeix.dyvertex.com", "downloadUrl": "https://treeix.dyvertex.com/download", "image": "https://treeix.dyvertex.com/assets/og.png", "screenshot": "https://treeix.dyvertex.com/assets/hero.webp", "license": "https://www.apache.org/licenses/LICENSE-2.0", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "codeRepository": "https://github.com/zaxovaiko/treeix", "sameAs": ["https://github.com/zaxovaiko/treeix"], "author": {"@type": "Organization", "name": "Dyvertex", "url": "https://dyvertex.com"}}</script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Treeix", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 13.3 or later (Apple silicon and Intel), Linux (x86_64 AppImage)", "description": "Treeix is a free, open source app for Mac and Linux. It puts every git worktree in one sidebar, shows what each Claude Code or Codex agent changed, and sends your line comments back to the agent session as its next prompt. A background daemon keeps shells and agent sessions running after you quit. GitHub and GitLab pull requests, Jira and Notion tickets, a browser pane, routines that open pull requests, a phone page over Tailscale and an MCP server sit in the same window.", "url": "https://treeix.dyvertex.com", "downloadUrl": "https://treeix.dyvertex.com/download", "image": "https://treeix.dyvertex.com/assets/og.png", "screenshot": "https://treeix.dyvertex.com/assets/hero.webp", "license": "https://www.apache.org/licenses/LICENSE-2.0", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "codeRepository": "https://github.com/zaxovaiko/treeix", "sameAs": ["https://github.com/zaxovaiko/treeix"], "author": {"@type": "Organization", "name": "Dyvertex", "url": "https://dyvertex.com"}}</script>
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does my code leave my machine?", "acceptedAnswer": {"@type": "Answer", "text": "Not through Treeix. It reads your repositories locally and runs the command line tools you already have: git for diffs, gh and glab for pull requests, claude and codex for sessions. There is no Treeix server. What you type into an agent goes to that agent's vendor, the same as in your own terminal."}}, {"@type": "Question", "name": "Which AI agents does it work with?", "acceptedAnswer": {"@type": "Answer", "text": "Claude Code and Codex, in a terminal pane or as a chat beside it, with a status dot for working, waiting for you and done. Any other CLI agent runs in a plain shell session."}}, {"@type": "Question", "name": "What happens when I quit Treeix?", "acceptedAnswer": {"@type": "Answer", "text": "Your shells and agent sessions keep running. A small background daemon, treeix-ptyd, owns them (a launchd agent on a Mac), so opening Treeix again reattaches each one with its scrollback. Routines run in the daemon too, so they fire with Treeix closed."}}, {"@type": "Question", "name": "Do I have to use git worktrees?", "acceptedAnswer": {"@type": "Answer", "text": "No. A plain repository works, and so does a plain folder. Worktrees are how Treeix keeps one agent per branch without touching the checkout you're working in, so it makes them easy."}}, {"@type": "Question", "name": "What do I need installed?", "acceptedAnswer": {"@type": "Answer", "text": "Git, plus whatever the features you use need: gh or glab for pull requests, claude or codex for agent sessions, acli for Jira, npx for the chat view. Notion takes a personal access token instead of a CLI. Each one is optional and its feature stays quiet without it."}}, {"@type": "Question", "name": "Which systems does it run on?", "acceptedAnswer": {"@type": "Answer", "text": "macOS 13.3 or newer, as one build for Apple silicon and Intel, signed and notarized by Apple so it opens like any other app. On Linux there is an x86_64 AppImage on GitHub releases. Dictation and meeting recording need Apple silicon. Updates arrive through the built-in updater."}}, {"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Free to download, and the source is public under Apache 2.0."}}]}</script>
   <link rel="icon" href="/assets/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -83,7 +83,7 @@
       </div>
 
       <figure class="hero-shot">
-        <img src="/assets/hero.webp" width="2000" height="1307" alt="Treeix showing the diff of the feat/usage-invoices worktree, with a comment being written on lines 6 to 10" />
+        <img src="/assets/hero.webp" width="2000" height="1307" alt="Treeix on the feat/terminal-redo worktree: pty.ts with diff marks in the gutter, and a note for the agent being written on lines 8 to 14" />
       </figure>
     </section>
 
@@ -176,7 +176,7 @@
               <p class="shot-meta">Recursive splits, a quick terminal on a global shortcut, and a notification when an agent stops to ask</p>
             </div>
           </div>
-          <figure><img src="/assets/terminal.webp" width="2000" height="1307" loading="lazy" alt="Sessions grouped by worktree in the sidebar, a dot on the one waiting for an answer, beside a shell" /></figure>
+          <figure><img src="/assets/terminal.webp" width="2000" height="1307" loading="lazy" alt="Sessions grouped by worktree in the sidebar, an orange dot on the Claude Code session that needs you, split beside a shell" /></figure>
         </article>
 
         <article class="shot">
@@ -184,7 +184,8 @@
             <h3>Routines run without you</h3>
             <div>
               <p>Hand an agent a prompt and a trigger: a schedule, a GitHub or Jira event such as a review request or a failed CI run, or a call to a local webhook. It runs in the repo, in a fresh worktree or in the pull request's worktree, with a turn budget and the permissions you set. The daemon fires it, so it runs with Treeix closed.</p>
-              <p class="shot-meta">Webhooks listen on 127.0.0.1 only</p>
+              <p>Pick what a run leaves behind: local commits, a draft pull request, or a push to the pull request it worked on. Treeix commits, pushes and opens the pull request itself after a clean run, and later runs add to it while it is open. Routine pull requests have their own filter in the pull requests panel.</p>
+              <p class="shot-meta">Agents never get push or pull request tools. Webhooks listen on 127.0.0.1 only</p>
             </div>
           </div>
         </article>
@@ -236,7 +237,7 @@
               <p class="shot-meta">Switch it off in Settings and it does no work</p>
             </div>
           </div>
-          <figure><img src="/assets/dependencies.webp" width="2000" height="1307" loading="lazy" alt="A monorepo's packages and the imports between them drawn as a graph, left to right" /></figure>
+          <figure><img src="/assets/dependencies.webp" width="2000" height="1307" loading="lazy" alt="A monorepo's packages and their imports drawn as a graph, with an unresolved import marked in red" /></figure>
         </article>
 
         <article class="shot">
@@ -247,7 +248,7 @@
               <p class="shot-meta">Built on the system WebView instead of Chromium. Agent control has its own switch in Settings.</p>
             </div>
           </div>
-          <figure><img src="/assets/browser.webp" width="2000" height="1307" loading="lazy" alt="A local app open in the browser pane" /></figure>
+          <figure><img src="/assets/browser.webp" width="2000" height="1307" loading="lazy" alt="A local odds board app in the browser pane beside the bun dev terminal, its console showing a TypeError" /></figure>
         </article>
 
         <dl class="features">
@@ -307,6 +308,11 @@
             <dd>Claude and Codex as a chat next to the terminal, kept across restarts.</dd></div>
           </div>
           <div>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM11 18h2"/></svg>
+            <div class="feature-copy"><dt>Your phone</dt>
+            <dd>A page on your own Tailscale network: answer an agent that needs you, type into a terminal, reply in a chat, run a routine and open its pull request.</dd></div>
+          </div>
+          <div>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10M18 16v4M16 18h4"/></svg>
             <div class="feature-copy"><dt>Ports</dt>
             <dd>The ports your sessions listen on, each with a button to open it in the browser pane and one to kill it.</dd></div>
@@ -353,9 +359,9 @@
           </div>
         </div>
         <ul class="open-facts">
-          <li><b>mobile app</b><span>Keep an eye on your agents, answer their questions and start a run from your phone while you're away from the Mac.</span></li>
+          <li><b>other machines</b><span>Sessions on your other computers over Tailscale and SSH, in the same sidebar.</span></li>
           <li><b>a proper ui</b><span>A design pass over every screen, so the whole app feels like one product.</span></li>
-          <li><b>history archive</b><span>Past agent sessions kept, searchable and one click from reopening.</span></li>
+          <li><b>windows</b><span>A Windows build next to the Mac and Linux ones.</span></li>
         </ul>
       </div>
     </section>

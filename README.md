@@ -28,21 +28,21 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="apps/landing/assets/hero.webp" alt="The diff of a worktree with a comment being written on lines 6 to 10" />
+      <img src="apps/landing/assets/hero.webp" alt="Treeix on the feat/terminal-redo worktree: pty.ts with diff marks in the gutter, and a note for the agent being written on lines 8 to 14" />
       Every worktree and its diff in one sidebar. Select lines, write a note, and the queue goes to the Claude Code or Codex session in that worktree.
     </td>
     <td width="50%" valign="top">
-      <img src="apps/landing/assets/terminal.webp" alt="Sessions grouped by worktree in the sidebar, a dot on the one waiting for an answer, and its terminal beside a shell" />
+      <img src="apps/landing/assets/terminal.webp" alt="Sessions grouped by worktree in the sidebar, an orange dot on the Claude Code session that needs you, split beside a shell" />
       A background daemon owns every shell and agent session. Quit Treeix, open it again, and they are still running, with their scrollback. A dot on Claude Code and Codex sessions says working, waiting for you or done.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="apps/landing/assets/browser.webp" alt="A local app open in the built-in browser pane" />
+      <img src="apps/landing/assets/browser.webp" alt="A local odds board app in the browser pane beside the bun dev terminal, its console showing a TypeError" />
       A browser pane sits beside the terminal, on the system WebView, with a console and network view. Agents can open pages, read them, click and type through Treeix's MCP server.
     </td>
     <td width="50%" valign="top">
-      <img src="apps/landing/assets/dependencies.webp" alt="A monorepo's packages and the imports between them drawn as a graph, left to right" />
+      <img src="apps/landing/assets/dependencies.webp" alt="A monorepo's packages and their imports drawn as a graph, with an unresolved import marked in red" />
       A module graph shows who imports what in the repo, and marks import cycles and unresolved imports.
     </td>
   </tr>

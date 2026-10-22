@@ -122,9 +122,12 @@ function prompt(cwd: string): string {
   return `${color.cyan}${tilde(cwd)}${color.off}${branch ? ` ${color.magenta}${branch}${color.off}` : ''} ${color.dim}❯${color.off} `
 }
 
+/** Keeps the path's end, which names the worktree */
+const fit = (text: string, width: number) => (text.length > width ? `…${text.slice(1 - width)}` : text.padEnd(width))
+
 const banner = (kind: 'claude' | 'codex', cwd: string) =>
   kind === 'claude'
-    ? `${color.claude}╭───────────────────────────────────────╮\r\n│ ✻ ${color.off}${color.bold}Welcome to Claude Code${color.off}${color.claude}              │\r\n│   ${color.off}${color.dim}cwd: ${tilde(cwd).padEnd(32).slice(0, 32)}${color.off}${color.claude}│\r\n╰───────────────────────────────────────╯${color.off}\r\n\r\n`
+    ? `${color.claude}╭───────────────────────────────────────╮\r\n│ ✻ ${color.off}${color.bold}Welcome to Claude Code${color.off}${color.claude}              │\r\n│   ${color.off}${color.dim}cwd: ${fit(tilde(cwd), 31)}${color.off}${color.claude}│\r\n╰───────────────────────────────────────╯${color.off}\r\n\r\n`
     : `${color.bold}>_ OpenAI Codex${color.off} ${color.dim}(research preview)${color.off}\r\n${color.dim}   directory: ${tilde(cwd)}${color.off}\r\n\r\n`
 
 type DataListener = (bytes: Uint8Array, seq: number) => void
