@@ -12,7 +12,7 @@
 [data-ui="islands"] .ndot { box-shadow: 0 0 0 2px var(--canvas); }
 
 .ph { height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 12px; }
-.ph h2 { margin: 0; font-size: 12px; font-weight: 600; flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ph h2 { margin: 0; font-size: 12px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ph h2 .tag { min-width: 0; flex: 0 1 auto; }
 [data-ui="compact"] .ph { height: 34px; border-bottom: 1px solid var(--border); }
 .pscroll { flex: 1; overflow: auto; min-height: 0; padding-bottom: 6px; }

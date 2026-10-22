@@ -16,7 +16,10 @@ export interface PrData {
   refresh: () => void
 }
 
-type Filter = 'all' | 'mine' | 'review'
+type Filter = 'all' | 'mine' | 'review' | 'routines'
+
+/** Branches routine runs push (`run_branch` in crates/core routines.rs) */
+const fromRoutine = (pr: PullRequest) => pr.sourceBranch.startsWith('routine/')
 
 const REVIEW: Record<NonNullable<PullRequest['review']>['state'], [string, string]> = {
   yours: ['', 'Yours'],
@@ -49,7 +52,13 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null)
 
   const userOf = (pr: PullRequest) => data.providers.find((p) => p.provider === pr.provider)?.user ?? null
-  const list = data.list.filter((pr) => filter === 'all' || (filter === 'mine' ? isMine(pr, userOf(pr)) : pr.review?.state === 'requested' && pr.state === 'open'))
+  const shown: Record<Filter, (pr: PullRequest) => boolean> = {
+    all: () => true,
+    mine: (pr) => isMine(pr, userOf(pr)),
+    review: (pr) => pr.review?.state === 'requested' && pr.state === 'open',
+    routines: fromRoutine,
+  }
+  const list = data.list.filter(shown[filter])
   const idOf = (pr: PullRequest) => `${pr.repoPath}#${pr.number}`
   const note = (pr: PullRequest, text: string | null, error = false) =>
     setBusy((all) => {
@@ -179,6 +188,7 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
               ['all', 'All'],
               ['mine', 'Mine'],
               ['review', 'Review'],
+              ['routines', 'Routines'],
             ] as const
           ).map(([k, label]) => (
             <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>

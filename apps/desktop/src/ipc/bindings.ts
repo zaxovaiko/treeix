@@ -1388,11 +1388,11 @@ repo: string | null; place: RoutinePlace; permission: RoutinePermission;
 /**
  * Extra `--allowedTools` patterns, like `Bash(npm test:*)`
  */
-allowedTools: string[]; budget: Budget; 
+allowedTools: string[]; budget: Budget; result?: RoutineResult; 
 /**
- * May push, open PRs and post comments; off, the prompt says not to and `gh` writes are denied
+ * May comment on and review the event's PR; otherwise `gh`/`glab` writes are denied
  */
-mayPush: boolean; asleep: WhileAsleep; 
+mayComment?: boolean; asleep: WhileAsleep; 
 /**
  * Unix ms; ptyd sets it
  */
@@ -1424,6 +1424,22 @@ export type RoutinePlace =
  */
 "prWorktree"
 /**
+ * What a run delivers. The agent only commits; Treeix pushes and opens the PR after it exits cleanly
+ */
+export type RoutineResult = 
+/**
+ * Nothing leaves the Mac: commits stay on the run's branch
+ */
+"local" | 
+/**
+ * Pushes the branch and opens a draft PR; while it's open, later runs add to it (`NewWorktree` only)
+ */
+"draftPr" | 
+/**
+ * Pushes to the PR the event is about (`PrWorktree` only)
+ */
+"pushToPr"
+/**
  * One firing of a routine; kept in `<data dir>/routines/runs.jsonl`, finished ones also in History
  */
 export type RoutineRun = { id: string; routine: string; 
@@ -1450,7 +1466,19 @@ cost: number;
 /**
  * Why it failed, was skipped or stopped, like `Stopped at the $5.00 budget`
  */
-error: string | null }
+error: string | null; 
+/**
+ * The worktree's branch
+ */
+branch?: string | null; 
+/**
+ * The PR it opened or pushed to
+ */
+pr?: RunPr | null; 
+/**
+ * The agent's last reply
+ */
+summary?: string | null }
 export type Routines = { 
 /**
  * Runs at the same time; the rest wait Queued
@@ -1473,6 +1501,7 @@ export type RunCause = "schedule" |
  * Run now
  */
 "manual"
+export type RunPr = { number: number; url: string }
 export type RunStatus = 
 /**
  * Waiting for a slot (settings.routines.maxParallel)

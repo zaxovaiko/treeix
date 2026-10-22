@@ -13,7 +13,7 @@ use routines::{Routine, RoutineId, RoutineRun, RunId};
 
 /// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Shutdown,
 /// so an older app never takes down a newer daemon by connecting
-pub const PROTO_VERSION: u32 = 4;
+pub const PROTO_VERSION: u32 = 5;
 /// Bundle id; also the data dir name
 pub const APP_ID: &str = "com.dyvertex.treeix";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
@@ -469,7 +469,8 @@ mod tests {
                 max_turns: Some(20),
                 max_cost: Some(2.0),
             },
-            may_push: false,
+            result: RoutineResult::Local,
+            may_comment: false,
             asleep: WhileAsleep::Skip,
             created_at: 1,
         };

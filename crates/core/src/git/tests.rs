@@ -557,3 +557,31 @@ fn lists_worktrees_with_missing_ones_flagged() {
     prune_worktrees(repo.to_str().unwrap()).unwrap();
     assert_eq!(list_worktrees(repo.to_str().unwrap()).unwrap().len(), 1);
 }
+
+#[test]
+fn routine_runs_count_their_commits_push_and_catch_up() {
+    let (_dir, origin, clone) = origin_and_clone();
+    let path = PathBuf::from(add(&request(&clone, Some("routine/x"), None)).0.unwrap());
+    let p = path.to_str().unwrap();
+    assert_eq!(commits_ahead(p).unwrap(), (s("main"), vec![]));
+    sh(&path, &["commit", "-q", "--allow-empty", "-m", "fix: a"]);
+    sh(&path, &["commit", "-q", "--allow-empty", "-m", "fix: b"]);
+    assert_eq!(commits_ahead(p).unwrap().1, vec![s("fix: a"), s("fix: b")]);
+    push(p, "routine/x").unwrap();
+    assert_eq!(
+        sh(&origin, &["log", "-1", "--format=%s", "routine/x"]).trim(),
+        "fix: b"
+    );
+    // Someone added to the PR meanwhile: the next run starts from that
+    sh(&origin, &["checkout", "-q", "routine/x"]);
+    sh(
+        &origin,
+        &["commit", "-q", "--allow-empty", "-m", "review fix"],
+    );
+    sh(&origin, &["checkout", "-q", "main"]);
+    catch_up(p, "routine/x").unwrap();
+    assert_eq!(
+        sh(&path, &["log", "-1", "--format=%s"]).trim(),
+        "review fix"
+    );
+}

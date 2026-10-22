@@ -23,17 +23,18 @@ const routine = (r: Pick<Routine, 'id' | 'name' | 'prompt' | 'trigger'> & Partia
   permission: 'editFiles',
   allowedTools: [],
   budget: { maxTurns: 30, maxCost: 5 },
-  mayPush: false,
+  result: 'local',
+  mayComment: false,
   asleep: 'catchUp',
   createdAt: NOW - 30 * DAY,
   ...r,
 })
 
 const ROUTINES: Routine[] = [
-  routine({ id: 'rt-review', name: 'Review requested PRs', prompt: 'Review PR {pr} "{title}" by {author}. Leave inline comments for real problems only.', trigger: { kind: 'event', event: 'reviewRequested' }, repo: null, place: 'prWorktree', permission: 'readOnly', mayPush: true }),
-  routine({ id: 'rt-ci', name: 'Fix failing CI', prompt: 'CI job {job} failed on {branch} ({pr}). Find the cause, fix it and push.', trigger: { kind: 'event', event: 'ciFailed' }, repo: null, place: 'prWorktree', allowedTools: ['Bash(bun test:*)', 'Bash(cargo test:*)'], mayPush: true, budget: { maxTurns: 40, maxCost: 3 } }),
+  routine({ id: 'rt-review', name: 'Review requested PRs', prompt: 'Review PR {pr} "{title}" by {author}. Leave inline comments for real problems only.', trigger: { kind: 'event', event: 'reviewRequested' }, repo: null, place: 'prWorktree', permission: 'readOnly', mayComment: true }),
+  routine({ id: 'rt-ci', name: 'Fix failing CI', prompt: 'CI job {job} failed on {branch} ({pr}). Find the cause and fix it.', trigger: { kind: 'event', event: 'ciFailed' }, repo: null, place: 'prWorktree', allowedTools: ['Bash(bun test:*)', 'Bash(cargo test:*)'], result: 'pushToPr', budget: { maxTurns: 40, maxCost: 3 } }),
   routine({ id: 'rt-digest', name: 'Morning digest', prompt: 'Summarize what changed on main since yesterday and what is waiting on me.', trigger: { kind: 'schedule', cron: '0 9 * * 1-5' }, place: 'root', permission: 'readOnly', budget: { maxTurns: 10, maxCost: 1 } }),
-  routine({ id: 'rt-deps', name: 'Weekly dependency bumps', prompt: 'Bump patch versions of dependencies, run the tests and open a PR.', trigger: { kind: 'schedule', cron: '0 7 * * 1' }, agent: 'codex', repo: BETFEEL, asleep: 'skip', mayPush: true }),
+  routine({ id: 'rt-deps', name: 'Weekly dependency bumps', prompt: 'Update patch and minor dependencies and run the tests. End with the changelog links of what you bumped.', trigger: { kind: 'schedule', cron: '0 7 * * 1' }, agent: 'codex', repo: BETFEEL, result: 'draftPr', asleep: 'skip' }),
   routine({ id: 'rt-ticket', name: 'Start assigned tickets', prompt: 'Read {ticket} "{title}": {desc}\nPlan the change and stop before editing.', trigger: { kind: 'event', event: 'ticketAssigned' }, permission: 'readOnly' }),
   routine({ id: 'rt-hook', name: 'Sentry alert triage', prompt: 'A Sentry alert came in:\n{body}\nFind the likely cause.', trigger: { kind: 'webhook', token: 'whk_7f3a9c2e41b8' }, repo: BETFEEL, place: 'root', permission: 'readOnly', enabled: false }),
 ]
@@ -45,9 +46,11 @@ const run = (r: Partial<RoutineRun> & Pick<RoutineRun, 'id' | 'routine' | 'cause
 }
 
 const RUNS: RoutineRun[] = [
-  run({ id: 'run-1', routine: 'rt-review', cause: 'event', status: 'ok', dueAt: NOW - 2 * HOUR, detail: '#412 Fix login redirect (octocat)', cwd: `${TREEIX}/.claude/worktrees/pr-412`, session: 'r1', turns: 14, cost: 0.62 }),
+  run({ id: 'run-1', routine: 'rt-review', cause: 'event', status: 'ok', dueAt: NOW - 2 * HOUR, detail: '#412 Fix login redirect (octocat)', cwd: `${TREEIX}/.claude/worktrees/pr-412`, session: 'r1', turns: 14, cost: 0.62, summary: 'Left 2 comments: the redirect drops the query string, and the new test never awaits the login.' }),
   run({ id: 'run-2', routine: 'rt-ci', cause: 'event', status: 'failed', dueAt: NOW - 5 * HOUR, detail: '#405 typecheck on feat/ports', cwd: `${TREEIX}/.claude/worktrees/pr-405`, session: 'r2', turns: 22, cost: 1.48, error: 'claude exited with code 1' }),
   run({ id: 'run-3', routine: 'rt-ci', cause: 'event', status: 'overBudget', dueAt: NOW - DAY, detail: '#398 e2e on fix/pty-leak', cwd: `${TREEIX}/.claude/worktrees/pr-398`, session: 'r3', turns: 31, cost: 3.02, error: 'Stopped at the $3.00 budget' }),
+  run({ id: 'run-8', routine: 'rt-ci', cause: 'event', status: 'ok', dueAt: NOW - 90 * MIN, detail: '#409 e2e on fix/pty-leak', cwd: `${TREEIX}/.claude/worktrees/pr-409`, session: 'r8', turns: 11, cost: 0.74, branch: 'fix/pty-leak', pr: { number: 409, url: 'https://github.com/you/treeix/pull/409' }, summary: 'The pane test closed the pty before reading its exit code; it now awaits the exit. Pushed 1 commit.' }),
+  run({ id: 'run-9', routine: 'rt-deps', cause: 'schedule', status: 'ok', dueAt: NOW - 4 * HOUR, cwd: `${BETFEEL}/.claude/worktrees/routine-weekly-dependency-bumps-20261022-0700`, session: 'r9', turns: 18, cost: 0.95, branch: 'routine/weekly-dependency-bumps-20261022-0700', pr: { number: 236, url: 'https://gitlab.com/betfeel/api/-/merge_requests/236' }, summary: 'Bumped 7 packages (zod 4.1.3, vitest 3.2.4, ...). All tests pass.' }),
   run({ id: 'run-4', routine: 'rt-digest', cause: 'catchUp', status: 'ok', dueAt: NOW - 3 * HOUR, cwd: TREEIX, session: 'r4', turns: 6, cost: 0.18 }),
   run({ id: 'run-5', routine: 'rt-deps', cause: 'schedule', status: 'skipped', dueAt: NOW - 2 * DAY - 5 * HOUR, error: 'The Mac was asleep' }),
   run({ id: 'run-6', routine: 'rt-ticket', cause: 'event', status: 'ok', dueAt: NOW - 2 * DAY, detail: 'TRX-52 Usage pill shows the weekly limit', cwd: `${TREEIX}/.claude/worktrees/trx-52`, session: 'r6', turns: 9, cost: 0.41 }),

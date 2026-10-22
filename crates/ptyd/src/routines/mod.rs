@@ -23,9 +23,10 @@ use treeix_core::agents::transcripts::{self, AgentKind};
 use treeix_core::agents::{codex, usage};
 use treeix_core::git::{self, NewWorktree};
 use treeix_core::history::{self, RecordKind, SessionRecord};
+use treeix_core::prs::{self, PrState};
 use treeix_core::routines::{
-    Routine, RoutinePermission, RoutinePlace, RoutineRun, RunCause, RunId, RunStatus, Trigger,
-    WEBHOOK_PORT, next_fire, run_branch,
+    Routine, RoutinePermission, RoutinePlace, RoutineResult, RoutineRun, RunCause, RunId, RunPr,
+    RunStatus, Trigger, WEBHOOK_PORT, next_fire, run_branch,
 };
 use treeix_core::settings::Settings;
 use treeix_proto::chat::ChatAgent;
@@ -42,14 +43,29 @@ const WATCH: Duration = Duration::from_secs(3);
 // ponytail: runs.jsonl is rewritten whole on each change, capped here; append + compaction if it shows up
 const KEEP_RUNS: usize = 1000;
 const ASLEEP: &str = "The Mac was asleep";
-/// Tools a `may_push` run gets and the rest are denied
-const PUSH_TOOLS: [&str; 4] = [
+/// Denied to every run: Treeix pushes and opens the PR itself (`deliver`)
+const WRITES: [&str; 10] = [
     "Bash(git push:*)",
-    "Bash(gh pr:*)",
-    "Bash(gh issue comment:*)",
+    "Bash(gh pr create:*)",
+    "Bash(gh pr merge:*)",
+    "Bash(gh pr close:*)",
+    "Bash(gh pr edit:*)",
+    "Bash(gh pr ready:*)",
     "Bash(gh api:*)",
+    "Bash(glab mr create:*)",
+    "Bash(glab mr merge:*)",
+    "Bash(glab api:*)",
 ];
-const NO_PUSH: &str = "Do not push, open pull requests or post comments.";
+/// Allowed with `may_comment`, denied otherwise
+const COMMENTS: [&str; 4] = [
+    "Bash(gh pr comment:*)",
+    "Bash(gh pr review:*)",
+    "Bash(gh issue comment:*)",
+    "Bash(glab mr note:*)",
+];
+const NO_PUSH: &str = "Do not push or open pull requests.";
+const COMMIT: &str = "Commit your changes on the current branch: Treeix pushes them and opens or updates the pull request after you finish. Do not push or open pull requests yourself.";
+const NO_COMMENTS: &str = "Do not post comments or reviews.";
 
 /// Routines, their runs and the run queue (settings.routines.maxParallel slots)
 #[derive(Default)]
@@ -243,6 +259,15 @@ impl Routines {
             Trigger::Webhook { token } if token.is_empty() => *token = new_token(),
             _ => {}
         }
+        match (routine.result, routine.place) {
+            (RoutineResult::DraftPr, place) if place != RoutinePlace::NewWorktree => {
+                return Err("A draft PR needs a new worktree per run".into());
+            }
+            (RoutineResult::PushToPr, place) if place != RoutinePlace::PrWorktree => {
+                return Err("Pushing to the PR needs the PR's worktree".into());
+            }
+            _ => {}
+        }
         let mut state = lock(&self.state);
         match state.routines.iter_mut().find(|r| r.id == routine.id) {
             Some(existing) if !routine.id.is_empty() => {
@@ -339,6 +364,9 @@ impl Routines {
             turns: 0,
             cost: 0.0,
             error: skip,
+            branch: None,
+            pr: None,
+            summary: None,
         };
         if run.status == RunStatus::Queued {
             state.saved.queued.insert(run.id.clone(), hit);
@@ -487,16 +515,25 @@ fn pump(daemon: &Arc<Daemon>) {
 async fn start(daemon: Arc<Daemon>, run: RoutineRun, routine: Routine, hit: Hit) {
     let prompt = triggers::render(&routine.prompt, &hit.vars);
     usage::refresh_prices(&daemon.data_dir).await;
+    let last_pr = (routine.result == RoutineResult::DraftPr)
+        .then(|| {
+            daemon
+                .routines
+                .runs(Some(&routine.id), KEEP_RUNS as u32)
+                .into_iter()
+                .find(|r| r.pr.is_some())
+        })
+        .flatten();
     let prepared = tokio::task::spawn_blocking(move || {
-        let cwd = place(&routine, &hit)?;
+        let placed = place(&routine, &hit, last_pr.as_ref())?;
         let conversation = (routine.agent == ChatAgent::Claude).then(new_uuid);
         let command = command(&routine, &prompt, conversation.as_deref());
-        Ok::<_, String>((routine, cwd, command, conversation))
+        Ok::<_, String>((routine, placed, command, conversation))
     })
     .await
     .map_err(|e| e.to_string())
     .and_then(|prepared| prepared);
-    let (routine, cwd, command, conversation) = match prepared {
+    let (routine, Placed { cwd, branch, pr }, command, conversation) = match prepared {
         Ok(prepared) => prepared,
         Err(e) => return finish(&daemon, &run.id, RunStatus::Failed, Some(e)),
     };
@@ -525,6 +562,8 @@ async fn start(daemon: Arc<Daemon>, run: RoutineRun, routine: Routine, hit: Hit)
     match daemon.routines.update(&run.id, |run| {
         run.session = Some(info.id.clone());
         run.cwd = Some(cwd);
+        run.branch = branch;
+        run.pr = pr;
     }) {
         Some(run) => changed(&daemon, run),
         // Cancelled while it was being set up
@@ -536,8 +575,15 @@ async fn start(daemon: Arc<Daemon>, run: RoutineRun, routine: Routine, hit: Hit)
     }
 }
 
-/// The folder a run happens in: the repo, a fresh worktree, or the PR's worktree
-fn place(routine: &Routine, hit: &Hit) -> Result<String, String> {
+/// Where a run happens, and the branch and PR it delivers to
+struct Placed {
+    cwd: String,
+    branch: Option<String>,
+    pr: Option<RunPr>,
+}
+
+/// The repo, a fresh worktree (or the one of the routine's still open draft PR), or the PR's worktree
+fn place(routine: &Routine, hit: &Hit, last_pr: Option<&RoutineRun>) -> Result<Placed, String> {
     let repo = hit
         .repo
         .clone()
@@ -572,16 +618,114 @@ fn place(routine: &Routine, hit: &Hit) -> Result<String, String> {
         })
     };
     match routine.place {
-        RoutinePlace::Root => Ok(repo),
-        RoutinePlace::NewWorktree => add(request(Some(run_branch(&routine.name, now_ms())), None)),
+        RoutinePlace::Root => Ok(Placed {
+            cwd: repo,
+            branch: None,
+            pr: None,
+        }),
+        RoutinePlace::NewWorktree => {
+            if let Some((branch, pr)) = open_pr(&repo, last_pr)? {
+                let cwd = git::add_worktree(&request(Some(branch.clone()), None), |_| {})?;
+                git::catch_up(&cwd, &branch)?;
+                return Ok(Placed {
+                    cwd,
+                    branch: Some(branch),
+                    pr: Some(pr),
+                });
+            }
+            let branch = run_branch(&routine.name, now_ms());
+            Ok(Placed {
+                cwd: add(request(Some(branch.clone()), None))?,
+                branch: Some(branch),
+                pr: None,
+            })
+        }
         RoutinePlace::PrWorktree => {
-            let pr = hit
+            let number = hit
                 .pr
                 .and_then(|pr| u32::try_from(pr).ok())
                 .ok_or("Only PR events run in a PR's worktree")?;
-            add(request(None, Some(pr)))
+            let cwd = add(request(None, Some(number)))?;
+            if routine.result != RoutineResult::PushToPr {
+                return Ok(Placed {
+                    cwd,
+                    branch: None,
+                    pr: None,
+                });
+            }
+            // A reused worktree is where the last run left it: start from what the PR has now
+            let found = prs::pull_request(&repo, number)?;
+            git::catch_up(&cwd, &found.source_branch)?;
+            Ok(Placed {
+                cwd,
+                branch: Some(found.source_branch),
+                pr: Some(RunPr {
+                    number,
+                    url: found.url,
+                }),
+            })
         }
     }
+}
+
+/// The branch and PR of an earlier run while that PR is open; once it's merged or closed its clean worktree goes
+fn open_pr(repo: &str, last: Option<&RoutineRun>) -> Result<Option<(String, RunPr)>, String> {
+    let Some((last, branch, pr)) = last.and_then(|r| Some((r, r.branch.clone()?, r.pr.clone()?)))
+    else {
+        return Ok(None);
+    };
+    if prs::pull_request(repo, pr.number)?.state == PrState::Open {
+        return Ok(Some((branch, pr)));
+    }
+    if let Some(cwd) = last.cwd.as_deref().filter(|cwd| Path::new(cwd).is_dir())
+        && let Err(e) = git::remove_worktree(cwd, false, true)
+    {
+        tracing::info!("worktree of a closed routine PR kept: {e}");
+    }
+    Ok(None)
+}
+
+/// After a clean exit: drops a new worktree the run left untouched, pushes, and opens the draft PR
+fn deliver(
+    routine: &Routine,
+    run: &RoutineRun,
+    summary: Option<&str>,
+) -> Result<Option<RunPr>, String> {
+    let (Some(cwd), Some(branch)) = (run.cwd.as_deref(), run.branch.as_deref()) else {
+        return Ok(None);
+    };
+    if !Path::new(cwd).is_dir() {
+        return Err(format!("{cwd} is gone"));
+    }
+    let dirty = git::git_status(cwd)?.is_some_and(|status| !status.changes.is_empty());
+    if dirty && routine.result != RoutineResult::Local {
+        // Agents forget, and Codex's sandbox can't write a worktree's git dir: what's left is committed for them
+        git::commit_all(cwd, &routine.name)?;
+    }
+    if routine.result == RoutineResult::PushToPr {
+        git::push(cwd, branch)?;
+        return Ok(run.pr.clone());
+    }
+    let (base, commits) = git::commits_ahead(cwd)?;
+    if commits.is_empty() {
+        if !dirty {
+            git::remove_worktree(cwd, false, true)?;
+        }
+        return Ok(None);
+    }
+    if routine.result == RoutineResult::Local {
+        return Ok(None);
+    }
+    git::push(cwd, branch)?;
+    if let Some(pr) = &run.pr {
+        return Ok(Some(pr.clone()));
+    }
+    let footer = format!("Opened by the Treeix routine **{}**.", routine.name);
+    let body = summary.map_or(footer.clone(), |summary| {
+        format!("{summary}\n\n---\n{footer}")
+    });
+    let (number, url) = prs::open_draft_pr(cwd, branch, &base, &commits[0], &body)?;
+    Ok(Some(RunPr { number, url }))
 }
 
 /// The agent's command line, run through the login shell so a daemon started without the user's PATH finds it
@@ -596,12 +740,16 @@ fn command(routine: &Routine, prompt: &str, conversation: Option<&str>) -> Vec<S
         "exec \"$@\"".into(),
         "treeix-routine".into(),
     ];
-    let prompt = if routine.may_push {
-        prompt.to_owned()
-    } else {
-        format!("{prompt}\n\n{NO_PUSH}")
+    let rules = match routine.result {
+        RoutineResult::Local => NO_PUSH,
+        RoutineResult::DraftPr | RoutineResult::PushToPr => COMMIT,
     };
-    let push_tools = PUSH_TOOLS.iter().map(|t| (*t).to_owned());
+    let prompt = if routine.may_comment {
+        format!("{prompt}\n\n{rules}")
+    } else {
+        format!("{prompt}\n\n{rules} {NO_COMMENTS}")
+    };
+    let owned = |tools: &[&str]| tools.iter().map(|t| (*t).to_owned()).collect::<Vec<_>>();
     match routine.agent {
         ChatAgent::Claude => {
             args.extend(["claude".into(), "-p".into()]);
@@ -618,12 +766,14 @@ fn command(routine: &Routine, prompt: &str, conversation: Option<&str>) -> Vec<S
                 args.extend(["--max-turns".into(), turns.to_string()]);
             }
             let mut allowed = routine.allowed_tools.clone();
-            if routine.may_push {
-                allowed.extend(push_tools);
+            let mut denied = owned(&WRITES);
+            if routine.may_comment {
+                allowed.extend(owned(&COMMENTS));
             } else {
-                args.push("--disallowedTools".into());
-                args.extend(push_tools);
+                denied.extend(owned(&COMMENTS));
             }
+            args.push("--disallowedTools".into());
+            args.extend(denied);
             if !allowed.is_empty() {
                 args.push("--allowedTools".into());
                 args.extend(allowed);
@@ -756,12 +906,14 @@ fn watch_run(daemon: &Arc<Daemon>, run: &RoutineRun, prices: &BTreeMap<String, u
         AgentKind::Claude => ChatAgent::Claude,
         AgentKind::Codex => ChatAgent::Codex,
     };
-    let spent = info
+    let transcript = info
         .agent_session
         .as_deref()
         .and_then(|id| transcripts::transcript_path(&home, kind, id))
-        .and_then(|path| fs::read_to_string(path).ok())
-        .map(|text| budget::spent(agent, &text, prices));
+        .and_then(|path| fs::read_to_string(path).ok());
+    let spent = transcript
+        .as_deref()
+        .map(|text| budget::spent(agent, text, prices));
     if let Some(spent) = spent
         && let Some(run) = daemon.routines.update(&run.id, |run| {
             run.turns = spent.turns;
@@ -775,10 +927,28 @@ fn watch_run(daemon: &Arc<Daemon>, run: &RoutineRun, prices: &BTreeMap<String, u
         turns: run.turns,
         cost: run.cost,
     });
-    let limits = routine.map(|r| r.budget).unwrap_or_default();
+    let limits = routine.as_ref().map(|r| r.budget).unwrap_or_default();
     if info.status == SessionStatus::Exited {
+        let summary = transcript
+            .as_deref()
+            .and_then(|text| transcripts::last_replies(kind, text, 1).pop());
+        let Some(run) = daemon.routines.update(&run.id, |run| {
+            run.summary.clone_from(&summary);
+        }) else {
+            return;
+        };
+        let delivered = match (info.exit_code, &routine) {
+            (Some(0), Some(routine)) => deliver(routine, &run, summary.as_deref()),
+            _ => Ok(None),
+        };
         let (status, error) = match info.exit_code {
-            Some(0) => (RunStatus::Ok, None),
+            Some(0) => match delivered {
+                Ok(pr) => {
+                    daemon.routines.update(&run.id, |run| run.pr = pr);
+                    (RunStatus::Ok, None)
+                }
+                Err(e) => (RunStatus::Failed, Some(e)),
+            },
             _ if limits.max_turns.is_some_and(|max| spent.turns >= max) => (
                 RunStatus::OverBudget,
                 limits
@@ -1232,15 +1402,24 @@ mod tests {
         assert_eq!(line[at("--permission-mode") + 1], "acceptEdits");
         assert_eq!(line[at("--max-turns") + 1], "30");
         assert_eq!(line[at("--allowedTools") + 1], "Bash(npm test:*)");
-        assert_eq!(line[at("--disallowedTools") + 1], "Bash(git push:*)");
+        let denied = &line[at("--disallowedTools") + 1..at("--allowedTools")];
+        assert!(denied.contains(&"Bash(git push:*)".to_owned()));
+        assert!(denied.contains(&"Bash(gh pr comment:*)".to_owned()));
         assert_eq!(line[line.len() - 2], "--");
-        assert_eq!(line[line.len() - 1], format!("Review it\n\n{NO_PUSH}"));
+        assert_eq!(
+            line[line.len() - 1],
+            format!("Review it\n\n{NO_PUSH} {NO_COMMENTS}")
+        );
 
-        r.may_push = true;
+        r.may_comment = true;
+        r.result = RoutineResult::DraftPr;
         let line = args(&r);
-        assert!(!line.contains(&"--disallowedTools".to_owned()));
-        assert!(line.contains(&"Bash(gh pr:*)".to_owned()));
-        assert_eq!(line.last().unwrap(), "Review it");
+        let at = |flag: &str| line.iter().position(|a| a == flag).unwrap();
+        let denied = &line[at("--disallowedTools") + 1..at("--allowedTools")];
+        assert!(denied.contains(&"Bash(gh pr create:*)".to_owned()));
+        assert!(!denied.contains(&"Bash(gh pr review:*)".to_owned()));
+        assert!(line[at("--allowedTools")..].contains(&"Bash(gh pr review:*)".to_owned()));
+        assert_eq!(line.last().unwrap(), &format!("Review it\n\n{COMMIT}"));
     }
 
     #[test]
@@ -1248,7 +1427,7 @@ mod tests {
         let mut r = routine("r", "* * * * *", WhileAsleep::CatchUp);
         r.agent = ChatAgent::Codex;
         r.permission = RoutinePermission::Anything;
-        r.may_push = true;
+        r.may_comment = true;
         assert_eq!(
             args(&r),
             [
@@ -1257,8 +1436,125 @@ mod tests {
                 "--sandbox",
                 "danger-full-access",
                 "--",
-                "Review it"
+                &format!("Review it\n\n{NO_PUSH}")
             ]
+        );
+    }
+
+    #[test]
+    fn a_result_needs_its_place() {
+        let (_dir, engine) = engine(vec![]);
+        let mut r = routine("", "* * * * *", WhileAsleep::CatchUp);
+        r.name = "Bump".into();
+        r.result = RoutineResult::DraftPr;
+        assert!(engine.put(r.clone()).is_err());
+        r.place = RoutinePlace::NewWorktree;
+        assert!(engine.put(r.clone()).is_ok());
+        r.result = RoutineResult::PushToPr;
+        assert!(engine.put(r).is_err());
+    }
+
+    /// git with a test identity; panics on failure
+    fn git_in(cwd: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "-c",
+                "commit.gpgsign=false",
+                "-C",
+            ])
+            .arg(cwd)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap()
+    }
+
+    fn run_in(cwd: &str, branch: &str) -> RoutineRun {
+        RoutineRun {
+            id: "run".into(),
+            routine: "r".into(),
+            name: "r".into(),
+            cause: RunCause::Manual,
+            status: RunStatus::Running,
+            detail: None,
+            due_at: 0,
+            started_at: None,
+            ended_at: None,
+            session: None,
+            cwd: Some(cwd.into()),
+            turns: 0,
+            cost: 0.0,
+            error: None,
+            branch: Some(branch.into()),
+            pr: None,
+            summary: None,
+        }
+    }
+
+    #[test]
+    fn delivery_drops_untouched_worktrees_and_pushes_commits() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        let (origin, clone) = (root.join("origin"), root.join("clone"));
+        fs::create_dir(&origin).unwrap();
+        git_in(&origin, &["init", "-q", "-b", "main"]);
+        git_in(&origin, &["commit", "-q", "--allow-empty", "-m", "root"]);
+        git_in(&root, &["clone", "-q", "origin", "clone"]);
+        // Treeix commits with the user's identity, which CI has none of
+        for (key, value) in [
+            ("user.email", "t@t"),
+            ("user.name", "t"),
+            ("commit.gpgsign", "false"),
+        ] {
+            git_in(&clone, &["config", key, value]);
+        }
+        let add = |branch: &str| {
+            let request = NewWorktree {
+                repo_path: clone.to_string_lossy().into_owned(),
+                branch: Some(branch.into()),
+                base: None,
+                pr: None,
+                copy_env: false,
+                setup: None,
+                skip_fetch: false,
+            };
+            git::add_worktree(&request, |_| {}).unwrap()
+        };
+        let mut r = routine("r", "* * * * *", WhileAsleep::CatchUp);
+        r.place = RoutinePlace::NewWorktree;
+
+        let untouched = add("routine/a");
+        assert_eq!(
+            deliver(&r, &run_in(&untouched, "routine/a"), None),
+            Ok(None)
+        );
+        assert!(!Path::new(&untouched).exists());
+
+        // Left uncommitted: committed for it. A later run of the routine whose draft PR is still open adds to it
+        r.result = RoutineResult::DraftPr;
+        let cwd = add("routine/b");
+        fs::write(Path::new(&cwd).join("a.txt"), "one\n").unwrap();
+        let pr = Some(RunPr {
+            number: 3,
+            url: "https://github.com/o/r/pull/3".into(),
+        });
+        let later = RoutineRun {
+            pr: pr.clone(),
+            ..run_in(&cwd, "routine/b")
+        };
+        assert_eq!(deliver(&r, &later, None), Ok(pr));
+        assert_eq!(
+            git_in(&origin, &["log", "-1", "--format=%s", "routine/b"]).trim(),
+            "r"
         );
     }
 

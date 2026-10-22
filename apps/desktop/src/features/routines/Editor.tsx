@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Modal, reposOf } from '../../dialogs'
-import type { Routine, RoutineEvent, RoutinePermission, RoutinePlace } from '../../ipc/api'
+import type { Routine, RoutineEvent, RoutinePermission, RoutinePlace, RoutineResult } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
 import { pickFolder } from '../../lib/native'
 import type { ShellView } from '../../shell/Shell'
 import { FIcon } from '../agents/icons'
-import { cronOf, EVENTS, EVERY, fixDraft, isPrEvent, parseAmount, parseCron, problem, webhookUrl, whenLabel, whenText, type Every } from './logic'
+import { cronOf, EVENTS, EVERY, fixDraft, isPrEvent, parseAmount, parseCron, problem, RESULTS, webhookUrl, whenLabel, whenText, type Every } from './logic'
 import { toast } from './toasts'
 
 const AGENT = { claude: 'Claude', codex: 'Codex' } as const
@@ -59,6 +59,8 @@ export function Editor({ view, initial, onClose }: { view: ShellView; initial: R
   const draft: Routine = { ...r, budget: { maxCost: parseAmount(budget.cost), maxTurns: parseAmount(budget.turns) } }
   const why = problem(draft) ?? (next?.startsWith('Not a valid') ? next : null)
 
+  const results = RESULTS[r.place]
+  const result = r.result ?? 'local'
   const schedule = cron === null ? null : parseCron(cron)
   const every: Every = custom ? 'custom' : (schedule?.every ?? 'weekdays')
   const at = schedule?.at ?? '09:00'
@@ -236,12 +238,22 @@ export function Editor({ view, initial, onClose }: { view: ShellView; initial: R
           <input value={budget.turns} inputMode="numeric" placeholder="No limit" onChange={(e) => setBudget({ ...budget, turns: e.target.value })} />
         </div>
       </div>
-      <div className="opts">
-        <label className="chk">
-          <input type="checkbox" checked={r.mayPush} onChange={(e) => set({ mayPush: e.target.checked })} />
-          May push, open PRs and post comments <span className="dim">{r.mayPush ? '' : 'off: it commits locally and you push'}</span>
-        </label>
-      </div>
+      {results.length > 0 && (
+        <div className="fld">
+          <label>
+            Result <span className="dim">· {results.find(([x]) => x === result)?.[2]}</span>
+          </label>
+          <Segs<RoutineResult> value={result} options={results.map(([x, label]) => [x, label] as const)} onChange={(result) => set({ result })} />
+        </div>
+      )}
+      {isPrEvent(r) && (
+        <div className="opts">
+          <label className="chk">
+            <input type="checkbox" checked={!!r.mayComment} onChange={(e) => set({ mayComment: e.target.checked })} />
+            May comment on and review the PR <span className="dim">{r.mayComment ? '' : 'off: it writes them in its reply'}</span>
+          </label>
+        </div>
+      )}
       {r.permission === 'anything' && (
         <div className="nwchk err">
           <Icon name="alert" />

@@ -1,4 +1,4 @@
-import { WEBHOOK_PORT, type Routine, type RoutineEvent, type RoutineRun, type RunCause, type RunStatus } from '../../ipc/api'
+import { WEBHOOK_PORT, type Routine, type RoutineEvent, type RoutinePlace, type RoutineResult, type RoutineRun, type RunCause, type RunStatus } from '../../ipc/api'
 
 // Pure helpers of the routines UI: schedule text and cron, validation, run status
 
@@ -77,11 +77,27 @@ export function problem(r: Routine): string | null {
   return null
 }
 
-/** Keeps a draft valid after its trigger changes: "the PR's repo" needs an event, a PR's worktree a PR event */
+/** [result, label, what happens] each place offers; the repo folder only keeps things local */
+export const RESULTS: Record<RoutinePlace, [RoutineResult, string, string][]> = {
+  root: [],
+  newWorktree: [
+    ['local', 'Local commits', 'Commits stay on the run\'s branch for you to look at'],
+    ['draftPr', 'Draft PR', 'Treeix pushes and opens a draft PR; while it is open, later runs add to it'],
+  ],
+  prWorktree: [
+    ['local', 'Local commits', 'Commits stay in the PR\'s worktree for you to push'],
+    ['pushToPr', 'Push to the PR', 'Treeix pushes the commits to the PR after a clean run'],
+  ],
+}
+
+/** Keeps a draft valid after its trigger or place changes: "the PR's repo" needs an event, a PR's worktree a PR
+ * event, a result its place, comments a PR */
 export function fixDraft(r: Routine, fallbackRepo: string | null): Routine {
   const repo = !r.repo && r.trigger.kind !== 'event' ? fallbackRepo : r.repo
   const place = r.place === 'prWorktree' && !isPrEvent(r) ? 'root' : r.place
-  return repo === r.repo && place === r.place ? r : { ...r, repo, place }
+  const result = RESULTS[place].some(([x]) => x === r.result) ? r.result : 'local'
+  const mayComment = !!r.mayComment && isPrEvent(r)
+  return repo === r.repo && place === r.place && result === r.result && mayComment === r.mayComment ? r : { ...r, repo, place, result, mayComment }
 }
 
 export const newRoutine = (repo: string | null): Routine => ({
@@ -96,17 +112,18 @@ export const newRoutine = (repo: string | null): Routine => ({
   permission: 'readOnly',
   allowedTools: [],
   budget: { maxTurns: null, maxCost: 1 },
-  mayPush: false,
+  result: 'local',
+  mayComment: false,
   asleep: 'catchUp',
   createdAt: 0,
 })
 
 /** Starting points shown while there are no routines (the prototype's) */
 export const TEMPLATES: (Partial<Routine> & Pick<Routine, 'name' | 'prompt' | 'trigger'>)[] = [
-  { name: 'Review PRs that ask for me', trigger: { kind: 'event', event: 'reviewRequested' }, repo: null, place: 'prWorktree', budget: { maxTurns: null, maxCost: 2 }, prompt: 'Review {pr} "{title}" by {author}. Correctness first, then tests. Draft comments I can post, do not post them.' },
-  { name: 'Fix CI on my PRs', agent: 'codex', trigger: { kind: 'event', event: 'ciFailed' }, repo: null, place: 'prWorktree', permission: 'editFiles', budget: { maxTurns: null, maxCost: 3 }, prompt: 'CI failed on {pr} ({job}) on {branch}. Find the cause and fix it. Commit, do not push.' },
+  { name: 'Review PRs that ask for me', trigger: { kind: 'event', event: 'reviewRequested' }, repo: null, place: 'prWorktree', budget: { maxTurns: null, maxCost: 2 }, prompt: 'Review {pr} "{title}" by {author}. Correctness first, then tests. Draft comments I can post.' },
+  { name: 'Fix CI on my PRs', agent: 'codex', trigger: { kind: 'event', event: 'ciFailed' }, repo: null, place: 'prWorktree', permission: 'editFiles', budget: { maxTurns: null, maxCost: 3 }, result: 'pushToPr', prompt: 'CI failed on {pr} ({job}) on {branch}. Find the cause and fix it.' },
   { name: 'Morning digest', trigger: { kind: 'schedule', cron: '0 9 * * 1-5' }, prompt: 'Summarize yesterday: my commits, open PRs waiting on me and tickets assigned to me.' },
-  { name: 'Bump dependencies', agent: 'codex', trigger: { kind: 'schedule', cron: '0 7 * * 1' }, place: 'newWorktree', permission: 'editFiles', budget: { maxTurns: null, maxCost: 2 }, mayPush: true, prompt: 'Update patch and minor dependencies, run the tests, open a draft PR with the changelog links.' },
+  { name: 'Bump dependencies', agent: 'codex', trigger: { kind: 'schedule', cron: '0 7 * * 1' }, place: 'newWorktree', permission: 'editFiles', budget: { maxTurns: null, maxCost: 2 }, result: 'draftPr', prompt: 'Update patch and minor dependencies and run the tests. End with the changelog links of what you bumped.' },
   { name: 'Start tickets assigned to me', trigger: { kind: 'event', event: 'ticketAssigned' }, repo: null, place: 'newWorktree', permission: 'editFiles', budget: { maxTurns: null, maxCost: 5 }, prompt: 'Read {ticket} "{title}". Plan first, then build it with tests. Stop and ask when the ticket is unclear.' },
 ]
 

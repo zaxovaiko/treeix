@@ -58,6 +58,16 @@ test('fixDraft keeps a draft valid when its trigger changes', () => {
   expect(scheduled.place).toBe('root')
 })
 
+test('fixDraft keeps the result valid for the place and comments for PR events', () => {
+  const bump = { ...newRoutine('/p/a'), place: 'newWorktree' as const, result: 'draftPr' as const }
+  expect(fixDraft(bump, '/p/a')).toBe(bump)
+  expect(fixDraft({ ...bump, place: 'root' }, '/p/a').result).toBe('local')
+  expect(fixDraft({ ...bump, place: 'prWorktree' }, '/p/a').result).toBe('local')
+  const review = { ...newRoutine(null), trigger: { kind: 'event', event: 'reviewRequested' } as const, place: 'prWorktree' as const, mayComment: true }
+  expect(fixDraft(review, '/p/a').mayComment).toBe(true)
+  expect(fixDraft({ ...review, trigger: { kind: 'schedule', cron: '0 9 * * *' } }, '/p/a').mayComment).toBe(false)
+})
+
 test('parseAmount: empty is no limit, garbage is NaN', () => {
   expect(parseAmount('')).toBeNull()
   expect(parseAmount(' $2.5 ')).toBe(2.5)

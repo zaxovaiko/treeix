@@ -311,6 +311,7 @@ function RunRow({
 }) {
   const [label, tone] = STATUS[run.status];
   const cost = runCost(run);
+  const pr = run.pr;
   return (
     <div className="srow rtrun">
       <Ki kind={agent} dot={runDot(run)} sm />
@@ -325,8 +326,22 @@ function RunRow({
           {CAUSE[run.cause]} · {whenLabel(run.startedAt ?? run.dueAt)}
           {cost && ` · ${cost}`}
         </div>
+        {run.summary && (
+          <div className="sd trunc" title={run.summary}>
+            {run.summary.trim().split("\n")[0]}
+          </div>
+        )}
       </div>
       <div className="sc">
+        {pr && (
+          <button
+            className="btn sm"
+            title={pr.url}
+            onClick={() => void view.api.openUrl(pr.url)}
+          >
+            PR #{pr.number}
+          </button>
+        )}
         {LIVE.has(run.status) && (
           <button
             className="btn sm"

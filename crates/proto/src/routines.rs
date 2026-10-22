@@ -50,6 +50,20 @@ pub enum RoutinePlace {
     PrWorktree,
 }
 
+/// What a run delivers. The agent only commits; Treeix pushes and opens the PR after it exits cleanly
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RoutineResult {
+    /// Nothing leaves the Mac: commits stay on the run's branch
+    #[default]
+    Local,
+    /// Pushes the branch and opens a draft PR; while it's open, later runs add to it (`NewWorktree` only)
+    DraftPr,
+    /// Pushes to the PR the event is about (`PrWorktree` only)
+    PushToPr,
+}
+
 /// Claude `--permission-mode` (plan / acceptEdits / bypassPermissions) and Codex `--sandbox`
 /// (read-only / workspace-write / danger-full-access)
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -102,8 +116,11 @@ pub struct Routine {
     /// Extra `--allowedTools` patterns, like `Bash(npm test:*)`
     pub allowed_tools: Vec<String>,
     pub budget: Budget,
-    /// May push, open PRs and post comments; off, the prompt says not to and `gh` writes are denied
-    pub may_push: bool,
+    #[serde(default)]
+    pub result: RoutineResult,
+    /// May comment on and review the event's PR; otherwise `gh`/`glab` writes are denied
+    #[serde(default)]
+    pub may_comment: bool,
     pub asleep: WhileAsleep,
     /// Unix ms; ptyd sets it
     pub created_at: u64,
@@ -163,6 +180,23 @@ pub struct RoutineRun {
     pub cost: f64,
     /// Why it failed, was skipped or stopped, like `Stopped at the $5.00 budget`
     pub error: Option<String>,
+    /// The worktree's branch
+    #[serde(default)]
+    pub branch: Option<String>,
+    /// The PR it opened or pushed to
+    #[serde(default)]
+    pub pr: Option<RunPr>,
+    /// The agent's last reply
+    #[serde(default)]
+    pub summary: Option<String>,
+}
+
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunPr {
+    pub number: u32,
+    pub url: String,
 }
 
 #[cfg(test)]

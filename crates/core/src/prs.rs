@@ -839,6 +839,81 @@ pub fn merge_pull_request(
     run("glab", &args, cwd).map(drop)
 }
 
+/// Opens a draft PR (a draft MR on GitLab) of the pushed `branch` into `base`; its number and URL
+pub fn open_draft_pr(
+    repo_path: &str,
+    branch: &str,
+    base: &str,
+    title: &str,
+    body: &str,
+) -> Result<(u32, String), String> {
+    let cwd = Path::new(repo_path);
+    let remote = require_remote(cwd)?;
+    let out = if remote.provider == Provider::Github {
+        let repo = format!("{}/{}", remote.host, remote.slug);
+        run(
+            "gh",
+            &[
+                "pr", "create", "--draft", "-R", &repo, "--head", branch, "--base", base,
+                "--title", title, "--body", body,
+            ],
+            cwd,
+        )?
+    } else {
+        run(
+            "glab",
+            &[
+                "mr",
+                "create",
+                "--draft",
+                "--yes",
+                "--source-branch",
+                branch,
+                "--target-branch",
+                base,
+                "--title",
+                title,
+                "--description",
+                body,
+            ],
+            cwd,
+        )?
+    };
+    created_pr(&out).ok_or_else(|| format!("No PR link in: {}", out.trim()))
+}
+
+/// The link `gh pr create` and `glab mr create` print, like `https://github.com/o/r/pull/12`
+fn created_pr(output: &str) -> Option<(u32, String)> {
+    output.split_whitespace().rev().find_map(|word| {
+        let (_, number) = word
+            .rsplit_once("/pull/")
+            .or_else(|| word.rsplit_once("/merge_requests/"))?;
+        Some((number.trim_end_matches('/').parse().ok()?, word.to_owned()))
+    })
+}
+
+/// One PR of the repo, without review state
+pub fn pull_request(repo_path: &str, number: u32) -> Result<PullRequest, String> {
+    let cwd = Path::new(repo_path);
+    let remote = require_remote(cwd)?;
+    let number = number.to_string();
+    if remote.provider == Provider::Github {
+        let repo = format!("{}/{}", remote.host, remote.slug);
+        let view = run_json(
+            "gh",
+            &["pr", "view", &number, "-R", &repo, "--json", GITHUB_FIELDS],
+            cwd,
+        )?;
+        return Ok(to_github_pull_request(&view, repo_path));
+    }
+    let request = run_json(
+        "glab",
+        &["api", &format!("projects/:id/merge_requests/{number}")],
+        cwd,
+    )?;
+    Ok(to_gitlab_pull_request(&request, repo_path))
+}
+
 /// Accounts in `gh auth status` / `glab auth status` output: "Logged in to <host> account <user>" or "... as <user>"
 pub fn signed_in_accounts(output: &str) -> Vec<String> {
     let mut accounts: Vec<String> = Vec::new();
@@ -892,6 +967,18 @@ pub fn pr_providers() -> Vec<ProviderStatus> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn created_prs_are_read_from_the_printed_link() {
+        let gh = "Creating draft pull request for routine/x into main\n\nhttps://github.com/o/r/pull/12\n";
+        assert_eq!(
+            created_pr(gh),
+            Some((12, "https://github.com/o/r/pull/12".into()))
+        );
+        let glab = "https://gitlab.com/g/r/-/merge_requests/7\n";
+        assert_eq!(created_pr(glab).map(|(n, _)| n), Some(7));
+        assert_eq!(created_pr("Warning: 2 uncommitted changes"), None);
+    }
 
     fn remote(provider: Provider, host: &str, slug: &str) -> Option<Remote> {
         Some(Remote {

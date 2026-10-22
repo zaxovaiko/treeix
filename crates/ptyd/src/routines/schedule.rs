@@ -90,7 +90,7 @@ pub fn due(routines: &[Routine], last_ms: u64, now_ms: u64, asleep: bool) -> Vec
 pub(super) mod tests {
     use super::*;
     use treeix_proto::chat::ChatAgent;
-    use treeix_proto::routines::{Budget, RoutinePermission, RoutinePlace};
+    use treeix_proto::routines::{Budget, RoutinePermission, RoutinePlace, RoutineResult};
 
     pub const MINUTE: u64 = 60_000;
     /// 2026-10-22 09:00 UTC, a quarter hour in every time zone
@@ -109,7 +109,8 @@ pub(super) mod tests {
             permission: RoutinePermission::ReadOnly,
             allowed_tools: vec![],
             budget: Budget::default(),
-            may_push: false,
+            result: RoutineResult::Local,
+            may_comment: false,
             asleep,
             created_at: 0,
         }

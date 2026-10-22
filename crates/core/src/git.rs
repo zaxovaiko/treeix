@@ -867,6 +867,42 @@ pub fn delete_branch(repo_path: &str, name: &str, force: bool) -> Result<()> {
     .map(drop)
 }
 
+/// The default branch's name and the subjects of the commits on HEAD it lacks, oldest first
+pub fn commits_ahead(path: &str) -> Result<(String, Vec<String>)> {
+    let path = Path::new(path);
+    let (name, base) = base_of(path).ok_or("The repository has no main, master or dev branch")?;
+    let log = git(
+        path,
+        ["log", "--reverse", "--format=%s", &format!("{base}..HEAD")],
+    )?;
+    Ok((name, log.lines().map(str::to_owned).collect()))
+}
+
+/// Fast-forwards HEAD (a branch or detached) to `branch` on origin
+pub fn catch_up(path: &str, branch: &str) -> Result<()> {
+    refuse_option("branch name", branch)?;
+    let path = Path::new(path);
+    git(path, ["fetch", "origin", branch])?;
+    git(path, ["merge", "--ff-only", "FETCH_HEAD"]).map(drop)
+}
+
+/// Commits every change, untracked files too
+pub fn commit_all(path: &str, message: &str) -> Result<()> {
+    let path = Path::new(path);
+    git(path, ["add", "--all"])?;
+    git(path, ["commit", "--quiet", "--message", message]).map(drop)
+}
+
+/// Pushes HEAD to `branch` on origin
+pub fn push(path: &str, branch: &str) -> Result<()> {
+    refuse_option("branch name", branch)?;
+    git(
+        Path::new(path),
+        ["push", "origin", &format!("HEAD:refs/heads/{branch}")],
+    )
+    .map(drop)
+}
+
 /// Creations in flight, by repository and branch or PR: a second call joins the first
 type InFlight = Arc<OnceLock<Result<String>>>;
 static ADDING: LazyLock<Mutex<HashMap<String, InFlight>>> = LazyLock::new(Default::default);

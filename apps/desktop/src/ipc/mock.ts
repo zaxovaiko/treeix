@@ -540,6 +540,7 @@ const PRS: PullRequest[] = (
     [TREEIX, 'github', 405, 'feat(deps): module graph follows tsconfig paths and exports', 'mkowalski', 24, ['passed', 5, 5], 'requested', 1204, 388, 'feat/deps-graph', '7d2c9e1', {}],
     [TREEIX, 'github', 401, 'fix(hotkey): the hotkey window leaves focus on the app below', 'you', 72, ['passed', 5, 5], null, 9, 3, 'fix/hotkey-focus', 'e02d5c1', { state: 'merged' }],
     [TREEIX, 'github', 398, 'docs: plugin authoring guide', 'anna.n', 96, ['passed', 5, 5], 'requested', 214, 12, 'docs/plugins', 'b41e0aa', {}],
+    [BETFEEL, 'gitlab', 236, 'chore(deps): bump zod, vitest and 5 more', 'you', 4, ['passed', 4, 4], 'yours', 48, 41, 'routine/weekly-dependency-bumps-20261022-0700', 'f19a2c4', { draft: true }],
     [BETFEEL, 'gitlab', 231, 'Ledger idempotency keys', 'you', 3, ['failed', 4, 4], 'yours', 312, 40, 'feat/bonus-ledger', 'c7a19f0', { changesRequested: true }],
   ] as const
 ).map(([repoPath, provider, number, title, author, hours, [status, done, total], review, additions, deletions, sourceBranch, head, extra]) => {
