@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import type { Api, BrowserEntry, BrowserProfile, SessionPort } from '../../ipc/api'
+import type { Api, BrowserEntry, BrowserProfile } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
 import { IN_TAURI } from '../../lib/native'
+import { usePorts } from '../agents/ports'
 import { Group, Row, Seg, Select, Switch } from '../../pages/settings/controls'
 import type { SectionProps } from '../../pages/settings/sections'
 import type { ShellView } from '../../shell/Shell'
@@ -65,14 +66,8 @@ const hostOf = (url: string) => {
 
 /** Live localhost ports while the start page shows, and the place's dev server command */
 function StartPage({ view, folder, onOpen }: { view: ShellView; folder: string; onOpen: (input: string) => void }) {
-  const [ports, setPorts] = useState<SessionPort[]>([])
+  const ports = usePorts(view.api, true)
   const [dev, setDev] = useState<string | null>(null)
-  useEffect(() => {
-    const load = () => void view.api.sessionPorts().then(setPorts, () => undefined)
-    load()
-    const timer = setInterval(load, 3000)
-    return () => clearInterval(timer)
-  }, [view.api])
   useEffect(() => void view.api.browserDevCommand(folder).then(setDev, () => setDev(null)), [view.api, folder])
 
   const runDev = async (command: string) => {

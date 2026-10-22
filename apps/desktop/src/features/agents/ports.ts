@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type { Api, SessionPort } from '../../ipc/api'
 
-// Ports the sessions listen on, polled only while something shows them
+// Ports the sessions listen on, polled only while something shows them and the window is visible
 
 const POLL_MS = 5000
 const NONE: SessionPort[] = []
@@ -20,7 +20,7 @@ function subscribe(api: Api, listener: () => void) {
   listeners.add(listener)
   if (!timer) {
     void refreshPorts(api)
-    timer = setInterval(() => void refreshPorts(api), POLL_MS)
+    timer = setInterval(() => document.visibilityState === 'visible' && void refreshPorts(api), POLL_MS)
   }
   return () => {
     listeners.delete(listener)
