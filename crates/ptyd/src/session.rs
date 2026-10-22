@@ -140,6 +140,14 @@ impl Dimensions for Size {
     }
 }
 
+/// Agents animate a status glyph before their title (Claude's ✳ ◐ ◑ about once a second while busy). The tab has
+/// its own dot, so the glyph goes, and with it a title event and a state write per frame
+fn without_status_glyph(title: &str) -> &str {
+    title
+        .trim_start_matches(|c: char| !c.is_ascii() && !c.is_alphanumeric())
+        .trim_start()
+}
+
 fn size(cols: u16, rows: u16) -> Size {
     Size {
         cols: cols.max(2) as usize,
@@ -343,7 +351,7 @@ impl Session {
             match event {
                 TermEvent::Title(title) => {
                     self.has_title.store(true, Ordering::Relaxed);
-                    self.set_title(daemon, title);
+                    self.set_title(daemon, without_status_glyph(&title));
                 }
                 TermEvent::ResetTitle => self.has_title.store(false, Ordering::Relaxed),
                 TermEvent::Bell => daemon.broadcast(Event::Bell {
@@ -367,14 +375,14 @@ impl Session {
         }
     }
 
-    fn set_title(&self, daemon: &Daemon, title: String) {
+    fn set_title(&self, daemon: &Daemon, title: &str) {
         let mut info = lock(&self.info);
         if info.title != title {
-            info.title.clone_from(&title);
+            title.clone_into(&mut info.title);
             drop(info);
             daemon.broadcast(Event::Title {
                 session: self.id.clone(),
-                title,
+                title: title.to_owned(),
             });
             daemon.mark_state_dirty();
         }
@@ -628,7 +636,7 @@ impl Session {
         if !self.has_title.load(Ordering::Relaxed)
             && let Some(name) = procinfo::name(foreground)
         {
-            self.set_title(daemon, name);
+            self.set_title(daemon, &name);
         }
     }
 
@@ -798,4 +806,21 @@ fn login_shell() -> String {
                 .then(|| "/bin/zsh".to_owned())
         })
         .unwrap_or_else(|| "/bin/sh".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::without_status_glyph;
+
+    #[test]
+    fn drops_agent_status_glyphs_only() {
+        assert_eq!(
+            without_status_glyph("◐ Counting from 1 to 40"),
+            "Counting from 1 to 40"
+        );
+        assert_eq!(without_status_glyph("✳ Claude Code"), "Claude Code");
+        assert_eq!(without_status_glyph("~/src: vim"), "~/src: vim");
+        assert_eq!(without_status_glyph("Ünïcode ✳"), "Ünïcode ✳");
+        assert_eq!(without_status_glyph("Привіт"), "Привіт");
+    }
 }
