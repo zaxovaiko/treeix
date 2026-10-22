@@ -483,6 +483,25 @@ section {
 }
 
 /* screenshots */
+.showcase {
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  view-timeline: --showcase;
+}
+/* a soft green light behind the screenshots, drifting slower than the page */
+.showcase::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 50%;
+  width: min(1200px, 130vw);
+  aspect-ratio: 1;
+  translate: -50% 0;
+  background: radial-gradient(closest-side, rgb(110 231 135 / 7%), transparent);
+  pointer-events: none;
+}
 .showcase h2 {
   max-width: 20ch;
 }
@@ -580,6 +599,131 @@ section {
   font-size: 16px;
 }
 
+/* gallery: screenshots in a row that snaps one at a time, bleeding past the page edges */
+.gallery {
+  --bleed: max(var(--gutter), (100vw - 1320px) / 2);
+  margin-top: clamp(72px, 10vw, 140px);
+}
+.gallery-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.gallery-nav {
+  display: flex;
+  gap: 10px;
+}
+.gallery-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--slab);
+  color: var(--paper);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+.gallery-btn:hover:not(:disabled) {
+  background: var(--slab-2);
+}
+.gallery-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.gallery-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gallery-track {
+  display: flex;
+  gap: clamp(16px, 2vw, 28px);
+  margin: 28px calc(var(--bleed) * -1) 0;
+  padding: 0 var(--bleed);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--bleed);
+  scrollbar-width: none;
+  list-style: none;
+}
+.gallery-track::-webkit-scrollbar {
+  display: none;
+}
+.slide {
+  flex: 0 0 min(86%, 1120px);
+  scroll-snap-align: start;
+}
+.slide figure {
+  margin: 0;
+}
+.slide img,
+.phone-stage {
+  width: 100%;
+  aspect-ratio: 3840 / 2496;
+  border-radius: 12px;
+}
+.phone-stage {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(closest-side, rgb(110 231 135 / 14%), transparent) var(--slab);
+}
+/* sized by width: a % height of the stage would let the tall image stretch it */
+.slide .phone-stage img {
+  width: 27%;
+  height: auto;
+  aspect-ratio: 1170 / 2532;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+}
+.slide figcaption {
+  max-width: 62ch;
+  margin-top: 18px;
+  font-size: 16px;
+}
+.slide figcaption b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--paper);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.gallery-dots {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 22px;
+}
+.gallery-dots button {
+  width: 24px;
+  height: 24px;
+  padding: 8px;
+  border: 0;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 22%);
+  background-clip: content-box;
+  cursor: pointer;
+  transition:
+    width 0.25s ease,
+    background-color 0.25s ease;
+}
+.gallery-dots button[aria-current='true'] {
+  width: 44px;
+  background-color: var(--add);
+}
+
 /* open source */
 .open-grid {
   display: grid;
@@ -648,7 +792,7 @@ section {
   color: var(--mute);
 }
 .faq details[open] summary::after {
-  content: '–';
+  content: '−';
   color: var(--add);
 }
 .faq details p {
@@ -840,6 +984,86 @@ section {
   }
   .nav-links {
     display: none;
+  }
+}
+
+/* scroll-driven motion: decorative, so browsers without it just show everything in place */
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    /* the hero window lies back, then stands up as it scrolls in */
+    .hero-shot img {
+      transform-origin: 50% 0;
+      animation: stand-up linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 45%;
+    }
+    @keyframes stand-up {
+      from {
+        transform: perspective(1600px) rotateX(18deg) scale(0.92);
+      }
+      to {
+        transform: perspective(1600px) rotateX(0) scale(1);
+      }
+    }
+
+    .showcase::before {
+      animation: drift linear both;
+      animation-timeline: --showcase;
+      animation-range: cover;
+    }
+    @keyframes drift {
+      from {
+        transform: translateY(-25%);
+      }
+      to {
+        transform: translateY(220%);
+      }
+    }
+
+    .shot figure {
+      animation: rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+    @keyframes rise-in {
+      from {
+        opacity: 0;
+        transform: translateY(96px) scale(0.95);
+      }
+    }
+
+    .features > div,
+    .compare li {
+      animation: fade-up linear both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 90%;
+    }
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(28px);
+      }
+    }
+
+    /* the slide in front is full size, the ones peeking in at the sides sit back;
+       on the figure, because a transform on the snap target itself shifts where it snaps */
+    .slide figure {
+      animation: slide-focus linear both;
+      animation-timeline: view(inline);
+      animation-range: cover;
+    }
+    @keyframes slide-focus {
+      0%,
+      100% {
+        opacity: 0.4;
+        transform: scale(0.94);
+      }
+      40%,
+      65% {
+        opacity: 1;
+        transform: none;
+      }
+    }
   }
 }
 

@@ -15,8 +15,8 @@ branch names, ticket keys and file paths leak.
 cd apps/desktop && bun run dev    # http://127.0.0.1:1420, no daemon, no home folder read
 ```
 
-Open it in a browser with a Mac user agent (the shortcuts and renderer follow the platform) and use a 1000x653 viewport at device scale
-factor 2, which gives the 2000x1307 export below. The `ui-verify` skill covers driving the page. `?seed=empty` starts with no sessions.
+Open it in a browser with a Mac user agent (the shortcuts and renderer follow the platform) and use a 1280x832 viewport at device scale
+factor 3, which gives the 3840x2496 export below. `phone.webp` is 390x844 at factor 3. The `ui-verify` skill covers driving the page. `?seed=empty` starts with no sessions.
 Change what the mock shows in `src/ipc/mock*.ts`, not in a screenshot.
 
 ## What each asset shows
@@ -28,16 +28,22 @@ Change what the mock shows in `src/ipc/mock*.ts`, not in a screenshot.
 | `browser.webp` | Terminal | A local app open in the browser pane beside the session that built it, console and network strip showing |
 | `dependencies.webp` | Module graph | A monorepo's packages and the imports between them, a cycle or an unresolved import marked |
 | `drawer.webp` | Any | The agent comments drawer holding three queued line comments |
+| `tickets.webp` | Open worktree | Your tickets listing Jira and Notion tickets (switch both on in Settings, any Notion token) |
+| `prs.webp` | Pull requests | GitHub and GitLab pull requests with CI states and tags |
+| `routines.webp` | Routines | Routines with their triggers and recent runs |
+| `chat.webp` | Chat | A Claude chat with folded tool calls and a diff |
+| `settings.webp` | Settings, Features | The feature switches, most on, Dictation and Meeting recording off |
+| `phone.webp` | Phone page | The phone page served by the daemon (`crates/ptyd/src/remote/web`) |
 
 Shoot at the same viewport for all of them, the landing lays them out at a single width. The alt text in
 `apps/landing/index.html` describes the intended moment - match it, or update it.
 
 ## Save them
 
-Capture at 2000x1307, convert to WebP, and keep the filenames. Anything else needs a matching edit in `apps/landing/index.html`.
+Capture at 3840x2496, convert to WebP, and keep the filenames. Anything else needs a matching edit in `apps/landing/index.html`.
 
 ```sh
-cwebp -q 82 shot.png -o apps/landing/assets/<name>.webp
+cwebp -q 85 shot.png -o apps/landing/assets/<name>.webp
 ```
 
 `og.png` is different: it comes from `marketing/og.html`, not the app. Re-render it whenever the landing's look changes, or the link
