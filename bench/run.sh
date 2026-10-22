@@ -29,7 +29,7 @@ ptyd() {
 # (2) Ghostty: wall time of cat inside a fresh Ghostty window, median of RUNS. Ghostty reads the pty on its IO thread
 # and parses as it reads, so cat's time is its parse throughput
 ghostty() {
-  app=/Applications/Ghostty.app
+  app=${GHOSTTY_APP:-/Applications/Ghostty.app}
   [ -d "$app" ] || { skipped "Ghostty not installed (brew install --cask ghostty)"; return; }
   times=""
   for run in $(seq 1 "$RUNS"); do
@@ -67,7 +67,7 @@ chmod +x "$DIR/timed-cat.sh"
 echo "ptyd..." >&2; p=$(ptyd)
 echo "ghostty..." >&2; g=$(ghostty)
 echo "electron..." >&2; e=$(electron)
-echo "reveal..." >&2; r=$(node bench/reveal.mts 2>/dev/null | tail -1)
+echo "frontend..." >&2; r=$(node bench/reveal.mts 2>/dev/null | tail -1)
 mkdir -p bench/results
 cat > "$out" <<EOF
 {
@@ -77,8 +77,8 @@ cat > "$out" <<EOF
   "ptyd": ${p:-null},
   "ghostty": ${g:-null},
   "electron": ${e:-null},
-  "revealFrontendOnly": ${r:-null},
-  "tauri": {"pending": "run await __treeixBench() in the app, see bench/README.md"}
+  "frontendOnly": ${r:-null},
+  "tauri": {"pending": "TREEIX_AUTORUN=bench in a release build, see bench/README.md"}
 }
 EOF
 echo "$out"

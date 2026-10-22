@@ -10,3 +10,4 @@ Short records of significant design decisions: the context, what was decided, an
 - [6. AI Hub: personas and workflows](0006-ai-hub-personas-and-workflows.md) - Accepted
 - [7. Voice dictation](0007-voice-dictation-and-transcription.md) - Accepted
 - [8. Plugin events and tool steps](0008-plugin-events-and-tool-steps.md) - Accepted
+- [9. Terminal stack for Treeix Next](0009-terminal-stack.md) - Accepted
