@@ -1,72 +1,72 @@
 # Treeix
 
-> Treeix is a free, open source (Apache 2.0) AI workspace for Mac. Your AI workspace: everything you use daily, in one app. It finds every git worktree on your Mac, shows what each AI coding agent (Claude Code, Codex or any CLI agent) changed, and sends your line comments back to the agent session as its next prompt. Pull requests, Jira tickets, Confluence pages, agent terminals, a browser and .env files sit in the same window.
+> Treeix is a free, open source (Apache 2.0) AI workspace for Mac and Linux. Your AI workspace: everything you use daily, in one app. Agent terminals run in a background daemon and keep going when you quit the app. Treeix shows what each AI coding agent (Claude Code, Codex or any CLI agent) changed in its worktree, and sends your line comments back to the agent session as its next prompt. Pull requests, tickets, a chat view and a browser pane sit in the same window.
 
 AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is usually spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, the review comments, the pull request and the agent session that produced it on a single screen.
 
-- Platform: macOS 14 or later, Apple silicon. Signed and notarized by Apple. Electron app.
-- Price: free. No account, no telemetry, no Treeix server. Code stays on the Mac.
+- Platform: macOS 13.3 or later as one universal build for Apple silicon and Intel, signed and notarized by Apple. Linux: an x86_64 AppImage on GitHub releases. A built-in updater. Dictation and meeting recording need Apple silicon. A native app: Rust and Tauri, with a React interface.
+- Price: free. No account, no telemetry, no Treeix server.
 - License: Apache 2.0. Source: https://github.com/zaxovaiko/treeix
-- Works with: Claude Code, OpenAI Codex, any shell or CLI agent, GitHub (gh), GitLab (glab), Jira and Confluence (Atlassian CLI, acli). Each integration is optional.
+- Works with: Claude Code, OpenAI Codex, any shell or CLI agent, GitHub (gh), GitLab (glab), Jira (Atlassian CLI, acli), Notion (personal access token). Each integration is optional.
 - Made by Dyvertex (https://dyvertex.com), a software house that builds and rescues web apps.
 
 ## How it works
 
-1. Pick a worktree: every repository and worktree under the home folder shows up in one sidebar, with a count of changed files and the diff against the base branch, split or unified.
+1. Pick a worktree: every repository and worktree shows up in one sidebar, with a count of changed files and the diff against the base branch, split or unified.
 2. Drag across the lines that need another pass and write a note. Notes keep the file and the line range and wait in a drawer.
 3. Send the queue: the notes go to the Claude Code or Codex session running in that worktree as its next prompt. Only references are sent, the code itself is not copied into the prompt.
 
 ## Features
 
-- AI Hub: your own agents (a name, a model and instructions on Claude Code, Codex, OpenRouter or Ollama) chained into workflows with conditions, approvals, cron schedules, events from other plugins and tool steps that call any MCP tool Treeix serves.
-- Ship tickets: a workflow watches Jira or Notion and takes each new item to a pull request. The agent first posts a plan on the ticket and in Treeix and waits; reply "approve" with notes to build it, or say what to change and it rewrites the plan. Comments on the ticket are read while it builds.
-- Review step: a judge agent scores a step's work against your rubric and sends it back to fix the issues until it passes.
-- Evals: saved cases test agents and workflows by text, pattern, a command or a judge's score, on demand or nightly, with a warning when a suite gets worse.
-- Meetings (off by default): Meet, Slack huddles, Zoom and Teams record on their own and are transcribed with speakers on the Mac. A workflow turns the transcript into notes and tasks.
-- Slack and Notion (off by default): Slack messages arrive in batches for workflows; workflow steps and agents write pages to any Notion database.
-- Dependency graph and Drizzle schema diagrams of a worktree, laid out to fit, left to right, top to bottom or as a grid with the fewest crossings.
-- Dictation: hold a key, speak, and the text lands in any app.
-- Agent groups: one group per agent holding its worktree, terminal panes and plan. A badge appears the moment a session waits for an answer.
-- Sessions survive reloads. Closed sessions stay in History; reopening one resumes the same agent conversation.
-- Chat view for Claude, Codex and any agent with a chat command, next to their terminals.
-- Pull requests from GitHub and GitLab with review threads, viewed files, conflicts and CI state. A reviewer's comment becomes an agent task with one click.
-- Jira work items grouped by whose move it is (yours, the reviewer's, blocked), a worktree per ticket, and Confluence pages beside the branch.
-- Built-in Chromium browser with DevTools, console and network capture. Comments on page elements go to the agent like comments on code.
-- Built-in editor for quick fixes; every save keeps a snapshot.
-- Env tab: every .env file across worktrees, which variables are secret, public or exposed to the browser, what is missing or differs from main.
-- Claude and Codex 5-hour and weekly usage limits in the title bar.
-- Usage tab: tokens and estimated cost of every Claude and Codex session, per day, model, project and session, for today, this week, 7 or 30 days, this month or all time.
-- Claude plans next to the code they describe.
-- Markdown with foldable headings, mermaid diagrams and images from private uploads.
-- Themes after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Nord, Dracula and Solarized.
-- Keeps the Mac awake while an agent works.
-- Global hotkey brings the window to the front. Keyboard first.
-- Every feature is a plugin that can be switched off in Settings; a disabled plugin does not load its code.
+- Sessions that keep running: the treeix-ptyd daemon owns every shell and agent session. Quit Treeix, open it again, and each one is still there with its scrollback. Sidebar or horizontal tabs, recursive splits, sessions grouped by repo and worktree, a quick terminal on a global shortcut, and notifications. A status dot on Claude Code and Codex sessions says working, waiting for you or done.
+- Worktrees and review: an Explorer and Changes with split or unified diffs. Line comments queue in a drawer and go to the Claude Code or Codex session in that worktree as its next prompt.
+- Session history: closed sessions stay in History; reopening one resumes the same agent conversation.
+- Open worktree: start from a branch, a pull request or a ticket from Your tickets, and copy the .env files across.
+- Pull requests panel for GitHub and GitLab through gh and glab: list, check out, open, merge, and CI checks.
+- Tickets: Jira through acli and Notion through a personal access token. Both are off until switched on in Settings.
+- Routines: an agent run on a schedule, on a GitHub or Jira event, or on a local webhook (127.0.0.1 only). They run in the repo, in a fresh worktree or in the pull request's worktree, with a turn budget and permissions. The daemon runs them, so they fire with Treeix closed.
+- Chat view for Claude and Codex next to the terminal, kept across restarts. It needs npx.
+- Race: one prompt to several agents, a worktree each.
+- MCP server: agents can open files, panes and worktrees in Treeix, and drive the browser pane.
+- Browser pane: built on the system WebView instead of Chromium, with a console and network view. An error can go to the agent in one click. Agents can open pages, read them, click, type and take screenshots; Settings has a switch for that.
+- Plans: Claude Code's plans as a pane, with mermaid diagrams and line comments.
+- Module graph: a repo's packages and the imports between them, with import cycles and unresolved imports marked.
+- Editor and search: a Monaco editor with diffs, find in files and file history.
+- Ports: the ports your sessions listen on, with open in the browser pane and kill.
+- Usage limits: Claude and Codex 5-hour and weekly limits in the title bar, and tokens per agent, model and project in its popover.
+- Dictation (off by default, Apple silicon): hold a hotkey, speak, and the text lands at the cursor. Recognised on the Mac.
+- Meeting recording (off by default, Apple silicon): record a call into a transcript and a note, on the Mac.
+- Command palette for commands, worktrees, sessions, files, pull requests and settings.
+- Themes: 14 dark and 8 light, after Vercel, Claude, Apple, Xcode, VS Code, GitHub, Solarized, Nord and Dracula.
+- Keeps the machine awake while an agent works.
+- Most features can be switched off in Settings; a feature that is off does no work.
 
 ## FAQ
 
-- Does my code leave my machine? No. Treeix runs git, gh, glab, claude and codex locally. There is no Treeix server.
-- Which agents does it work with? Claude Code and Codex, each in its own terminal pane, plus plain shell sessions.
-- Do I have to use git worktrees? No. Any repository under the home folder shows up. Worktrees make one agent per branch easy.
-- What do I need installed? Git. Optional: gh or glab for pull requests, claude or codex for agent sessions, acli for Jira and Confluence.
-- Is it really free? Yes, free to download and open source under Apache 2.0.
+- Does my code leave my machine? Not through Treeix. It runs git, gh, glab, claude and codex locally and has no server. What you type into an agent goes to that agent's vendor, as in your own terminal.
+- Which agents does it work with? Claude Code and Codex, in a terminal pane or as a chat, with a status dot. Other CLI agents run in a plain shell session.
+- What happens when I quit Treeix? Shells and agent sessions keep running in the treeix-ptyd daemon and reattach with their scrollback when you reopen it. Routines fire with Treeix closed.
+- Do I have to use git worktrees? No. A plain repository or a plain folder works. Worktrees make one agent per branch easy.
+- What do I need installed? Git. Optional: gh or glab for pull requests, claude or codex for agent sessions, acli for Jira, npx for the chat view. Notion takes a personal access token.
+- Which systems does it run on? macOS 13.3 or later (Apple silicon and Intel) and Linux x86_64 (AppImage).
+- Is it free? Yes, free to download and open source under Apache 2.0.
 
 ## Roadmap
 
-- Mobile app, to keep an eye on your agents away from the Mac.
+- A mobile app, to keep an eye on your agents away from the Mac.
 - A design pass over every screen.
-- History archive: past agent sessions kept, searchable and one click from reopening.
-- Contributions welcome: https://github.com/zaxovaiko/treeix/blob/main/CONTRIBUTING.md
+- A history archive, so past agent sessions are kept, searchable and one click from reopening.
+- Contributions are welcome, see https://github.com/zaxovaiko/treeix/blob/main/CONTRIBUTING.md
 
 ## Links
 
 - [Video tour](https://youtu.be/Un4AvXgqtAM): the whole app in 80 seconds
-- [Download the DMG](https://treeix.dyvertex.com/download): latest release for Apple silicon
+- [Download the DMG](https://treeix.dyvertex.com/download): latest release, universal build for macOS 13.3 or later
+- [Linux AppImage](https://github.com/zaxovaiko/treeix/releases/latest): x86_64, from the latest release
 - [Source code on GitHub](https://github.com/zaxovaiko/treeix): README, issues, discussions
 - [Releases and changelog](https://github.com/zaxovaiko/treeix/releases)
-- [Plugin docs](https://github.com/zaxovaiko/treeix/blob/main/packages/README.md): how to write a plugin
 - [Architecture](https://github.com/zaxovaiko/treeix/blob/main/docs/architecture.md)
-- [llms-full.txt](https://treeix.dyvertex.com/llms-full.txt): this file plus every plugin and the plugin guide
+- [llms-full.txt](https://treeix.dyvertex.com/llms-full.txt): this file plus the architecture notes
 
 ## Optional
 

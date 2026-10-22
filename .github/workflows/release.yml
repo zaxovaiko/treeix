@@ -1,11 +1,11 @@
 name: Release
 
-# Every push to main that touches the app ships a patch release. The tag is created by the release itself,
+# Every push to main that touches the app ships a release. The tag is created by the release itself,
 # so tags don't trigger this workflow, and pushes made with GITHUB_TOKEN never trigger workflows at all
 on:
   push:
     branches: [main]
-    paths-ignore: ['apps/landing/**', 'docs/**', 'marketing/**', '.claude/**', '**.md', 'apps/next/**', 'crates/**', 'bench/**', 'Cargo.*', 'rust-toolchain.toml']
+    paths: ['apps/desktop/**', 'crates/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '!**.md']
 
 permissions:
   contents: write
@@ -14,6 +14,11 @@ permissions:
 concurrency:
   group: release
   cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # The frontend build (Monaco, Shiki grammars, Mermaid) needs more heap than Node's default
+  NODE_OPTIONS: --max-old-space-size=4096
 
 jobs:
   # Picks the version and opens the release as a draft; the builds upload into it and `publish` makes it public
@@ -26,20 +31,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-
-      # A version bumped by hand in package.json (a minor) ships as is; a breaking commit since the latest tag
-      # (feat!:, BREAKING CHANGE:) ships the next major; otherwise the patch after the latest tag. The bump lives
-      # only in this build, main is never committed to
+      # A version set by hand in package.json above the latest tag (a minor) ships as is; a lower one is ignored.
+      # Otherwise a breaking commit since the latest tag (feat!:, BREAKING CHANGE:) ships the next major, and anything
+      # else the patch after the latest tag. The bump lives only in this build, main is never committed to
       - name: Pick the version and write the notes
         id: pick
         run: |
-          pinned=$(bun --print "require('./apps/desktop/package.json').version")
+          pinned=$(jq -r .version apps/desktop/package.json)
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
           notes="$RUNNER_TEMP/notes.md"
           sh apps/desktop/scripts/release-notes.sh "${latest:+$latest..}HEAD" > "$notes"
           IFS=. read -r major minor patch <<< "${latest#v}"
-          if [ -z "$(git tag -l "v$pinned")" ]; then
+          if [ -z "$(git tag -l "v$pinned")" ] && [ "$(printf '%s\n' "${latest#v}" "$pinned" | sort -V | tail -1)" = "$pinned" ]; then
             version="$pinned"
           elif grep -q '^## Breaking' "$notes"; then
             version="$((major + 1)).0.0"
@@ -51,8 +54,8 @@ jobs:
           echo "Releasing v$version"
           cat "$notes"
 
-      # A draft until every file is up: installed copies see the release only once latest-mac.yml and
-      # latest-linux.yml are there. The tag is created on this commit when the draft is published
+      # A draft until every file is up: installed copies see the release only once latest.json is there.
+      # The tag is created on this commit when the draft is published
       - name: Open the draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -61,55 +64,62 @@ jobs:
           gh release view "$TAG" > /dev/null 2>&1 ||
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
-  dmg:
+  # One universal app (Apple silicon and Intel), signed, notarized and stapled, as Treeix.dmg and the updater bundle
+  macos:
     needs: version
-    # Apple silicon, which is what the DMG targets, and Xcode 26 for the Icon Composer icon actool 15 cannot read
     runs-on: macos-26
-    # The renderer build (Monaco, Shiki grammars, Mermaid) peaks around 2.4 GB of heap, past Node's default on this runner
     env:
-      NODE_OPTIONS: --max-old-space-size=4096
       TAG: ${{ needs.version.outputs.tag }}
+      TARGET: universal-apple-darwin
+    outputs:
+      sig: ${{ steps.upload.outputs.sig }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
-      # The bump lives only in this build, main is never committed to
+      - name: Rust for both architectures
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      # tauri.conf.json takes its version from package.json; the bump lives only in this build
       - run: npm version --no-git-tag-version --allow-same-version --prefix apps/desktop "${TAG#v}" > /dev/null
 
-      - run: bun install
+      - run: bun install --frozen-lockfile
+        working-directory: apps/desktop
 
-      - run: bun run typecheck
-      - run: bun test
-
-      # The dictation and meetings helpers, Swift binaries shipped unpacked beside the asar. A cold build
-      # (FluidAudio in release) takes ~4 minutes, so the binaries are reused until the Swift sources change.
+      # The dictation and meetings helpers (Swift, FluidAudio). A cold universal build takes minutes, so the
+      # binaries are reused until the Swift sources change
       - uses: actions/cache@v4
         id: voice
         with:
-          path: apps/desktop/native/voice/bin
-          key: voice-${{ runner.os }}-${{ hashFiles('apps/desktop/native/voice/Package.*', 'apps/desktop/native/voice/Sources/**') }}
+          path: |
+            apps/desktop/src-tauri/binaries/treeix-voice-universal-apple-darwin
+            apps/desktop/src-tauri/binaries/treeix-meetings-universal-apple-darwin
+          key: voice-${{ hashFiles('apps/desktop/native/voice/Package.*', 'apps/desktop/native/voice/Sources/**') }}
       - if: steps.voice.outputs.cache-hit != 'true'
-        run: bun run --cwd apps/desktop build:voice
+        run: sh apps/desktop/scripts/build-voice.sh release
 
-      # Signed builds are the ones the app can update itself into: macOS only replaces a build whose
-      # Developer ID signature matches. Without the secrets this still ships a DMG, just one people install by hand.
-      - name: Check for signing secrets
-        id: signing
-        env:
-          CERT: ${{ secrets.MAC_CERT_P12 }}
-          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+      # tauri bundles externalBin as binaries/<name>-<target>; build-ptyd.sh builds the host arch only, and a
+      # universal app takes one fat binary
+      - name: Universal treeix-ptyd sidecar
         run: |
-          if [ -n "$CERT" ] && [ -n "$API_KEY" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else echo "signed=false" >> "$GITHUB_OUTPUT"; fi
+          for arch in aarch64 x86_64; do cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$arch-apple-darwin"; done
+          lipo -create -output "apps/desktop/src-tauri/binaries/treeix-ptyd-$TARGET" \
+            target/aarch64-apple-darwin/release/treeix-ptyd target/x86_64-apple-darwin/release/treeix-ptyd
 
-      # electron-builder's own CSC_LINK import is broken: it creates the keychain with one password and then
-      # unlocks it with the certificate's (macCodeSign.js, set-key-partition-list), so the import always fails.
-      # Importing here and letting it discover the identity avoids that entirely.
+      # Tauri signs with APPLE_SIGNING_IDENTITY and notarizes with the API key (its APPLE_API_KEY is the key id,
+      # APPLE_API_KEY_PATH the .p8)
       - name: Import the signing certificate
-        if: steps.signing.outputs.signed == 'true'
         env:
           CERT_P12: ${{ secrets.MAC_CERT_P12 }}
           CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           keychain="$RUNNER_TEMP/signing.keychain-db"
           password=$(openssl rand -base64 24)
@@ -119,71 +129,129 @@ jobs:
           security unlock-keychain -p "$password" "$keychain"
           security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          # shellcheck disable=SC2046 # one argument per keychain already in the search list
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | sed -e 's/^ *"//' -e 's/"$//')
           rm -f "$RUNNER_TEMP/certificate.p12"
-          security find-identity -v -p codesigning "$keychain"
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+          [ -n "$identity" ] || { echo "No Developer ID Application identity in MAC_CERT_P12"; exit 1; }
+          printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          {
+            echo "APPLE_SIGNING_IDENTITY=$identity"
+            echo "APPLE_API_KEY=$APPLE_API_KEY_ID"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
+          } >> "$GITHUB_ENV"
 
-      # An empty APPLE_API_KEY is what tells electron-builder to skip notarization. Only the signed build takes the
-      # passkey entitlement and its provisioning profile: macOS kills an ad-hoc build that claims it at launch.
+      # The sidecars are already built, so only the frontend is. Tauri signs the app and every sidecar with the
+      # hardened runtime and Entitlements.plist, notarizes and staples the app, then makes the DMG and the
+      # minisign-signed updater bundle (Treeix.app.tar.gz and its .sig)
       - name: Build, sign and notarize
+        working-directory: apps/desktop
         env:
-          APPLE_API_KEY: ${{ steps.signing.outputs.signed == 'true' && format('{0}/AuthKey.p8', runner.temp) || '' }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          script=release:mac
-          if [ -n "$APPLE_API_KEY" ]; then
-            printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"
-            script=dist:dmg:notarized
-          fi
-          bun run --cwd apps/desktop "$script"
-          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bun run tauri build --target "$TARGET" --config '{"build":{"beforeBuildCommand":"bun run build"},"bundle":{"createUpdaterArtifacts":true}}'
 
-      # electron-builder's own uploader quits before the uploads finish when it runs under bun, leaving a
-      # release with a stray blockmap, so the assets go up here. latest-mac.yml is the update feed itself.
+      - name: Verify the signatures
+        run: |
+          app="target/$TARGET/release/bundle/macos/Treeix.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          for binary in "$app/Contents/MacOS/"*; do
+            codesign -d --verbose=2 "$binary" 2>&1 | grep -q 'flags=.*runtime' || { echo "$binary lacks the hardened runtime"; exit 1; }
+          done
+          xcrun stapler validate "$app"
+
+      - name: Notarize the DMG
+        run: |
+          dmg=$(ls "target/$TARGET/release/bundle/dmg/"*.dmg)
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+          xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "$dmg"
+          rm -f "$APPLE_API_KEY_PATH"
+
+      # Treeix.dmg is what the landing page's /download points at (vercel.json)
       - name: Upload to the draft
+        id: upload
         env:
           GH_TOKEN: ${{ github.token }}
-        working-directory: apps/desktop/dist
+        working-directory: target/${{ env.TARGET }}/release/bundle
         run: |
-          gh release upload "$TAG" --clobber \
-            Treeix-arm64.dmg Treeix-arm64.dmg.blockmap \
-            Treeix-*-arm64-mac.zip Treeix-*-arm64-mac.zip.blockmap \
-            latest-mac.yml
+          cp dmg/*.dmg "$RUNNER_TEMP/Treeix.dmg"
+          gh release upload "$TAG" --clobber "$RUNNER_TEMP/Treeix.dmg" macos/Treeix.app.tar.gz macos/Treeix.app.tar.gz.sig
+          echo "sig=$(cat macos/Treeix.app.tar.gz.sig)" >> "$GITHUB_OUTPUT"
 
+  # The AppImage is also its own update: the updater swaps the file in place
   appimage:
     needs: version
-    runs-on: ubuntu-latest
+    # The oldest glibc the AppImage runs on is the one it was built against
+    runs-on: ubuntu-22.04
     env:
-      NODE_OPTIONS: --max-old-space-size=4096
       TAG: ${{ needs.version.outputs.tag }}
+    outputs:
+      sig: ${{ steps.upload.outputs.sig }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Tauri's Linux prerequisites (WebKitGTK 4.1, GTK, appindicator, rsvg, xdo for the global shortcut), patchelf for the AppImage
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
       - run: npm version --no-git-tag-version --allow-same-version --prefix apps/desktop "${TAG#v}" > /dev/null
 
-      # Compiles node-pty, which ships no Linux prebuild (scripts/postinstall.sh)
-      - run: bun install
+      - run: bun install --frozen-lockfile
+        working-directory: apps/desktop
 
-      - run: bun run typecheck
-      - run: bun test
-
-      # The AppImage updates itself from latest-linux.yml
-      - run: bun run --cwd apps/desktop release:linux
+      # beforeBuildCommand builds treeix-ptyd for this host and skips the Swift helpers off macOS;
+      # tauri.linux.conf.json makes the bundle an AppImage
+      - name: Build
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bun run tauri build --config '{"bundle":{"createUpdaterArtifacts":true}}'
 
       - name: Upload to the draft
+        id: upload
         env:
           GH_TOKEN: ${{ github.token }}
-        working-directory: apps/desktop/dist
-        run: gh release upload "$TAG" --clobber Treeix-*.AppImage latest-linux.yml
+        working-directory: target/release/bundle/appimage
+        run: |
+          cp Treeix_*.AppImage "$RUNNER_TEMP/Treeix-x86_64.AppImage"
+          cp Treeix_*.AppImage.sig "$RUNNER_TEMP/Treeix-x86_64.AppImage.sig"
+          gh release upload "$TAG" --clobber "$RUNNER_TEMP/Treeix-x86_64.AppImage" "$RUNNER_TEMP/Treeix-x86_64.AppImage.sig"
+          echo "sig=$(cat "$RUNNER_TEMP/Treeix-x86_64.AppImage.sig")" >> "$GITHUB_OUTPUT"
 
   publish:
-    needs: [version, dmg, appimage]
+    needs: [version, macos, appimage]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.version.outputs.tag }}
+      MAC_SIG: ${{ needs.macos.outputs.sig }}
+      LINUX_SIG: ${{ needs.appimage.outputs.sig }}
     steps:
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release edit "${{ needs.version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      # The feed tauri-plugin-updater reads from releases/latest/download/latest.json. The universal app serves
+      # both Mac architectures
+      - name: Upload latest.json
+        run: |
+          base="https://github.com/$GH_REPO/releases/download/$TAG"
+          gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          jq -n --arg version "${TAG#v}" --rawfile notes "$RUNNER_TEMP/notes.md" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg mac "$base/Treeix.app.tar.gz" --arg mac_sig "$MAC_SIG" \
+            --arg linux "$base/Treeix-x86_64.AppImage" --arg linux_sig "$LINUX_SIG" \
+            '{version: $version, notes: $notes, pub_date: $date, platforms: {
+              "darwin-aarch64": {url: $mac, signature: $mac_sig},
+              "darwin-x86_64": {url: $mac, signature: $mac_sig},
+              "linux-x86_64": {url: $linux, signature: $linux_sig}
+            }}' > "$RUNNER_TEMP/latest.json"
+          gh release upload "$TAG" --clobber "$RUNNER_TEMP/latest.json"
+
+      - run: gh release edit "$TAG" --draft=false --latest

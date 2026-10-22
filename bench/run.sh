@@ -47,13 +47,6 @@ ghostty() {
     "$(awk -v mb="$mb" -v s="$secs" 'BEGIN { printf "%.1f", mb / s }')"
 }
 
-# (3) The Electron app (apps/desktop), driven by Playwright
-electron() {
-  [ -d apps/desktop/out ] || (cd apps/desktop && bun install --frozen-lockfile >/dev/null && ln -sfn ../apps/desktop/node_modules ../../packages/node_modules && bunx electron-vite build >/dev/null) \
-    || { skipped "apps/desktop did not build"; return; }
-  node bench/electron.mts "$MIXED" "$RUNS" 2>/dev/null | tail -1
-}
-
 cat > "$DIR/timed-cat.sh" <<'EOF'
 #!/bin/sh
 # timed-cat.sh <file> <result>: wall seconds of cat inside whatever terminal runs it
@@ -66,7 +59,6 @@ chmod +x "$DIR/timed-cat.sh"
 
 echo "ptyd..." >&2; p=$(ptyd)
 echo "ghostty..." >&2; g=$(ghostty)
-echo "electron..." >&2; e=$(electron)
 echo "frontend..." >&2; r=$(node bench/reveal.mts 2>/dev/null | tail -1)
 mkdir -p bench/results
 cat > "$out" <<EOF
@@ -76,7 +68,6 @@ cat > "$out" <<EOF
   "macos": "$(sw_vers -productVersion 2>/dev/null || uname -r)",
   "ptyd": ${p:-null},
   "ghostty": ${g:-null},
-  "electron": ${e:-null},
   "frontendOnly": ${r:-null},
   "tauri": {"pending": "TREEIX_AUTORUN=bench in a release build, see bench/README.md"}
 }

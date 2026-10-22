@@ -1,5 +1,5 @@
 //! Codex conversations from its rollout files (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`), so a codex
-//! terminal learns the id `codex resume` takes. Port of terminal/main/codex.ts
+//! terminal learns the id `codex resume` takes. Port of the Electron terminal plugin's codex.ts
 
 use serde::{Deserialize, Serialize};
 use specta::Type;

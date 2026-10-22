@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "macOS": {
+      "entitlements": "./Entitlements.plist"
+    },
+    "externalBin": [
+      "binaries/treeix-ptyd",
+      "binaries/treeix-voice",
+      "binaries/treeix-meetings"
+    ]
+  }
+}

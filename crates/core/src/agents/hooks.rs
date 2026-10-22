@@ -1,6 +1,6 @@
 //! The app side of Claude's status hooks (ptyd watches the files): the settings that make Claude write
-//! `input|working|done` and its statusline JSON into `$TREEIX_AGENT_STATUS`. Port of terminal/main/hooks.ts and
-//! usage-limits/main/claudeStatus.ts
+//! `input|working|done` and its statusline JSON into `$TREEIX_AGENT_STATUS`. Port of the Electron terminal plugin's
+//! hooks.ts and the usage-limits plugin's claudeStatus.ts
 
 use serde_json::{Map, Value, json};
 use std::fs;

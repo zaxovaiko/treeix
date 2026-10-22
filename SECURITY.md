@@ -9,7 +9,7 @@ Report a vulnerability privately through GitHub's "Report a vulnerability" butto
 - **Local repositories.** Treeix runs `git` in the folders you add and can create worktrees and branches. It never runs `git push`: branches and worktrees stay local.
 - **Command line tools.** `gh`, `glab`, `acli`, `claude` and `codex` run with your own accounts and their existing sessions. Treeix never handles those passwords.
 - **Terminal sessions.** Shell, Claude and Codex sessions are real processes with your permissions.
-- **The Atlassian API token** is the one secret the app stores itself. It is encrypted with the system keychain through Electron's `safeStorage` and never leaves the machine except in requests to your own Atlassian site.
-- **The renderer has no Node access**: context isolation is on and `nodeIntegration` is off, so every privileged action goes through the preload bridge. The preload itself runs unsandboxed (`sandbox: false`), which native modules such as the pty need. Remote markdown and HTML are sanitized before rendering.
-
-Plugins run in the same processes as the host and are not sandboxed. Only install plugins you trust.
+- **Secrets.** The Notion token is the one secret the app stores itself. It goes to the system keychain, or to a file readable only by you where there is none (Linux without a secret service), and never reaches the webview or the logs. It leaves the machine only in requests to your own Notion workspace. Jira uses the sign-in of `acli`.
+- **The webview has no direct system access.** Every privileged action is a typed Tauri command, and the capability file lists what the window may call. Remote markdown and HTML are sanitized before rendering.
+- **The terminal daemon** listens on a Unix socket in the app's data folder, readable only by you, and checks the peer's user id.
+- **The MCP server and routine webhooks** bind 127.0.0.1 only. The MCP server requires a bearer token.

@@ -1,8 +1,8 @@
 # Phase 4-5 contract: agents, chat, MCP, tickets, settings
 
-The shared surface the Phase 4-5 agents build against. The UI talks to `Api` in `apps/next/src/ipc/api.ts` only. `tauri.ts` maps it to the generated commands. The mock implements it in memory: `mockAgents.ts`, `mockChat.ts` and `mockSettings.ts`, spread into `mock.ts`.
+The shared surface the Phase 4-5 agents build against. The UI talks to `Api` in `apps/desktop/src/ipc/api.ts` only. `tauri.ts` maps it to the generated commands. The mock implements it in memory: `mockAgents.ts`, `mockChat.ts` and `mockSettings.ts`, spread into `mock.ts`.
 
-- Rust commands live in `apps/next/src-tauri/src/commands/{agents,chat,mcp,tickets,settings,system}.rs`. All are registered in `lib.rs`. Each stub returns `Err("not implemented")` until its owner fills it in.
+- Rust commands live in `apps/desktop/src-tauri/src/commands/{agents,chat,mcp,tickets,settings,system}.rs`. All are registered in `lib.rs`. Each stub returns `Err("not implemented")` until its owner fills it in.
 - `get_settings` and `update_settings` already work.
 - Types:
   - Chat types are in `crates/proto/src/chat.rs`: shared by ptyd and the app, with specta behind the proto `specta` feature.
@@ -112,7 +112,7 @@ The shared surface the Phase 4-5 agents build against. The UI talks to `Api` in 
 
 ## Features
 
-- `apps/next/src/features.ts`
+- `apps/desktop/src/features.ts`
   - `FEATURES`: id (a `settings.features` key), label, description, and the settings sections the feature owns.
   - `SETTINGS_NAV` and `sectionVisible`.
   - `THEMES`: name, --background and --primary. --popover is derived as in the prototype.

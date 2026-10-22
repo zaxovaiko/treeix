@@ -4,6 +4,6 @@
   "buildCommand": "sh apps/landing/llms-full.sh",
   "outputDirectory": "apps/landing",
   "redirects": [
-    { "source": "/download", "destination": "https://github.com/zaxovaiko/treeix/releases/latest/download/Treeix-arm64.dmg", "permanent": false }
+    { "source": "/download", "destination": "https://github.com/zaxovaiko/treeix/releases/latest/download/Treeix.dmg", "permanent": false }
   ]
 }

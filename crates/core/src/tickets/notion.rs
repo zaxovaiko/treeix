@@ -1,4 +1,4 @@
-//! Notion through its API with the personal access token from the keyring. Port of notion/main/{api,properties}.ts
+//! Notion through its API with the personal access token from the keyring. Port of the Electron notion plugin's api and properties modules
 
 use super::{Ticket, TicketDetail, TicketKind, TicketSource};
 use serde::{Deserialize, Serialize};

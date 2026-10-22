@@ -1,4 +1,4 @@
-//! Jira through Atlassian's `acli` (signed in by the user, never a token of ours). Port of jira/main/acli.ts
+//! Jira through Atlassian's `acli` (signed in by the user, never a token of ours). Port of the Electron jira plugin's acli.ts
 
 use super::{Ticket, TicketDetail, TicketKind, TicketSource};
 use serde_json::Value;

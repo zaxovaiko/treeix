@@ -1,5 +1,5 @@
 //! A short name for a chat from its first message, by Claude's smallest model, the way Claude Code names its
-//! sessions (port of title.ts)
+//! sessions (port of the Electron app's title.ts)
 
 use super::Chat;
 use crate::server::Daemon;

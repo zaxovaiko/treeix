@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Privacy - Treeix, the AI coding workspace</title>
-  <meta name="description" content="Treeix runs entirely on your Mac. It has no account, no server and no analytics." />
+  <meta name="description" content="Treeix runs on your own computer. It has no account, no server and no analytics. This page lists every connection the app makes." />
   <meta name="robots" content="index, follow" />
   <link rel="icon" href="/assets/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -23,24 +23,33 @@
 
   <main class="prose">
     <h1>Privacy</h1>
-    <p class="prose-date">Last updated 20 September 2026</p>
+    <p class="prose-date">Last updated 22 October 2026</p>
 
     <h2>What Treeix collects</h2>
-    <p>Nothing. The app has no account, no server of its own and no analytics or crash reporting. It never phones home, including to check for updates on your behalf without asking.</p>
+    <p>Nothing. The app has no account, no server of its own and no analytics or crash reporting, and it sends nothing about you or your code to its authors. It does make a few requests of its own, such as the check for a newer version. Every one of them is listed below.</p>
 
-    <h2>What stays on your Mac</h2>
-    <p>Treeix reads and writes your repositories, diffs, comments, terminal sessions, window layout and settings on your own disk. Comments live next to the worktree they belong to, and the app's settings live in its application support folder.</p>
+    <h2>What stays on your computer</h2>
+    <p>Treeix reads and writes your repositories, diffs, comments, terminal sessions, window layout and settings on your own disk. Comments live next to the worktree they belong to, and the app's settings live in its application support folder. Tokens you paste into Settings go into the system keyring. Audio for dictation and meeting recording is recognised on the Mac and never uploaded.</p>
 
     <h2>Which connections the app makes</h2>
     <p>Treeix runs the command line tools you already have, under your own credentials, and only for the features you use:</p>
     <ul>
-      <li><b>git</b> for repositories, worktrees and diffs. Local only.</li>
-      <li><b>gh</b> and <b>glab</b> for pull requests and merge requests, talking to GitHub or GitLab as you.</li>
-      <li><b>claude</b> and <b>codex</b> for agent sessions. Whatever you send in a session goes to that vendor under their terms, exactly as it would in your own terminal.</li>
-      <li><b>acli</b> for Jira and Confluence, talking to your Atlassian site as you.</li>
-      <li>GitHub's release feed, to tell you when a newer Treeix exists.</li>
+      <li><code>git</code> for repositories, worktrees and diffs. Local only.</li>
+      <li><code>gh</code> and <code>glab</code> for pull requests and merge requests, talking to GitHub or GitLab as you. Routines that wait for a GitHub event poll the same way, about once a minute.</li>
+      <li><code>claude</code> and <code>codex</code> for agent sessions and the chat view. Whatever you send in a session goes to that vendor under their terms, exactly as it would in your own terminal.</li>
+      <li><code>acli</code> for Jira, talking to your Atlassian site as you. Off until you switch Jira on.</li>
+      <li>Notion, at api.notion.com, with a personal access token you paste into Settings. Off until you switch Notion on.</li>
+      <li><code>npx</code>, which fetches the Claude and Codex chat adapters from the npm registry the first time you open a chat.</li>
     </ul>
-    <p>Each of these is a plugin. Switch one off in Settings and its code stops loading, connections included.</p>
+    <p>Treeix also makes a few requests itself:</p>
+    <ul>
+      <li>To check for updates, Treeix fetches a signed <code>latest.json</code> from GitHub releases on start, from the tray and from Settings > About. The update is checked against Treeix's public key before it installs. Turn off <i>Check for updates on start</i> in Settings > About and the app only looks when you ask.</li>
+      <li>The usage feature downloads a public price list from raw.githubusercontent.com at most once a day, to estimate cost. Offline, it keeps the last list.</li>
+      <li>The pull requests panel loads author pictures from github.com.</li>
+      <li>If you switch on dictation or meeting recording and pick a speech model, Treeix downloads it from Hugging Face. Only the download goes over the network, the audio never does.</li>
+      <li>The browser pane loads the sites you open, like any browser. The default search is Google, and Settings offers DuckDuckGo and Bing.</li>
+    </ul>
+    <p>The MCP server and the routine webhooks listen on 127.0.0.1 only, and the background daemon talks to the app over a local socket, so nothing else on your network can reach them. Most features can be switched off in Settings. A feature that is off does no work, connections included.</p>
 
     <h2>This website</h2>
     <p>treeix.dyvertex.com is a static page hosted on Vercel, with no cookies and no analytics. Vercel writes its own server logs, which include your IP address and user agent, under <a href="https://vercel.com/legal/privacy-policy">Vercel's privacy policy</a>. Downloads are served by GitHub Releases, under <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>.</p>

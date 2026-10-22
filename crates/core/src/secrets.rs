@@ -8,7 +8,7 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-pub const SERVICE: &str = "com.dyvertex.treeix.next";
+pub const SERVICE: &str = "com.dyvertex.treeix";
 /// Keyring account of the MCP server's bearer token, which the webview never asks for
 pub const MCP_TOKEN: &str = "mcp-token";
 /// macOS always has a keychain; a failing one is an error to show, not a reason to write a file

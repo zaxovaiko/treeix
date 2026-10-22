@@ -1,4 +1,4 @@
-//! One chat's agent: the ACP adapter in a login shell, spoken to over stdio (port of acpAdapter.ts)
+//! One chat's agent: the ACP adapter in a login shell, spoken to over stdio (port of the Electron app's acpAdapter.ts)
 
 use super::{Chat, events, lock};
 use crate::server::Daemon;

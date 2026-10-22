@@ -37,7 +37,7 @@ fn find<'g>(graph: &'g ModuleGraph, from: &str, specifier: &str) -> &'g GraphImp
         .unwrap_or_else(|| panic!("no import of {specifier} in {from}"))
 }
 
-/// Port of dependencies/main/scan.test.ts
+/// Port of the Electron dependencies plugin's scan.test.ts
 #[test]
 fn scan_reads_packages_and_resolves_relative_extensionless_and_tsconfig_alias_imports() {
     let dir = repo();
@@ -269,26 +269,20 @@ fn scan_this_repo() {
     );
     let package = |name: &str| graph.packages.iter().find(|package| package.name == name);
     assert_eq!(
-        package("treeix-next").map(|p| p.dir.as_str()),
-        Some("apps/next")
-    );
-    assert_eq!(
-        package("@treeix/sdk").map(|p| p.dir.as_str()),
-        Some("packages/sdk")
+        package("treeix-desktop").map(|p| p.dir.as_str()),
+        Some("apps/desktop")
     );
     assert!(package("treeix-monorepo").is_some_and(|p| p.dir.is_empty()));
 
     let edges = edges(&graph);
     for edge in [
-        "apps/next/src/main.tsx > apps/next/src/shell/Shell.tsx",
-        "apps/next/src/main.tsx > apps/next/src/autorun.ts",
-        // tsconfig paths in packages/tsconfig.json
-        "packages/plugins/plans/renderer/index.tsx > packages/sdk/src/index.ts",
-        "packages/plugins/plans/renderer/index.tsx > apps/desktop/src/renderer/src/Icon.tsx",
+        "apps/desktop/src/main.tsx > apps/desktop/src/shell/Shell.tsx",
+        "apps/desktop/src/main.tsx > apps/desktop/src/autorun.ts",
+        "apps/desktop/src/features/plans/index.tsx > apps/desktop/src/lib/icons.tsx",
     ] {
         assert!(edges.iter().any(|found| found == edge), "missing {edge}");
     }
-    let react = find(&graph, "apps/next/src/main.tsx", "react-dom/client");
+    let react = find(&graph, "apps/desktop/src/main.tsx", "react-dom/client");
     assert_eq!(react.external.as_deref(), Some("react-dom"));
     assert!(graph.errors.is_empty(), "{:?}", graph.errors);
     // A few may point at files not written yet; hundreds would mean tsconfig paths or workspaces broke

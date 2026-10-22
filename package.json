@@ -2,15 +2,12 @@
   "name": "treeix-monorepo",
   "private": true,
   "scripts": {
-    "postinstall": "bun install --cwd apps/desktop && ln -sfn ../apps/desktop/node_modules packages/node_modules",
+    "postinstall": "bun install --cwd apps/desktop",
     "dev": "bun run --cwd apps/desktop dev",
     "dev:landing": "bun run --cwd apps/landing dev",
-    "dist:dmg": "bun run --cwd apps/desktop dist:dmg",
-    "dist:mas": "bun run --cwd apps/desktop dist:mas",
+    "app": "bun run --cwd apps/desktop app",
+    "app:build": "bun run --cwd apps/desktop app:build",
     "test": "bun run --cwd apps/desktop test",
-    "lint": "bun run --cwd apps/desktop lint",
-    "format": "bun run --cwd apps/desktop format",
-    "format:check": "bun run --cwd apps/desktop format:check",
     "e2e": "bun run --cwd apps/desktop e2e",
     "typecheck": "bun run --cwd apps/desktop typecheck"
   }

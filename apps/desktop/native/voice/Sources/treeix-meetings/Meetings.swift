@@ -36,6 +36,8 @@ final class Meetings {
             if let path = message["modelsPath"] as? String { modelsPath = URL(fileURLWithPath: path, isDirectory: true) }
         case "record":
             if let folder = message["folder"] as? String { record(folder: folder, app: message["app"] as? String ?? "") }
+        case "pause":
+            recording?.paused = message["paused"] as? Bool ?? false
         case "stop":
             if let folder = stop() { send(["type": "stopped", "folder": folder]) }
         case "transcribe":

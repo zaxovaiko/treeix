@@ -1,18 +1,19 @@
 ---
 name: release
-description: Cut a Treeix release - every push to main ships a patch, a breaking commit ships a major, a package.json bump a minor; push, and watch GitHub Actions build and publish the DMG. Use on "cut a release", "ship a new version", "release 0.2.0", "publish a build", "/release".
+description: Cut a Treeix release - every push to main ships a patch, a breaking commit ships a major, a package.json bump a minor; push, and watch GitHub Actions build and publish the DMG and AppImage. Use on "cut a release", "ship a new version", "release 0.2.0", "publish a build", "/release".
 ---
 
 # Cut a release
 
-`.github/workflows/release.yml` ships a release on every push to `main` that touches the app (landing, docs,
-marketing, `.claude` and markdown-only pushes are skipped). A patch needs nothing but the push. Your job is a
+`.github/workflows/release.yml` ships a release on every push to `main` that touches the app (`apps/desktop`,
+`crates`, `Cargo.*`, `rust-toolchain.toml`; markdown-only pushes are skipped). A patch needs nothing but the push. Your job is a
 minor or major when asked, release notes users can read, and watching the run.
 
 ## Before pushing
 
 1. Working tree clean and on `main`. If not, stop and say so.
-2. `bun run typecheck && bun test` pass locally. The workflow runs both, so a failure here is a failed release, not a surprise.
+2. `cargo test --workspace` and, in `apps/desktop`, `bun run typecheck && bun test src` pass locally. The release
+   builds without running tests, so a failure here ships unless CI catches it first.
 
 ## Release notes
 
@@ -32,9 +33,9 @@ first: there is no undoing a major once installed copies update into it.
 
 ## Minor
 
-The workflow ships `apps/desktop/package.json` `version` as is when no tag has it yet; otherwise it releases the
-patch after the latest tag (or the major, above). It never commits the bump, so `package.json` lags behind patch
-releases on purpose.
+The workflow ships `apps/desktop/package.json` `version` as is when it is above the latest tag; otherwise it releases the
+patch after the latest tag (or the major, above). `tauri.conf.json` reads its version from that file. The workflow
+never commits the bump, so `package.json` lags behind patch releases on purpose.
 
 ```sh
 # <version> is bare, e.g. 0.6.0
@@ -57,21 +58,21 @@ gh run watch --exit-status
 gh release view v<version>
 ```
 
-The release ends up with `Treeix-arm64.dmg` and the matching `.zip` attached. The landing page's `/download` redirect points at
-`releases/latest/download/Treeix-arm64.dmg`, so it starts working the moment the release is published - no landing change needed.
+The release stays a draft until the Mac and Linux jobs are done, then gets `latest.json` and goes public. It carries
+`Treeix.dmg` (universal), `Treeix.app.tar.gz`, `Treeix-x86_64.AppImage`, their `.sig` files and `latest.json`. The
+landing page's `/download` redirect points at `releases/latest/download/Treeix.dmg`, so it starts working the moment
+the release is published - no landing change needed.
 
 ## When it fails
 
-- **Wrong version** - a tag was pushed by hand or a bump in `package.json` went backwards. Delete the stray tag (`git push origin :v<version>`) and push again.
-- **`node-gyp` on the runner** - the native `mac-window` module needs Xcode command line tools; the `macos-14` image has them. A failure here is usually a dependency bump, not the runner.
-- **Release already exists** - `gh release create` refuses to overwrite. Delete the release and the tag before retrying.
+- **Wrong version** - a tag was pushed by hand. Delete the stray tag (`git push origin :v<version>`) and push again.
+- **Missing private key** - `tauri build` stops with "A public key has been found, but no private key": the `TAURI_SIGNING_PRIVATE_KEY` secret is missing.
+- **Notarization rejected** - `xcrun notarytool log <id> --key ... --key-id ... --issuer ...` says which binary; usually a sidecar without the hardened runtime or a timestamp.
+- **A job failed after the draft opened** - re-run the failed jobs; uploads use `--clobber` and the draft is reused. A draft left behind by an abandoned run can be deleted with `gh release delete v<version>`.
 
 ## Signing, notarisation and in-app updates
 
-The workflow signs and notarises when `MAC_CERT_P12` and `APPLE_API_KEY_P8` are set, and publishes through
-`electron-builder --publish always`, which is what uploads `latest-mac.yml`. That file is the update feed: without it,
-or without a Developer ID signature, installed copies never move off their version. Setting the secrets up is
-`apps/desktop/scripts/signing-secrets.sh`, described in `docs/releasing.md`.
-
-Without those secrets the run falls back to the ad-hoc DMG, and first launch needs System Settings > Privacy &
-Security > Open Anyway. Say so when reporting a release built that way, since those users have to update by hand.
+The Mac job needs `MAC_CERT_P12`, `MAC_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID` and
+`APPLE_API_ISSUER`, and both jobs need `TAURI_SIGNING_PRIVATE_KEY` (plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the
+key has one). There is no unsigned fallback: a missing secret fails the run before anything is published. Setup in
+`docs/releasing.md`, the update feed and the key in `docs/next/updater.md`.

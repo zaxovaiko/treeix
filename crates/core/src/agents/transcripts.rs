@@ -1,5 +1,5 @@
 //! Claude transcripts (`~/.claude/projects/<cwd>/<id>.jsonl`) and codex rollouts: what a session spent, its
-//! replies, and the stats History shows. Port of terminal/main/transcripts.ts
+//! replies, and the stats History shows. Port of the Electron terminal plugin's transcripts.ts
 
 use super::{count, parse_line, text};
 use serde::{Deserialize, Serialize};

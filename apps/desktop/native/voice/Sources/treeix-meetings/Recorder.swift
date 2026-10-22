@@ -58,6 +58,9 @@ final class TrackWriter {
     private let start: UInt64
     private var converter: AVAudioConverter?
     private var written: AVAudioFramePosition = 0
+    /// Buffers are dropped while paused; the gap is written as silence on resume, so the tracks stay aligned
+    // ponytail: set from the main thread, read on the audio thread unlocked; a Bool tears no worse than one late buffer
+    var paused = false
 
     /// `start` is the host time the meeting's recording began
     init(output: URL, start: UInt64) throws {
@@ -70,6 +73,7 @@ final class TrackWriter {
 
     /// `hostTime` is when the buffer's first sample was captured, 0 when unknown; a buffer in a new format (the device changed) gets a new converter
     func write(_ buffer: AVAudioPCMBuffer, at hostTime: UInt64) {
+        guard !paused else { return }
         if converter?.inputFormat != buffer.format {
             converter = AVAudioConverter(from: buffer.format, to: Self.format)
             converter?.downmix = true
@@ -116,7 +120,7 @@ final class TrackWriter {
 @available(macOS 14.2, *)
 final class ProcessTapRecorder {
     private let appBundlePrefix: String
-    private let writer: TrackWriter
+    let writer: TrackWriter
     /// Opens and closes the tap and hears about device changes; the audio itself is written on `io`
     private let control = DispatchQueue(label: "treeix.meetings.tap.control")
     private let io = DispatchQueue(label: "treeix.meetings.tap")
@@ -258,7 +262,7 @@ final class ProcessTapRecorder {
 /// The local microphone: you, or the whole room. A device that changes or goes away stops the engine for good, so a new one starts on what's there now
 final class MicRecorder {
     private var engine = AVAudioEngine()
-    private let writer: TrackWriter
+    let writer: TrackWriter
     private var observer: NSObjectProtocol?
     private var stopped = false
 
@@ -316,6 +320,12 @@ final class Recording {
     private let mic: MicRecorder?
     /// A ProcessTapRecorder, which needs macOS 14.2
     private let tap: AnyObject?
+    var paused = false {
+        didSet {
+            mic?.writer.paused = paused
+            if #available(macOS 14.2, *) { (tap as? ProcessTapRecorder)?.writer.paused = paused }
+        }
+    }
 
     init(folder: String, app: String) throws {
         self.folder = folder

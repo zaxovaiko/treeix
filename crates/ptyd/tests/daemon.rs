@@ -248,7 +248,9 @@ async fn channels_on_one_connection_lag_independently_and_resync_to_the_screen()
     let dir = tempfile::tempdir().unwrap();
     let _server = treeix_ptyd::spawn_in_process(dir.path().into());
     let mut client = connect(dir.path()).await;
-    let info = created(&mut client, "sleep 0.3; yes | head -c 6000000").await;
+    // Twice HIGH_WATER: enough to make channel 2 lag, small enough to finish long before it counts as stuck
+    // (5 s), which pauses the PTY for good since channel 2 never acks
+    let info = created(&mut client, "sleep 0.3; yes | head -c 2000000").await;
     for channel in [1, 2] {
         let resp = client
             .request(Request::AttachChannel {
@@ -289,7 +291,7 @@ async fn channels_on_one_connection_lag_independently_and_resync_to_the_screen()
             _ => {}
         }
     }
-    assert_eq!(yes, 3_000_000, "the acking channel got every byte");
+    assert_eq!(yes, 1_000_000, "the acking channel got every byte");
     assert!(
         stalled <= UNACKED_CEILING,
         "{stalled} sent to the stalled channel"

@@ -1,5 +1,5 @@
 //! Agents (Claude Code, Codex): hook settings, transcripts, codex rollouts, listening ports, token usage and
-//! plan limits. Port of packages/plugins/{terminal,agent-usage,usage-limits}/main. Owner: A3
+//! plan limits. Port of the Electron app's terminal, agent-usage and usage-limits plugins. Owner: A3
 
 pub mod codex;
 pub mod hooks;

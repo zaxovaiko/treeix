@@ -1,9 +1,0 @@
-{
-  "bundle": {
-    "externalBin": [
-      "binaries/treeix-ptyd",
-      "binaries/treeix-voice",
-      "binaries/treeix-meetings"
-    ]
-  }
-}

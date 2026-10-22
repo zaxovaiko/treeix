@@ -1,4 +1,4 @@
-# IME checklist (Treeix Next)
+# IME checklist (Treeix)
 
 Run on every release candidate, by hand, in both webviews:
 

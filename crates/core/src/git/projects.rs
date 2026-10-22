@@ -1,4 +1,4 @@
-//! The folders an agent started in a place loads besides it. Port of apps/desktop/src/main/projects.ts.
+//! The folders an agent started in a place loads besides it. Port of the Electron app's projects.ts.
 
 use std::collections::HashSet;
 use std::fs;

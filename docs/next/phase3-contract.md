@@ -1,8 +1,8 @@
 # Phase 3 contract: git, files, PRs, history
 
-The shared surface the five Phase 3 agents build against. The UI talks to `Api` in `apps/next/src/ipc/api.ts` only. `tauri.ts` maps it to the generated commands, and `mock.ts` implements it in memory for the dev server, Playwright and screenshots.
+The shared surface the five Phase 3 agents build against. The UI talks to `Api` in `apps/desktop/src/ipc/api.ts` only. `tauri.ts` maps it to the generated commands, and `mock.ts` implements it in memory for the dev server, Playwright and screenshots.
 
-- Rust commands: `apps/next/src-tauri/src/commands/{git,files,prs,history}.rs`. Each is registered in `lib.rs` and returns `Err("not implemented")` until its owner fills it in.
+- Rust commands: `apps/desktop/src-tauri/src/commands/{git,files,prs,history}.rs`. Each is registered in `lib.rs` and returns `Err("not implemented")` until its owner fills it in.
 - Types: `crates/core/src/{git,fs,search,prs,history}.rs`, with serde camelCase and `specta::Type`. `bindings.ts` is generated from them: `CARGO_TARGET_DIR=... cargo test -p treeix-app export_bindings`.
 - The hand-written types in `api.ts` mirror the Rust ones field for field. If you change a Rust type, change its `api.ts` twin and the mock in the same commit.
 

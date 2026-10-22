@@ -1,4 +1,4 @@
-//! Pull requests through the `gh` and `glab` CLIs. Port of packages/plugins/pull-requests/main.
+//! Pull requests through the `gh` and `glab` CLIs. Port of the Electron app's pull-requests plugin.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

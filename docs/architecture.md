@@ -1,66 +1,62 @@
 # Architecture
 
-Treeix is an Electron app with a small host and a set of plugins. The host knows about folders, repositories, worktrees, diffs, files and review comments. Everything a user would call a feature - terminals, pull requests, Jira, Confluence, diagrams - is a plugin that the host never imports directly.
+Treeix is a Tauri v2 app on a Rust daemon. `treeix-ptyd` owns every terminal and chat, so sessions outlive the window. The app shell is a thin client of the daemon and the home of everything that needs a window. The UI is a React webview that talks to the shell through one typed API.
 
-Why the larger pieces are built the way they are is recorded in [the decision records](adr/README.md).
+Why the larger pieces are built the way they are is recorded in [the decision records](adr/README.md). Records 1-8 were written for the Electron app this one replaced; the terminal stack is [record 9](adr/0009-terminal-stack.md).
 
-## Processes
+## Layout
 
 ```
-apps/desktop/src/main       Node: git, the file system, command line tools, plugin main modules
-apps/desktop/src/preload    the only bridge, exposes window.api
-apps/desktop/src/renderer   React 19, Tailwind 4, the plugin host UI
-apps/desktop/src/shared     types and pure helpers both sides use
+crates/proto               wire protocol between the app and ptyd, and the types the webview shares
+crates/ptyd                treeix-ptyd: PTYs, terminal state, chats, routines
+crates/core                plain modules the app and ptyd share: git, files, pull requests, agents, tickets, MCP
+apps/desktop/src-tauri     the Tauri shell (crate treeix-app): commands, events, browser panes, tray, updater
+apps/desktop/src           React 19, Tailwind 4, Vite
+apps/desktop/native/voice  Swift helpers for dictation and call recording
 ```
 
-The renderer has no Node access. Everything that touches the disk or spawns a process goes through `window.api`, defined in `src/preload/index.ts` and typed in `src/preload/index.d.ts`.
+## The daemon
 
-## Plugins
+`treeix-ptyd` runs every PTY (`portable-pty`), parses each session with `alacritty_terminal`, and keeps a sequence counter and a scrollback ring per session. An attach gets an ANSI snapshot of the screen plus the seq to continue from, so a pane that reconnects, or a daemon that restarts, comes back with its scrollback. State lives in the data dir (`state.json`, `sessions/<id>.vt`); the daemon snapshots on SIGTERM and on a `Shutdown` from a newer app.
 
-A plugin is a folder in `packages/plugins/<id>` with a `package.json` holding a `treeix` manifest, an optional `main/index.ts` and an optional `renderer/index.tsx`. Authoring details live in [packages/README.md](../packages/README.md); this is how the host loads them.
+- **Socket.** A Unix socket in the data dir, mode 0600, peer uid checked. Frames are postcard behind a u32 length. `PROTO_VERSION` bumps on any incompatible change, and variants are only ever appended because postcard encodes them by index.
+- **Backpressure.** Each attached channel counts unacked bytes. Past 1 MB the daemon keeps reading and parsing at full speed, stops sending that pane data, and sends a fresh snapshot once the pane catches up. A `cat` of a huge file ends at daemon speed instead of xterm's. Details in [bench/README.md](../bench/README.md).
+- **Agents.** Hooks that Claude writes (`input|working|done`, the statusline JSON) land in `$TREEIX_AGENT_STATUS`; the daemon maps them to the status dots and reads Codex off its screen. Chats are Agent Client Protocol processes (`agent-client-protocol`) run by the daemon, so they survive restarts like terminals do.
+- **Routines.** The daemon runs scheduled, event and webhook routines as sessions, with budgets and a queue. The webhook listener binds 127.0.0.1 only.
+- **Lifecycle.** The app connects first and starts a daemon only when nothing answers: a LaunchAgent on macOS, a systemd user unit on Linux, a plain spawn in dev. [docs/next/daemon.md](next/daemon.md).
 
-- **Discovery** is static. `apps/desktop/src/renderer/src/plugins.ts` and `apps/desktop/src/main/plugins.ts` collect manifests and modules with `import.meta.glob`, so adding a folder is the whole registration step.
-- **The renderer side is lazy.** Each `renderer/index.tsx` is its own chunk, fetched only once the plugin is enabled. Heavy views inside a plugin (xterm, mermaid) use `React.lazy` again, so enabling a plugin is cheap until you open its tab.
-- **The main side is eager but inactive.** Main modules are bundled into the main process, but `activate(context)` runs only while the plugin is enabled, and the handlers it registered are removed when it is switched off.
-- **IPC is namespaced.** `createBridge(id)` from `@treeix/sdk` calls the plugin's own handlers over `plugin:<id>:<channel>`, so two plugins cannot collide and a disabled plugin answers nothing.
-- **Contributions, not hooks.** A renderer plugin returns data: `tabs`, `sidebar`, `panels`, `titleBar`, `Root`, `Settings`, `commands`, `codeBlocks`, `linkPreviews`, `toolMarks`, `services`, `shortcuts`. The host sorts and renders them. There is no plugin that patches the host.
-- **Plugins talk through services.** They never import each other. A plugin publishes a service (the terminal plugin publishes `sessions`) and others look it up with `host.service(name)`, typed by augmenting the `Services` interface in `@treeix/sdk`.
-- **The host offers `HostApi`** through `HostContext`/`useHost()`: the current workspace and worktree, tabs, review comments, and render functions for the pieces a plugin should not rebuild (`renderFileView`, `renderExplorer`, `renderCommentsPanel`, `withDock`).
+## The app shell
 
-Shared code that several plugins need is a library package instead of a plugin: `packages/atlassian` holds the `acli` runner, the Atlassian Document Format converter, the encrypted API token and attachment downloads for both `jira` and `confluence`.
+`apps/desktop/src-tauri` connects to the daemon in `daemon.rs`, reconnects with backoff, and exposes everything to the webview.
 
-The `browser` plugin is the one plugin with a page-side part. Its pages run in `<webview>` elements, which the host hardens in `will-attach-webview` (`src/main/webviewPolicy.ts`): a separate `persist:browser` session, a sandbox, and `packages/plugins/browser/inject/preload.ts` as the only preload, built by electron-vite as `out/preload/browserInject.js`. The pages live in one fixed layer drawn over the Browser tab or panel, so moving between them doesn't reload anything. Main attaches the Chrome DevTools Protocol to each page for the console and network strip, and the inject script reports web vitals and design mode selections back with `sendToHost`.
+- **Commands and bindings.** Each command in `commands/*.rs` (git, files, history, prs, agents, chat, mcp, tickets, routines, browser, plans, graph, voice, settings, system) is registered with `tauri-specta` in `lib.rs`. `cargo test -p treeix-app export_bindings` writes `src/ipc/bindings.ts`; never edit it by hand. Errors cross the boundary as strings.
+- **Streams.** Terminal output reaches a pane over one Tauri `Channel` of raw frames, coalesced to 5 ms or 64 KB, with acks coming from xterm's write callback. The app fans one daemon attach out to every pane showing the session. Other updates are typed events (`collect_events!`).
+- **Subprocesses, not libraries.** `git`, `gh`, `glab`, `acli`, `claude` and `codex` run with your own accounts. Long work runs in `spawn_blocking`, and path commands refuse paths outside their place.
+- **Browser panes.** One child webview per pane (`Window::add_child`, Tauri's `unstable` feature; `browser/` is the only user of it). An injected script reports console and network rows and serves the agent tools; cookie import copies from Chromium browsers, Firefox and Safari.
+- **MCP server.** `core::mcp` serves the agents Treeix runs over streamable HTTP on 127.0.0.1 with a bearer token. Browser tools show up in it only while the browser feature and its agent switch are on.
+- **The rest.** The quick terminal (a panel under a global shortcut), tray and menu, keep-awake, the updater ([docs/next/updater.md](next/updater.md)), and the voice sidecars: the two Swift helpers ship as `externalBin` and speak JSON lines over stdin and stdout.
 
-Plugin pages stay mounted once visited: the page on screen is the only one with a layout box, the others keep their state behind the `hidden` attribute, and an off-screen page is handed back the element it was last rendered with so React skips its subtree. Each kept page renders under its own `HostApi` whose `activePage` is that page, so `PageLayout` reads that page's panels, and zone picking skips zones with no layout box.
+## Core modules
 
-The `chat` plugin gives agents a chat view next to their terminals. It talks to agents only through the `ChatAdapter` contract in `@treeix/sdk`: an adapter connects to an agent's command and turns what it says into `ChatEvent`s. Any plugin can contribute adapters with `MainPlugin.chatAdapters`; the chat plugin ships the Agent Client Protocol adapter, which covers Claude and Codex through their ACP commands. Agents opt in with `Agent.chat` in the registry, run through the user's login shell like terminal sessions, and keep their own transcripts; chat sessions are terminal plugin sessions with `view: 'chat'`.
+`crates/core` has no UI and no Tauri: `places` (the checkout or folder behind a cwd), `git`, `fs` (with watching and conflict-checked saves), `search`, `history` (file snapshots, closed sessions), `prs`, `agents` (hooks, transcripts, Codex rollouts, ports, token usage, plan limits), `tickets` (Jira through `acli`, Notion), `mcp`, `routines`, `plans`, `graph` ([notes](next/graph.md)), `settings` and `secrets` (OS keyring, a 0600 file where none answers).
 
-The `hub` plugin (ADR 0006) adds personas, workflows and runs on top of chat. Personas join the agent registry through `RendererPlugin.agents` as `hub.<id>`; the plugin also contributes an OpenAI-compatible chat adapter for OpenRouter, Ollama and LM Studio, with API keys kept in main. Workflow runs execute in the hub's main process (`packages/plugins/hub/main/engine.ts`) over `context.chatAdapter`, so they outlive a window reload; run state and event logs live under the plugin's data folder. The canvas is `@xyflow/react`, loaded lazily.
+## The webview
 
-Plugins that produce something hand it to workflows instead of knowing where it goes (ADR 0008). `context.emit(name, payload)` names the event `<plugin id>.<name>` and resolves true once a listener (the hub, whose input steps can list events) started a run, so a producer keeps the payload until then. A workflow's `tool` step calls any MCP tool Treeix serves through `context.callTool`. So `meetings` emits `transcribed`, `slack` emits `messages`, `notion` offers `notion_create_pages`, and which model writes the notes and which database gets them is the user's workflow. Tokens these plugins keep go through `@treeix/host/secrets`, encrypted with `safeStorage`.
+`src/ipc/api.ts` is the one surface the UI talks to. `tauri.ts` implements it over commands and channels; `mock.ts` implements it in memory, so `bun run dev` works in a plain browser with seeded sessions and the Playwright tests run without a window.
 
-`meetings` and `dictation` run Swift helpers from `apps/desktop/native/voice` (one Swift package, two executables) over JSON lines on stdin and stdout, supervised by `@treeix/host/nativeHelper`. Both read speech models from one `models` folder in the app's data, so a model is downloaded once. The meetings helper records the call app's audio with a Core Audio process tap and the microphone into separate CAF files, which stay readable if the app is killed mid-call, and reads the macOS calendar with EventKit.
+```
+shell/      window chrome, panes and splits, palette, shortcuts, session state
+panes/      terminal (xterm.js 6), chat, file view (Monaco, diffs)
+panels/     Changes, Explorer, History, pull requests
+dialogs/    worktrees, branches, find in files, file history
+pages/      Settings
+features/   agents, browser, graph, mcp, plans, routines, tickets, voice
+```
 
-## Imports
-
-| Alias | Points at |
-| --- | --- |
-| `@treeix/sdk`, `@treeix/sdk/main` | the plugin contract |
-| `@treeix/app/*` | host UI building blocks (`Icon`, `ui`, `settingsUi`, file views) |
-| `@treeix/shared/*` | types shared with the host |
-| `@treeix/host/*` | main process helpers |
-| `@treeix/atlassian/*` | the shared Atlassian library |
-
-They are declared in `apps/desktop/electron.vite.config.ts`, `apps/desktop/tsconfig.node.json`, `apps/desktop/tsconfig.web.json` and `packages/tsconfig.json` (the last one so `bun test` resolves them). `packages/node_modules` is a symlink to `apps/desktop/node_modules`, created by the root `postinstall`.
-
-## State and caching
-
-Workspaces, settings and per-plugin settings live in `localStorage`; `definePluginSettings` keeps a plugin's own keys apart from the app's. Slow remote data (Jira items, Confluence pages) goes through `packages/atlassian/renderer/cache.ts`: a persistent cache with `useCached`, which shows the stored value immediately and revalidates when it is stale.
-
-## Command line tools
-
-Features are built on the tools you already have rather than on API tokens: `git`, `gh`, `glab`, `acli`, `claude`, `codex`. A plugin declares the tools it needs in its main module, and `apps/desktop/src/main/tools.ts` reports version, sign-in state and whether a newer release exists in Settings.
+- **Features are switches.** `features.ts` lists them; one that is off in `settings.features` does no work and its UI is hidden.
+- **Hidden terminals cost nothing.** A pane that is not on screen disposes its xterm and WebGL context and re-attaches from a snapshot when shown.
+- **Settings** live in `<data dir>/settings.json`. The app writes the file; ptyd only reads the terminal fields. Secrets never reach the webview.
 
 ## Tests
 
-`bun test` runs next to the code: pure logic in `*.test.ts` files beside the module. There is no renderer test runner, so logic worth testing is kept out of components (`buckets.ts`, `markdownSections.ts`, `fileTree.ts`, `adf.ts`, `search.ts`). CI commands are `bun run typecheck` and `bun run test`.
+Rust tests sit beside the code, and `crates/ptyd/tests` start a daemon in process on a temp socket. Frontend logic worth testing is a plain module with a `*.test.ts` beside it. Playwright runs the UI against the mock in WebKit and Chromium, and an in-app runner (`TREEIX_AUTORUN=e2e`) drives the real app and daemon. [docs/next/testing.md](next/testing.md) has the commands.

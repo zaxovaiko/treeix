@@ -1,4 +1,4 @@
-//! Git over `git --no-optional-locks` subprocesses: worktrees, status, diffs, branches, file log. Port of apps/desktop/src/main/git.ts.
+//! Git over `git --no-optional-locks` subprocesses: worktrees, status, diffs, branches, file log. Port of the Electron app's git.ts.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;

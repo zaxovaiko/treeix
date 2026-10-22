@@ -1,5 +1,5 @@
 //! Token usage per day, agent, model and project from every Claude transcript and codex rollout, cached by
-//! file size and mtime. Port of packages/plugins/agent-usage/main
+//! file size and mtime. Port of the Electron app's agent-usage plugin.
 
 use super::{count, parse_line, text};
 use serde::{Deserialize, Serialize};

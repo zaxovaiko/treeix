@@ -1,5 +1,5 @@
 //! Treeix's MCP server for the agents it runs: streamable HTTP (rmcp + axum) on 127.0.0.1, every request
-//! carrying a bearer token compared in constant time. Port of apps/desktop/src/main/mcp.ts
+//! carrying a bearer token compared in constant time. Port of the Electron app's mcp.ts
 
 use axum::extract::Request;
 use axum::http::{StatusCode, header};

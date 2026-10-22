@@ -1,110 +1,62 @@
 # Releasing
 
-Every push to `main` that touches the app runs `.github/workflows/release.yml`, which picks the next patch version,
-builds, signs, notarizes and publishes the GitHub release, tagging the pushed commit.
+Every push to `main` that touches the app (`apps/desktop`, `crates`, `Cargo.*`, `rust-toolchain.toml`; markdown
+skipped) runs `.github/workflows/release.yml`, which picks the next version, builds the Mac and Linux apps, signs,
+notarizes and publishes the GitHub release, tagging the pushed commit.
 
 - **Patch**: any push.
 - **Major**: a commit since the latest tag marked breaking, `feat(scope)!:` or a `BREAKING CHANGE:` body line.
-- **Minor**: set it in `apps/desktop/package.json` and push; the workflow ships that version as is.
+- **Minor**: set it in `apps/desktop/package.json` above the latest tag and push; the workflow ships that version as is.
+
+`tauri.conf.json` reads its version from `apps/desktop/package.json`. The workflow bumps that file in the build only,
+never on `main`, so it lags behind patch releases on purpose.
 
 The release notes come from the same commits (`apps/desktop/scripts/release-notes.sh`): breaking changes, `feat`
 and `fix` subjects grouped and scope first, other types left out, and a link to the full compare.
-That release is also the update feed: `latest-mac.yml` next to the zip is what the app reads.
 
-## In-app updates
+## What a release carries
 
-`apps/desktop/src/main/updates.ts` checks GitHub ten seconds after launch and every six hours, downloads a newer
-build in the background and tells the page, which offers the restart (banner bottom right, and Settings > General >
-Updates). Nothing installs without that restart, except on the next quit.
+- `Treeix.dmg`: the universal Mac app (Apple silicon and Intel), signed, notarized and stapled. The landing page's
+  `/download` redirects here (`vercel.json`).
+- `Treeix.app.tar.gz` and its `.sig`: the Mac update bundle.
+- `Treeix-x86_64.AppImage` and its `.sig`: Linux, built on Ubuntu 22.04, and its own update.
+- `latest.json`: the update feed, uploaded last.
 
-Two things have to hold or the app silently stays on its version:
-
-- **The release carries `latest-mac.yml`.** electron-builder writes it into `dist` next to the zip; the workflow
-  uploads it with `gh release upload`. electron-builder's own `--publish always` cannot be used here: under bun it
-  exits while the uploads are still running and leaves the release with a stray blockmap.
-- **The build is signed with a Developer ID certificate.** macOS refuses to swap an app for one with a different
-  signature, so ad-hoc builds (`dist:dmg`) can download an update and then fail to apply it.
-
-Dev runs and Mac App Store builds report "handled elsewhere" instead of checking.
-
-## DMG
-
-```sh
-bun run dist:dmg   # apps/desktop/dist/Treeix-arm64.dmg, ad-hoc signed, no auto-update
-```
-
-Ad-hoc builds open only after System Settings > Privacy & Security > Open Anyway.
+The release stays a draft until every job is done, so installed copies only see a complete one. In-app updates and
+the signing key: `docs/next/updater.md`.
 
 ## Signing in CI
 
-The workflow signs when `MAC_CERT_P12` and `APPLE_API_KEY_P8` exist, and otherwise falls back to the unsigned DMG,
-so a repository without the secrets still releases. It imports the certificate into a keychain itself rather than
-handing electron-builder `CSC_LINK`: electron-builder creates its keychain with one password and then unlocks it
-with the certificate's, so its own import always fails (`security set-key-partition-list`, macCodeSign.js).
+The Mac job needs these secrets and fails without them:
 
-1. **Certificate.** A Developer ID Application certificate, made from a CSR whose private key stays on the Mac:
+- `MAC_CERT_P12` (base64 `.p12` of the Developer ID Application certificate with Apple's intermediate) and
+  `MAC_CERT_PASSWORD`. The job imports it into its own keychain and hands Tauri the identity.
+- `APPLE_API_KEY_P8` (base64 `.p8`), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`: an App Store Connect API key, role
+  Developer, for notarization.
+- `TAURI_SIGNING_PRIVATE_KEY` (both jobs), plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has one.
 
-   ```sh
-   mkdir -p ~/.treeix-signing && chmod 700 ~/.treeix-signing
-   openssl req -new -newkey rsa:2048 -nodes \
-     -keyout ~/.treeix-signing/developerID.key -out ~/.treeix-signing/developerID.csr \
-     -subj "/emailAddress=you@example.com/CN=Your Name/C=UA"
-   ```
+Tauri signs the app and every sidecar (`treeix-ptyd`, `treeix-voice`, `treeix-meetings`) with the hardened runtime
+and `src-tauri/Entitlements.plist` (microphone, calendars), notarizes and staples the app; the job then notarizes and
+staples the DMG.
 
-   Upload the CSR at developer.apple.com > Certificates > + > Developer ID Application (Account Holder only),
-   download the `.cer`, then:
-
-   ```sh
-   sh apps/desktop/scripts/signing-secrets.sh cert ~/Downloads/developerID_application.cer
-   ```
-
-   It chains Apple's intermediate, builds a `.p12` with a random password and sets `MAC_CERT_P12` and
-   `MAC_CERT_PASSWORD` through `gh secret set`, so neither value is printed.
-
-2. **Notarization key.** App Store Connect > Users and Access > Integrations > Keys, role Developer. Keep the
-   `.p8`, its Key ID and the Issuer ID:
-
-   ```sh
-   sh apps/desktop/scripts/signing-secrets.sh notary ~/Downloads/AuthKey_ABC123.p8 ABC123 <issuer-uuid>
-   ```
-
-3. Push to `main`. Notarization adds a few minutes to the run.
-
-Locally the same build is:
+Setting a secret without printing it:
 
 ```sh
-APPLE_API_KEY=~/.treeix-signing/AuthKey.p8 APPLE_API_KEY_ID=... APPLE_API_ISSUER=... \
-  bun run --cwd apps/desktop dist:dmg:notarized
+base64 -i DeveloperID.p12 | gh secret set MAC_CERT_P12
+base64 -i AuthKey_ABC123.p8 | gh secret set APPLE_API_KEY_P8
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/treeix-updater.key
 ```
 
-### Passkeys
+## Local build
 
-The signed build lets the built-in browser use Touch ID passkeys (`src/main/passkeys.ts`). That takes the
-`keychain-access-groups` entitlement in `build/entitlements.mac.app.plist`, and macOS kills at launch any app that
-claims it without a provisioning profile allowing it. So `dist:dmg:notarized` signs with that file and embeds
-`build/developerID.provisionprofile`, while ad-hoc builds keep the plain entitlements and run without passkeys.
+```sh
+cd apps/desktop
+bun run app:build   # target/release/bundle at the repo root: Treeix.app and the DMG on a Mac, the AppImage on Linux
+```
 
-The profile is a Developer ID one for `com.dyvertex.treeix`, made at developer.apple.com > Profiles > + >
-Developer ID with the same certificate. It is committed: every shipped app carries a copy anyway.
-
-The landing page's `/download` redirects to the release asset named `Treeix-arm64.dmg` (`apps/landing/vercel.json`).
-
-## Mac App Store
-
-1. Create the `com.dyvertex.treeix` app ID and a Mac App Store provisioning profile, save it as `apps/desktop/build/embedded.provisionprofile`.
-2. Install the "3rd Party Mac Developer Installer" certificate.
-3. `bun run dist:mas`, then upload the `.pkg` with Transporter.
-
-The App Store build runs sandboxed: it cannot scan the home folder, run `git`, `gh` or `claude` from Homebrew, or open login shells without extra work.
+Unsigned unless `APPLE_SIGNING_IDENTITY` is set; an unsigned app opens only after System Settings > Privacy &
+Security > Open Anyway.
 
 ## Landing page
 
 A Vercel project with Root Directory `apps/landing`, framework preset Other, no build command, domain `treeix.dyvertex.com`.
-
-## Screenshots
-
-`sh apps/desktop/scripts/demo-home.sh /tmp/treeix-demo` creates fake repositories. Run the packaged app against them so no real data shows:
-
-```sh
-HOME=/tmp/treeix-demo apps/desktop/dist/mac-arm64/Treeix.app/Contents/MacOS/Treeix --user-data-dir=/tmp/treeix-demo/profile
-```

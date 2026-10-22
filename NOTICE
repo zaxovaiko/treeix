@@ -16,5 +16,5 @@ work. A suitable attribution line is:
     contributors, licensed under the Apache License 2.0.
 
 The names "Treeix" and "Dyvertex", the Treeix logo and the application icons in
-apps/desktop/build, apps/desktop/resources and apps/landing/assets are trademarks and brand assets, not covered by the Apache License 2.0 grant
+apps/desktop/src-tauri/icons and apps/landing/assets are trademarks and brand assets, not covered by the Apache License 2.0 grant
 (Section 6). Forks must use their own name and icon.

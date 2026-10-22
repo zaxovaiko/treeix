@@ -1,20 +1,17 @@
 {
-  "files": [],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "./tsconfig.web.json"
-    }
-  ],
-  // Only for bun test, which resolves imports through this file; tsc and the build use the configs above
   "compilerOptions": {
-    "paths": {
-      "@treeix/sdk": ["../../packages/sdk/src/index.ts"],
-      "@treeix/sdk/main": ["../../packages/sdk/src/main.ts"],
-      "@treeix/shared/*": ["./src/shared/*"],
-      "@treeix/app/*": ["./src/renderer/src/*"]
-    }
-  }
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": ["bun", "vite/client"]
+  },
+  "include": ["src"]
 }

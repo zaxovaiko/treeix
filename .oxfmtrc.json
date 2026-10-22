@@ -1,8 +1,0 @@
-{
-  "$schema": "./apps/desktop/node_modules/oxfmt/configuration_schema.json",
-  "printWidth": 180,
-  "semi": false,
-  "singleQuote": true,
-  "trailingComma": "none",
-  "ignorePatterns": ["**/out/**", "**/dist/**", "**/build/**", "**/test-results/**", "**/*.md", "**/*.html", "apps/desktop/design/**"]
-}

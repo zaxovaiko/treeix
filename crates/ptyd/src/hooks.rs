@@ -2,7 +2,7 @@
 //! `$TREEIX_AGENT_STATUS/<TREEIX_SESSION>` and its statusline JSON to `usage-<TREEIX_SESSION>`.
 //! The watcher maps them onto SessionStatus (Watching when the screen footer shows background work) and
 //! broadcasts Event::AgentSession when the conversation id changes. Codex has no hooks and is read off its
-//! screen. Port of terminal/main/hooks.ts and terminal/renderer/agentStatus.ts
+//! screen. Port of the Electron terminal plugin's hooks.ts and agentStatus.ts
 //!
 //! "Done until shown" is the app's: ptyd reports Done, the app shows a done session on screen as idle.
 

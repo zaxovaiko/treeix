@@ -1,4 +1,4 @@
-//! Claude Code's plans (`~/.claude/plans/*.md`) for the plan pane, like the Electron plugins/plans/main/plans.ts.
+//! Claude Code's plans (`~/.claude/plans/*.md`) for the plan pane, like the Electron app's plans plugin.
 //! Owner: G7
 
 use serde::{Deserialize, Serialize};

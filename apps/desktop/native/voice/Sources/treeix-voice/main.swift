@@ -25,4 +25,5 @@ Thread.detachNewThread {
 }
 
 send(["type": "ready"])
+MainActor.assumeIsolated { controller.sendPermissions() }
 app.run()

@@ -1,9 +1,9 @@
 // Browser half of reveal.mts: times the TerminalPane reveal path (fresh xterm + WebGL, attach, 5000-line snapshot, a frame)
 // against an in-page attach, and xterm's parse + draw throughput on the bench files, so only the frontend cost is measured;
 // the pty, ptyd and IPC come on top in the app
-import type { Attachment, SessionInfo } from '../apps/next/src/ipc/api'
-import { reveal, spread } from '../apps/next/src/panes/terminal/bench'
-import { openXterm } from '../apps/next/src/panes/terminal/xterm'
+import type { Attachment, SessionInfo } from '../apps/desktop/src/ipc/api'
+import { reveal, spread } from '../apps/desktop/src/panes/terminal/bench'
+import { openXterm } from '../apps/desktop/src/panes/terminal/xterm'
 
 let lines = ''
 for (let i = 1; i <= 5000; i++) lines += `\x1b[3${(i % 7) + 1}mline ${String(i).padStart(4, '0')}\x1b[0m ${'scrollback text '.repeat(1 + (i % 6))}\r\n`

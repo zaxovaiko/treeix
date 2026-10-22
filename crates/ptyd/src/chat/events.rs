@@ -1,4 +1,4 @@
-//! ACP messages to chat events, a port of packages/plugins/chat/main/acpEvents.ts. They come over JSON-RPC from
+//! ACP messages to chat events, a port of the Electron app's acpEvents.ts. They come over JSON-RPC from
 //! the agent's process, so every field is read defensively from the raw JSON
 
 use serde::de::DeserializeOwned;

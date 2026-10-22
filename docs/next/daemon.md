@@ -1,11 +1,11 @@
 # treeix-ptyd: how the app runs the daemon
 
-`treeix-ptyd` owns every PTY, so shells outlive the app. The app is a client over a Unix socket. Code: `apps/next/src-tauri/src/daemon.rs` (client) and `service.rs` (start).
+`treeix-ptyd` owns every PTY, so shells outlive the app. The app is a client over a Unix socket. Code: `apps/desktop/src-tauri/src/daemon.rs` (client) and `service.rs` (start).
 
 ## Finding it
 
-- Data dir: `$TREEIX_DATA_DIR`, else `~/Library/Application Support/com.dyvertex.treeix.next` (macOS) or `$XDG_DATA_HOME/com.dyvertex.treeix.next` (Linux, default `~/.local/share/...`).
-- Socket: `<data dir>/ptyd.sock`, or `$XDG_RUNTIME_DIR/com.dyvertex.treeix.next.sock` on Linux when that is set (and `TREEIX_DATA_DIR` is not). Mode 0600, the daemon checks the peer uid.
+- Data dir: `$TREEIX_DATA_DIR`, else `~/Library/Application Support/com.dyvertex.treeix` (macOS) or `$XDG_DATA_HOME/com.dyvertex.treeix` (Linux, default `~/.local/share/...`).
+- Socket: `<data dir>/ptyd.sock`, or `$XDG_RUNTIME_DIR/com.dyvertex.treeix.sock` on Linux when that is set (and `TREEIX_DATA_DIR` is not). Mode 0600, the daemon checks the peer uid.
 - Binary: the `treeix-ptyd` sidecar next to the app binary (`Contents/MacOS/` in the bundle, `target/<profile>/` in dev). `scripts/build-ptyd.sh` builds it into `src-tauri/binaries/` for tauri.
 
 ## Starting it
@@ -14,7 +14,7 @@ The app connects first. Only when nothing answers does it start one, then polls 
 
 - macOS, installed bundle, default data dir: a LaunchAgent through `SMAppService` (plist in `Contents/Library/LaunchAgents`, `KeepAlive`).
   - Not registered: register it; launchd starts it.
-  - Registered but silent (launchd throttling a crash loop): `launchctl kickstart gui/<uid>/com.dyvertex.treeix.next.ptyd`.
+  - Registered but silent (launchd throttling a crash loop): `launchctl kickstart gui/<uid>/com.dyvertex.treeix.ptyd`.
   - Switched off in System Settings > Login Items, or registration fails (unsigned bundle): spawn by hand.
 - Linux, release build, default data dir: a systemd user unit `~/.config/systemd/user/treeix-ptyd.service` (`Restart=always`) pointing at the sidecar. The app rewrites it when the path changes, then `systemctl --user daemon-reload` and `enable --now`. No user systemd (containers, some WSL): spawn by hand.
 - Everything else (dev builds, `TREEIX_DATA_DIR`): spawn by hand, `setsid` so it leaves the app's session. Its stderr goes to `<data dir>/ptyd.log`; the services log to launchd (nowhere) and the journal (`journalctl --user -u treeix-ptyd`).
@@ -35,6 +35,6 @@ One connection attaches a session once; the app fans its output out to every pan
 
 - Isolate: run the app with `TREEIX_DATA_DIR=/tmp/treeix-dev`; it never touches the installed daemon or registers a service. Delete the dir to start clean.
 - Stop the running daemon: `pkill -x treeix-ptyd` (SIGTERM snapshots first). With a service it restarts; stop the service instead:
-  - macOS: `launchctl bootout gui/$(id -u)/com.dyvertex.treeix.next.ptyd`, or remove it under System Settings > Login Items.
+  - macOS: `launchctl bootout gui/$(id -u)/com.dyvertex.treeix.ptyd`, or remove it under System Settings > Login Items.
   - Linux: `systemctl --user disable --now treeix-ptyd && rm ~/.config/systemd/user/treeix-ptyd.service && systemctl --user daemon-reload`.
 - Forget all sessions: stop the daemon, then delete `state.json` and `sessions/` in the data dir.

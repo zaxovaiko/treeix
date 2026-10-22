@@ -1,4 +1,4 @@
-//! Local file history (a snapshot before each save, like history.ts) and the record of closed sessions.
+//! Local file history (a snapshot before each save, like the Electron app's history.ts) and the record of closed sessions.
 
 use crate::fs::inside_root;
 use serde::{Deserialize, Serialize};

@@ -1,8 +1,8 @@
 # Phase 6-7 contract: routines, browser, plans, module graph, dictation, recording
 
-The shared surface the Phase 6-7 agents build against. The UI talks to `Api` in `apps/next/src/ipc/api.ts` only. `tauri.ts` maps it to the generated commands. The mock implements it in memory: `mockRoutines.ts`, `mockBrowser.ts`, `mockPlans.ts` and `mockVoice.ts`, spread into `mock.ts`.
+The shared surface the Phase 6-7 agents build against. The UI talks to `Api` in `apps/desktop/src/ipc/api.ts` only. `tauri.ts` maps it to the generated commands. The mock implements it in memory: `mockRoutines.ts`, `mockBrowser.ts`, `mockPlans.ts` and `mockVoice.ts`, spread into `mock.ts`.
 
-- Rust commands live in `apps/next/src-tauri/src/commands/{routines,browser,plans,graph,voice}.rs`, all registered in `lib.rs`, events in `collect_events!`.
+- Rust commands live in `apps/desktop/src-tauri/src/commands/{routines,browser,plans,graph,voice}.rs`, all registered in `lib.rs`, events in `collect_events!`.
   - Routine commands already forward to ptyd for real; ptyd answers `Err("not implemented")` until R6 fills `routines::handle`.
   - `routineNextFires` already works (`core::routines::next_fires`, croner).
   - Browser, plan, graph and voice commands call stubs in `src-tauri/src/browser/mod.rs`, `core::plans`, `core::graph` and `src-tauri/src/voice.rs` that return `Err("not implemented")`.
@@ -13,7 +13,7 @@ The shared surface the Phase 6-7 agents build against. The UI talks to `Api` in 
 - Proto is at version 4:
   - Appended: `SessionKind::Routine`, `SessionInfo.routine` / `CreateSession.routine`, `Request::{RoutineList, RoutinePut, RoutineRemove, RoutineRunNow, RoutineRuns, RunCancel}`, `Response::{Routines, Routine, Runs, Run}`, `Event::{RoutineChanged, RoutineRemoved, RunChanged}`. Never reorder: postcard encodes by index.
   - `Routine` holds tagged enums (`Trigger`), so it travels as JSON inside the frame (`chat::as_json`).
-- Pinned: `croner` 4.0.2 (jiff backend), `oxc` 0.152.0 + `oxc_resolver` 11.24.3 (oxc 0.155 needs rustc 1.97), tauri `unstable` feature (child webviews), `mermaid` 12.0.0 in apps/next.
+- Pinned: `croner` 4.0.2 (jiff backend), `oxc` 0.152.0 + `oxc_resolver` 11.24.3 (oxc 0.155 needs rustc 1.97), tauri `unstable` feature (child webviews), `mermaid` 12.0.0 in apps/desktop.
 
 ## Rules for every command
 
@@ -76,7 +76,7 @@ The shared surface the Phase 6-7 agents build against. The UI talks to `Api` in 
 
 ### Dictation and recording (V7: `src-tauri/src/voice.rs`, `native/voice`, `features/voice/`)
 
-- The Swift package is copied to `apps/next/native/voice`. V7 builds it into `src-tauri/binaries/` and adds it to `bundle.externalBin` (tauri-build fails while the files are missing, so it is not listed yet).
+- The Swift package is copied to `apps/desktop/native/voice`. V7 builds it into `src-tauri/binaries/` and adds it to `bundle.externalBin` (tauri-build fails while the files are missing, so it is not listed yet).
 - `dictationStatus()`: helper state, models, microphone and accessibility access, phase.
 - `dictationToggle()`: starts or stops listening (the hotkey does the same natively, `settings.dictation.hotkey`).
 - `voiceModelDownload(model)` / `voiceModelDelete(model)`: progress through `dictation` events.

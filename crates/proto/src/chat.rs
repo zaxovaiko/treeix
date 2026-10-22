@@ -1,5 +1,5 @@
 //! Chats over ACP (Agent Client Protocol). ptyd runs the agent so a chat outlives the app. These are also the
-//! webview's types (`specta` feature), shaped like the Electron SDK's (packages/sdk/src/chat.ts).
+//! webview's types (`specta` feature), shaped like the Electron app's SDK chat types.
 //! Tagged enums can't go through postcard, so fields holding them travel as JSON (`as_json`).
 
 use serde::{Deserialize, Serialize};

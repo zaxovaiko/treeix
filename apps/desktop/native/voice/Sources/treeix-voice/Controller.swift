@@ -30,7 +30,10 @@ final class Controller {
     private let recorder = Recorder()
     private let transcriber = Transcriber()
     private let hotkey = Hotkey()
-    private var phase = Phase.idle
+    private var phase = Phase.idle {
+        didSet { sendPhase() }
+    }
+    private var sentPhase = "idle"
     private var pressedAt = Date()
     private var target: NSRunningApplication?
     /// Transcripts sent to the plugin, by id, waiting for their `insert`
@@ -69,6 +72,9 @@ final class Controller {
         case "delete": if let id = message["model"] as? String { delete(id) }
         case "insert":
             if let id = message["id"] as? Int, let text = message["text"] as? String { insert(id, text) }
+        case "toggle": toggle()
+        case "permissions": sendPermissions()
+        case "request": if let kind = message["kind"] as? String { request(kind) }
         default: break
         }
     }
@@ -155,7 +161,66 @@ final class Controller {
         refreshStates()
     }
 
+    // MARK: Permissions
+
+    func sendPermissions() {
+        let microphone: String
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: microphone = "granted"
+        case .notDetermined: microphone = "notAsked"
+        default: microphone = "denied"
+        }
+        send(["type": "permissions", "microphone": microphone, "accessibility": AXIsProcessTrusted()])
+    }
+
+    /// Asks for the microphone once; after that, and for pasting, the switch is in System Settings
+    private func request(_ kind: String) {
+        if kind == "microphone" {
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .audio) { _ in
+                    DispatchQueue.main.async { MainActor.assumeIsolated { self.sendPermissions() } }
+                }
+                return
+            }
+            openPrivacyPane("Privacy_Microphone")
+        } else {
+            // Prompting adds Treeix to the list in System Settings, where the switch still has to be turned on
+            _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+            openPrivacyPane("Privacy_Accessibility")
+        }
+        sendPermissions()
+    }
+
+    private func openPrivacyPane(_ pane: String) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") { NSWorkspace.shared.open(url) }
+    }
+
+    private func sendPhase() {
+        let name: String
+        switch phase {
+        case .idle: name = "idle"
+        case .recording: name = "listening"
+        case .busy: name = "transcribing"
+        }
+        guard name != sentPhase else { return }
+        sentPhase = name
+        send(["type": "phase", "phase": name])
+    }
+
     // MARK: Hotkey
+
+    /// The title bar's mic: starts hands-free listening, or ends it like the next tap
+    private func toggle() {
+        switch phase {
+        case .recording: finish()
+        case .idle:
+            start()
+            guard case .recording = phase else { return }
+            phase = .recording(handsFree: true)
+            hud.show(.listening(handsFree: true))
+        case .busy: break
+        }
+    }
 
     private func pressed() {
         switch phase {

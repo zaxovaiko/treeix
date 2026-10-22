@@ -6,8 +6,8 @@
 
 # Releases
 
-- Every push to `main` that touches the app publishes a release to users (`.github/workflows/release.yml`). Treat a push as a release.
-- Patch: just push. The version comes from the latest `v*` tag and the bump is never committed, so `apps/desktop/package.json` lags behind on purpose. Don't "fix" it.
+- Every push to `main` that touches the app (`apps/desktop`, `crates`, `Cargo.*`, `rust-toolchain.toml`) publishes a release to users (`.github/workflows/release.yml`): a universal Mac DMG and a Linux AppImage, both updating themselves through `latest.json`. Treat a push as a release.
+- Patch: just push. The version comes from the latest `v*` tag and the bump is never committed, so `apps/desktop/package.json` (which `tauri.conf.json` reads its version from) lags behind on purpose. Don't "fix" it.
 - Major: a breaking commit (above), then push. Nothing else to bump.
 - Minor: `npm version --no-git-tag-version --prefix apps/desktop <x.y.0>`, commit `chore: release v<x.y.0>`, push. It must be higher than the latest tag.
 - Preview the notes before pushing: `sh apps/desktop/scripts/release-notes.sh "$(git tag -l 'v*' --sort=-v:refname | head -1)..HEAD"`.
@@ -15,5 +15,6 @@
 
 # E2E and repros
 
-- Always headless: every Electron launch (e2e, `.claude/repro` scripts, ad-hoc checks) sets `TREEIX_HEADLESS: '1'` in its env, so no window takes over the user's screen. Playwright screenshots still work hidden.
-- The one exception is a check that has to screen-capture the real window (e.g. the hotkey window's corners). Ask before running it.
+- UI e2e runs headless on the mock daemon, no window: `bunx playwright test` in `apps/desktop`.
+- The in-app e2e drives a built app against the real daemon: `TREEIX_AUTORUN=e2e TREEIX_DATA_DIR=$(mktemp -d) <app binary>`. Always a fresh data dir, never the user's. Steps and the report: `docs/next/testing.md`.
+- That one is not headless: autorun keeps the window on top, because macOS stops drawing covered windows. Ask before running it or any other check that shows or screen-captures the app.

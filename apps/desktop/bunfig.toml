@@ -1,3 +1,0 @@
-[install]
-# Dependencies are pinned; bun add writes the exact version instead of a ^ range
-exact = true

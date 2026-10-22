@@ -1,5 +1,5 @@
 //! Plan limits (5-hour and weekly windows) of Claude (statusline, LimitBar, the Claude desktop app) and Codex
-//! (rollout rate_limits). Port of packages/plugins/usage-limits/main
+//! (rollout rate_limits). Port of the Electron app's usage-limits plugin.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

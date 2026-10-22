@@ -1,4 +1,4 @@
-//! TCP ports that processes under a Treeix session listen on (`ps` + `lsof`). Port of terminal/main/ports.ts
+//! TCP ports that processes under a Treeix session listen on (`ps` + `lsof`). Port of the Electron terminal plugin's ports.ts
 
 use serde::{Deserialize, Serialize};
 use specta::Type;

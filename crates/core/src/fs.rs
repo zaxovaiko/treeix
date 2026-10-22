@@ -1,4 +1,4 @@
-//! Files inside a place: listing, reading, saving with conflict check, create / rename / trash, watching. Port of files.ts and paths.ts.
+//! Files inside a place: listing, reading, saving with conflict check, create / rename / trash, watching. Port of the Electron app's files.ts and paths.ts.
 //! Every function takes the place root and a relative path, and refuses paths that resolve outside the root.
 
 use ignore::WalkBuilder;

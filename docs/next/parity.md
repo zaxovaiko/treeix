@@ -1,6 +1,6 @@
 # Prototype parity (Phase 2)
 
-What the Next shell covers from the prototype. `[x]` done, `[ ]` missing.
+What the shell covers from the prototype. `[x]` done, `[ ]` missing.
 
 ## Window and tabs
 

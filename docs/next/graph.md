@@ -1,6 +1,6 @@
 # Module graph: differences from the Electron scan
 
-`crates/core/src/graph` replaces `packages/plugins/dependencies/main/scan.ts` (TypeScript compiler API) with oxc_parser + oxc_resolver. The page (`apps/next/src/features/graph`) cuts the result to packages, folders or files in `graph.ts`, which replaces `shared/graph.ts`.
+`crates/core/src/graph` replaces the Electron app's dependencies plugin scan (`scan.ts`, TypeScript compiler API) with oxc_parser + oxc_resolver. The page (`apps/desktop/src/features/graph`) cuts the result to packages, folders or files in `graph.ts`, which replaces `shared/graph.ts`.
 
 ## Shape
 
@@ -25,4 +25,4 @@
 
 ## Speed
 
-This repo: about 650 files and 2900 imports in about 130 ms (parallel parse, one arena per thread). `scan_this_repo` in `crates/core/src/graph/tests.rs` checks known packages and edges.
+This repo: about 150 files and 600 imports in about 110 ms (parallel parse, one arena per thread). `scan_this_repo` in `crates/core/src/graph/tests.rs` checks known packages and edges.

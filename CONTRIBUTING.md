@@ -3,36 +3,40 @@
 ## Setup
 
 ```sh
-bun install   # installs apps/desktop and apps/landing, links packages/node_modules
-bun run dev
+bun install   # installs apps/desktop
+bun run dev   # the UI in a browser, on a mock daemon
+bun run app   # the Tauri app with the real daemon
 ```
 
-macOS 14 or newer, Apple silicon, [Bun](https://bun.sh). The optional command line tools (`gh`, `glab`, `acli`, `claude`, `codex`) are only needed for the plugins that use them.
+macOS 14 or newer, Apple silicon, [Bun](https://bun.sh) and the Rust toolchain in `rust-toolchain.toml`. The optional command line tools (`gh`, `glab`, `acli`, `claude`, `codex`) are only needed for the features that use them.
 
 ## Before opening a pull request
 
 ```sh
-bun run format
-bun run lint
 bun run typecheck
 bun run test
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-All have to pass; CI checks the formatting with `bun run format:check`. UI changes need a screenshot of the change in the app.
+All have to pass; [docs/next/testing.md](docs/next/testing.md) covers the other layers and what CI runs. UI changes need a screenshot of the change in the app.
 
 ## House style
 
 - TypeScript with no `any`. `unknown` at trust boundaries, narrowed with a type guard.
-- Single quotes, no semicolons, 180 column lines. `bun run format` (oxfmt) applies them; rules live in `.oxfmtrc.json` and `.oxlintrc.json`.
+- Single quotes, no semicolons, 180 column lines in TypeScript; `cargo fmt` for Rust.
 - Clear names and decomposition over comments. A comment explains why, never what.
 - No speculative abstraction: no interface with one implementation, no option nobody sets.
 - Conventional commit messages (`feat:`, `fix:`, `docs:`, `refactor:`).
 
 ## Where code goes
 
-A new feature is a plugin in `packages/plugins/<id>` unless it belongs to workspaces, worktrees, diffs, the editor, comments or settings, which are the host. Code two plugins need is a library package, not an import between plugins. See [packages/README.md](packages/README.md) and [docs/architecture.md](docs/architecture.md).
+Terminals, chats, routines and anything that must outlive the window belong in `crates/ptyd`. Git, files, pull requests, agents and tickets are plain modules in `crates/core`, called through a command in `apps/desktop/src-tauri`. The UI is `apps/desktop/src`, and it reaches the Rust side only through `src/ipc/api.ts`. See [docs/architecture.md](docs/architecture.md).
 
-Logic worth testing lives in a plain module with a `*.test.ts` beside it, not inside a component: there is no renderer test runner.
+`src/ipc/bindings.ts` is generated: change the Rust type and run `cargo test -p treeix-app export_bindings`.
+
+Logic worth testing lives in a plain module with a `*.test.ts` beside it, not inside a component.
 
 ## License of contributions
 
