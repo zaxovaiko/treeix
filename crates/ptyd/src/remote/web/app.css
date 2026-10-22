@@ -312,6 +312,13 @@ a.btn {
   transition: background 0.15s;
 }
 
+/* A 44px tap target around the 26px track */
+.switch::before {
+  content: "";
+  position: absolute;
+  inset: -9px -4px;
+}
+
 .switch::after {
   content: "";
   position: absolute;
