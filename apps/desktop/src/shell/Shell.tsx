@@ -6,9 +6,9 @@ import { Icon } from '../lib/icons'
 import { IN_TAURI, pickFolder, registerQuickShortcut, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, type Sessions } from './model'
-import { isCommandId, menuChord, type CommandId } from './shortcuts'
+import { isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
-import { SettingsPage, useAppliedSettings } from '../pages/settings'
+import { SettingsPage, followedMode, useAppliedSettings } from '../pages/settings'
 import { settingsNow } from '../features/agents/settings'
 import { toggleRecording } from '../features/voice'
 import { useBrowserAgentPanes } from '../features/browser/open'
@@ -18,7 +18,7 @@ import { Palette } from './Palette'
 import { Dialogs, useDialogKeys, type DialogRequest } from '../dialogs'
 import { paneGrid } from '../panes/terminal/xterm'
 import { Panels } from '../panels/Panels'
-import { openFile } from '../panes/file/open'
+import { isFileLeaf, leafRoot, openFile } from '../panes/file/open'
 import { chatLeaf, isChatLeaf, leafChat } from '../panes/chat/open'
 import { getChat, initChats, useChatsVersion } from '../panes/chat/store'
 
@@ -56,7 +56,8 @@ const GraphPage = lazy(() => import('../features/graph').then((m) => ({ default:
 const byId = (list: SessionInfo[]): Sessions => Object.fromEntries(list.map((s) => [s.id, s]))
 /** Chat leaves a restore keeps; none when ptyd can't list chats */
 const openChats = (api: Api): Promise<string[]> => api.chatList().then((list) => list.map((chat) => chatLeaf(chat.id)), () => [])
-const chatCwd = (leaf: string): string | undefined => (isChatLeaf(leaf) ? getChat(leafChat(leaf)).info?.cwd : undefined)
+/** Where a leaf that is not a session works: a chat's cwd, a file view's place */
+const leafCwd = (leaf: string): string | undefined => (isChatLeaf(leaf) ? getChat(leafChat(leaf)).info?.cwd : isFileLeaf(leaf) ? leafRoot(leaf) : undefined)
 
 export function Shell({ api }: { api: Api }) {
   const [ui, dispatch] = useReducer(reducer, initialUi)
@@ -90,7 +91,7 @@ export function Shell({ api }: { api: Api }) {
         const saved = parseUi(json)
         setHome(homeDir)
         setSessions(byId(list))
-        dispatch({ type: 'load', ui: restore(saved, list, chats) })
+        dispatch({ type: 'load', ui: restore({ ...saved, theme: followedMode(saved.theme) }, list, chats) })
         setUnreachable(false)
         setLoaded(true)
         if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
@@ -148,19 +149,19 @@ export function Shell({ api }: { api: Api }) {
   })
   useEffect(() => api.onEvent(onEvent), [api])
 
-  const chatCwds = ui.tabs.flatMap((tab) => leaves(tab.root)).flatMap((leaf) => chatCwd(leaf) ?? [])
+  const leafCwds = ui.tabs.flatMap((tab) => leaves(tab.root)).flatMap((leaf) => leafCwd(leaf) ?? [])
   useEffect(() => {
-    const cwds = [...new Set([...Object.values(sessions).map((s) => s.cwd), ...chatCwds])].filter((cwd) => !places[cwd] && !resolving.current.has(cwd))
+    const cwds = [...new Set([...Object.values(sessions).map((s) => s.cwd), ...leafCwds])].filter((cwd) => !places[cwd] && !resolving.current.has(cwd))
     if (!cwds.length) return
     cwds.forEach((cwd) => resolving.current.add(cwd))
     void api
       .places(cwds)
       .then((found) => setPlaces((all) => ({ ...all, ...Object.fromEntries(cwds.map((cwd, i) => [cwd, found[i]] as const).filter(([, p]) => p)) })))
       .finally(() => cwds.forEach((cwd) => resolving.current.delete(cwd)))
-  }, [api, sessions, places, chatCwds.join('\n')])
+  }, [api, sessions, places, leafCwds.join('\n')])
 
   const placeOf = (session: string): Place => {
-    const cwd = sessions[session]?.cwd ?? chatCwd(session) ?? home
+    const cwd = sessions[session]?.cwd ?? leafCwd(session) ?? home
     return places[cwd] ?? fallbackPlace(cwd, home)
   }
   const placeOfTab = (tab: Tab): Place => {
@@ -275,7 +276,7 @@ export function Shell({ api }: { api: Api }) {
       case 'settings':
         return setPage(page === 'settings' ? null : 'settings')
       case 'module-graph':
-        if (!settingsNow()?.features.graph || (activeTab && placeOfTab(activeTab).kind === 'scratch')) return
+        if (!settingsNow()?.features.graph || !activeTab || placeOfTab(activeTab).kind === 'scratch') return
         return setPage(page === 'graph' ? null : 'graph')
       case 'record':
         if (settingsNow()?.features.recording) void toggleRecording(api).catch((e: unknown) => console.warn('recording:', e))
@@ -285,13 +286,14 @@ export function Shell({ api }: { api: Api }) {
       case 'toggle-ui':
         return dispatch({ type: 'set', patch: { ui: ui.ui === 'compact' ? 'islands' : 'compact' } })
       case 'toggle-theme':
+        // A picked mode stops following the OS, else the next launch or OS switch undoes it
+        if (settingsNow()?.appearance.followSystem) void api.updateSettings({ appearance: { followSystem: false } }).catch((e: unknown) => console.warn('settings:', e))
         return dispatch({ type: 'set', patch: { theme: ui.theme === 'dark' ? 'light' : 'dark' } })
     }
   }
 
   const onKey = useEffectEvent((e: KeyboardEvent) => {
-    // The settings recorder is taking a chord
-    if (document.querySelector('.krec.on')) return
+    if (shortcutsPaused()) return
     const keys = settingsNow()?.keys ?? {}
     const id = resolveShortcut(e, keys)
     if (!id || (IN_TAURI && menuChord(e, keys))) return
@@ -306,7 +308,7 @@ export function Shell({ api }: { api: Api }) {
   }, [])
 
   const onMenu = useEffectEvent((id: string) => {
-    if (isCommandId(id)) run(id)
+    if (isCommandId(id) && !shortcutsPaused()) run(id)
   })
   useEffect(() => {
     if (!IN_TAURI) return

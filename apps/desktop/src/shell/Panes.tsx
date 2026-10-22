@@ -96,7 +96,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                     <span className="trunc grow">{file ? leafRoot(id).split('/').pop() : (info?.title ?? 'zsh')}</span>
                   </>
                 )}
-                {dot !== 'idle' && <span className={`st-${dot}`}>{DOT_LABEL[dot].toLowerCase()}</span>}
+                {dot !== 'idle' && <span className={`st-${dot} trunc`}>{DOT_LABEL[dot].toLowerCase()}</span>}
                 <button className="icon sm" onClick={() => view.split('row', id)} title={withHint('Split right', 'split-right')}>
                   <Icon name="split" />
                 </button>

@@ -60,9 +60,9 @@ export function GraphPage({ view, onClose }: { view: ShellView; onClose: () => v
 
   const top = (
     <div className="gtop">
-      <button className="btn sm" onClick={onClose}>
+      <button className="btn sm back" onClick={onClose} title="Back to the terminal">
         <Icon name="left" />
-        Terminal
+        <span>Terminal</span>
       </button>
       <b>Module graph</b>
       <span className="dim trunc">{place?.name}</span>

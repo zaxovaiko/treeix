@@ -319,7 +319,7 @@ async fn connect() -> io::Result<Connection> {
         if is_ours(&hello) {
             return Ok((reader, writer, hello));
         }
-        tracing::info!(theirs = %hello.build, ours = BUILD, "daemon build differs, replacing it");
+        tracing::info!(theirs = %describe(&hello), ours = %describe_ours(), "daemon build differs, replacing it");
         proto::write_frame(
             &mut writer,
             &ClientMsg::Req {
@@ -346,12 +346,25 @@ async fn connect() -> io::Result<Connection> {
         match handshake().await {
             Ok(conn) if is_ours(&conn.2) => return Ok(conn),
             Ok(conn) => {
-                last = io::Error::other(format!("daemon build {} is not {BUILD}", conn.2.build))
+                last = io::Error::other(format!(
+                    "daemon {} is not {}",
+                    describe(&conn.2),
+                    describe_ours()
+                ))
             }
             Err(e) => last = e,
         }
     }
     Err(last)
+}
+
+/// Build and protocol: a stale dev daemon often has the same version but an older protocol
+fn describe(hello: &Hello) -> String {
+    format!("build {} (protocol {})", hello.build, hello.proto)
+}
+
+fn describe_ours() -> String {
+    format!("build {BUILD} (protocol {})", proto::PROTO_VERSION)
 }
 
 fn is_ours(hello: &Hello) -> bool {

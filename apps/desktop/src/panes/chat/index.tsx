@@ -71,17 +71,15 @@ function EmptyState({ chat }: { chat: ChatState }) {
   )
 }
 
-/** The prototype's footer: agent, model, context used */
+/** The prototype's footer: agent and context used; the composer's menu shows the model */
 function Footer({ chat }: { chat: ChatState }) {
   const { feed, info } = chat
-  const model = feed.options.find((option) => option.category === 'model')
-  const modelName = model?.values.find((value) => value.value === model.currentValue)?.name ?? model?.currentValue
   const usage = feed.usage
   const pct = usage && usage.size > 0 ? Math.min(100, Math.round((usage.used / usage.size) * 100)) : null
   return (
     <div className="tfoot">
       {info && <Icon name={info.agent} />}
-      {modelName ?? (info?.agent === 'codex' ? 'Codex' : 'Claude')}
+      {info?.agent === 'codex' ? 'Codex' : 'Claude'}
       {usage && pct !== null && (
         <>
           <span>· context</span>
