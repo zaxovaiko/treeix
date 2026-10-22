@@ -830,6 +830,9 @@ section {
 .install .button {
   margin-top: clamp(40px, 5vw, 64px);
 }
+.install .fine {
+  margin-top: 18px;
+}
 
 /* footer */
 .footer {
