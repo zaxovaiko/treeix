@@ -7,6 +7,9 @@ import { IS_MAC } from '../../shell/shortcuts'
 import type { ShellView } from '../../shell/Shell'
 import type { UiState } from '../../shell/state'
 import type { Mode } from '../../styles/theme'
+import { RoutinesSection } from '../../features/routines'
+import { BrowserSection } from '../../features/browser'
+import { RecordingSection, VoiceSection } from '../../features/voice'
 import { Field, Group, Recorder, Row, Seg, Select, Status, Switch } from './controls'
 
 export interface SectionProps {
@@ -502,6 +505,10 @@ export const SECTION_VIEWS: Record<SettingsSection, (props: SectionProps) => Rea
   notion: Notion,
   prs: Prs,
   awake: Awake,
+  routines: RoutinesSection,
+  browser: BrowserSection,
+  voice: VoiceSection,
+  recording: RecordingSection,
   features: Features,
   about: About,
 }

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.dyvertex.treeix.next",
   "build": {
-    "beforeDevCommand": "sh scripts/build-ptyd.sh debug && bun run dev",
+    "beforeDevCommand": "sh scripts/build-ptyd.sh debug && sh scripts/build-voice.sh debug && bun run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "sh scripts/build-ptyd.sh && bun run build",
+    "beforeBuildCommand": "sh scripts/build-ptyd.sh && sh scripts/build-voice.sh && bun run build",
     "frontendDist": "../dist"
   },
   "app": {

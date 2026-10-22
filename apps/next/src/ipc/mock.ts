@@ -24,8 +24,12 @@ import {
   type WorktreeStep,
 } from './api'
 import { agentsMock } from './mockAgents'
+import { browserMock } from './mockBrowser'
 import { chatMock } from './mockChat'
+import { plansMock } from './mockPlans'
+import { routinesMock } from './mockRoutines'
 import { settingsMock } from './mockSettings'
+import { voiceMock } from './mockVoice'
 
 // In-browser fake daemon for the dev server and visual checks: a tiny shell over a fake file tree.
 // `?seed=empty` starts with no sessions (first run); `window.treeixMock.restart()` simulates a daemon restart
@@ -332,6 +336,10 @@ export function mockApi(): Api {
     ...agentsMock(),
     ...chatMock(),
     ...settingsMock(),
+    ...routinesMock(),
+    ...browserMock(),
+    ...plansMock(),
+    ...voiceMock(),
   }
 }
 
@@ -369,7 +377,8 @@ function seed(spawn: (opts: CreateSession, id: string, createdAt: number) => Sim
 // Phase 3 demo data, from the prototype (data.js): repos, worktrees, branches, changes, PRs, closed sessions
 
 type Phase3 = Omit<Api, 'hello' | 'sessions' | 'create' | 'attach' | 'write' | 'resize' | 'kill' | 'remove' | 'restart' | 'clear' | 'getUi' | 'putUi' | 'places' | 'homeDir' | 'onEvent' | keyof Phase45>
-type Phase45 = ReturnType<typeof agentsMock> & ReturnType<typeof chatMock> & ReturnType<typeof settingsMock>
+type Phase45 = ReturnType<typeof agentsMock> & ReturnType<typeof chatMock> & ReturnType<typeof settingsMock> & Phase67
+type Phase67 = ReturnType<typeof routinesMock> & ReturnType<typeof browserMock> & ReturnType<typeof plansMock> & ReturnType<typeof voiceMock>
 
 const HOUR = 3_600_000
 const DOWNLOADS = `${HOME}/Downloads`
@@ -573,6 +582,7 @@ const RECORDS: SessionRecord[] = (
     ['codex', 'Speaker labels in meeting notes', TREEIX, 'main', 6, 33, 1.21, 'Label speakers in meeting transcripts...'],
     ['claude', 'Rename invoices by vendor', DOWNLOADS, null, 6, 9, 0.31, 'Rename the PDFs in invoices/ to vendor-date...'],
     ['claude', 'Convert HEIC photos to JPG', HOME, null, 6, 6, 0.12, 'Convert the HEIC photos on my Desktop to JPG...'],
+    ['claude', 'Review requested PRs', `${TREEIX}/.claude/worktrees/pr-412`, 'fix/login-redirect', 0, 14, 0.62, 'Review PR #412 "Fix login redirect" by octocat...'],
   ] as const
 ).map(([kind, title, cwd, branch, days, messages, cost, firstPrompt], i) => {
   const closedAt = Date.now() - days * 24 * HOUR - i * HOUR
@@ -591,6 +601,8 @@ const RECORDS: SessionRecord[] = (
     messages,
     cost,
     firstPrompt,
+    // The routine run in mockRoutines
+    run: title === 'Review requested PRs' ? 'run-1' : null,
   }
 })
 

@@ -74,12 +74,18 @@ test('menu ids are checked', () => {
 })
 
 test('menu chords: only what src-tauri/src/menu.rs binds, and only on macOS', () => {
-  expect(menuChord(key('\\', {}, 'Backslash'), true)).toBe(true)
-  expect(menuChord(key(','), true)).toBe(true)
-  expect(menuChord(key('P', { shift: true }), true)).toBe(true)
-  expect(menuChord(key('k'), true)).toBe(false)
-  expect(menuChord(key('t'), true)).toBe(false)
-  expect(menuChord(key(','), false)).toBe(false)
+  expect(menuChord(key('\\', {}, 'Backslash'), {}, true)).toBe(true)
+  expect(menuChord(key(',', {}, 'Comma'), {}, true)).toBe(true)
+  expect(menuChord(key('P', { shift: true }, 'KeyP'), {}, true)).toBe(true)
+  expect(menuChord(key('k', {}, 'KeyK'), {}, true)).toBe(false)
+  expect(menuChord(key('t', {}, 'KeyT'), {}, true)).toBe(false)
+  expect(menuChord(key(',', {}, 'Comma'), {}, false)).toBe(false)
+})
+
+test('menu chords follow settings.keys', () => {
+  expect(menuChord(key('P', { shift: true }, 'KeyP'), { palette: 'Shift+Super+KeyO' }, true)).toBe(false)
+  expect(menuChord(key('O', { shift: true }, 'KeyO'), { palette: 'Shift+Super+KeyO' }, true)).toBe(true)
+  expect(menuChord(key(',', {}, 'Comma'), { settings: '' }, true)).toBe(false)
 })
 
 test('records global shortcut accelerators', () => {

@@ -24,6 +24,14 @@ keyring = "=4.2.0"
 reqwest = { version = "=0.13.5", features = ["json"] }
 jiff = "0.2"
 zstd = "0.13"
+treeix-proto = { workspace = true, features = ["specta"] }
+croner = { version = "=4.0.2", default-features = false, features = ["jiff"] }
+oxc_allocator = "=0.152.0"
+oxc_ast = "=0.152.0"
+oxc_ast_visit = "=0.152.0"
+oxc_parser = "=0.152.0"
+oxc_span = "=0.152.0"
+oxc_resolver = "=11.24.3"
 
 [dev-dependencies]
 tempfile = "3"

@@ -40,6 +40,7 @@ pub struct Daemon {
     pub shutdown: Notify,
     stopping: AtomicBool,
     pub chats: crate::chat::Chats,
+    pub routines: crate::routines::Routines,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -71,6 +72,7 @@ impl Daemon {
             sessions.insert(session.id.clone(), session);
         }
         let chats = crate::chat::Chats::load(&data_dir);
+        let routines = crate::routines::Routines::load(&data_dir);
         Arc::new(Self {
             data_dir,
             build,
@@ -83,11 +85,17 @@ impl Daemon {
             shutdown: Notify::new(),
             stopping: AtomicBool::new(false),
             chats,
+            routines,
         })
     }
 
     pub fn stopping(&self) -> bool {
         self.stopping.load(Ordering::Acquire)
+    }
+
+    /// An app is connected (routines with background runs off fire only then)
+    pub fn has_clients(&self) -> bool {
+        !lock(&self.clients).is_empty()
     }
 
     pub fn broadcast(&self, event: Event) {
@@ -163,6 +171,7 @@ impl Daemon {
             session.signal(Signal::SIGHUP);
         }
         self.chats.stop();
+        self.routines.stop();
         tracing::info!("stopped with {} sessions", sessions.len());
     }
 
@@ -203,6 +212,7 @@ impl Daemon {
             }
         });
         crate::hooks::watch(self);
+        crate::routines::spawn(self);
     }
 
     pub async fn serve(self: Arc<Self>, stream: UnixStream) -> anyhow::Result<()> {
@@ -279,6 +289,18 @@ impl Daemon {
             crate::chat::handle(self, client, outbox, id, req);
             return;
         }
+        if matches!(
+            req,
+            Request::RoutineList
+                | Request::RoutinePut { .. }
+                | Request::RoutineRemove { .. }
+                | Request::RoutineRunNow { .. }
+                | Request::RoutineRuns { .. }
+                | Request::RunCancel { .. }
+        ) {
+            crate::routines::handle(self, outbox, id, req);
+            return;
+        }
         let shutdown = matches!(req, Request::Shutdown);
         let resp = self.respond(client, req);
         let _ = outbox.send(ServerMsg::Resp { id, resp });
@@ -336,7 +358,13 @@ impl Daemon {
             | Request::ChatList
             | Request::ChatAttach { .. }
             | Request::ChatDetach { .. }
-            | Request::ChatClose { .. } => {
+            | Request::ChatClose { .. }
+            | Request::RoutineList
+            | Request::RoutinePut { .. }
+            | Request::RoutineRemove { .. }
+            | Request::RoutineRunNow { .. }
+            | Request::RoutineRuns { .. }
+            | Request::RunCancel { .. } => {
                 unreachable!("answered in handle")
             }
             Request::Detach { session } => self.detach(&session, (client, None)),
@@ -411,7 +439,7 @@ impl Daemon {
         Ok(Response::Ok)
     }
 
-    fn create(self: &Arc<Self>, create: CreateSession) -> anyhow::Result<SessionInfo> {
+    pub(crate) fn create(self: &Arc<Self>, create: CreateSession) -> anyhow::Result<SessionInfo> {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
         let title = create.title.clone().unwrap_or_else(|| {
             let program = create

@@ -54,6 +54,9 @@ pub struct SessionRecord {
     pub messages: Option<u32>,
     pub cost: Option<f64>,
     pub first_prompt: Option<String>,
+    /// The routine run this session was (`RoutineRun.id`); ptyd records those when they end
+    #[serde(default)]
+    pub run: Option<String>,
 }
 
 /// Snapshots of one file live in `dir/<sha1(root \0 file)>/<ms>.txt`
@@ -236,6 +239,7 @@ mod tests {
             messages: None,
             cost: None,
             first_prompt: None,
+            run: None,
         }
     }
 

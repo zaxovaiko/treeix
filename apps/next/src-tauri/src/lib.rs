@@ -1,3 +1,4 @@
+mod browser;
 mod commands;
 mod daemon;
 mod keep_awake;
@@ -8,6 +9,7 @@ mod service;
 mod tray;
 mod types;
 mod updater;
+mod voice;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -112,6 +114,42 @@ fn specta() -> Builder<tauri::Wry> {
             install_update,
             keep_awake,
             set_keep_awake,
+            // Phase 6-7: routines
+            routine_list,
+            routine_put,
+            routine_remove,
+            routine_run_now,
+            routine_runs,
+            routine_cancel_run,
+            routine_next_fires,
+            // browser pane
+            browser_open,
+            browser_place,
+            browser_close,
+            browser_navigate,
+            browser_go,
+            browser_devtools,
+            browser_cookie_profiles,
+            browser_import_cookies,
+            browser_clear_data,
+            browser_dev_command,
+            // plan pane, module graph
+            plans_list,
+            plan_read,
+            graph_scan,
+            // dictation, recording
+            dictation_status,
+            dictation_toggle,
+            voice_model_download,
+            voice_model_delete,
+            voice_request_access,
+            dictation_history,
+            recording_status,
+            recording_start,
+            recording_pause,
+            recording_stop,
+            recordings,
+            recording_read,
         ])
         // Registering events is also what drops tauri's `TAURI_CHANNEL = null` placeholder type from the export
         .events(collect_events![
@@ -119,7 +157,10 @@ fn specta() -> Builder<tauri::Wry> {
             UsageLimitsChanged,
             ChatsEvent,
             SettingsChanged,
-            KeepAwakeState
+            KeepAwakeState,
+            RoutinesEvent,
+            browser::BrowserEvent,
+            voice::VoiceEvent
         ])
 }
 
@@ -202,6 +243,7 @@ pub fn run() {
             quick::create(app.handle())?;
             commands::mcp::start(app.handle());
             commands::system::setup(app.handle());
+            voice::setup(app.handle());
             // macOS stops drawing frames in a covered window, and the runners wait on frames
             if let (Some(_), Some(window)) = (autorun(), app.get_webview_window("main")) {
                 window.set_always_on_top(true)?;
@@ -214,6 +256,7 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 commands::system::exit(app);
+                voice::exit(app);
             }
         });
 }

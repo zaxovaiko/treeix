@@ -65,7 +65,7 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
   const [failedAt, setFailedAt] = useState(0)
   const paths = useRef<string[]>([])
   const settings = useSettings(api)
-  const { tickets } = useTickets(api, settings)
+  const { tickets, errors: ticketErrors } = useTickets(api, settings)
   const agent = agents[0] ?? null
   const racing = mode === 'branch' && agents.length > 1
 
@@ -353,6 +353,11 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
               />
               {rows.length > 0 && (
                 <div className="sugg" onMouseDown={(e) => e.preventDefault()}>
+                  {ticketErrors.map((e) => (
+                    <div key={e.source} className="mlabel err trunc" title={e.message}>
+                      {e.source === 'jira' ? 'Jira' : 'Notion'}: {e.message}
+                    </div>
+                  ))}
                   {rows.map((r, i) => {
                     const label = 'ticket' in r ? (i === 0 || !('ticket' in rows[i - 1]) ? 'Your tickets' : null) : !r.create && ticketList.length && i > 0 && 'ticket' in rows[i - 1] ? 'Branches' : null
                     return (

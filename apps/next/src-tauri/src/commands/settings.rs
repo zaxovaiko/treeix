@@ -33,6 +33,8 @@ pub async fn update_settings(app: AppHandle, patch: Value) -> Result<Settings> {
     if let Err(e) = event.emit(&app) {
         tracing::warn!("settings event not sent: {e}");
     }
+    #[cfg(target_os = "macos")]
+    crate::menu::rebind(&app);
     Ok(saved)
 }
 

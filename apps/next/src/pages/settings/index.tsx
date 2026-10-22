@@ -25,6 +25,10 @@ const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {
   notion: ['Notion', 'book'],
   prs: ['Pull requests', 'branch'],
   awake: ['Keep awake', 'moon'],
+  routines: ['Routines', 'clock'],
+  browser: ['Browser', 'globe'],
+  voice: ['Dictation', 'mic'],
+  recording: ['Meeting recording', 'rec'],
   features: ['Features', 'gear'],
   about: ['About', 'alert'],
 }

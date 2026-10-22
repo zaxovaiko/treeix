@@ -2,9 +2,19 @@
 // `mock.ts` in the browser (dev server, visual checks, tests). Mirrors crates/proto.
 
 import type {
+  Access,
+  AccessKind,
   AgentLimits,
   AgentUsage,
   AgentView,
+  Bounds,
+  Browser,
+  BrowserEntry,
+  BrowserEvent,
+  BrowserNav,
+  BrowserProfile,
+  BrowserState,
+  Budget,
   ChatAgent,
   ChatCapabilities,
   ChatCommand,
@@ -15,12 +25,23 @@ import type {
   ChatOption,
   ChatPreset,
   ChatRole,
-  ChatStatus,
   ChatsEvent,
+  ChatStatus,
   CliTool,
+  ConsoleLevel,
+  CookieImport,
   Cost,
   CursorStyle,
+  Dictation,
+  DictationEntry,
+  DictationPhase,
+  DictationStatus,
   Features,
+  GraphFile,
+  GraphImport,
+  GraphPackage,
+  HelperState,
+  ImportKind,
   KeepAwakeMode,
   KeepAwakeState,
   LimitWindow,
@@ -31,6 +52,8 @@ import type {
   McpInstallState,
   McpStatus,
   McpToolInfo,
+  ModelPhase,
+  ModuleGraph,
   NewChat,
   NotionDatabase,
   OptionCategory,
@@ -38,6 +61,21 @@ import type {
   PermissionKind,
   PermissionOption,
   PlanEntry,
+  PlanFile,
+  Recording,
+  RecordingInfo,
+  RecordingNote,
+  RecordingPhase,
+  RecordingStatus,
+  Routine,
+  RoutineEvent,
+  RoutinePermission,
+  RoutinePlace,
+  RoutineRun,
+  Routines,
+  RoutinesEvent,
+  RunCause,
+  RunStatus,
   Secret,
   SessionPort,
   SessionUsage,
@@ -55,11 +93,17 @@ import type {
   ToolLocation,
   ToolOutput,
   ToolStatus,
+  TranscriptLine,
   TrayLabel,
+  Trigger,
   TurnUsage,
   UpdateInfo,
   UsageLimits,
   UsageRow,
+  VocabularyTerm,
+  VoiceEvent,
+  VoiceModel,
+  WhileAsleep,
 } from './bindings'
 
 export type SessionKind = 'shell' | 'claude' | 'codex' | 'routine'
@@ -296,13 +340,92 @@ export interface Api {
   /** Turns the toggle on or off; `settings.awake.mode` decides when it holds */
   setKeepAwake(on: boolean): Promise<KeepAwakeState>
   onKeepAwake(cb: (state: KeepAwakeState) => void): () => void
+  // Phase 6-7. Contract: docs/next/phase67-contract.md
+  // Routines (R6 engine in ptyd, U7 UI): they fire in ptyd, also while the app is closed
+  /** Every routine, by name */
+  routineList(): Promise<Routine[]>
+  /** Creates (empty id) or replaces a routine; ptyd fills id, created_at and a webhook token */
+  routinePut(routine: Routine): Promise<Routine>
+  /** Removes the routine; its finished runs stay in History */
+  routineRemove(id: string): Promise<void>
+  /** Fires it now (cause `manual`); queued when every slot is busy */
+  routineRunNow(id: string): Promise<RoutineRun>
+  /** Runs newest first, of one routine or all (null), at most `limit` */
+  routineRuns(routine: string | null, limit: number): Promise<RoutineRun[]>
+  /** Kills a running run or drops a queued one; it ends `cancelled` */
+  routineCancelRun(run: string): Promise<void>
+  /** The next `count` (max 20) fire times of a cron in local time, unix ms; rejects an invalid cron */
+  routineNextFires(cron: string, count: number): Promise<number[]>
+  /** A routine changed or was removed, or a run was queued, changed or ended, in any window */
+  onRoutines(cb: (e: RoutinesEvent) => void): () => void
+  // Browser pane (B7): a child webview per `browser:<pane>` leaf, laid over the leaf's rect
+  /** Creates the pane's webview (or returns the live one) and loads `url` */
+  browserOpen(pane: string, url: string): Promise<BrowserState>
+  /** Moves the webview over the leaf, in CSS px of the window; null hides it (popover, dialog, other tab) */
+  browserPlace(pane: string, bounds: Bounds | null): Promise<void>
+  /** Destroys the webview */
+  browserClose(pane: string): Promise<void>
+  /** A URL, `localhost:5173`, or words searched with `settings.browser.searchUrl` */
+  browserNavigate(pane: string, input: string): Promise<void>
+  browserGo(pane: string, nav: BrowserNav): Promise<void>
+  /** Opens the webview's own DevTools window */
+  browserDevtools(pane: string): Promise<void>
+  /** Browser profiles on this machine cookies can be imported from */
+  browserCookieProfiles(): Promise<BrowserProfile[]>
+  /** Copies the profile's cookies into the browser panes' store */
+  browserImportCookies(profile: string): Promise<CookieImport>
+  /** Drops cookies, storage and cache of every browser pane */
+  browserClearData(): Promise<void>
+  /** The dev server command of a folder (package.json `dev`/`start`, with its package manager); null when none */
+  browserDevCommand(folder: string): Promise<string | null>
+  /** Navigation, console and network entries, closes; pushed to every window */
+  onBrowser(cb: (e: BrowserEvent) => void): () => void
+  // Plans and module graph (G7)
+  /** Claude Code's plans in ~/.claude/plans, newest first; watch the folder with `watchPlace` */
+  plansList(): Promise<PlanFile[]>
+  /** A plan's markdown, by file name */
+  planRead(name: string): Promise<string>
+  /** Parses every JS/TS file under the root and resolves its imports */
+  graphScan(root: string): Promise<ModuleGraph>
+  // Dictation and recording (V7): the treeix-voice and treeix-meetings sidecars, macOS on Apple silicon only
+  dictationStatus(): Promise<DictationStatus>
+  /** Starts or stops listening, like a tap of the hotkey */
+  dictationToggle(): Promise<void>
+  /** Downloads a speech model; progress arrives as `dictation` events */
+  voiceModelDownload(model: string): Promise<void>
+  voiceModelDelete(model: string): Promise<void>
+  /** Shows the OS prompt, or opens System Settings when it was denied */
+  voiceRequestAccess(kind: AccessKind): Promise<void>
+  /** Recent dictations, newest first */
+  dictationHistory(): Promise<DictationEntry[]>
+  recordingStatus(): Promise<RecordingStatus>
+  /** Records the microphone and system audio; null title names it by date */
+  recordingStart(title: string | null): Promise<RecordingStatus>
+  recordingPause(paused: boolean): Promise<RecordingStatus>
+  /** Stops; the transcript and note are written while `saving`, then a `saved` event */
+  recordingStop(): Promise<RecordingStatus>
+  /** Saved recordings, newest first */
+  recordings(): Promise<RecordingInfo[]>
+  recordingRead(id: string): Promise<RecordingNote>
+  /** Dictation and recording status, partial words, live transcript lines, saved recordings */
+  onVoice(cb: (e: VoiceEvent) => void): () => void
 }
 
-// Phase 4-5 types are the generated ones (bindings.ts carries their docs)
+// Phase 4-7 types are the generated ones (bindings.ts carries their docs)
 export type {
+  Access,
+  AccessKind,
   AgentLimits,
   AgentUsage,
   AgentView,
+  Bounds,
+  Browser,
+  BrowserEntry,
+  BrowserEvent,
+  BrowserNav,
+  BrowserProfile,
+  BrowserState,
+  Budget,
   ChatAgent,
   ChatCapabilities,
   ChatCommand,
@@ -313,12 +436,23 @@ export type {
   ChatOption,
   ChatPreset,
   ChatRole,
-  ChatStatus,
   ChatsEvent,
+  ChatStatus,
   CliTool,
+  ConsoleLevel,
+  CookieImport,
   Cost,
   CursorStyle,
+  Dictation,
+  DictationEntry,
+  DictationPhase,
+  DictationStatus,
   Features,
+  GraphFile,
+  GraphImport,
+  GraphPackage,
+  HelperState,
+  ImportKind,
   KeepAwakeMode,
   KeepAwakeState,
   LimitWindow,
@@ -329,6 +463,8 @@ export type {
   McpInstallState,
   McpStatus,
   McpToolInfo,
+  ModelPhase,
+  ModuleGraph,
   NewChat,
   NotionDatabase,
   OptionCategory,
@@ -336,6 +472,21 @@ export type {
   PermissionKind,
   PermissionOption,
   PlanEntry,
+  PlanFile,
+  Recording,
+  RecordingInfo,
+  RecordingNote,
+  RecordingPhase,
+  RecordingStatus,
+  Routine,
+  RoutineEvent,
+  RoutinePermission,
+  RoutinePlace,
+  RoutineRun,
+  Routines,
+  RoutinesEvent,
+  RunCause,
+  RunStatus,
   Secret,
   SessionPort,
   SessionUsage,
@@ -353,11 +504,17 @@ export type {
   ToolLocation,
   ToolOutput,
   ToolStatus,
+  TranscriptLine,
   TrayLabel,
+  Trigger,
   TurnUsage,
   UpdateInfo,
   UsageLimits,
   UsageRow,
+  VocabularyTerm,
+  VoiceEvent,
+  VoiceModel,
+  WhileAsleep,
 }
 
 /** Any subset of the settings, one section deep: `{ terminal: { fontSize: 13 } }` */
@@ -603,7 +760,12 @@ export interface SessionRecord {
   messages: number | null
   cost: number | null
   firstPrompt: string | null
+  /** The routine run this session was (`RoutineRun.id`) */
+  run?: string | null
 }
+
+/** Webhook routines listen on `http://127.0.0.1:${WEBHOOK_PORT}/r/<token>` (crates/proto routines.rs) */
+export const WEBHOOK_PORT = 47311
 
 /** The message `saveFile` rejects with when the file changed on disk */
 export const SAVE_CONFLICT = 'SAVE_CONFLICT'

@@ -265,7 +265,7 @@ pub enum SessionEvent {
 }
 
 impl SessionEvent {
-    /// None for Data, which goes to the session's channel instead, and for chat events (commands/chat.rs)
+    /// None for Data, which goes to the session's channel instead, and for chat and routine events (commands/)
     pub fn from_proto(event: proto::Event) -> Option<Self> {
         Some(match event {
             proto::Event::Data { .. }
@@ -273,7 +273,10 @@ impl SessionEvent {
             | proto::Event::Resync { .. }
             | proto::Event::Chat { .. }
             | proto::Event::ChatChanged(_)
-            | proto::Event::ChatRemoved { .. } => return None,
+            | proto::Event::ChatRemoved { .. }
+            | proto::Event::RoutineChanged(_)
+            | proto::Event::RoutineRemoved { .. }
+            | proto::Event::RunChanged(_) => return None,
             proto::Event::Status { session, status } => Self::Status {
                 session,
                 status: status.into(),

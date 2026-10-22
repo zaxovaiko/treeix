@@ -1,6 +1,8 @@
 import { useEffect, useEffectEvent, useState, type PointerEvent } from 'react'
 import type { GitStatus, PullRequest } from '../ipc/api'
+import { useSettings } from '../features/agents/settings'
 import { fallbackPlace } from '../shell/model'
+import { withHint } from '../shell/shortcuts'
 import { PANEL, type PanelId } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
 import { Changes } from './Changes'
@@ -30,6 +32,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const place = activeTab ? view.placeOfTab(activeTab) : fallbackPlace(home, home)
   const root = place.path
   const scratch = place.kind === 'scratch'
+  const graph = useSettings(api)?.features.graph ?? false
   const shown = hidden ? null : ui.panel
 
   // Git status and file changes of the focused place: one watcher feeds every panel and the badge
@@ -107,6 +110,11 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
           {!!badges[id] && <span className="ndot">{badges[id]}</span>}
         </button>
       ))}
+      {graph && (
+        <button className="icon" disabled={scratch} onClick={() => view.run('module-graph')} title={withHint('Module graph', 'module-graph')}>
+          <PIcon name="network" />
+        </button>
+      )}
     </div>
   )
   if (!shown) return bar

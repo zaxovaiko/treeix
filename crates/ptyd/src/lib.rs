@@ -5,6 +5,7 @@ mod chat;
 mod hooks;
 mod osc;
 mod procinfo;
+mod routines;
 mod server;
 mod session;
 mod snapshot;

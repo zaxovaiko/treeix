@@ -17,18 +17,25 @@ export type CommandId =
   | 'toggle-tabs'
   | 'toggle-ui'
   | 'toggle-theme'
+  | 'module-graph'
+  | 'record'
   | `tab-${number}`
   | `focus-${Direction}`
 
-const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme'])
+const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme', 'module-graph', 'record'])
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
 type Keys = Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'shiftKey' | 'altKey' | 'ctrlKey'>
 
-/** Chords the native menu binds (src-tauri/src/menu.rs, macOS only): inside Tauri the menu fires them, keydown must not too */
-export const menuChord = (e: Keys, mac = IS_MAC): boolean =>
-  mac && e.metaKey && !e.altKey && !e.ctrlKey && (e.shiftKey ? e.key.toLowerCase() === 'p' : e.code === 'Backslash' || e.key === ',')
+/** What the native menu (src-tauri/src/menu.rs, macOS only) binds when settings.keys leaves the item alone */
+const MENU_KEYS: Record<string, string> = { settings: 'Super+Comma', 'toggle-sidebar': 'Super+Backslash', palette: 'Shift+Super+KeyP' }
+
+/** Whether the native menu owns this chord, rebound ones included ('' unbinds): inside Tauri it fires them, keydown must not too */
+export function menuChord(e: Keys, keys: Partial<Record<string, string>>, mac = IS_MAC): boolean {
+  const accel = mac && accelerator(e)
+  return !!accel && Object.entries(MENU_KEYS).some(([id, chord]) => (keys[id] ?? chord) === accel)
+}
 
 export const isCommandId = (id: string): id is CommandId => MENU_IDS.has(id) || /^tab-[1-9]$/.test(id) || /^focus-(left|right|up|down)$/.test(id)
 
@@ -50,6 +57,8 @@ function macShortcut(e: Keys): CommandId | null {
     if (e.code === 'BracketRight') return 'next-tab'
     if (key === 'd') return 'split-down'
     if (key === 'p') return 'palette'
+    if (key === 'g') return 'module-graph'
+    if (key === 'r') return 'record'
     return null
   }
   if (/^[1-9]$/.test(e.key)) return `tab-${Number(e.key)}`
@@ -58,7 +67,8 @@ function macShortcut(e: Keys): CommandId | null {
   return plain[key] ?? null
 }
 
-const LINUX_CTRL_SHIFT: Record<string, CommandId> = { KeyT: 'new-shell', KeyO: 'open-folder', KeyW: 'close-pane', KeyP: 'palette', KeyD: 'split-right', KeyE: 'split-down', KeyB: 'toggle-sidebar' }
+/** Ctrl+Shift+G is Changes (panels/Panels.tsx), so the module graph takes M */
+const LINUX_CTRL_SHIFT: Record<string, CommandId> = { KeyT: 'new-shell', KeyO: 'open-folder', KeyW: 'close-pane', KeyP: 'palette', KeyD: 'split-right', KeyE: 'split-down', KeyB: 'toggle-sidebar', KeyM: 'module-graph', KeyR: 'record' }
 
 /** Like GNOME Terminal and Konsole: app chords are Ctrl+Shift, so plain Ctrl+<key> stays the shell's */
 function linuxShortcut(e: Keys): CommandId | null {
@@ -80,6 +90,8 @@ const MAC_HINTS: Partial<Record<CommandId, string>> = {
   palette: '⌘K',
   'toggle-sidebar': '⌘\\',
   settings: '⌘,',
+  'module-graph': '⇧⌘G',
+  record: '⇧⌘R',
 }
 const LINUX_HINTS: Partial<Record<CommandId, string>> = {
   'new-shell': 'Ctrl+Shift+T',
@@ -90,6 +102,8 @@ const LINUX_HINTS: Partial<Record<CommandId, string>> = {
   palette: 'Ctrl+Shift+P',
   'toggle-sidebar': 'Ctrl+Shift+B',
   settings: 'Ctrl+,',
+  'module-graph': 'Ctrl+Shift+M',
+  record: 'Ctrl+Shift+R',
 }
 
 /** The chord shown next to a command in buttons, tooltips and the palette */

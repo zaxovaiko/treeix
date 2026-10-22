@@ -4,6 +4,7 @@ import { Icon } from '../lib/icons'
 import { DOT_LABEL, Ki, tabDot, tabKind, tabTitle } from '../shell/model'
 import { placeLabel } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
+import { RunMark } from '../features/routines'
 import { Head, openSession, PIcon } from './common'
 import { ago, dayLabel } from './logic'
 
@@ -145,7 +146,10 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
               <div className="hrow">
                 <Ki kind={r.kind} sm />
                 <div className="grow" style={{ minWidth: 0 }}>
-                  <div className="t trunc">{r.title}</div>
+                  <div className="t trunc">
+                    {r.title}
+                    <RunMark view={view} run={r.run} />
+                  </div>
                   <div className="m">
                     <span>{w.label}</span>
                     {w.why && <span className={`tag ${w.why === 'worktree missing' ? 'red' : ''}`}>{w.why}</span>}

@@ -1,11 +1,11 @@
 import type { Features, Settings } from './ipc/api'
 
-// Phase 4-5 features and the Settings page layout. Each feature has an on/off switch (`settings.features`);
+// Phase 4-7 features and the Settings page layout. Each feature has an on/off switch (`settings.features`);
 // off hides everything it adds: its settings sections, panels, palette actions and status items
 
 export type FeatureId = keyof Features
 
-export type SettingsSection = 'appearance' | 'terminal' | 'keys' | 'hotkey' | 'agents' | 'chats' | 'usage' | 'mcp' | 'jira' | 'notion' | 'prs' | 'awake' | 'features' | 'about'
+export type SettingsSection = 'appearance' | 'terminal' | 'keys' | 'hotkey' | 'agents' | 'chats' | 'usage' | 'mcp' | 'jira' | 'notion' | 'prs' | 'awake' | 'routines' | 'browser' | 'voice' | 'recording' | 'features' | 'about'
 
 export interface Feature {
   id: FeatureId
@@ -14,6 +14,9 @@ export interface Feature {
   /** Settings sections that show only while the feature is on */
   sections: SettingsSection[]
 }
+
+/** Dictation and recording run on the macOS Swift helpers, so elsewhere they are not offered */
+const MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
 export const FEATURES = [
   { id: 'usage', label: 'Usage', description: 'Plan limits in the title bar and tokens per agent, model and project', sections: ['usage'] },
@@ -25,14 +28,24 @@ export const FEATURES = [
   { id: 'prs', label: 'Pull requests', description: 'GitHub and GitLab pull requests and their checks', sections: ['prs'] },
   { id: 'awake', label: 'Keep awake', description: 'Keeps the Mac awake while agents work', sections: ['awake'] },
   { id: 'race', label: 'Race', description: 'One prompt to several agents, a worktree each', sections: [] },
+  { id: 'routines', label: 'Routines', description: 'Agent runs on a schedule, a GitHub or Jira event, or a webhook, even with Treeix closed', sections: ['routines'] },
+  { id: 'browser', label: 'Browser', description: 'A browser pane beside the terminal that agents can drive', sections: ['browser'] },
+  { id: 'plans', label: 'Plans', description: "Claude Code's plans as a pane, with diagrams and line comments", sections: [] },
+  { id: 'graph', label: 'Module graph', description: 'Who imports what across the repo, with cycles and unresolved imports', sections: [] },
+  ...(MAC
+    ? ([
+        { id: 'dictation', label: 'Dictation', description: 'Hold a hotkey and speak; the text lands where the cursor is (Apple silicon)', sections: ['voice'] },
+        { id: 'recording', label: 'Meeting recording', description: 'Record a call into a transcript and a note (Apple silicon)', sections: ['recording'] },
+      ] satisfies Feature[])
+    : []),
 ] as const satisfies readonly Feature[]
 
 /** The Settings sidebar; a section that belongs to an off feature is hidden */
 export const SETTINGS_NAV: readonly [group: string, sections: readonly SettingsSection[]][] = [
   ['App', ['appearance', 'terminal', 'keys', 'hotkey']],
-  ['Agents', ['agents', 'chats', 'usage', 'mcp']],
+  ['Agents', ['agents', 'chats', 'routines', 'usage', 'mcp']],
   ['Integrations', ['jira', 'notion', 'prs']],
-  ['Tools', ['awake']],
+  ['Tools', ['browser', ...(MAC ? (['voice', 'recording'] as const) : []), 'awake']],
   ['More', ['features', 'about']],
 ]
 
@@ -55,7 +68,7 @@ export const THEMES = {
 
 /** Mirrors the Rust defaults (crates/core/src/settings.rs); the mock starts from it */
 export const DEFAULT_SETTINGS: Settings = {
-  features: { usage: true, ports: true, chat: true, mcp: true, jira: false, notion: false, prs: true, awake: true, race: true },
+  features: { usage: true, ports: true, chat: true, mcp: true, jira: false, notion: false, prs: true, awake: true, race: true, routines: true, browser: true, plans: true, graph: true, dictation: false, recording: false },
   appearance: { darkTheme: 'Neutral', lightTheme: 'Light', followSystem: true },
   terminal: { fontFamily: 'JetBrains Mono', fontSize: 12, lineHeight: 1.2, cursorStyle: 'block', cursorBlink: true, scrollback: 10_000, copyOnSelect: false, optionAsMeta: true, shell: null, loginShell: true, confirmQuit: true },
   keys: {},
@@ -67,4 +80,8 @@ export const DEFAULT_SETTINGS: Settings = {
   prs: { refreshMinutes: 5 },
   awake: { mode: 'untilAgentsFinish', lidClosed: false },
   updates: { autoCheck: true },
+  routines: { maxParallel: 2, background: true },
+  browser: { openLinks: false, searchUrl: 'https://www.google.com/search?q=%s', agents: true },
+  dictation: { hotkey: ['MetaLeft', 'AltRight'], tapToToggle: true, sounds: true, model: 'parakeet-v3', vocabulary: [] },
+  recording: { folder: null, language: '' },
 }

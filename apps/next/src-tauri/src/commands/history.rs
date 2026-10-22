@@ -64,6 +64,7 @@ pub(super) async fn record_closed(info: SessionInfo, home: PathBuf) {
             messages,
             cost,
             first_prompt,
+            run: None,
         };
         history::record_session(&sessions_file(), &record)
     })

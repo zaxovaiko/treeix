@@ -4,6 +4,8 @@ import { closeFileLeaf, isFileLeaf, leafRoot, resolvePath } from '../panes/file/
 import { closeChat, isChatLeaf, leafChat } from '../panes/chat/open'
 import { titleOf, useChatState } from '../panes/chat/store'
 import { Icon } from '../lib/icons'
+import { BrowserHead, closeBrowser, isBrowserLeaf } from '../features/browser/open'
+import { closePlan, isPlanLeaf, PlanHead } from '../features/plans/open'
 import { DOT_LABEL, KIND_ICON, statusDot } from './model'
 import { withHint } from './shortcuts'
 import { paneRects, splitHandles, type Handle, type Rect, type Tab } from './state'
@@ -12,6 +14,8 @@ import type { ShellView } from './Shell'
 // Monaco and the diff renderer load with the first file view, not at startup
 const FilePane = lazy(() => import('../panes/file').then((m) => ({ default: m.FilePane })))
 const ChatPane = lazy(() => import('../panes/chat').then((m) => ({ default: m.ChatPane })))
+const BrowserPane = lazy(() => import('../features/browser').then((m) => ({ default: m.BrowserPane })))
+const PlanPane = lazy(() => import('../features/plans').then((m) => ({ default: m.PlanPane })))
 
 /** A chat leaf's header: its agent and title */
 function ChatHead({ leaf }: { leaf: string }) {
@@ -73,12 +77,19 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
         const dot = info ? statusDot(info.status) : 'idle'
         const file = isFileLeaf(id)
         const chat = isChatLeaf(id)
+        const browser = isBrowserLeaf(id)
+        const plan = isPlanLeaf(id)
+        const close = () => (file ? closeFileLeaf(view, id) : chat ? closeChat(view, id) : browser ? closeBrowser(view, id) : plan ? closePlan(view, id) : view.closePane(id))
         return (
           <div key={id} className={`pane ${multi ? (focused ? 'focus' : 'dimmed') : ''}`} style={box(rect)}>
             {multi && (
               <div className="phd" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
                 {chat ? (
                   <ChatHead leaf={id} />
+                ) : browser ? (
+                  <BrowserHead leaf={id} />
+                ) : plan ? (
+                  <PlanHead leaf={id} />
                 ) : (
                   <>
                     <Icon name={file ? 'folder' : KIND_ICON[info?.kind ?? 'shell']} />
@@ -92,7 +103,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                 <button className="icon sm" onClick={() => view.split('col', id)} title={withHint('Split down', 'split-down')}>
                   <Icon name="splitDown" />
                 </button>
-                <button className="icon sm" onClick={() => (file ? closeFileLeaf(view, id) : chat ? closeChat(view, id) : view.closePane(id))} title={withHint('Close pane', 'close-pane')}>
+                <button className="icon sm" onClick={close} title={withHint('Close pane', 'close-pane')}>
                   <Icon name="x" />
                 </button>
               </div>
@@ -107,6 +118,12 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
               <div className="pterm" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
                 <Suspense fallback={<div className="empty">Loading...</div>}>
                   <ChatPane key={`${id}:${epoch}`} view={view} leaf={id} focused={active && focused} />
+                </Suspense>
+              </div>
+            ) : browser || plan ? (
+              <div className="pterm" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
+                <Suspense fallback={<div className="empty">Loading...</div>}>
+                  {browser ? <BrowserPane view={view} leaf={id} focused={active && focused} /> : <PlanPane view={view} leaf={id} />}
                 </Suspense>
               </div>
             ) : (

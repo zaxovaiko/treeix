@@ -24,6 +24,8 @@ export const ACTIONS = [
   ['toggle-tabs', 'Tabs on top or on the side'],
   ['toggle-ui', 'Compact or Islands'],
   ['toggle-theme', 'Light or dark'],
+  ['module-graph', 'Module graph'],
+  ['record', 'Record a meeting'],
 ] as const satisfies readonly (readonly [CommandId, string])[]
 
 export type ActionId = (typeof ACTIONS)[number][0]

@@ -8,6 +8,11 @@ import type { ShellView } from './Shell'
 import { dialogCommands } from '../dialogs'
 import { chatCommands } from '../panes/chat/open'
 import { settingsNow } from '../features/agents/settings'
+import { routineCommands } from '../features/routines'
+import { browserCommands } from '../features/browser/open'
+import { planCommands } from '../features/plans/open'
+import { graphCommands } from '../features/graph/commands'
+import { voiceCommands } from '../features/voice'
 
 const ACTIONS: [CommandId, string][] = [
   ['new-shell', 'New shell here'],
@@ -52,8 +57,16 @@ function commands(view: ShellView): Command[] {
     })
   )
   const focused = view.activeTab ? view.sessions[view.activeTab.focus] : undefined
-  const chats = settingsNow()?.features.chat ? chatCommands(view, focused?.cwd ?? view.home, focused) : []
-  return [...actions, ...chats, ...dialogCommands(view), ...tabs]
+  const features = settingsNow()?.features
+  const chats = features?.chat ? chatCommands(view, focused?.cwd ?? view.home, focused) : []
+  const phase67 = [
+    ...(features?.routines ? routineCommands(view) : []),
+    ...(features?.browser ? browserCommands(view) : []),
+    ...(features?.plans ? planCommands(view) : []),
+    ...(features?.graph ? graphCommands(view) : []),
+    ...(features?.recording ? voiceCommands(view) : []),
+  ]
+  return [...actions, ...chats, ...phase67, ...dialogCommands(view), ...tabs]
 }
 
 const Marked = ({ text, marks }: { text: string; marks: Set<number> }) => <>{[...text].map((ch, i) => (marks.has(i) ? <mark key={i}>{ch}</mark> : ch))}</>

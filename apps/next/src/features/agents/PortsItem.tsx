@@ -8,6 +8,7 @@ import { FIcon } from './icons'
 import { Pop } from './Pop'
 import { refreshPorts, usePorts } from './ports'
 import { useSettings } from './settings'
+import { openBrowser } from '../browser/open'
 import { usd } from './usage'
 import '../../styles/agents.css'
 
@@ -30,12 +31,12 @@ export function PortsItem({ view }: { view: ShellView }) {
           :{p.port}
         </button>
       ))}
-      {open && <PortMenu view={view} port={open.port} anchor={open.anchor} onClose={close} />}
+      {open && <PortMenu view={view} port={open.port} anchor={open.anchor} browser={!!settings?.features.browser} onClose={close} />}
     </span>
   )
 }
 
-function PortMenu({ view, port, anchor, onClose }: { view: ShellView; port: SessionPort; anchor: DOMRect; onClose: () => void }) {
+function PortMenu({ view, port, anchor, browser, onClose }: { view: ShellView; port: SessionPort; anchor: DOMRect; browser: boolean; onClose: () => void }) {
   const { api } = view
   const [error, setError] = useState<string | null>(null)
   const session = view.sessions[port.session]
@@ -55,6 +56,12 @@ function PortMenu({ view, port, anchor, onClose }: { view: ShellView; port: Sess
   return (
     <Pop anchor={anchor} className="menu" onClose={onClose}>
       <div className="mlabel">localhost:{port.port}</div>
+      {browser && (
+        <button className="mi" onClick={act(() => openBrowser(view, `localhost:${port.port}`))}>
+          <Icon name="globe" />
+          Open in a browser pane
+        </button>
+      )}
       <button className="mi" onClick={act(() => api.openUrl(url(port.port)))}>
         <FIcon name="link" />
         Open in the default browser

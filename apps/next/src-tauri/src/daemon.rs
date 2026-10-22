@@ -206,6 +206,11 @@ impl Daemon {
                     event
                     @ (Event::Chat { .. } | Event::ChatChanged(_) | Event::ChatRemoved { .. }),
                 ))) => crate::commands::on_chat_event(app, event),
+                Ok(Some(ServerMsg::Event(
+                    event @ (Event::RoutineChanged(_)
+                    | Event::RoutineRemoved { .. }
+                    | Event::RunChanged(_)),
+                ))) => crate::commands::on_routine_event(app, event),
                 Ok(Some(ServerMsg::Event(event))) => {
                     if let Some(event) = SessionEvent::from_proto(event) {
                         crate::commands::on_session_event(app, &event);

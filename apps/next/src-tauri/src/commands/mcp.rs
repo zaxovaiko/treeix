@@ -240,7 +240,7 @@ fn tools(app: &AppHandle) -> Vec<McpTool> {
         let app = app.clone();
         move |args: Value| run(app.clone(), args)
     };
-    vec![
+    let mut tools = vec![
         tool(
             "sessions_list",
             "Lists the terminal and agent sessions open in Treeix: id, kind, title, status and folder.",
@@ -330,7 +330,9 @@ fn tools(app: &AppHandle) -> Vec<McpTool> {
                 })
             }),
         ),
-    ]
+    ];
+    tools.extend(crate::browser::tools(app));
+    tools
 }
 
 async fn sessions_list(app: &AppHandle) -> Result<String> {

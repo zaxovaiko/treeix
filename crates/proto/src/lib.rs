@@ -7,11 +7,13 @@ use std::path::PathBuf;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub mod chat;
+pub mod routines;
 use chat::{ChatContent, ChatCreate, ChatEntry, ChatId, ChatInfo};
+use routines::{Routine, RoutineId, RoutineRun, RunId};
 
 /// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Shutdown,
 /// so an older app never takes down a newer daemon by connecting
-pub const PROTO_VERSION: u32 = 3;
+pub const PROTO_VERSION: u32 = 4;
 /// Data dir name; `.next` while the Tauri app ships beside the Electron one
 pub const APP_ID: &str = "com.dyvertex.treeix.next";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
@@ -186,6 +188,30 @@ pub enum Request {
         session: SessionId,
         agent_session: String,
     },
+    /// Replies Routines
+    RoutineList,
+    /// Creates (empty id) or replaces a routine and replies Routine; ptyd fills id, created_at and a webhook token
+    RoutinePut {
+        #[serde(with = "chat::as_json")]
+        routine: Routine,
+    },
+    /// Drops the routine; its runs stay in history. Replies Ok
+    RoutineRemove {
+        routine: RoutineId,
+    },
+    /// Queues a Manual run, even of a disabled routine; replies Run
+    RoutineRunNow {
+        routine: RoutineId,
+    },
+    /// Newest first, at most `limit`; None lists every routine's. Replies Runs
+    RoutineRuns {
+        routine: Option<RoutineId>,
+        limit: u32,
+    },
+    /// Stops a queued or running run (kills its session), which ends Cancelled. Replies Ok
+    RunCancel {
+        run: RunId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -201,6 +227,10 @@ pub enum Response {
     Ui(Option<String>),
     Chat(ChatInfo),
     Chats(Vec<ChatInfo>),
+    Routines(#[serde(with = "chat::as_json")] Vec<Routine>),
+    Routine(#[serde(with = "chat::as_json")] Routine),
+    Runs(Vec<RoutineRun>),
+    Run(RoutineRun),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -277,6 +307,13 @@ pub enum Event {
         state: ProgressState,
         percent: u8,
     },
+    /// A routine was created or changed; goes to every client
+    RoutineChanged(#[serde(with = "chat::as_json")] Routine),
+    RoutineRemoved {
+        routine: RoutineId,
+    },
+    /// A run was queued, started, progressed (turns, cost) or ended; goes to every client
+    RunChanged(RoutineRun),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -409,6 +446,36 @@ mod tests {
             );
         }
         assert_eq!(read_frame::<_, ServerMsg>(&mut r).await.unwrap(), None);
+    }
+
+    #[test]
+    fn routines_round_trip_through_postcard() {
+        use chat::ChatAgent;
+        use routines::*;
+        let routine = Routine {
+            id: "rt-1".into(),
+            name: "Review".into(),
+            enabled: true,
+            agent: ChatAgent::Claude,
+            prompt: "Review {pr}".into(),
+            trigger: Trigger::Event {
+                event: RoutineEvent::ReviewRequested,
+            },
+            repo: None,
+            place: RoutinePlace::PrWorktree,
+            permission: RoutinePermission::ReadOnly,
+            allowed_tools: vec![],
+            budget: Budget {
+                max_turns: Some(20),
+                max_cost: Some(2.0),
+            },
+            may_push: false,
+            asleep: WhileAsleep::Skip,
+            created_at: 1,
+        };
+        let msg = ServerMsg::Event(Event::RoutineChanged(routine));
+        let bytes = postcard::to_stdvec(&msg).unwrap();
+        assert_eq!(postcard::from_bytes::<ServerMsg>(&bytes).unwrap(), msg);
     }
 
     /// Any app and daemon must agree on these bytes forever: they are how an app replaces a daemon of

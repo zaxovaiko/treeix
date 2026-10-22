@@ -412,6 +412,147 @@ async keepAwake() : Promise<KeepAwakeState> {
  */
 async setKeepAwake(on: boolean) : Promise<KeepAwakeState> {
     return await TAURI_INVOKE("set_keep_awake", { on });
+},
+async routineList() : Promise<Routine[]> {
+    return await TAURI_INVOKE("routine_list");
+},
+/**
+ * Creates (empty id) or replaces a routine; the reply has its id, createdAt and webhook token
+ */
+async routinePut(routine: Routine) : Promise<Routine> {
+    return await TAURI_INVOKE("routine_put", { routine });
+},
+async routineRemove(id: string) : Promise<null> {
+    return await TAURI_INVOKE("routine_remove", { id });
+},
+/**
+ * Queues a manual run, even of a disabled routine
+ */
+async routineRunNow(id: string) : Promise<RoutineRun> {
+    return await TAURI_INVOKE("routine_run_now", { id });
+},
+/**
+ * Newest first; None lists every routine's
+ */
+async routineRuns(routine: string | null, limit: number) : Promise<RoutineRun[]> {
+    return await TAURI_INVOKE("routine_runs", { routine, limit });
+},
+/**
+ * Stops a queued or running run; it ends Cancelled
+ */
+async routineCancelRun(run: string) : Promise<null> {
+    return await TAURI_INVOKE("routine_cancel_run", { run });
+},
+/**
+ * The schedule's next `count` fire times (unix ms) from now; rejects an invalid cron with what is wrong
+ */
+async routineNextFires(cron: string, count: number) : Promise<number[]> {
+    return await TAURI_INVOKE("routine_next_fires", { cron, count });
+},
+/**
+ * Creates the pane's webview (hidden) or returns the one it has
+ */
+async browserOpen(pane: string, url: string) : Promise<BrowserState> {
+    return await TAURI_INVOKE("browser_open", { pane, url });
+},
+/**
+ * Lays the webview over the pane's rect; null hides it under popovers and dialogs
+ */
+async browserPlace(pane: string, bounds: Bounds | null) : Promise<null> {
+    return await TAURI_INVOKE("browser_place", { pane, bounds });
+},
+async browserClose(pane: string) : Promise<null> {
+    return await TAURI_INVOKE("browser_close", { pane });
+},
+/**
+ * A URL, a host like `localhost:5173`, or search text
+ */
+async browserNavigate(pane: string, input: string) : Promise<null> {
+    return await TAURI_INVOKE("browser_navigate", { pane, input });
+},
+async browserGo(pane: string, nav: BrowserNav) : Promise<null> {
+    return await TAURI_INVOKE("browser_go", { pane, nav });
+},
+async browserDevtools(pane: string) : Promise<null> {
+    return await TAURI_INVOKE("browser_devtools", { pane });
+},
+async browserCookieProfiles() : Promise<BrowserProfile[]> {
+    return await TAURI_INVOKE("browser_cookie_profiles");
+},
+async browserImportCookies(profile: string) : Promise<CookieImport> {
+    return await TAURI_INVOKE("browser_import_cookies", { profile });
+},
+async browserClearData() : Promise<null> {
+    return await TAURI_INVOKE("browser_clear_data");
+},
+/**
+ * The command that starts the folder's dev server on a free port, for the start page; null without one
+ */
+async browserDevCommand(folder: string) : Promise<string | null> {
+    return await TAURI_INVOKE("browser_dev_command", { folder });
+},
+/**
+ * `~/.claude/plans/*.md`, newest first
+ */
+async plansList() : Promise<PlanFile[]> {
+    return await TAURI_INVOKE("plans_list");
+},
+/**
+ * A plan's markdown by file name; rejects anything but a `.md` name in the plans folder
+ */
+async planRead(name: string) : Promise<string> {
+    return await TAURI_INVOKE("plan_read", { name });
+},
+/**
+ * Parses and resolves every git-tracked JS/TS file of the place at `root`; seconds on a large repo
+ */
+async graphScan(root: string) : Promise<ModuleGraph> {
+    return await TAURI_INVOKE("graph_scan", { root });
+},
+async dictationStatus() : Promise<DictationStatus> {
+    return await TAURI_INVOKE("dictation_status");
+},
+/**
+ * Starts or ends listening, like a tap on the hotkey
+ */
+async dictationToggle() : Promise<null> {
+    return await TAURI_INVOKE("dictation_toggle");
+},
+/**
+ * Progress arrives as `VoiceEvent::Dictation`
+ */
+async voiceModelDownload(model: string) : Promise<null> {
+    return await TAURI_INVOKE("voice_model_download", { model });
+},
+async voiceModelDelete(model: string) : Promise<null> {
+    return await TAURI_INVOKE("voice_model_delete", { model });
+},
+async voiceRequestAccess(kind: AccessKind) : Promise<null> {
+    return await TAURI_INVOKE("voice_request_access", { kind });
+},
+async dictationHistory() : Promise<DictationEntry[]> {
+    return await TAURI_INVOKE("dictation_history");
+},
+async recordingStatus() : Promise<RecordingStatus> {
+    return await TAURI_INVOKE("recording_status");
+},
+/**
+ * null takes the title from the app in the call, else `Recording`
+ */
+async recordingStart(title: string | null) : Promise<RecordingStatus> {
+    return await TAURI_INVOKE("recording_start", { title });
+},
+async recordingPause(paused: boolean) : Promise<RecordingStatus> {
+    return await TAURI_INVOKE("recording_pause", { paused });
+},
+async recordingStop() : Promise<RecordingStatus> {
+    return await TAURI_INVOKE("recording_stop");
+},
+async recordings() : Promise<RecordingInfo[]> {
+    return await TAURI_INVOKE("recordings");
+},
+async recordingRead(id: string) : Promise<RecordingNote> {
+    return await TAURI_INVOKE("recording_read", { id });
 }
 }
 
@@ -419,17 +560,23 @@ async setKeepAwake(on: boolean) : Promise<KeepAwakeState> {
 
 
 export const events = __makeEvents__<{
+browserEvent: BrowserEvent,
 chatsEvent: ChatsEvent,
 fsEvent: FsEvent,
 keepAwakeState: KeepAwakeState,
+routinesEvent: RoutinesEvent,
 settingsChanged: SettingsChanged,
-usageLimitsChanged: UsageLimitsChanged
+usageLimitsChanged: UsageLimitsChanged,
+voiceEvent: VoiceEvent
 }>({
+browserEvent: "browser-event",
 chatsEvent: "chats-event",
 fsEvent: "fs-event",
 keepAwakeState: "keep-awake-state",
+routinesEvent: "routines-event",
 settingsChanged: "settings-changed",
-usageLimitsChanged: "usage-limits-changed"
+usageLimitsChanged: "usage-limits-changed",
+voiceEvent: "voice-event"
 })
 
 /** user-defined constants **/
@@ -438,6 +585,12 @@ usageLimitsChanged: "usage-limits-changed"
 
 /** user-defined types **/
 
+export type Access = "granted" | "denied" | "notAsked"
+export type AccessKind = "microphone" | 
+/**
+ * Pasting into other apps
+ */
+"accessibility"
 export type AgentLimits = { fiveHour: LimitWindow | null; weekly: LimitWindow | null; 
 /**
  * When the numbers were captured, unix millis
@@ -482,6 +635,10 @@ mode: KeepAwakeMode;
  */
 lidClosed: boolean }
 /**
+ * The pane's rect in logical px from the main window's top-left
+ */
+export type Bounds = { x: number; y: number; width: number; height: number }
+/**
  * A local branch, or a remote-only one
  */
 export type Branch = { 
@@ -501,6 +658,84 @@ author: string;
  * Worktree that has it checked out
  */
 worktree: string | null }
+export type Browser = { 
+/**
+ * Links clicked in terminals and chats open in a browser pane instead of the default browser
+ */
+openLinks: boolean; 
+/**
+ * Where text typed in the address bar goes; `%s` is the query
+ */
+searchUrl: string; 
+/**
+ * Agents get the browser tools over MCP
+ */
+agents: boolean }
+/**
+ * A console message or a request of the page, for the pane's DevTools strip and "Send to agent"
+ */
+export type BrowserEntry = { kind: "console"; id: string; level: ConsoleLevel; text: string; source: string; time: number } | { kind: "network"; id: string; method: string; url: string; status: number | null; failed: string | null; startedAt: number; durationMs: number | null }
+/**
+ * Pushed to every window
+ */
+export type BrowserEvent = 
+/**
+ * An agent opened a pane (browser_navigate without a tab); the window adds its leaf
+ */
+{ type: "opened"; state: BrowserState } | 
+/**
+ * Navigation, title, loading or history changed
+ */
+{ type: "changed"; state: BrowserState } | 
+/**
+ * New entries, batched; `reset` drops the earlier ones (a new page loaded)
+ */
+{ type: "entries"; pane: string; reset: boolean; entries: BrowserEntry[] } | 
+/**
+ * The webview is gone (closed, crashed)
+ */
+{ type: "closed"; pane: string }
+export type BrowserNav = "back" | "forward" | "reload" | "stop"
+/**
+ * A browser profile cookies can come from
+ */
+export type BrowserProfile = { 
+/**
+ * What `import_cookies` takes
+ */
+key: string; 
+/**
+ * Chrome, Arc, Brave, Edge, Chromium, Vivaldi, Firefox, Safari
+ */
+browser: string; name: string; 
+/**
+ * The OS keeps it from Treeix (Safari without Full Disk Access)
+ */
+blocked: boolean }
+/**
+ * What the pane's bar shows
+ */
+export type BrowserState = { 
+/**
+ * The pane leaf's id, after `browser:`
+ */
+pane: string; url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; 
+/**
+ * The last load failed, like `Nothing is answering on localhost:5173`
+ */
+error: string | null }
+/**
+ * A run over either limit is killed and ends `OverBudget`
+ */
+export type Budget = { 
+/**
+ * `--max-turns`
+ */
+maxTurns: number | null; 
+/**
+ * USD, from the transcript's token usage
+ */
+maxCost: number | null }
 /**
  * One uncommitted file
  */
@@ -641,9 +876,51 @@ export type Commit = { sha: string; author: string;
  * Unix seconds
  */
 date: number; subject: string }
+export type ConsoleLevel = "error" | "warning" | "info" | "log" | "debug"
+export type CookieImport = { imported: number; skipped: number; error: string | null }
 export type Cost = { amount: number; currency: string }
 export type CreateSession = { kind: SessionKind; cwd: string | null; command?: string[]; env?: ([string, string])[]; cols: number; rows: number; title: string | null; routine: string | null }
 export type CursorStyle = "block" | "bar" | "underline"
+export type Dictation = { 
+/**
+ * Modifiers held together, by `KeyboardEvent.code`: MetaLeft, MetaRight, AltLeft, AltRight, ControlLeft,
+ * ControlRight, ShiftLeft, ShiftRight, Fn
+ */
+hotkey: string[]; 
+/**
+ * A quick tap keeps listening until the next tap; off, only holding records
+ */
+tapToToggle: boolean; sounds: boolean; 
+/**
+ * `parakeet-v3` (25 languages) or `parakeet-v2` (English)
+ */
+model: string; vocabulary: VocabularyTerm[] }
+/**
+ * One dictation, for Settings' history
+ */
+export type DictationEntry = { 
+/**
+ * Unix ms
+ */
+at: number; 
+/**
+ * What the model heard
+ */
+raw: string; 
+/**
+ * What was inserted, after vocabulary
+ */
+text: string; 
+/**
+ * The app it went into
+ */
+app: string | null }
+export type DictationPhase = "idle" | "listening" | "transcribing"
+export type DictationStatus = { helper: HelperState; models: VoiceModel[]; microphone: Access; accessibility: Access; phase: DictationPhase; 
+/**
+ * The last thing that went wrong, for Settings
+ */
+error: string | null }
 /**
  * What `diff` compares the working tree against
  */
@@ -667,7 +944,31 @@ usage: boolean; ports: boolean; chat: boolean; mcp: boolean; jira: boolean; noti
 /**
  * One prompt, several agents, a worktree each
  */
-race: boolean }
+race: boolean; 
+/**
+ * Agent runs on a schedule, an event or a webhook
+ */
+routines: boolean; 
+/**
+ * Browser pane and its agent tools
+ */
+browser: boolean; 
+/**
+ * Plan pane for Claude Code's plans
+ */
+plans: boolean; 
+/**
+ * Module graph page
+ */
+graph: boolean; 
+/**
+ * Hold a hotkey, speak, the text lands where the cursor is (macOS, Apple silicon)
+ */
+dictation: boolean; 
+/**
+ * Record a call into a transcript and a note (macOS, Apple silicon)
+ */
+recording: boolean }
 /**
  * One file's unified diff
  */
@@ -740,7 +1041,61 @@ conflicts: string[];
  * Uncommitted changes, untracked files included
  */
 changes: Change[] }
+export type GraphFile = { 
+/**
+ * Relative to the root, `/`-separated
+ */
+path: string; 
+/**
+ * Name of the innermost package holding it
+ */
+package: string | null }
+/**
+ * One import statement
+ */
+export type GraphImport = { 
+/**
+ * File that imports
+ */
+from: string; 
+/**
+ * Resolved file in the graph; None for packages outside the root and for unresolved imports
+ */
+to: string | null; 
+/**
+ * As written, like `./util` or `react`
+ */
+specifier: string; kind: ImportKind; 
+/**
+ * A package outside the root (node_modules, a Node builtin), by name
+ */
+external: string | null; 
+/**
+ * Neither a file in the graph nor a package: shown under Unresolved
+ */
+unresolved: boolean; 
+/**
+ * 1-based
+ */
+line: number }
+/**
+ * A workspace package: a folder with a package.json
+ */
+export type GraphPackage = { name: string; 
+/**
+ * Relative to the root, `""` for the root package
+ */
+dir: string }
 export type Hello = { proto: number; build: string; daemonPid: number }
+export type HelperState = "starting" | "running" | 
+/**
+ * The sidecar isn't in the bundle (a dev build without `swift build`)
+ */
+"missing" | "crashed" | 
+/**
+ * Not an Apple silicon Mac on macOS 14 or later
+ */
+"unsupported"
 /**
  * One saved version of a file
  */
@@ -753,6 +1108,26 @@ id: string;
  * Unix ms
  */
 savedAt: number; bytes: number }
+/**
+ * How a file pulls in another
+ */
+export type ImportKind = 
+/**
+ * `import` / `export ... from`
+ */
+"static" | 
+/**
+ * `import type`, `export type`, or every specifier `type`
+ */
+"type" | 
+/**
+ * `import()`
+ */
+"dynamic" | 
+/**
+ * `require()`
+ */
+"require"
 export type Jira = { jql: string }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type KeepAwakeMode = "off" | "on" | 
@@ -798,6 +1173,17 @@ running: boolean;
 url: string | null; installs: McpInstall[]; tools: McpToolInfo[] }
 export type McpToolInfo = { name: string; description: string }
 export type MergeMethod = "merge" | "squash" | "rebase"
+export type ModelPhase = "missing" | "downloading" | "downloaded" | "loading" | "ready" | "error"
+export type ModuleGraph = { root: string; packages: GraphPackage[]; files: GraphFile[]; imports: GraphImport[]; 
+/**
+ * File cycles over every import but type-only ones, one per strongly connected group, in import order
+ * without repeating the first file
+ */
+cycles: string[][]; 
+/**
+ * Files that failed to parse, with the error, so the page can say what is missing
+ */
+errors: ([string, string])[] }
 /**
  * A chat the user starts; the app adds the adapter command, env and instructions
  */
@@ -871,6 +1257,22 @@ export type PlanEntry = { content: string; priority: PlanPriority;
  * Pending, in progress or completed (`Failed` never appears)
  */
 status: ToolStatus }
+/**
+ * One plan file
+ */
+export type PlanFile = { 
+/**
+ * File name, like `snug-wiggling-cat.md`; what `read` takes
+ */
+name: string; path: string; 
+/**
+ * The first `# heading`, else the name without `.md`
+ */
+title: string; 
+/**
+ * Unix ms
+ */
+modifiedAt: number }
 export type PlanPriority = "high" | "medium" | "low"
 /**
  * One repo that could not be listed (CLI missing, signed out, offline)
@@ -921,6 +1323,42 @@ export type Rebase = { step: number; total: number }
  * What kind of session a record is
  */
 export type RecordKind = "shell" | "claude" | "codex"
+export type Recording = { 
+/**
+ * Where recordings go; None is `<data dir>/recordings`
+ */
+folder: string | null; 
+/**
+ * ISO 639-1 code the calls are spoken in; empty lets the model detect it
+ */
+language: string }
+/**
+ * A saved recording
+ */
+export type RecordingInfo = { 
+/**
+ * Folder name; what `recording_read` takes
+ */
+id: string; title: string; startedAt: number; durationMs: number; folder: string; hasNote: boolean }
+export type RecordingNote = { info: RecordingInfo; transcript: TranscriptLine[]; 
+/**
+ * Markdown summary and action items; None until written
+ */
+note: string | null }
+export type RecordingPhase = "idle" | "recording" | "paused" | 
+/**
+ * Stopped; the transcript and note are being written
+ */
+"saving"
+export type RecordingStatus = { helper: HelperState; phase: RecordingPhase; title: string | null; 
+/**
+ * Unix ms; the title bar's REC timer counts from it
+ */
+startedAt: number | null; 
+/**
+ * Ms recorded before the last pause
+ */
+elapsedMs: number; error: string | null }
 export type Review = { state: ReviewState; 
 /**
  * Commits pushed after your review
@@ -934,6 +1372,120 @@ changesRequested: boolean }
  * Your relation to an open PR
  */
 export type ReviewState = "yours" | "requested" | "approved" | "changes" | "commented" | "unreviewed"
+export type Routine = { 
+/**
+ * Empty in `RoutinePut` creates one
+ */
+id: string; name: string; enabled: boolean; agent: ChatAgent; 
+/**
+ * With the trigger's `{variables}`
+ */
+prompt: string; trigger: Trigger; 
+/**
+ * Repo the run happens in; None only for events, meaning whichever repo the event comes from
+ */
+repo: string | null; place: RoutinePlace; permission: RoutinePermission; 
+/**
+ * Extra `--allowedTools` patterns, like `Bash(npm test:*)`
+ */
+allowedTools: string[]; budget: Budget; 
+/**
+ * May push, open PRs and post comments; off, the prompt says not to and `gh` writes are denied
+ */
+mayPush: boolean; asleep: WhileAsleep; 
+/**
+ * Unix ms; ptyd sets it
+ */
+createdAt: number }
+/**
+ * Prompt variables per event: review `{pr} {title} {author}`, ci `{pr} {branch} {job}`,
+ * comment `{pr} {author} {comment}`, ticket `{ticket} {title} {desc}`
+ */
+export type RoutineEvent = "reviewRequested" | "ciFailed" | "prComment" | "ticketAssigned"
+/**
+ * Claude `--permission-mode` (plan / acceptEdits / bypassPermissions) and Codex `--sandbox`
+ * (read-only / workspace-write / danger-full-access)
+ */
+export type RoutinePermission = "readOnly" | "editFiles" | "anything"
+/**
+ * Where a run happens
+ */
+export type RoutinePlace = 
+/**
+ * The repo's main checkout
+ */
+"root" | 
+/**
+ * A fresh worktree per run, on a `routine/<name>-<date>` branch
+ */
+"newWorktree" | 
+/**
+ * The worktree of the PR the event is about, added when missing (PR events only)
+ */
+"prWorktree"
+/**
+ * One firing of a routine; kept in `<data dir>/routines/runs.jsonl`, finished ones also in History
+ */
+export type RoutineRun = { id: string; routine: string; 
+/**
+ * The routine's name when it fired, for runs of removed routines
+ */
+name: string; cause: RunCause; status: RunStatus; 
+/**
+ * What fired it, like `#412 Fix login (octocat)`, `ABC-12`, the webhook body's first line
+ */
+detail: string | null; 
+/**
+ * When it was due (schedule) or fired; unix ms
+ */
+dueAt: number; startedAt: number | null; endedAt: number | null; 
+/**
+ * The `SessionKind::Routine` session it runs in
+ */
+session: string | null; cwd: string | null; turns: number; 
+/**
+ * USD so far
+ */
+cost: number; 
+/**
+ * Why it failed, was skipped or stopped, like `Stopped at the $5.00 budget`
+ */
+error: string | null }
+export type Routines = { 
+/**
+ * Runs at the same time; the rest wait Queued
+ */
+maxParallel: number; 
+/**
+ * Keep firing while Treeix is closed (ptyd keeps running); off, ptyd only fires while an app is connected
+ */
+background: boolean }
+/**
+ * A routine was created, changed or removed, or a run was queued, changed or ended, in any window
+ */
+export type RoutinesEvent = { type: "changed"; routine: Routine } | { type: "removed"; routine: string } | { type: "run"; run: RoutineRun }
+export type RunCause = "schedule" | 
+/**
+ * The one run for schedules missed while asleep
+ */
+"catchUp" | "event" | "webhook" | 
+/**
+ * Run now
+ */
+"manual"
+export type RunStatus = 
+/**
+ * Waiting for a slot (settings.routines.maxParallel)
+ */
+"queued" | "running" | "ok" | "failed" | 
+/**
+ * Killed at `Budget`
+ */
+"overBudget" | 
+/**
+ * Came due while asleep with `WhileAsleep::Skip`, or the routine was off
+ */
+"skipped" | "cancelled"
 export type SearchMatch = { 
 /**
  * The searched root the match is under
@@ -992,7 +1544,11 @@ createdAt: number; closedAt: number;
 /**
  * Agent transcript stats; None until Phase 4 reads transcripts
  */
-messages: number | null; cost: number | null; firstPrompt: string | null }
+messages: number | null; cost: number | null; firstPrompt: string | null; 
+/**
+ * The routine run this session was (`RoutineRun.id`); ptyd records those when they end
+ */
+run?: string | null }
 export type SessionStatus = "running" | "needs" | "done" | "idle" | "exited" | "error" | "restored" | "crashed" | "watching"
 /**
  * Tokens one conversation spent; `cached` is the cache reads
@@ -1006,7 +1562,7 @@ export type Settings = { features: Features; appearance: Appearance; terminal: T
 /**
  * Shortcut overrides: action id (shell/shortcuts.ts) to accelerator, empty string unbinds
  */
-keys: Partial<{ [key in string]: string }>; agents: Agents; chats: Chats; usage: Usage; jira: Jira; notion: Notion; prs: Prs; awake: Awake; updates: Updates }
+keys: Partial<{ [key in string]: string }>; agents: Agents; chats: Chats; usage: Usage; jira: Jira; notion: Notion; prs: Prs; awake: Awake; updates: Updates; routines: Routines; browser: Browser; dictation: Dictation; recording: Recording }
 /**
  * Saved settings, from any window
  */
@@ -1073,6 +1629,15 @@ export type ToolOutput = { type: "text"; text: string } | { type: "image"; mimeT
  */
 { type: "diff"; path: string; oldText: string | null; newText: string } | { type: "terminal"; terminalId: string }
 export type ToolStatus = "pending" | "in_progress" | "completed" | "failed"
+export type TranscriptLine = { 
+/**
+ * Ms from the start
+ */
+at: number; 
+/**
+ * `Me`, `Speaker 2`; None before diarization
+ */
+speaker: string | null; text: string }
 /**
  * What sits next to the tray icon
  */
@@ -1081,6 +1646,22 @@ export type TrayLabel =
  * No tray icon
  */
 "off" | "icon" | "weekly" | "fiveHour" | "rings"
+/**
+ * What starts a routine
+ */
+export type Trigger = 
+/**
+ * 5-field cron in local time, like `0 9 * * 1-5`; `treeix_core::routines::next_fire` reads it
+ */
+{ kind: "schedule"; cron: string } | 
+/**
+ * A gh / acli event, polled every 60 s with ETags
+ */
+{ kind: "event"; event: RoutineEvent } | 
+/**
+ * A POST to the webhook URL with this token; the body is the prompt's `{body}`. ptyd makes the token
+ */
+{ kind: "webhook"; token: string }
 /**
  * Tokens one turn spent, as the agent reports them; `input` excludes the cached part
  */
@@ -1121,6 +1702,46 @@ project: string;
  * Claude or Codex session id
  */
 session: string; input: number; output: number; cacheRead: number; cacheWrite: number }
+/**
+ * A word dictation spells exactly; recognised aliases are replaced with it
+ */
+export type VocabularyTerm = { text: string; aliases: string[] }
+/**
+ * Pushed to every window
+ */
+export type VoiceEvent = { type: "dictation"; status: DictationStatus } | 
+/**
+ * Words so far, for the title bar while Listening
+ */
+{ type: "partial"; text: string } | { type: "dictated"; entry: DictationEntry } | { type: "recording"; status: RecordingStatus } | 
+/**
+ * A live transcript line while Recording
+ */
+{ type: "transcript"; line: TranscriptLine } | 
+/**
+ * Transcript and note written; the toast's "Open notes"
+ */
+{ type: "saved"; recording: RecordingInfo }
+/**
+ * A speech model, `parakeet-v3` or `parakeet-v2`
+ */
+export type VoiceModel = { id: string; phase: ModelPhase; 
+/**
+ * 0-1 while Downloading
+ */
+progress: number | null; error: string | null }
+/**
+ * What happens to a schedule that came due while the computer slept
+ */
+export type WhileAsleep = 
+/**
+ * One run on wake, however many were missed
+ */
+"catchUp" | 
+/**
+ * Recorded as a skipped run
+ */
+"skip"
 /**
  * One `git worktree list --porcelain` entry
  */

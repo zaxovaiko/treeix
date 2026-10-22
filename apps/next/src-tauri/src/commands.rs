@@ -7,26 +7,36 @@ use treeix_core::places::{self, Place};
 use treeix_proto::{Request, Response};
 
 mod agents;
+mod browser;
 mod chat;
 mod files;
 mod git;
+mod graph;
 mod history;
 pub(crate) mod mcp;
+mod plans;
 mod prs;
+mod routines;
 mod settings;
 pub(crate) mod system;
 mod tickets;
+mod voice;
 
 pub use agents::*;
+pub use browser::*;
 pub use chat::*;
 pub use files::*;
 pub use git::*;
+pub use graph::*;
 pub use history::*;
 pub use mcp::*;
+pub use plans::*;
 pub use prs::*;
+pub use routines::*;
 pub use settings::*;
 pub use system::*;
 pub use tickets::*;
+pub use voice::*;
 
 type Result<T> = std::result::Result<T, String>;
 

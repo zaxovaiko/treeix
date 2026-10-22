@@ -22,6 +22,18 @@ pub struct Features {
     pub awake: bool,
     /// One prompt, several agents, a worktree each
     pub race: bool,
+    /// Agent runs on a schedule, an event or a webhook
+    pub routines: bool,
+    /// Browser pane and its agent tools
+    pub browser: bool,
+    /// Plan pane for Claude Code's plans
+    pub plans: bool,
+    /// Module graph page
+    pub graph: bool,
+    /// Hold a hotkey, speak, the text lands where the cursor is (macOS, Apple silicon)
+    pub dictation: bool,
+    /// Record a call into a transcript and a note (macOS, Apple silicon)
+    pub recording: bool,
 }
 
 impl Default for Features {
@@ -36,6 +48,12 @@ impl Default for Features {
             prs: true,
             awake: true,
             race: true,
+            routines: true,
+            browser: true,
+            plans: true,
+            graph: true,
+            dictation: false,
+            recording: false,
         }
     }
 }
@@ -254,6 +272,88 @@ impl Default for Updates {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Routines {
+    /// Runs at the same time; the rest wait Queued
+    pub max_parallel: u32,
+    /// Keep firing while Treeix is closed (ptyd keeps running); off, ptyd only fires while an app is connected
+    pub background: bool,
+}
+
+impl Default for Routines {
+    fn default() -> Self {
+        Self {
+            max_parallel: 2,
+            background: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Browser {
+    /// Links clicked in terminals and chats open in a browser pane instead of the default browser
+    pub open_links: bool,
+    /// Where text typed in the address bar goes; `%s` is the query
+    pub search_url: String,
+    /// Agents get the browser tools over MCP
+    pub agents: bool,
+}
+
+impl Default for Browser {
+    fn default() -> Self {
+        Self {
+            open_links: false,
+            search_url: "https://www.google.com/search?q=%s".into(),
+            agents: true,
+        }
+    }
+}
+
+/// A word dictation spells exactly; recognised aliases are replaced with it
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct VocabularyTerm {
+    pub text: String,
+    pub aliases: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Dictation {
+    /// Modifiers held together, by `KeyboardEvent.code`: MetaLeft, MetaRight, AltLeft, AltRight, ControlLeft,
+    /// ControlRight, ShiftLeft, ShiftRight, Fn
+    pub hotkey: Vec<String>,
+    /// A quick tap keeps listening until the next tap; off, only holding records
+    pub tap_to_toggle: bool,
+    pub sounds: bool,
+    /// `parakeet-v3` (25 languages) or `parakeet-v2` (English)
+    pub model: String,
+    pub vocabulary: Vec<VocabularyTerm>,
+}
+
+impl Default for Dictation {
+    fn default() -> Self {
+        Self {
+            hotkey: vec!["MetaLeft".into(), "AltRight".into()],
+            tap_to_toggle: true,
+            sounds: true,
+            model: "parakeet-v3".into(),
+            vocabulary: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Recording {
+    /// Where recordings go; None is `<data dir>/recordings`
+    pub folder: Option<String>,
+    /// ISO 639-1 code the calls are spoken in; empty lets the model detect it
+    pub language: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Type)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -270,6 +370,10 @@ pub struct Settings {
     pub prs: Prs,
     pub awake: Awake,
     pub updates: Updates,
+    pub routines: Routines,
+    pub browser: Browser,
+    pub dictation: Dictation,
+    pub recording: Recording,
 }
 
 pub fn path(data_dir: &Path) -> PathBuf {

@@ -1,0 +1,26 @@
+/* Dictation and meeting recording (features/voice) */
+.pill.rec { color: var(--red); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent); background: var(--red-bg); }
+.pill.rec > i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: vc-blink 1.2s ease-in-out infinite; }
+.icon.rec { color: var(--red); background: var(--red-bg); }
+
+.hud { position: fixed; z-index: 55; border-radius: 14px; background: var(--popover); box-shadow: 0 0 0 1px var(--input), 0 16px 40px rgb(0 0 0 / 45%); animation: vc-rise .16s ease-out; }
+.hud.meet { top: 50px; right: 58px; width: 340px; padding: 12px; }
+.meet .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; white-space: nowrap; }
+.meet .hd > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.meet .tr { font-size: 12px; line-height: 1.55; max-height: 120px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+.meet .tr div { padding: 1px 0; }
+.meet .err { margin-top: 6px; font-size: 11.5px; color: var(--red); }
+.meet .ft { display: flex; gap: 6px; margin-top: 10px; }
+
+.wave { display: flex; align-items: center; gap: 2px; height: 20px; margin: 2px 0 8px; }
+.wave i { width: 3px; height: 4px; border-radius: 2px; background: var(--red); animation: vc-wave .9s ease-in-out infinite; }
+.wave i:nth-child(3n) { animation-delay: .25s; } .wave i:nth-child(3n + 1) { animation-delay: .1s; } .wave i:nth-child(4n) { animation-delay: .4s; }
+.wave.still { opacity: .3; }
+.wave.still i { animation: none; }
+
+textarea.vocab { width: 100%; height: auto; padding: 6px 8px; resize: vertical; font-family: var(--mono, ui-monospace); font-size: 12px; line-height: 1.5; }
+
+@keyframes vc-wave { 50% { height: 16px; } }
+@keyframes vc-blink { 50% { opacity: .35; } }
+@keyframes vc-rise { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .wave i, .pill.rec > i, .hud { animation: none; } }

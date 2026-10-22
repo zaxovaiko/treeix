@@ -1,6 +1,8 @@
 import { useEffect, useState, type PointerEvent } from 'react'
 import { PortsItem, TabTags } from '../features/agents/PortsItem'
 import { UsagePill } from '../features/agents/UsagePill'
+import { RoutineClock, RoutinesHost } from '../features/routines'
+import { VoiceTitleItems } from '../features/voice'
 import type { Api, Place, ProgressState } from '../ipc/api'
 import { Icon } from '../lib/icons'
 import { DOT_LABEL, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
@@ -33,6 +35,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
         <HStrip view={view} />
         <div className="tb-r" data-tauri-drag-region>
           <UsagePill api={view.api} />
+          <VoiceTitleItems view={view} />
           <button className="kbar mini" onClick={() => run('palette')} title="Search sessions and commands">
             <Icon name="search" />
             <kbd>{keyHint('palette')}</kbd>
@@ -60,6 +63,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
       </button>
       <div className="tb-r" data-tauri-drag-region>
         <UsagePill api={view.api} />
+        <VoiceTitleItems view={view} />
         <button className="icon" onClick={() => run('toggle-theme')} title="Toggle theme">
           <Icon name="moon" />
         </button>
@@ -83,6 +87,7 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
       <div className="grow">
         <div className="t1">
           <span className="trunc">{tabTitle(tab, sessions)}</span>
+          <RoutineClock view={view} tab={tab} />
         </div>
         <div className="t2">
           <span className={`st-${dot}`}>{DOT_LABEL[dot]}</span>
@@ -266,6 +271,7 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
                     <div key={tab.id} className={`htab ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })}>
                       <Ki kind={tabKind(tab, sessions)} dot={tabDot(tab, sessions)} sm />
                       <span className="trunc">{tabTitle(tab, sessions)}</span>
+                      <RoutineClock view={view} tab={tab} />
                       {place.missing && <span className="tag red">missing</span>}
                       <button className="icon sm x" onClick={stop(() => closeTab(tab))} title="Close">
                         <Icon name="x" />
@@ -354,6 +360,7 @@ export function StatusBar({ view }: ViewProps) {
         <Icon name="host" />
         PTY host · {liveCount(ordered, sessions)} live
       </span>
+      <RoutinesHost view={view} />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react'
 import { emit, listen } from '@tauri-apps/api/event'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyTheme } from '../styles/theme'
@@ -10,6 +10,8 @@ import { isCommandId, menuChord, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
 import { SettingsPage, useAppliedSettings } from '../pages/settings'
 import { settingsNow } from '../features/agents/settings'
+import { toggleRecording } from '../features/voice'
+import { useBrowserAgentPanes } from '../features/browser/open'
 import { resolveShortcut } from '../lib/hotkeys'
 import { TabPanes } from './Panes'
 import { Palette } from './Palette'
@@ -49,6 +51,8 @@ export interface ShellView {
   openFile: (root: string, file: string, line?: number, column?: number) => void
 }
 
+const GraphPage = lazy(() => import('../features/graph').then((m) => ({ default: m.GraphPage })))
+
 const byId = (list: SessionInfo[]): Sessions => Object.fromEntries(list.map((s) => [s.id, s]))
 /** Chat leaves a restore keeps; none when ptyd can't list chats */
 const openChats = (api: Api): Promise<string[]> => api.chatList().then((list) => list.map((chat) => chatLeaf(chat.id)), () => [])
@@ -67,7 +71,7 @@ export function Shell({ api }: { api: Api }) {
   /** Bumped on reconnect so every terminal re-attaches */
   const [epoch, setEpoch] = useState(0)
   const [palette, setPalette] = useState(false)
-  const [page, setPage] = useState<'settings' | null>(null)
+  const [page, setPage] = useState<'settings' | 'graph' | null>(null)
   const [dialog, setDialog] = useState<DialogRequest | null>(null)
   useDialogKeys(setDialog)
   const resolving = useRef(new Set<string>())
@@ -189,6 +193,7 @@ export function Shell({ api }: { api: Api }) {
   // Before the terminals mount, so they open with the right colors
   useLayoutEffect(() => applyTheme(ui.theme, ui.ui), [ui.theme, ui.ui])
   useAppliedSettings(api, ui.theme, (theme) => dispatch({ type: 'set', patch: { theme } }))
+  useBrowserAgentPanes({ api, dispatch, activeTab, placeOfTab })
   useEffect(() => {
     if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer })
   }, [loaded, ui.theme, ui.ui, ui.renderer])
@@ -268,7 +273,13 @@ export function Shell({ api }: { api: Api }) {
       case 'toggle-sidebar':
         return dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })
       case 'settings':
-        return setPage(page ? null : 'settings')
+        return setPage(page === 'settings' ? null : 'settings')
+      case 'module-graph':
+        if (!settingsNow()?.features.graph || (activeTab && placeOfTab(activeTab).kind === 'scratch')) return
+        return setPage(page === 'graph' ? null : 'graph')
+      case 'record':
+        if (settingsNow()?.features.recording) void toggleRecording(api).catch((e: unknown) => console.warn('recording:', e))
+        return
       case 'toggle-tabs':
         return dispatch({ type: 'set', patch: { orientation: ui.orientation === 'vertical' ? 'horizontal' : 'vertical' } })
       case 'toggle-ui':
@@ -281,8 +292,9 @@ export function Shell({ api }: { api: Api }) {
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     // The settings recorder is taking a chord
     if (document.querySelector('.krec.on')) return
-    const id = resolveShortcut(e, settingsNow()?.keys ?? {})
-    if (!id || (IN_TAURI && menuChord(e))) return
+    const keys = settingsNow()?.keys ?? {}
+    const id = resolveShortcut(e, keys)
+    if (!id || (IN_TAURI && menuChord(e, keys))) return
     e.preventDefault()
     e.stopPropagation()
     run(id)
@@ -341,6 +353,10 @@ export function Shell({ api }: { api: Api }) {
         <main className="card center">
           {page === 'settings' ? (
             <SettingsPage view={view} onClose={() => setPage(null)} />
+          ) : page === 'graph' ? (
+            <Suspense fallback={<div className="empty">Loading...</div>}>
+              <GraphPage view={view} onClose={() => setPage(null)} />
+            </Suspense>
           ) : empty ? (
             <Welcome view={view} />
           ) : (

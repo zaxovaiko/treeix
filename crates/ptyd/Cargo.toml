@@ -24,6 +24,7 @@ test = false
 
 [dependencies]
 treeix-proto.workspace = true
+treeix-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
