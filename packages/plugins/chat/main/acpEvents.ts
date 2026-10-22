@@ -95,6 +95,9 @@ function toolCallUpdateEvent(update: Record<string, unknown>): ChatEvent[] {
   if (update.content !== undefined && update.content !== null) patch.output = toolOutputs(update.content)
   if (update.locations !== undefined && update.locations !== null) patch.locations = toolLocations(update.locations)
   if (update.rawInput !== undefined) patch.rawInput = update.rawInput
+  // The Agent tool's response, which claude-agent-acp passes along once the subagent finishes
+  const response = record(record(record(update._meta).claudeCode).toolResponse)
+  if (typeof response.totalTokens === 'number') patch.subagent = { model: nullableText(response.resolvedModel), tokens: response.totalTokens }
   return [{ type: 'tool_call_update', id: update.toolCallId, patch }]
 }
 
@@ -117,11 +120,14 @@ export function fromSessionUpdate(update: unknown): ChatEvent[] {
   if (kind === 'plan_update') return [{ type: 'plan', entries: planEntries(record(value.plan).entries) }]
   if (kind === 'usage_update') {
     const cost = record(value.cost)
+    // The model the usage belongs to, so a subagent on the same model can share its window
+    const model = record(value._meta)['_claude/model']
     return [
       {
         type: 'usage',
         used: num(value.used),
         size: num(value.size),
+        ...(typeof model === 'string' ? { model } : {}),
         cost: typeof cost.amount === 'number' && typeof cost.currency === 'string' ? { amount: cost.amount, currency: cost.currency } : null
       }
     ]

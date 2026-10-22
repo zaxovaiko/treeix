@@ -26,6 +26,7 @@ import {
 } from './git'
 import { buildMenu, type MenuAction } from './appMenu'
 import { configureHotkey, isSummoned, releaseHotkey } from './hotkeyWindow'
+import { setSquareCorners } from './macWindow'
 import { closeDocument, completionDetails, completions, diagnostics, hover, navigate, signatureHelp, stopLanguageProcess } from './language'
 import { disposePlugins, enabledTools, setEnabledPlugins } from './plugins'
 import { loadShellPath } from './env'
@@ -186,6 +187,8 @@ app.whenReady().then(() => {
     if (appearance === 'dark' || appearance === 'light' || appearance === 'system') nativeTheme.themeSource = appearance
     // The page paints its own backgrounds with reduced alpha; vibrancy supplies the blurred desktop underneath
     window?.setVibrancy(translucent ? 'under-window' : null)
+    // The new vibrancy view comes with rounded corners, which the borderless hotkey window must not have
+    if (window && isSummoned()) setSquareCorners(window, true)
   })
   ipcMain.handle('saveAttachment', (_, name: string, data: Uint8Array) => saveAttachment(name, data))
   const history = createHistory(join(app.getPath('userData'), 'history'))

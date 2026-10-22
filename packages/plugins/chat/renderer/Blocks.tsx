@@ -218,7 +218,7 @@ const Counts = ({ added, removed }: { added: number; removed: number }): React.J
   </span>
 )
 
-/** The files a finished turn changed, so its edits read without unfolding its steps */
+/** The files a turn changed, so its edits read without unfolding its steps */
 export function ChangeSummary({ blocks, cwd }: { blocks: Block[]; cwd: string }): React.JSX.Element | null {
   const files = turnChanges(blocks)
   if (!files.length) return null

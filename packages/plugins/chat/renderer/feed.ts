@@ -13,7 +13,7 @@ export type PendingPermission = { requestId: string; title: string; options: Per
 export type Feed = {
   blocks: Block[]
   plan: PlanEntry[]
-  usage: { used: number; size: number; cost: { amount: number; currency: string } | null } | null
+  usage: { used: number; size: number; model?: string; cost: { amount: number; currency: string } | null } | null
   /** The agent's own title for the chat, once it made one */
   title: string | null
   /** The last turn that reported its tokens */
@@ -123,7 +123,7 @@ function reduceOwn(feed: Feed, event: ChatEvent, now: number): Feed {
     case 'plan':
       return { ...feed, plan: event.entries }
     case 'usage':
-      return { ...feed, usage: { used: event.used, size: event.size, cost: event.cost } }
+      return { ...feed, usage: { used: event.used, size: event.size, model: event.model, cost: event.cost } }
     case 'title':
       return { ...feed, title: event.title }
     case 'options':

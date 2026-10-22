@@ -1,3 +1,5 @@
+import type { ChatOption } from '@treeix/sdk'
+
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -103,6 +105,16 @@ export function switchWarning(usage: { used: number } | null, empty: boolean): {
   if (usage === null) return empty ? null : { tokens: null }
   if (usage.used < 10000) return null
   return { tokens: usage.used }
+}
+
+/** The name of an option's current value, as its picker lists it */
+export const valueName = (option: ChatOption): string => option.values.find((value) => value.value === option.currentValue)?.name ?? option.currentValue
+
+/** A Claude model id or alias as people say it: claude-haiku-4-5-20251001 is Haiku 4.5, sonnet is Sonnet */
+export function modelName(id: string): string {
+  const [, family = id, version = ''] = /^claude-([a-z]+)((?:-\d{1,2}){0,2})(?!\d)/.exec(id) ?? []
+  if (!/^[a-z]+$/.test(family)) return id
+  return `${family[0].toUpperCase()}${family.slice(1)}${version.replace('-', ' ').replaceAll('-', '.')}`
 }
 
 export function formatTokens(n: number): string {

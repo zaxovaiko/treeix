@@ -6,6 +6,7 @@ import {
   folderPath,
   formatTokens,
   imageProblem,
+  modelName,
   parseShellPrompt,
   shellCommandOf,
   shellPrompt,
@@ -61,6 +62,15 @@ test('switchWarning and formatTokens', () => {
   expect(switchWarning(null, true)).toBeNull()
   expect(formatTokens(48123)).toBe('48k')
   expect(formatTokens(1234567)).toBe('1.2M')
+})
+
+test('modelName reads ids and aliases as people say them', () => {
+  expect(modelName('claude-sonnet-5-5')).toBe('Sonnet 5.5')
+  expect(modelName('claude-opus-5-5[1m]')).toBe('Opus 5.5')
+  expect(modelName('claude-haiku-4-5-20251001')).toBe('Haiku 4.5')
+  expect(modelName('claude-sonnet-4-20250514')).toBe('Sonnet 4')
+  expect(modelName('sonnet')).toBe('Sonnet')
+  expect(modelName('gpt-5-codex')).toBe('gpt-5-codex')
 })
 
 test('built-in /clear unless the agent has its own', () => {

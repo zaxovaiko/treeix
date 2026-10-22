@@ -1,6 +1,6 @@
 import type { Repo } from '../../shared/types'
 import { baseName, branchLabel } from './Sidebar'
-import { agentOr, isAgent, useAgents } from './agents'
+import { type Agent, agentOr, isAgent, logoOf, useAgents } from './agents'
 import { type Activity, agentActivity } from './activity'
 import type { SessionKind, SessionStatus, SessionSummary } from '@treeix/sdk'
 
@@ -27,16 +27,26 @@ export function worktreeLabel(repos: Repo[] | null, worktreePath: string): strin
   return repo && worktree ? `${baseName(repo.path)} · ${branchLabel(worktree)}` : baseName(worktreePath)
 }
 
+/** An agent's mark in its colour: Claude's and Codex's logos, any other agent's glyph */
+export function AgentGlyph({ agent, className = 'size-3' }: { agent: Agent; className?: string }): React.JSX.Element {
+  const logo = logoOf(agent)
+  if (!logo) return <span style={{ color: agent.color }}>{agent.mark}</span>
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden style={{ color: agent.color }} className={`shrink-0 ${className}`}>
+      <path d={logo} fill="currentColor" fillRule="evenodd" />
+    </svg>
+  )
+}
+
 export function KindBadge({ kind }: { kind: SessionKind }): React.JSX.Element {
   'use no memo' // agent mark is read from the agents list during render
   useAgents()
-  const { mark, color } = agentOr(kind)
+  const agent = agentOr(kind)
   return (
     <span
-      style={{ color }}
-      className={`grid size-[18px] shrink-0 place-items-center overflow-hidden rounded-[5px] bg-foreground/5 whitespace-nowrap ${[...mark].length > 1 ? 'text-[8px] tracking-tight' : 'text-[11px]'}`}
+      className={`grid size-[18px] shrink-0 place-items-center overflow-hidden rounded-[5px] bg-foreground/5 whitespace-nowrap ${[...agent.mark].length > 1 ? 'text-[8px] tracking-tight' : 'text-[11px]'}`}
     >
-      {mark}
+      <AgentGlyph agent={agent} />
     </span>
   )
 }

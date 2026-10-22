@@ -19,6 +19,8 @@ export type ToolCall = {
   output: ToolOutput[]
   locations: { path: string; line: number | null }[]
   rawInput: unknown
+  /** A finished subagent's model and the context its last step filled */
+  subagent?: { model: string | null; tokens: number }
 }
 
 export type PlanEntry = { content: string; priority: 'high' | 'medium' | 'low'; status: 'pending' | 'in_progress' | 'completed' }
@@ -45,7 +47,7 @@ export type ChatEvent =
   | { type: 'tool_call'; call: ToolCall; parent?: string }
   | { type: 'tool_call_update'; id: string; patch: Partial<Omit<ToolCall, 'id'>> }
   | { type: 'plan'; entries: PlanEntry[] }
-  | { type: 'usage'; used: number; size: number; cost: { amount: number; currency: string } | null }
+  | { type: 'usage'; used: number; size: number; model?: string; cost: { amount: number; currency: string } | null }
   /** A title the agent made for the chat, like Claude's summary of what it is about */
   | { type: 'title'; title: string }
   | { type: 'options'; options: ChatOption[] }

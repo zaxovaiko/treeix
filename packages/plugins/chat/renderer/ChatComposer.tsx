@@ -7,7 +7,7 @@ import { updateSettings } from '@treeix/app/settings'
 import { errorMessage, Popup } from '@treeix/app/ui'
 import { ImageThumb } from './Blocks'
 import type { Feed } from './feed'
-import { browsedFolder, builtinOf, completion, folderPath, shellCommandOf, formatTokens, imageProblem, switchWarning, withBuiltins, withMentions } from './composer'
+import { browsedFolder, builtinOf, completion, folderPath, shellCommandOf, formatTokens, imageProblem, valueName, switchWarning, withBuiltins, withMentions } from './composer'
 import { cancel, clear, filesFor, getChat, hasConversation, isBusy, runShell, send, setDraft, setImages, setOption, switchAgent, unqueue, useChat, whenIdle } from './store'
 import { primaryKey } from '@treeix/shared/shortcut'
 
@@ -25,8 +25,6 @@ const BARE_VALUE = /^(on|off|default|none|auto)$/i
 type PendingSwitch = { option: ChatOption; value: string; tokens: number | null }
 
 /** What a picker's button says for an option: its value, with the option's name when the value is bare */
-const valueName = (option: ChatOption): string => option.values.find((value) => value.value === option.currentValue)?.name ?? option.currentValue
-
 const optionLabel = (option: ChatOption): string => {
   const shown = valueName(option)
   return BARE_VALUE.test(shown) ? `${option.name}: ${shown}` : shown
@@ -155,11 +153,23 @@ function UsageRow({ label, tokens, total }: { label: string; tokens: number; tot
   )
 }
 
+/** How full a context window is: a bar, amber past 80%, then the tokens over the window */
+export function ContextBar({ used, size }: { used: number; size: number }): React.JSX.Element {
+  const fullness = size > 0 ? used / size : 0
+  return (
+    <>
+      <span className="h-1 w-12 overflow-hidden rounded-full bg-muted">
+        <span className={`block h-full ${fullness > 0.8 ? 'bg-amber-400' : 'bg-foreground/40'}`} style={{ width: `${Math.min(100, fullness * 100)}%` }} />
+      </span>
+      {formatTokens(used)} / {formatTokens(size)}
+    </>
+  )
+}
+
 /** The context bar; clicking it splits the last turn's tokens into cached, new and generated */
 function ContextMeter({ usage, turn, running }: { usage: NonNullable<Feed['usage']>; turn: Feed['turnUsage']; running: boolean }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
-  const fullness = usage.size > 0 ? usage.used / usage.size : 0
   const prompt = turn ? turn.input + turn.cacheRead + turn.cacheWrite : 0
   return (
     <>
@@ -169,10 +179,7 @@ function ContextMeter({ usage, turn, running }: { usage: NonNullable<Feed['usage
         onClick={() => setOpen((value) => !value)}
         className="flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        <span className="h-1 w-12 overflow-hidden rounded-full bg-muted">
-          <span className={`block h-full ${fullness > 0.8 ? 'bg-amber-400' : 'bg-foreground/40'}`} style={{ width: `${Math.min(100, fullness * 100)}%` }} />
-        </span>
-        {formatTokens(usage.used)} / {formatTokens(usage.size)}
+        <ContextBar used={usage.used} size={usage.size} />
       </button>
       {open && (
         <Popup

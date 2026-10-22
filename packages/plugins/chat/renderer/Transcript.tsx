@@ -79,7 +79,7 @@ function SubagentLog({ blocks, onOpen, ...props }: FeedProps & { onOpen: (() => 
   )
 }
 
-/** A finished turn's tool calls and thoughts, folded behind one row so its reply reads on its own */
+/** A turn's tool calls and thoughts, folded behind one row so its reply reads on its own */
 function Steps(props: FeedProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   // A step asking for permission unfolds, so the card is never hidden
@@ -96,13 +96,13 @@ function Steps(props: FeedProps): React.JSX.Element {
   )
 }
 
-/** The feed turn by turn; every turn but the one still running folds its steps */
-export const TurnBlocks = memo(function TurnBlocks({ live, ...props }: FeedProps & { live: boolean }): React.JSX.Element {
+/** The feed turn by turn; each folds its steps, the running one too, so the chat reads as what was said */
+export const TurnBlocks = memo(function TurnBlocks(props: FeedProps): React.JSX.Element {
   const turns = turnsOf(props.blocks)
   return (
     <>
       {turns.map((turn, index) =>
-        (live && index === turns.length - 1) || !turn.steps.some((block) => block.type === 'tool') ? (
+        !turn.steps.some((block) => block.type === 'tool') ? (
           <FeedBlocks key={index} {...props} blocks={[...turn.steps, ...turn.answer]} />
         ) : (
           <Fragment key={index}>
@@ -116,21 +116,11 @@ export const TurnBlocks = memo(function TurnBlocks({ live, ...props }: FeedProps
   )
 })
 
-export function Transcript({
-  events,
-  cwd,
-  live = false,
-  onAnswer
-}: {
-  events: LoggedChatEvent[]
-  cwd: string
-  live?: boolean
-  onAnswer?: (requestId: string, optionId: string) => void
-}): React.JSX.Element {
+export function Transcript({ events, cwd, onAnswer }: { events: LoggedChatEvent[]; cwd: string; onAnswer?: (requestId: string, optionId: string) => void }): React.JSX.Element {
   const blocks = useMemo(() => events.reduce((feed, { at, event }) => reduce(feed, event, at), emptyFeed).blocks, [events])
   return (
     <div className="flex flex-col gap-3">
-      <TurnBlocks blocks={blocks} cwd={cwd} newest={null} onAnswer={onAnswer} live={live} />
+      <TurnBlocks blocks={blocks} cwd={cwd} newest={null} onAnswer={onAnswer} />
     </div>
   )
 }

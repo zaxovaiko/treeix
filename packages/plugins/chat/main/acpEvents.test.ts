@@ -46,6 +46,9 @@ test('plan, usage, commands, options and unknown updates', () => {
   expect(fromSessionUpdate({ sessionUpdate: 'usage_update', used: 48000, size: 200000, cost: { amount: 0.04, currency: 'USD' } })).toEqual([
     { type: 'usage', used: 48000, size: 200000, cost: { amount: 0.04, currency: 'USD' } }
   ])
+  expect(fromSessionUpdate({ sessionUpdate: 'usage_update', used: 1, size: 2, _meta: { '_claude/model': 'claude-opus-5-5' } })).toEqual([
+    { type: 'usage', used: 1, size: 2, model: 'claude-opus-5-5', cost: null }
+  ])
   expect(fromSessionUpdate({ sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'compact', description: 'Summarize' }] })).toEqual([
     { type: 'commands', commands: [{ name: 'compact', description: 'Summarize' }] }
   ])
@@ -218,6 +221,16 @@ test("a subagent's updates carry the call that started it", () => {
     { type: 'thought_chunk', text: 'Hmm', parent: 'agent1' }
   ])
   expect(fromSessionUpdate({ sessionUpdate: 'tool_call', toolCallId: 't1', title: 'grep', ...meta })).toMatchObject([{ type: 'tool_call', parent: 'agent1', call: { id: 't1' } }])
+})
+
+test("a finished subagent's response gives its model and the context it filled", () => {
+  const response = { status: 'completed', resolvedModel: 'claude-sonnet-5-5', totalTokens: 71580, content: [] }
+  expect(fromSessionUpdate({ sessionUpdate: 'tool_call_update', toolCallId: 'agent1', _meta: { claudeCode: { toolName: 'Agent', toolResponse: response } } })).toEqual([
+    { type: 'tool_call_update', id: 'agent1', patch: { subagent: { model: 'claude-sonnet-5-5', tokens: 71580 } } }
+  ])
+  expect(fromSessionUpdate({ sessionUpdate: 'tool_call_update', toolCallId: 'r1', _meta: { claudeCode: { toolName: 'Read', toolResponse: { type: 'text' } } } })).toEqual([
+    { type: 'tool_call_update', id: 'r1', patch: {} }
+  ])
 })
 
 test('the agent names the session', () => {

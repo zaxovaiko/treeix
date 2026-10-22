@@ -4,7 +4,7 @@ import { agentOr, chatAgent, isAgent, isChatOnly, useAgents } from './agents'
 import { BotAvatar } from './BotAvatar'
 import { Icon } from './Icon'
 import { JOBS } from './jobs'
-import { findService, usePlugins, useService, useSessions } from './plugins'
+import { findService, useActiveSessionId, usePlugins, useService, useSessions } from './plugins'
 import { FolderPicker } from './FolderPicker'
 import { stepFontSize, useSettings } from './settings'
 import { actionForEvent, actionKeys, NEW_TAB_ACTIONS, onKeymapChange, withKeys } from '../../shared/keymap'
@@ -12,7 +12,7 @@ import { primaryKey, secondaryKey } from '../../shared/shortcut'
 import { menuActions, registerActionRunner, runAction, subscribeRunners } from './actionRunners'
 import { ShortcutSheet } from './Shell'
 import { CHANGES, PluginHost, PluginPage, type Side, TERMINAL } from './PluginHost'
-import { projectOf, StatusDot, worktreeLabel } from './sessionUi'
+import { AgentGlyph, projectOf, StatusDot, worktreeLabel } from './sessionUi'
 import { timeAgo } from './time'
 import logo from './assets/treeix.webp'
 import { openMenu } from './contextMenu'
@@ -38,10 +38,9 @@ function BotRow({ bot, active, onClick }: { bot: Bot; active: boolean; onClick: 
 function AgentMark({ kind, className = 'size-7 text-[15px]' }: { kind: string; className?: string }): React.JSX.Element {
   'use no memo' // agent mark is read from the agents list during render
   useAgents()
-  const { mark, color } = agentOr(kind)
   return (
-    <span style={{ color }} className={`grid shrink-0 place-items-center rounded-full bg-foreground/10 ${className}`}>
-      {mark}
+    <span className={`grid shrink-0 place-items-center rounded-full bg-foreground/10 ${className}`}>
+      <AgentGlyph agent={agentOr(kind)} className="size-[58%]" />
     </span>
   )
 }
@@ -84,9 +83,10 @@ function ChatRow({
         <AgentMark kind={session.kind} className="size-5 text-[11px]" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{session.title}</span>
         {(session.status === 'input' || session.status === 'running') && <StatusDot session={session} />}
+        {session.view === 'terminal' && <Icon name="terminal" className="size-3 shrink-0 text-muted-foreground" />}
       </button>
       <span className="absolute right-1 hidden group-hover:block">
-        <IconButton label="Close chat" onClick={() => findService('sessions')?.close(session.id)}>
+        <IconButton label={session.view === 'chat' ? 'Close chat' : 'Close terminal'} onClick={() => findService('sessions')?.close(session.id)}>
           <Icon name="close" className="size-3" />
         </IconButton>
       </span>
@@ -477,9 +477,14 @@ export function Bots(): React.JSX.Element {
   const selected = bots.find((bot) => bot.id === selectedId)
   const matches = (text: string): boolean => text.toLowerCase().includes(query.trim().toLowerCase())
   const shown = bots.filter((bot) => matches(bot.name))
-  const chats = useSessions()
-    .filter((session) => session.view === 'chat')
-    .toSorted((a, b) => b.startedAt - a.startedAt)
+  const live = useSessions().toSorted((a, b) => b.startedAt - a.startedAt)
+  const chats = live.filter((session) => session.view === 'chat')
+  // Claude and Codex terminals are listed with the chats, so one that filled the page can be found again
+  const listedSessions = live.filter((session) => (session.view === 'chat' ? session.id === selectedId || !isDraft(session) : isAgent(session.kind)))
+  // A terminal on the whole page is the one picked in the list, in place of the chat behind it
+  const terminalPage = filled && side === TERMINAL
+  const shownTerminal = useActiveSessionId()
+  const isOpen = (session: SessionSummary): boolean => (session.view === 'chat' ? !terminalPage && session.id === selectedId : terminalPage && session.id === shownTerminal)
   // Agents closed in a terminal resume there; a closed shell has nothing to resume
   const allClosed = useSyncExternalStore(sessions?.subscribe ?? noSubscription, sessions?.getClosed ?? noClosed).filter(
     (session) => session.view === 'chat' || isAgent(session.kind)
@@ -603,10 +608,17 @@ export function Bots(): React.JSX.Element {
     if (draft) setSelectedId(draft.id)
   }
 
-  // Picking something to show docks a panel that fills the page
+  // Picking something to show docks a panel that fills the page; a terminal on the page is listed in the sidebar, so it closes instead
   const pick = (id: string | null): void => {
+    if (terminalPage) setSide(null)
     setFilled(false)
     setSelectedId(id)
+  }
+  const openSession = (session: SessionSummary): void => {
+    if (session.view === 'chat') return pick(session.id)
+    setSide(TERMINAL)
+    setFilled(true)
+    sessions?.reveal(session.id)
   }
   // A new chat has the page to itself
   const newChat = (): void => {
@@ -679,7 +691,7 @@ export function Bots(): React.JSX.Element {
               <NewButton onChat={newChat} onTerminal={newTerminal} />
             </div>
             {Map.groupBy(
-              chats.filter((session) => (session.id === selectedId || !isDraft(session)) && matches(session.title)),
+              listedSessions.filter((session) => matches(session.title)),
               projectOfChat
             )
               .entries()
@@ -704,9 +716,9 @@ export function Bots(): React.JSX.Element {
                         <ChatRow
                           key={session.id}
                           session={session}
-                          active={session.id === selectedId}
+                          active={isOpen(session)}
                           renaming={session.id === renaming}
-                          onClick={() => pick(session.id)}
+                          onClick={() => openSession(session)}
                           onRename={() => setRenaming(session.id)}
                           onRenamed={() => setRenaming(null)}
                           flash={setProblem}
@@ -760,7 +772,7 @@ export function Bots(): React.JSX.Element {
       className={`relative flex w-[52px] shrink-0 flex-col items-center gap-1 pb-2 ${islandUi ? '' : 'after:absolute after:top-9 after:right-0 after:bottom-0 after:w-px after:bg-border'}`}
     >
       {/* Under the traffic lights */}
-      <div className={`h-11 w-full shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
+      <div className={`w-full shrink-0 ${islandUi ? 'h-[53px]' : 'h-11'} ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
       {canChat && <NewButton active={onHome} onChat={newChat} onTerminal={newTerminal} />}
       <nav className="flex min-h-0 w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto py-1.5">
         {bots.map((bot) => (
@@ -769,10 +781,7 @@ export function Bots(): React.JSX.Element {
           </button>
         ))}
         {canChat &&
-          Map.groupBy(
-            chats.filter((session) => session.id === selectedId || !isDraft(session)),
-            projectOfChat
-          )
+          Map.groupBy(listedSessions, projectOfChat)
             .entries()
             .map(([folder, group]) =>
               // One tile per folder; a folder folded shut in the sidebar is its icon, opening it again
@@ -791,8 +800,8 @@ export function Bots(): React.JSX.Element {
                     <button
                       key={session.id}
                       title={session.title}
-                      onClick={() => pick(session.id)}
-                      className={`relative rounded-[10px] p-1 ${session.id === selectedId ? 'bg-foreground/10' : 'hover:bg-accent'}`}
+                      onClick={() => openSession(session)}
+                      className={`relative rounded-[10px] p-1 ${isOpen(session) ? 'bg-foreground/10' : 'hover:bg-accent'}`}
                     >
                       <AgentMark kind={session.kind} />
                       {(session.status === 'input' || session.status === 'running') && (
@@ -815,10 +824,11 @@ export function Bots(): React.JSX.Element {
   // Pages whose header starts at the top left keep clear of the rail's corner
   const cornerBar = listed ? null : <div className={`h-10 shrink-0 ${chromeless ? '' : '[-webkit-app-region:drag]'}`} />
   // Right of the traffic lights, a title section over the rail's top, its bottom border meeting the rail's edge. Last in the page, since the window takes
-  // drag areas in page order: one earlier would sit under the page's draggable header and its button would miss the click
+  // drag areas in page order: one earlier would sit under the page's draggable header and its button would miss the click.
+  // An island's header sits below the island's 8px gap and 1px border, so the corner grows by those 9px underneath, its button staying level with the traffic lights
   const corner = (
     <span
-      className={`absolute top-0 left-0 z-20 flex h-9 items-center border-b border-border pr-3 pl-20 ${islandUi ? 'bg-canvas' : 'bg-background'} ${
+      className={`absolute top-0 left-0 z-20 flex items-center border-b border-border pr-3 pl-20 ${islandUi ? 'h-[45px] bg-canvas pb-[9px]' : 'h-9 bg-background'} ${
         chromeless ? '' : '[-webkit-app-region:drag]'
       }`}
     >
