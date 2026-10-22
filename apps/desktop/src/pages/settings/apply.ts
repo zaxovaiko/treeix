@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useLayoutEffect } from 'react'
-import { useSettings } from '../../features/agents/settings'
+import { settingsNow, useSettings } from '../../features/agents/settings'
 import { THEMES } from '../../features'
 import type { Api, Settings } from '../../ipc/api'
 import type { Mode } from '../../styles/theme'
@@ -42,6 +42,9 @@ function apply(settings: Settings, mode: Mode) {
 }
 
 const DARK = '(prefers-color-scheme: dark)'
+
+/** A saved mode as it should load: the OS mode when following the system, so the restore doesn't undo the sync */
+export const followedMode = (saved: Mode): Mode => (settingsNow()?.appearance.followSystem ? (matchMedia(DARK).matches ? 'dark' : 'light') : saved)
 
 /**
  * Applies the saved theme, terminal font and size to this window and keeps them live. With follow-system on, `setMode`

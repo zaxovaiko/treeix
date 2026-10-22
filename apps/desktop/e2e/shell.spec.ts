@@ -116,6 +116,7 @@ test('horizontal tabs replace the sidebar and switch tabs', async ({ page }) => 
 })
 
 test('theme toggles and persists', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
   await open(page)
   const html = page.locator('html')
   await expect(html).toHaveAttribute('data-mode', 'dark')

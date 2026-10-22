@@ -50,8 +50,9 @@ function ThemeGrid({ mode, view, settings, update }: SectionProps & { mode: Mode
           key={name}
           className={`thx ${name === current ? 'on' : ''}`}
           onClick={() => {
-            update({ appearance: mode === 'light' ? { lightTheme: name, followSystem: false } : { darkTheme: name, followSystem: false } })
-            setUi(view, { theme: mode })
+            update({ appearance: mode === 'light' ? { lightTheme: name } : { darkTheme: name } })
+            // Following the system, the OS picks which of the two shows
+            if (!settings.appearance.followSystem) setUi(view, { theme: mode })
           }}
         >
           <span className="pv" style={{ background, color: mode === 'light' ? '#1b1b1f' : '#f5f5f5' }}>

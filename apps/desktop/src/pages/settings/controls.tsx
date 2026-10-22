@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useEffectEvent, useState, type ReactNode } from 'react'
-import { accelerator, acceleratorLabel } from '../../shell/shortcuts'
+import { createContext, useContext, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
+import { IS_MAC, MODIFIER_KEYS, accelerator, acceleratorLabel } from '../../shell/shortcuts'
 
 /** The search and where a row sits, so each row can tell whether it matches */
 const Where = createContext({ query: '', section: '', group: '' })
@@ -112,6 +112,7 @@ export function Select<T extends string | number>({ value, options, onChange }: 
 export function Recorder({ value, onChange, label }: { value: string | null; onChange: (accel: string | null) => Promise<void> | void; label: string }) {
   const [recording, setRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const self = useRef<HTMLButtonElement>(null)
   const save = (accel: string | null) => {
     setRecording(false)
     Promise.resolve(onChange(accel)).then(
@@ -126,18 +127,27 @@ export function Recorder({ value, onChange, label }: { value: string | null; onC
     if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) return save(null)
     const accel = accelerator(e)
     if (accel) save(accel)
+    else if (!MODIFIER_KEYS.has(e.key)) setError(`Hold ${IS_MAC ? '⌘, ⌃ or ⌥' : 'Ctrl or Alt'} with the key`)
   })
   // On the window: WebKit doesn't focus a clicked button, so its own keydown never fires
   useEffect(() => {
     if (!recording) return
     const handler = (e: KeyboardEvent) => onKey(e)
+    // A click anywhere else, another recorder too, stops this one
+    const away = (e: PointerEvent) => {
+      if (!(e.target instanceof Node && self.current?.contains(e.target))) setRecording(false)
+    }
     window.addEventListener('keydown', handler, true)
-    return () => window.removeEventListener('keydown', handler, true)
+    window.addEventListener('pointerdown', away, true)
+    return () => {
+      window.removeEventListener('keydown', handler, true)
+      window.removeEventListener('pointerdown', away, true)
+    }
   }, [recording])
   return (
     <>
       {error && <span className="sd st-err">{error}</span>}
-      <button className={`krec ${recording ? 'on' : ''}`} aria-label={`${label} shortcut`} onClick={() => setRecording(!recording)} title="Click, then press the new keys. Backspace clears">
+      <button ref={self} className={`krec ${recording ? 'on' : ''}`} aria-label={`${label} shortcut`} onClick={() => setRecording(!recording)} title="Click, then press the new keys. Backspace clears">
         {recording ? 'Press keys...' : value ? <kbd>{acceleratorLabel(value)}</kbd> : <span className="dim">Not set</span>}
       </button>
     </>

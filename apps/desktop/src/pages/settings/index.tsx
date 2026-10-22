@@ -9,7 +9,7 @@ import { onSettingsSection, openableSection, takeRequestedSection } from './nav'
 import { SECTION_VIEWS } from './sections'
 import './settings.css'
 
-export { useAppliedSettings } from './apply'
+export { followedMode, useAppliedSettings } from './apply'
 export { showSettingsSection } from './nav'
 
 const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {

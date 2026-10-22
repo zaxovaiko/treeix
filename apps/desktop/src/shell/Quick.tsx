@@ -5,7 +5,7 @@ import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
 import { paneGrid } from '../panes/terminal/xterm'
 import { IN_TAURI, UI_CHANGED } from '../lib/native'
-import { useAppliedSettings } from '../pages/settings'
+import { followedMode, useAppliedSettings } from '../pages/settings'
 import { applyTheme, type Mode } from '../styles/theme'
 import { parseUi, type UiState } from './state'
 
@@ -17,7 +17,7 @@ const GONE = new Set(['exited', 'restored', 'crashed'])
 async function quickSession(api: Api, onLook: (look: Look) => void): Promise<string> {
   const [json, list, home] = await Promise.all([api.getUi(), api.sessions(), api.homeDir()])
   const saved = parseUi(json)
-  onLook(saved)
+  onLook({ ...saved, theme: followedMode(saved.theme) })
   const alive = list.find((s) => s.id === saved.quick && !GONE.has(s.status))
   if (alive) return alive.id
   const info = await api.create({ kind: 'shell', cwd: home, ...paneGrid(innerWidth, innerHeight) })
