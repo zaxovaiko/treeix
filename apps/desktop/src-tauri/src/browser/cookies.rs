@@ -1,6 +1,8 @@
 //! Cookie import from the user's other browsers into the panes' data store: Chromium-based browsers (Keychain key,
 //! AES-128-CBC), Firefox and Safari. A one-off copy, not a sync. macOS only for now.
 //! Port of the Electron app's browser cookies module.
+// The parsers are shared by the macOS importer and the tests, so off macOS they are unused
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 use super::{BrowserProfile, CookieImport};
 use tauri::webview::cookie::{Cookie, SameSite, time::OffsetDateTime};
