@@ -23,6 +23,9 @@ import {
   type Worktree,
   type WorktreeStep,
 } from './api'
+import { agentsMock } from './mockAgents'
+import { chatMock } from './mockChat'
+import { settingsMock } from './mockSettings'
 
 // In-browser fake daemon for the dev server and visual checks: a tiny shell over a fake file tree.
 // `?seed=empty` starts with no sessions (first run); `window.treeixMock.restart()` simulates a daemon restart
@@ -326,6 +329,9 @@ export function mockApi(): Api {
       return () => listeners.delete(cb)
     },
     ...phase3(),
+    ...agentsMock(),
+    ...chatMock(),
+    ...settingsMock(),
   }
 }
 
@@ -346,7 +352,7 @@ function seed(spawn: (opts: CreateSession, id: string, createdAt: number) => Sim
     ['s4', 'claude', redo, 'Redo terminal: blocks + splits', 'needs', ['Redo the terminal pane: blocks and recursive splits', `${color.claude}⏺${color.off} Update(packages/plugins/terminal/main/pty.ts)`, '  Updated with 12 additions and 3 removals', '', 'Do you want to make this edit to pty.ts?', `${color.claude}❯ 1. Yes${color.off}`, '  2. No, and tell Claude what to do differently']],
     ['s5', 'codex', redo, 'Stress test PTY throughput', 'done', ['Stress test PTY throughput', '20 sessions · 1000 MB in 2.43s · 412 MB/s', 'p50 frame 4.1ms · p99 frame 9.8ms']],
     ['s6', 'claude', `${TREEIX}/.claude/worktrees/fix+pty-leak`, 'Close pty fd on pane close', 'running', ['Close the pty fd when a pane closes', `${color.claude}✻${color.off} Reading packages/plugins/terminal/main/pty.ts...`]],
-    ['s7', 'claude', `${TREEIX}/.claude/worktrees/pr-405`, 'Review #405', 'done', ['Review PR #405', `${color.green}⏺${color.off} Looks good. Two nits left as comments.`]],
+    ['s7', 'claude', `${TREEIX}/.claude/worktrees/pr-405`, 'Review #405', 'watching', ['Review PR #405', `${color.green}⏺${color.off} Looks good. Two nits left as comments.`]],
     ['s8', 'shell', `${HOME}/dotfiles`, 'zsh', 'idle', ['./install.sh', 'linked .zshrc .gitconfig']],
     ['s9', 'shell', `${HOME}/Downloads`, 'zsh', 'idle', ['ls', `${color.dir}invoices${color.off}  report.pdf  IMG_2041.heic`]],
     ['s10', 'shell', HOME, 'zsh', 'idle', []],
@@ -362,7 +368,8 @@ function seed(spawn: (opts: CreateSession, id: string, createdAt: number) => Sim
 
 // Phase 3 demo data, from the prototype (data.js): repos, worktrees, branches, changes, PRs, closed sessions
 
-type Phase3 = Omit<Api, 'hello' | 'sessions' | 'create' | 'attach' | 'write' | 'resize' | 'kill' | 'remove' | 'restart' | 'clear' | 'getUi' | 'putUi' | 'places' | 'homeDir' | 'onEvent'>
+type Phase3 = Omit<Api, 'hello' | 'sessions' | 'create' | 'attach' | 'write' | 'resize' | 'kill' | 'remove' | 'restart' | 'clear' | 'getUi' | 'putUi' | 'places' | 'homeDir' | 'onEvent' | keyof Phase45>
+type Phase45 = ReturnType<typeof agentsMock> & ReturnType<typeof chatMock> & ReturnType<typeof settingsMock>
 
 const HOUR = 3_600_000
 const DOWNLOADS = `${HOME}/Downloads`

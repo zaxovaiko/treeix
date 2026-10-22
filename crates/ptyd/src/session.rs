@@ -5,7 +5,8 @@ use crate::server::{ClientId, Daemon, Outbox};
 use crate::{procinfo, snapshot};
 use alacritty_terminal::event::{Event as TermEvent, EventListener};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::Line;
+use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 use nix::sys::signal::{Signal, killpg};
@@ -14,12 +15,14 @@ use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system}
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, mpsc};
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::{Instant, sleep_until};
-use treeix_proto::{Event, Response, ServerMsg, SessionId, SessionInfo, SessionStatus};
+use treeix_proto::{
+    Event, ProgressState, Response, ServerMsg, SessionId, SessionInfo, SessionStatus,
+};
 
 const READ_BUF: usize = 64 * 1024;
 const MAX_DATA_FRAME: usize = 64 * 1024;
@@ -47,6 +50,8 @@ pub struct Session {
     has_title: AtomicBool,
     /// Output since the last snapshot
     pub dirty: AtomicBool,
+    /// Last OSC 9;4 progress sent, as `state << 8 | percent`, so a TUI repeating it sends no events
+    progress: AtomicU16,
 }
 
 struct Vt {
@@ -176,6 +181,7 @@ impl Session {
             term_events,
             has_title: AtomicBool::new(has_title),
             dirty: AtomicBool::new(false),
+            progress: AtomicU16::new(0),
         })
     }
 
@@ -228,9 +234,15 @@ impl Session {
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "Treeix");
         cmd.env("TREEIX_SESSION", &self.id);
+        cmd.env(
+            crate::hooks::STATUS_ENV,
+            crate::hooks::status_dir(&daemon.data_dir),
+        );
         for (key, value) in &self.env {
             cmd.env(key, value);
         }
+        // A restart starts with no agent status; the last run's would linger
+        let _ = std::fs::remove_file(crate::hooks::status_dir(&daemon.data_dir).join(&self.id));
         let child = pair.slave.spawn_command(cmd)?;
         drop(pair.slave);
         let reader = pair.master.try_clone_reader()?;
@@ -350,6 +362,7 @@ impl Session {
                     title,
                     body,
                 }),
+                Osc::Progress { state, percent } => self.set_progress(daemon, state, percent),
             }
         }
     }
@@ -364,6 +377,17 @@ impl Session {
                 title,
             });
             daemon.mark_state_dirty();
+        }
+    }
+
+    fn set_progress(&self, daemon: &Daemon, state: ProgressState, percent: u8) {
+        let packed = (state as u16) << 8 | percent as u16;
+        if self.progress.swap(packed, Ordering::Relaxed) != packed {
+            daemon.broadcast(Event::Progress {
+                session: self.id.clone(),
+                state,
+                percent,
+            });
         }
     }
 
@@ -421,6 +445,7 @@ impl Session {
             info.pid = None;
         }
         self.dirty.store(true, Ordering::Relaxed);
+        self.set_progress(daemon, ProgressState::Off, 0);
         daemon.broadcast(Event::Exit {
             session: self.id.clone(),
             code,
@@ -647,6 +672,59 @@ impl Session {
         let mut info = lock(&self.info);
         info.status = status;
         info.pid = None;
+    }
+
+    /// An agent status from the hook watcher; only while the process runs and its status is an agent one, so an
+    /// exit is never overwritten
+    pub fn set_agent_status(&self, daemon: &Daemon, status: SessionStatus) {
+        use SessionStatus::*;
+        let mut info = lock(&self.info);
+        if info.status == status
+            || !self.is_live()
+            || !matches!(info.status, Running | Needs | Done | Idle | Watching)
+        {
+            return;
+        }
+        info.status = status;
+        drop(info);
+        daemon.broadcast(Event::Status {
+            session: self.id.clone(),
+            status,
+        });
+    }
+
+    /// The visible screen as text, one line per row, trailing blanks trimmed
+    pub fn screen_text(&self) -> String {
+        let vt = lock(&self.vt);
+        let grid = vt.term.grid();
+        let mut text = String::new();
+        for line in 0..grid.screen_lines() as i32 {
+            let row = &grid[Line(line)];
+            let start = text.len();
+            for col in 0..grid.columns() {
+                let cell = &row[Column(col)];
+                if !cell
+                    .flags
+                    .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
+                {
+                    text.push(cell.c);
+                }
+            }
+            let kept = text[start..].trim_end().len();
+            text.truncate(start + kept);
+            text.push('\n');
+        }
+        text
+    }
+
+    /// False when it already had this conversation id
+    pub fn set_agent_session(&self, agent_session: &str) -> bool {
+        let mut info = lock(&self.info);
+        if info.agent_session.as_deref() == Some(agent_session) {
+            return false;
+        }
+        info.agent_session = Some(agent_session.to_owned());
+        true
     }
 }
 

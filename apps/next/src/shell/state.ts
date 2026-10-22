@@ -182,8 +182,9 @@ export function parseUi(json: string | null): UiState {
  * Reconciles the saved layout with the daemon's sessions: panes whose session is gone drop out, live sessions
  * without a tab get their own. The quick terminal's session belongs to its own window
  */
-export function restore(saved: UiState, sessions: SessionInfo[]): UiState {
-  const live = new Set(sessions.map((s) => s.id))
+/** `kept`: leaves that aren't sessions but still exist, like open chats */
+export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] = []): UiState {
+  const live = new Set([...sessions.map((s) => s.id), ...kept])
   let state = saved
   for (const session of new Set(saved.tabs.flatMap((t) => leaves(t.root)))) {
     if (!live.has(session)) state = withoutSession(state, session)

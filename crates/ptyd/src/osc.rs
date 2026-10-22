@@ -1,6 +1,7 @@
-//! Finds the OSC sequences alacritty ignores (7 cwd, 9 and 777 notifications) in raw PTY output.
+//! Finds the OSC sequences alacritty ignores (7 cwd, 9 and 777 notifications, 9;4 progress) in raw PTY output.
 
 use std::mem;
+use treeix_proto::ProgressState;
 
 const MAX_PAYLOAD: usize = 4096;
 
@@ -16,7 +17,15 @@ enum State {
 #[derive(Debug, PartialEq)]
 pub enum Osc {
     Cwd(String),
-    Notify { title: String, body: String },
+    Notify {
+        title: String,
+        body: String,
+    },
+    /// ConEmu's `9;4;<state>;<percent>`, which Windows Terminal, Ghostty and agents use
+    Progress {
+        state: ProgressState,
+        percent: u8,
+    },
 }
 
 /// Keeps its state between chunks, so a sequence split across reads is still found
@@ -82,8 +91,8 @@ fn parse(payload: &[u8]) -> Option<Osc> {
     let (code, rest) = text.split_once(';')?;
     match code {
         "7" => cwd_from_url(rest).map(Osc::Cwd),
-        // 9;4 is ConEmu progress, not a notification
-        "9" if !rest.starts_with("4;") => Some(Osc::Notify {
+        "9" if rest.starts_with("4;") => progress(&rest[2..]),
+        "9" => Some(Osc::Notify {
             title: String::new(),
             body: rest.to_owned(),
         }),
@@ -96,6 +105,21 @@ fn parse(payload: &[u8]) -> Option<Osc> {
         }
         _ => None,
     }
+}
+
+/// `<state>;<percent>`: 0 off, 1 normal, 2 error, 3 indeterminate, 4 paused; a missing percent is 0
+fn progress(args: &str) -> Option<Osc> {
+    let (state, percent) = args.split_once(';').unwrap_or((args, ""));
+    let state = match state {
+        "0" => ProgressState::Off,
+        "1" => ProgressState::Normal,
+        "2" => ProgressState::Error,
+        "3" => ProgressState::Indeterminate,
+        "4" => ProgressState::Paused,
+        _ => return None,
+    };
+    let percent = percent.parse::<u16>().map_or(0, |p| p.min(100) as u8);
+    Some(Osc::Progress { state, percent })
 }
 
 /// `file://host/path` with percent escapes
@@ -154,6 +178,33 @@ mod tests {
                 Osc::Notify {
                     title: "Claude".into(),
                     body: "needs you".into()
+                },
+                Osc::Progress {
+                    state: ProgressState::Normal,
+                    percent: 50
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn reads_progress_states_and_drops_unknown_ones() {
+        let found =
+            scan_chunks(&[b"\x1b]9;4;3\x07\x1b]9;4;2;250\x07\x1b]9;4;0;\x07\x1b]9;4;7;1\x07"]);
+        assert_eq!(
+            found,
+            vec![
+                Osc::Progress {
+                    state: ProgressState::Indeterminate,
+                    percent: 0
+                },
+                Osc::Progress {
+                    state: ProgressState::Error,
+                    percent: 100
+                },
+                Osc::Progress {
+                    state: ProgressState::Off,
+                    percent: 0
                 },
             ]
         );

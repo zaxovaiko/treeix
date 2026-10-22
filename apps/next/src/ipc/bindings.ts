@@ -271,6 +271,147 @@ async sessionHistory() : Promise<SessionRecord[]> {
  */
 async forgetSession(id: string) : Promise<null> {
     return await TAURI_INVOKE("forget_session", { id });
+},
+/**
+ * Token usage by day, agent, model and project across every transcript
+ */
+async agentUsage() : Promise<AgentUsage> {
+    return await TAURI_INVOKE("agent_usage");
+},
+/**
+ * Both agents' 5-hour and weekly windows; `UsageLimitsChanged` follows any change
+ */
+async usageLimits() : Promise<UsageLimits> {
+    return await TAURI_INVOKE("usage_limits");
+},
+/**
+ * What a claude or codex session's conversation spent; None before it has one
+ */
+async sessionUsage(session: string) : Promise<SessionUsage | null> {
+    return await TAURI_INVOKE("session_usage", { session });
+},
+/**
+ * TCP ports listened on by processes under any live session
+ */
+async sessionPorts() : Promise<SessionPort[]> {
+    return await TAURI_INVOKE("session_ports");
+},
+/**
+ * SIGTERM to the process listening on `port`; refuses one that is not under a Treeix session
+ */
+async killPort(port: number, pid: number) : Promise<null> {
+    return await TAURI_INVOKE("kill_port", { port, pid });
+},
+async chatCreate(chat: NewChat) : Promise<ChatInfo> {
+    return await TAURI_INVOKE("chat_create", { chat });
+},
+/**
+ * Starts a turn and returns; the turn streams to attached channels
+ */
+async chatPrompt(chat: string, content: ChatContent[]) : Promise<null> {
+    return await TAURI_INVOKE("chat_prompt", { chat, content });
+},
+async chatCancel(chat: string) : Promise<null> {
+    return await TAURI_INVOKE("chat_cancel", { chat });
+},
+/**
+ * `option` None rejects the permission request
+ */
+async chatAnswer(chat: string, request: string, option: string | null) : Promise<null> {
+    return await TAURI_INVOKE("chat_answer", { chat, request, option });
+},
+/**
+ * Model, effort or mode, by the option's id and one of its values
+ */
+async chatSetOption(chat: string, option: string, value: string) : Promise<null> {
+    return await TAURI_INVOKE("chat_set_option", { chat, option, value });
+},
+async chatList() : Promise<ChatInfo[]> {
+    return await TAURI_INVOKE("chat_list");
+},
+/**
+ * The log from `from_seq` on, then each new entry, as one channel message each; seqs never repeat on a channel
+ */
+async chatAttach(chat: string, fromSeq: number, channel: TAURI_CHANNEL<ChatEntry>) : Promise<ChatInfo> {
+    return await TAURI_INVOKE("chat_attach", { chat, fromSeq, channel });
+},
+async chatDetach(chat: string, channel: number) : Promise<null> {
+    return await TAURI_INVOKE("chat_detach", { chat, channel });
+},
+/**
+ * Stops the agent and drops the chat
+ */
+async chatClose(chat: string) : Promise<null> {
+    return await TAURI_INVOKE("chat_close", { chat });
+},
+async mcpStatus() : Promise<McpStatus> {
+    return await TAURI_INVOKE("mcp_status");
+},
+/**
+ * Registers Treeix with Claude Code and Codex (user scope)
+ */
+async mcpInstall() : Promise<McpInstallResult> {
+    return await TAURI_INVOKE("mcp_install");
+},
+/**
+ * Jira items matching the settings' JQL plus the Notion database's pages; a failing source lands in `errors`
+ */
+async myTickets() : Promise<TicketList> {
+    return await TAURI_INVOKE("my_tickets");
+},
+async ticketDetail(source: TicketSource, key: string) : Promise<TicketDetail> {
+    return await TAURI_INVOKE("ticket_detail", { source, key });
+},
+/**
+ * Databases the saved Notion token can see
+ */
+async notionDatabases() : Promise<NotionDatabase[]> {
+    return await TAURI_INVOKE("notion_databases");
+},
+async getSettings() : Promise<Settings> {
+    return await TAURI_INVOKE("get_settings");
+},
+/**
+ * Deep-merges `patch` (any subset of Settings) and saves; rejects an invalid one without saving
+ */
+async updateSettings(patch: JsonValue) : Promise<Settings> {
+    return await TAURI_INVOKE("update_settings", { patch });
+},
+/**
+ * Whether the secret is saved; its value never leaves Rust
+ */
+async hasSecret(secret: Secret) : Promise<boolean> {
+    return await TAURI_INVOKE("has_secret", { secret });
+},
+async setSecret(secret: Secret, value: string) : Promise<null> {
+    return await TAURI_INVOKE("set_secret", { secret, value });
+},
+async deleteSecret(secret: Secret) : Promise<null> {
+    return await TAURI_INVOKE("delete_secret", { secret });
+},
+async cliTools() : Promise<CliTool[]> {
+    return await TAURI_INVOKE("cli_tools");
+},
+/**
+ * None when this is the newest version
+ */
+async checkUpdate() : Promise<UpdateInfo | null> {
+    return await TAURI_INVOKE("check_update");
+},
+/**
+ * Downloads and installs the update `check_update` found, then restarts
+ */
+async installUpdate() : Promise<null> {
+    return await TAURI_INVOKE("install_update");
+},
+async keepAwake() : Promise<KeepAwakeState> {
+    return await TAURI_INVOKE("keep_awake");
+},
+/**
+ * Turns the toggle on or off, in settings.awake.mode; `KeepAwakeState` follows each change
+ */
+async setKeepAwake(on: boolean) : Promise<KeepAwakeState> {
+    return await TAURI_INVOKE("set_keep_awake", { on });
 }
 }
 
@@ -278,9 +419,17 @@ async forgetSession(id: string) : Promise<null> {
 
 
 export const events = __makeEvents__<{
-fsEvent: FsEvent
+chatsEvent: ChatsEvent,
+fsEvent: FsEvent,
+keepAwakeState: KeepAwakeState,
+settingsChanged: SettingsChanged,
+usageLimitsChanged: UsageLimitsChanged
 }>({
-fsEvent: "fs-event"
+chatsEvent: "chats-event",
+fsEvent: "fs-event",
+keepAwakeState: "keep-awake-state",
+settingsChanged: "settings-changed",
+usageLimitsChanged: "usage-limits-changed"
 })
 
 /** user-defined constants **/
@@ -289,7 +438,49 @@ fsEvent: "fs-event"
 
 /** user-defined types **/
 
+export type AgentLimits = { fiveHour: LimitWindow | null; weekly: LimitWindow | null; 
+/**
+ * When the numbers were captured, unix millis
+ */
+updatedAt: number | null }
+export type AgentUsage = { rows: UsageRow[]; 
+/**
+ * By model id
+ */
+prices: Partial<{ [key in string]: [number, number, number, number] }>; 
+/**
+ * Session titles the agents saved, by session id
+ */
+titles: Partial<{ [key in string]: string }> }
+export type AgentView = "terminal" | "chat"
+export type Agents = { 
+/**
+ * `--dangerously-skip-permissions`
+ */
+skipPermissionsClaude: boolean; 
+/**
+ * `--dangerously-bypass-approvals-and-sandbox`
+ */
+skipPermissionsCodex: boolean }
+export type Appearance = { 
+/**
+ * Theme name (features.ts THEMES) used in dark mode
+ */
+darkTheme: string; lightTheme: string; 
+/**
+ * Switch between them with the OS
+ */
+followSystem: boolean }
 export type Attached = { seq: number; info: SessionInfo }
+export type Awake = { 
+/**
+ * What the toggle turns on
+ */
+mode: KeepAwakeMode; 
+/**
+ * Also with the lid closed (macOS, on power)
+ */
+lidClosed: boolean }
 /**
  * A local branch, or a remote-only one
  */
@@ -322,11 +513,126 @@ oldPath: string | null }
  * A file's state, from `git status` or a diff
  */
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflicted"
+export type ChatAgent = "claude" | "codex"
+export type ChatCapabilities = { images: boolean; 
+/**
+ * Can resume a past conversation
+ */
+load: boolean; list: boolean }
+export type ChatCommand = { name: string; description: string }
+export type ChatContent = { type: "text"; text: string } | 
+/**
+ * Base64 `data`
+ */
+{ type: "image"; mimeType: string; data: string }
+/**
+ * One event as the chat's log keeps it
+ */
+export type ChatEntry = { seq: number; 
+/**
+ * Unix millis
+ */
+at: number; event: ChatEvent }
+/**
+ * What a chat's log holds. `parent` is the id of the tool call whose subagent said or ran it
+ */
+export type ChatEvent = { type: "message_chunk"; role: ChatRole; content: ChatContent; parent: string | null } | { type: "thought_chunk"; text: string; parent: string | null } | { type: "tool_call"; call: ToolCall; parent: string | null } | { type: "tool_call_update"; id: string; patch: ToolCallPatch } | { type: "plan"; entries: PlanEntry[] } | 
+/**
+ * Context window: `used` of `size` tokens
+ */
+{ type: "usage"; used: number; size: number; cost: Cost | null } | 
+/**
+ * A title the agent made for the chat
+ */
+{ type: "title"; title: string } | { type: "options"; options: ChatOption[] } | 
+/**
+ * Slash commands the agent offers
+ */
+{ type: "commands"; commands: ChatCommand[] } | { type: "permission"; requestId: string; title: string; toolCallId: string | null; options: PermissionOption[] } | 
+/**
+ * Answered, from any window, or cancelled with the turn
+ */
+{ type: "permission_settled"; requestId: string } | { type: "turn_start" } | { type: "turn_end"; stopReason: StopReason; usage: TurnUsage | null } | { type: "error"; message: string } | 
+/**
+ * The agent's process or connection ended; the next prompt starts it again
+ */
+{ type: "disconnected"; message: string }
+/**
+ * A live chat in ptyd
+ */
+export type ChatInfo = { id: string; agent: ChatAgent; cwd: string; title: string; status: ChatStatus; 
+/**
+ * The agent's conversation id, which `claude --resume` / `codex resume` take
+ */
+agentSession: string | null; capabilities: ChatCapabilities; 
+/**
+ * Unix millis
+ */
+createdAt: number; 
+/**
+ * Seq the next event gets; attach from 0 replays the whole log
+ */
+seq: number }
+/**
+ * A setting of the conversation the agent offers, like model, effort or mode
+ */
+export type ChatOption = { id: string; name: string; category: OptionCategory; currentValue: string; values: OptionValue[] }
+/**
+ * Model, effort and mode a new conversation starts with, by option value
+ */
+export type ChatPreset = { model: string | null; effort: string | null; mode: string | null }
+export type ChatRole = "user" | "agent"
+export type ChatStatus = 
+/**
+ * The agent process is starting or loading the conversation
+ */
+"starting" | "idle" | 
+/**
+ * A turn is running
+ */
+"running" | 
+/**
+ * A permission request waits for an answer
+ */
+"needs" | 
+/**
+ * The agent exited or the connection broke; a prompt starts it again, resuming the conversation
+ */
+"disconnected"
+export type Chats = { 
+/**
+ * What New Claude / New Codex session opens
+ */
+defaultView: AgentView; 
+/**
+ * Max width of the message column, px
+ */
+width: number; showThinking: boolean; 
+/**
+ * Notify when a turn ends or asks for permission out of sight
+ */
+notify: boolean }
+/**
+ * A chat was created, changed (status, title, agent session) or closed, in any window
+ */
+export type ChatsEvent = { type: "changed"; info: ChatInfo } | { type: "removed"; chat: string }
 /**
  * One CI check or pipeline job
  */
 export type Check = { name: string; status: CheckStatus; url: string | null }
 export type CheckStatus = "passed" | "failed" | "running" | "skipped"
+/**
+ * claude, codex, acli, gh, glab
+ */
+export type CliTool = { name: string; installed: boolean; version: string | null; 
+/**
+ * None when the tool has no sign-in or it could not tell
+ */
+signedIn: boolean | null; account: string | null; 
+/**
+ * A newer version, when the tool says so
+ */
+update: string | null }
 /**
  * One commit from `git log`
  */
@@ -335,7 +641,9 @@ export type Commit = { sha: string; author: string;
  * Unix seconds
  */
 date: number; subject: string }
+export type Cost = { amount: number; currency: string }
 export type CreateSession = { kind: SessionKind; cwd: string | null; command?: string[]; env?: ([string, string])[]; cols: number; rows: number; title: string | null; routine: string | null }
+export type CursorStyle = "block" | "bar" | "underline"
 /**
  * What `diff` compares the working tree against
  */
@@ -348,6 +656,18 @@ export type DiffScope =
  * What the PR shows: the merge base with the base branch vs the working tree
  */
 "base"
+/**
+ * Each feature's on/off switch; off hides everything it adds (panels, settings, palette, status items)
+ */
+export type Features = { 
+/**
+ * Usage pill, plan limits and the agent usage popover
+ */
+usage: boolean; ports: boolean; chat: boolean; mcp: boolean; jira: boolean; notion: boolean; prs: boolean; awake: boolean; 
+/**
+ * One prompt, several agents, a worktree each
+ */
+race: boolean }
 /**
  * One file's unified diff
  */
@@ -433,7 +753,59 @@ id: string;
  * Unix ms
  */
 savedAt: number; bytes: number }
+export type Jira = { jql: string }
+export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type KeepAwakeMode = "off" | "on" | 
+/**
+ * Held while any agent session is running
+ */
+"untilAgentsFinish"
+export type KeepAwakeState = { 
+/**
+ * The toggle is on
+ */
+on: boolean; 
+/**
+ * The assertion is held now (with `untilAgentsFinish`, only while an agent runs)
+ */
+active: boolean }
+export type LimitWindow = { usedPercent: number; 
+/**
+ * Unix millis; None when unknown or already reset
+ */
+resetsAt: number | null }
+export type LimitWindowName = "fiveHour" | "weekly"
+export type McpAgent = "claude" | "codex"
+export type McpInstall = { agent: McpAgent; state: McpInstallState }
+export type McpInstallResult = { installed: McpAgent[]; 
+/**
+ * Agent and the error
+ */
+failed: ([McpAgent, string])[] }
+export type McpInstallState = "installed" | 
+/**
+ * Registered with an old command or URL
+ */
+"outdated" | "missing"
+export type McpStatus = { 
+/**
+ * Off in settings, or failed to bind
+ */
+running: boolean; 
+/**
+ * `http://127.0.0.1:<port>/mcp`
+ */
+url: string | null; installs: McpInstall[]; tools: McpToolInfo[] }
+export type McpToolInfo = { name: string; description: string }
 export type MergeMethod = "merge" | "squash" | "rebase"
+/**
+ * A chat the user starts; the app adds the adapter command, env and instructions
+ */
+export type NewChat = { agent: ChatAgent; cwd: string; 
+/**
+ * Conversation to resume, like a History record's agent session
+ */
+resume: string | null; preset: ChatPreset | null }
 /**
  * What the Open worktree dialog asks for. Exactly one of `branch` or `pr` is set
  */
@@ -462,6 +834,16 @@ setup: string | null;
  * "Continue without fetching" after a failed fetch; ignored for PRs
  */
 skipFetch: boolean }
+export type Notion = { 
+/**
+ * Database the tickets come from; the token is in the keyring
+ */
+database: string | null }
+export type NotionDatabase = { id: string; title: string }
+export type OptionCategory = "mode" | "model" | "effort" | "other"
+export type OptionValue = { value: string; name: string; description: string | null }
+export type PermissionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always"
+export type PermissionOption = { id: string; name: string; kind: PermissionKind }
 /**
  * CI on the head commit: GitHub's checks rolled up, GitLab's pipeline
  */
@@ -484,6 +866,12 @@ files: string[];
  */
 ignored: string[] }
 export type PlaceKind = "root" | "worktree" | "git" | "folder" | "scratch" | "detached"
+export type PlanEntry = { content: string; priority: PlanPriority; 
+/**
+ * Pending, in progress or completed (`Failed` never appears)
+ */
+status: ToolStatus }
+export type PlanPriority = "high" | "medium" | "low"
 /**
  * One repo that could not be listed (CLI missing, signed out, offline)
  */
@@ -502,6 +890,7 @@ export type ProviderStatus = { provider: Provider; installed: boolean; signedIn:
  * Your login, which "Mine" filters on
  */
 user: string | null }
+export type Prs = { refreshMinutes: number }
 export type PullRequest = { provider: Provider; 
 /**
  * Local repo it was listed for
@@ -568,8 +957,18 @@ export type SearchResult = { matches: SearchMatch[];
  * A limit was hit
  */
 truncated: boolean }
+export type Secret = "notionToken"
 export type SessionInfo = { id: string; kind: SessionKind; cwd: string; title: string; status: SessionStatus; pid: number | null; exitCode: number | null; cols: number; rows: number; createdAt: number; command: string[]; seq: number; agentSession: string | null; routine: string | null }
 export type SessionKind = "shell" | "claude" | "codex" | "routine"
+export type SessionPort = { session: string; port: number; pid: number; 
+/**
+ * Process name, like `node`
+ */
+command: string | null; 
+/**
+ * The listening process's working directory
+ */
+cwd: string | null }
 /**
  * A closed session, for the History panel
  */
@@ -594,9 +993,134 @@ createdAt: number; closedAt: number;
  * Agent transcript stats; None until Phase 4 reads transcripts
  */
 messages: number | null; cost: number | null; firstPrompt: string | null }
-export type SessionStatus = "running" | "needs" | "done" | "idle" | "exited" | "error" | "restored" | "crashed"
+export type SessionStatus = "running" | "needs" | "done" | "idle" | "exited" | "error" | "restored" | "crashed" | "watching"
+/**
+ * Tokens one conversation spent; `cached` is the cache reads
+ */
+export type SessionUsage = { input: number; output: number; cached: number; 
+/**
+ * Claude's own figure from the statusline, when it ran with Treeix's hooks
+ */
+costUsd: number | null }
+export type Settings = { features: Features; appearance: Appearance; terminal: Terminal; 
+/**
+ * Shortcut overrides: action id (shell/shortcuts.ts) to accelerator, empty string unbinds
+ */
+keys: Partial<{ [key in string]: string }>; agents: Agents; chats: Chats; usage: Usage; jira: Jira; notion: Notion; prs: Prs; awake: Awake; updates: Updates }
+/**
+ * Saved settings, from any window
+ */
+export type SettingsChanged = { settings: Settings }
 export type StepId = "fetch" | "add" | "env" | "setup"
 export type StepState = "running" | "done" | "failed" | "skipped"
+export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled"
+export type Terminal = { fontFamily: string; fontSize: number; lineHeight: number; cursorStyle: CursorStyle; cursorBlink: boolean; 
+/**
+ * Lines kept above the screen
+ */
+scrollback: number; copyOnSelect: boolean; optionAsMeta: boolean; 
+/**
+ * None runs the login shell from the user database
+ */
+shell: string | null; loginShell: boolean; confirmQuit: boolean }
+export type Ticket = { 
+/**
+ * `TRX-47` for Jira, the page id for Notion
+ */
+key: string; source: TicketSource; kind: TicketKind; title: string; status: string; 
+/**
+ * Browser link
+ */
+url: string | null; 
+/**
+ * Jira project key or Notion database title
+ */
+project: string | null; 
+/**
+ * RFC 3339
+ */
+updatedAt: string | null }
+export type TicketDetail = { ticket: Ticket; 
+/**
+ * Markdown, what the agent's first prompt quotes
+ */
+description: string }
+export type TicketError = { source: TicketSource; message: string }
+/**
+ * Picks the branch prefix: bugs get `fix/`, the rest `feat/`
+ */
+export type TicketKind = "task" | "bug" | "story"
+export type TicketList = { tickets: Ticket[]; 
+/**
+ * A source that failed (signed out, no database); the other still lists
+ */
+errors: TicketError[] }
+export type TicketSource = "jira" | "notion"
+export type ToolCall = { id: string; title: string; kind: ToolKind; status: ToolStatus; output: ToolOutput[]; locations: ToolLocation[]; 
+/**
+ * The tool's arguments as the agent sent them
+ */
+rawInput: JsonValue }
+/**
+ * A tool call update: None leaves the field as it was
+ */
+export type ToolCallPatch = { title: string | null; kind: ToolKind | null; status: ToolStatus | null; output: ToolOutput[] | null; locations: ToolLocation[] | null; rawInput: JsonValue | null }
+export type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other"
+export type ToolLocation = { path: string; line: number | null }
+export type ToolOutput = { type: "text"; text: string } | { type: "image"; mimeType: string; data: string } | 
+/**
+ * `old_text` is None for a new file
+ */
+{ type: "diff"; path: string; oldText: string | null; newText: string } | { type: "terminal"; terminalId: string }
+export type ToolStatus = "pending" | "in_progress" | "completed" | "failed"
+/**
+ * What sits next to the tray icon
+ */
+export type TrayLabel = 
+/**
+ * No tray icon
+ */
+"off" | "icon" | "weekly" | "fiveHour" | "rings"
+/**
+ * Tokens one turn spent, as the agent reports them; `input` excludes the cached part
+ */
+export type TurnUsage = { input: number; cacheRead: number; cacheWrite: number; output: number; thought: number }
+export type UpdateInfo = { version: string; 
+/**
+ * Markdown release notes
+ */
+notes: string | null }
+export type Updates = { autoCheck: boolean }
+export type Usage = { 
+/**
+ * The pill in the title bar
+ */
+pill: boolean; 
+/**
+ * Which window the pill shows
+ */
+window: LimitWindowName; tray: TrayLabel }
+export type UsageLimits = { claude: AgentLimits | null; codex: AgentLimits | null }
+/**
+ * Plan limits changed (statusline, rollout or a poll of Claude's usage endpoint)
+ */
+export type UsageLimitsChanged = { limits: UsageLimits }
+/**
+ * Tokens one agent spent on one model in one project on one local day
+ */
+export type UsageRow = { 
+/**
+ * YYYY-MM-DD, local time
+ */
+day: string; agent: string; model: string; 
+/**
+ * The repository, worktrees counted toward it, shown from ~
+ */
+project: string; 
+/**
+ * Claude or Codex session id
+ */
+session: string; input: number; output: number; cacheRead: number; cacheWrite: number }
 /**
  * One `git worktree list --porcelain` entry
  */

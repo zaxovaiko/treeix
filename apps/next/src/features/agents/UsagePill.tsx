@@ -1,0 +1,133 @@
+import { useCallback, useEffect, useState } from 'react'
+import type { AgentUsage, Api, UsageLimits } from '../../ipc/api'
+import { Icon } from '../../lib/icons'
+import { Pop } from './Pop'
+import { useSettings } from './settings'
+import { compact, level, pillParts, summarize, untilLabel, usd, WINDOW_LABEL, type LimitAgent, type Share } from './usage'
+
+const AGENT_NAME: Record<LimitAgent, string> = { claude: 'Claude', codex: 'Codex' }
+
+function useLimits(api: Api, on: boolean) {
+  const [limits, setLimits] = useState<UsageLimits | null>(null)
+  useEffect(() => {
+    if (!on) return
+    let live = true
+    void api.usageLimits().then((l) => live && setLimits(l), () => {})
+    const stop = api.onUsageLimits(setLimits)
+    return () => {
+      live = false
+      stop()
+    }
+  }, [api, on])
+  return on ? limits : null
+}
+
+/** Title bar: plan limits of the chosen window; click for both windows per agent and the last week's tokens */
+export function UsagePill({ api }: { api: Api }) {
+  const settings = useSettings(api)
+  const on = !!settings?.features.usage && settings.usage.pill
+  const limits = useLimits(api, on)
+  const [anchor, setAnchor] = useState<DOMRect | null>(null)
+  const close = useCallback(() => setAnchor(null), [])
+  const parts = settings && pillParts(limits, settings.usage.window)
+  if (!on || !parts || !limits) return null
+  const { agent, main, other } = parts
+  return (
+    <>
+      <button className="pill" title={`${AGENT_NAME[agent]} plan limits. Click for usage`} onClick={(e) => setAnchor(anchor ? null : e.currentTarget.getBoundingClientRect())}>
+        <Icon name={agent} />
+        {main.label}
+        <span className={`meter ${level(main.percent)}`}>
+          <b style={{ width: `${Math.min(100, main.percent)}%` }} />
+        </span>
+        {main.percent}%{other && ` · ${other.label} ${other.percent}%`}
+      </button>
+      {anchor && (
+        <Pop anchor={anchor} className="upop" onClose={close}>
+          <UsageDetails api={api} limits={limits} />
+        </Pop>
+      )}
+    </>
+  )
+}
+
+function UsageDetails({ api, limits }: { api: Api; limits: UsageLimits }) {
+  const [usage, setUsage] = useState<AgentUsage | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    void api.agentUsage().then(setUsage, () => setFailed(true))
+  }, [api])
+  const week = usage && summarize(usage)
+  return (
+    <>
+      {(['claude', 'codex'] as const).map((agent) => {
+        const own = limits[agent]
+        if (!own) return null
+        return (
+          <div key={agent} className="ulim">
+            <div className="mlabel">
+              <Icon name={agent} />
+              {AGENT_NAME[agent]}
+            </div>
+            {(['fiveHour', 'weekly'] as const).map((name) => {
+              const w = own[name]
+              if (!w) return null
+              const until = untilLabel(w.resetsAt)
+              return (
+                <div key={name} className="lim">
+                  <div className="l">
+                    <span>{WINDOW_LABEL[name]}</span>
+                    <span className="dim">
+                      {Math.round(w.usedPercent)}%{until && ` · resets in ${until}`}
+                    </span>
+                  </div>
+                  <div className={`bar ${level(w.usedPercent)}`}>
+                    <b style={{ width: `${Math.min(100, w.usedPercent)}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+      <div className="msep" />
+      <div className="mlabel">
+        Last 7 days
+        <span className="grow" />
+        {week && <span className="num">{usd(week.cost)} API-equivalent</span>}
+      </div>
+      {failed ? (
+        <div className="uempty">Could not read the agents' logs</div>
+      ) : !week ? (
+        <div className="uempty">Reading the agents' logs...</div>
+      ) : !week.tokens ? (
+        <div className="uempty">No tokens spent this week</div>
+      ) : (
+        <div className="ulim">
+          <div className="uchart" title="Tokens per day">
+            {week.days.map((d) => (
+              <i key={d.name} title={`${d.name}: ${compact(d.tokens)} tokens · ${usd(d.cost)}`} style={{ height: `${Math.max(4, (d.tokens / Math.max(...week.days.map((x) => x.tokens))) * 100)}%` }} />
+            ))}
+          </div>
+          <Shares title="By model" shares={week.models} />
+          <Shares title="By project" shares={week.projects} />
+        </div>
+      )}
+    </>
+  )
+}
+
+function Shares({ title, shares }: { title: string; shares: Share[] }) {
+  return (
+    <>
+      <div className="mlabel">{title}</div>
+      {shares.slice(0, 4).map((s) => (
+        <div key={s.name} className="ushare">
+          <span className="trunc">{s.name}</span>
+          <span className="num">{compact(s.tokens)}</span>
+          <span className="num">{usd(s.cost)}</span>
+        </div>
+      ))}
+    </>
+  )
+}

@@ -8,6 +8,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import './terminal.css'
 import { type Renderer, wantsWebgl } from './renderer'
+import { settingsNow } from '../../features/agents/settings'
 
 export const IS_MAC = /Mac/.test(navigator.userAgent)
 const IS_LINUX = /Linux/.test(navigator.userAgent)
@@ -62,6 +63,20 @@ export function searchDecorations(host: HTMLElement): ISearchDecorationOptions {
 }
 
 const LINE_HEIGHT = 1.15
+
+/** The CSS tokens plus Settings > Terminal, defaults until the settings load */
+function look(host: HTMLElement) {
+  const terminal = settingsNow()?.terminal
+  return {
+    ...cssTheme(host),
+    lineHeight: terminal?.lineHeight ?? LINE_HEIGHT,
+    cursorStyle: terminal?.cursorStyle ?? ('bar' as const),
+    cursorBlink: terminal?.cursorBlink ?? true,
+    scrollback: terminal?.scrollback ?? 5000,
+    // Off by default: Option types characters like ą and ś; word jumps are mapped in keys.ts
+    macOptionIsMeta: terminal?.optionAsMeta ?? false
+  }
+}
 /** What a pane's header (.phd) and the xterm padding take from its box */
 const PANE_CHROME = { width: 8, height: 30 }
 
@@ -74,7 +89,7 @@ export function paneGrid(width: number, height: number): { cols: number; rows: n
   ctx.font = `${fontSize}px ${fontFamily}`
   return {
     cols: Math.max(2, Math.floor((width - PANE_CHROME.width) / ctx.measureText('W').width) - 1),
-    rows: Math.max(1, Math.floor((height - PANE_CHROME.height) / Math.ceil(fontSize * LINE_HEIGHT)))
+    rows: Math.max(1, Math.floor((height - PANE_CHROME.height) / Math.ceil(fontSize * (settingsNow()?.terminal.lineHeight ?? LINE_HEIGHT))))
   }
 }
 
@@ -82,29 +97,20 @@ export interface Xterm {
   term: Terminal
   fit: FitAddon
   search: SearchAddon
-  /** Re-reads the theme and font from CSS; a no-op when they didn't change */
+  /** Re-reads the theme, font and terminal settings; a no-op when they didn't change */
   restyle(): void
   dispose(): void
 }
 
 /** An xterm with the app's addons opened in `host`; the GPU context lives exactly as long as it does */
 export function openXterm(host: HTMLElement, webgl: boolean): Xterm {
-  const style = cssTheme(host)
+  const style = look(host)
   let applied = JSON.stringify(style)
-  const { theme, fontFamily, fontSize } = style
   const term = new Terminal({
-    theme,
-    fontFamily,
-    fontSize,
-    lineHeight: LINE_HEIGHT,
-    cursorBlink: true,
-    cursorStyle: 'bar',
+    ...style,
     cursorWidth: 2,
     // Opaque canvas: no blend tricks needed under a see-through window
     allowTransparency: false,
-    // Option types characters like ą and ś; word jumps are mapped in keys.ts
-    macOptionIsMeta: false,
-    scrollback: 5000,
     // unicode11 registers through the proposed unicode API
     allowProposedApi: true
   })
@@ -139,7 +145,7 @@ export function openXterm(host: HTMLElement, webgl: boolean): Xterm {
     fit,
     search,
     restyle() {
-      const next = cssTheme(host)
+      const next = look(host)
       const key = JSON.stringify(next)
       if (key === applied) return
       applied = key

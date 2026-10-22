@@ -88,6 +88,7 @@ pub enum SessionStatus {
     Error,
     Restored,
     Crashed,
+    Watching,
 }
 
 impl From<proto::SessionStatus> for SessionStatus {
@@ -101,6 +102,30 @@ impl From<proto::SessionStatus> for SessionStatus {
             proto::SessionStatus::Error => Self::Error,
             proto::SessionStatus::Restored => Self::Restored,
             proto::SessionStatus::Crashed => Self::Crashed,
+            proto::SessionStatus::Watching => Self::Watching,
+        }
+    }
+}
+
+/// OSC 9;4 progress state
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ProgressState {
+    Off,
+    Normal,
+    Error,
+    Indeterminate,
+    Paused,
+}
+
+impl From<proto::ProgressState> for ProgressState {
+    fn from(state: proto::ProgressState) -> Self {
+        match state {
+            proto::ProgressState::Off => Self::Off,
+            proto::ProgressState::Normal => Self::Normal,
+            proto::ProgressState::Error => Self::Error,
+            proto::ProgressState::Indeterminate => Self::Indeterminate,
+            proto::ProgressState::Paused => Self::Paused,
         }
     }
 }
@@ -222,18 +247,33 @@ pub enum SessionEvent {
     Removed {
         session: String,
     },
+    /// The agent's conversation id, which `--resume` takes, became known or changed
+    #[serde(rename_all = "camelCase")]
+    AgentSession {
+        session: String,
+        agent_session: String,
+    },
     Daemon {
         state: DaemonState,
+    },
+    /// The program's OSC 9;4 progress; `percent` is 0-100 and only means something while Normal, Error or Paused
+    Progress {
+        session: String,
+        state: ProgressState,
+        percent: u8,
     },
 }
 
 impl SessionEvent {
-    /// None for Data, which goes to the session's channel instead
+    /// None for Data, which goes to the session's channel instead, and for chat events (commands/chat.rs)
     pub fn from_proto(event: proto::Event) -> Option<Self> {
         Some(match event {
             proto::Event::Data { .. }
             | proto::Event::ChannelData { .. }
-            | proto::Event::Resync { .. } => return None,
+            | proto::Event::Resync { .. }
+            | proto::Event::Chat { .. }
+            | proto::Event::ChatChanged(_)
+            | proto::Event::ChatRemoved { .. } => return None,
             proto::Event::Status { session, status } => Self::Status {
                 session,
                 status: status.into(),
@@ -253,6 +293,22 @@ impl SessionEvent {
             proto::Event::Bell { session } => Self::Bell { session },
             proto::Event::Created(info) => Self::Created { info: info.into() },
             proto::Event::Removed { session } => Self::Removed { session },
+            proto::Event::AgentSession {
+                session,
+                agent_session,
+            } => Self::AgentSession {
+                session,
+                agent_session,
+            },
+            proto::Event::Progress {
+                session,
+                state,
+                percent,
+            } => Self::Progress {
+                session,
+                state: state.into(),
+                percent,
+            },
         })
     }
 }

@@ -1,8 +1,70 @@
 // The one surface the UI talks to. `tauri.ts` implements it over Tauri commands + channels,
 // `mock.ts` in the browser (dev server, visual checks, tests). Mirrors crates/proto.
 
+import type {
+  AgentLimits,
+  AgentUsage,
+  AgentView,
+  ChatAgent,
+  ChatCapabilities,
+  ChatCommand,
+  ChatContent,
+  ChatEntry,
+  ChatEvent,
+  ChatInfo,
+  ChatOption,
+  ChatPreset,
+  ChatRole,
+  ChatStatus,
+  ChatsEvent,
+  CliTool,
+  Cost,
+  CursorStyle,
+  Features,
+  KeepAwakeMode,
+  KeepAwakeState,
+  LimitWindow,
+  LimitWindowName,
+  McpAgent,
+  McpInstall,
+  McpInstallResult,
+  McpInstallState,
+  McpStatus,
+  McpToolInfo,
+  NewChat,
+  NotionDatabase,
+  OptionCategory,
+  OptionValue,
+  PermissionKind,
+  PermissionOption,
+  PlanEntry,
+  Secret,
+  SessionPort,
+  SessionUsage,
+  Settings,
+  StopReason,
+  Ticket,
+  TicketDetail,
+  TicketError,
+  TicketKind,
+  TicketList,
+  TicketSource,
+  ToolCall,
+  ToolCallPatch,
+  ToolKind,
+  ToolLocation,
+  ToolOutput,
+  ToolStatus,
+  TrayLabel,
+  TurnUsage,
+  UpdateInfo,
+  UsageLimits,
+  UsageRow,
+} from './bindings'
+
 export type SessionKind = 'shell' | 'claude' | 'codex' | 'routine'
-export type SessionStatus = 'running' | 'needs' | 'done' | 'idle' | 'exited' | 'error' | 'restored' | 'crashed'
+/** `watching`: an agent's turn ended with background work still running (Phase 4) */
+export type SessionStatus = 'running' | 'needs' | 'done' | 'idle' | 'exited' | 'error' | 'restored' | 'crashed' | 'watching'
 
 export interface SessionInfo {
   id: string
@@ -52,6 +114,8 @@ export interface Place {
   missing: boolean
 }
 
+export type ProgressState = 'off' | 'normal' | 'error' | 'indeterminate' | 'paused'
+
 export type SessionEvent =
   | { type: 'status'; session: string; status: SessionStatus }
   | { type: 'exit'; session: string; code: number | null }
@@ -61,6 +125,10 @@ export type SessionEvent =
   | { type: 'bell'; session: string }
   | { type: 'created'; info: SessionInfo }
   | { type: 'removed'; session: string }
+  /** The agent's conversation id became known (Claude hook or Codex rollout); `SessionInfo.agentSession` */
+  | { type: 'agentSession'; session: string; agentSession: string }
+  /** OSC 9;4 progress the session reported; `off` once it ends or the session exits */
+  | { type: 'progress'; session: string; state: ProgressState; percent: number }
   /** The daemon restarted (crash or upgrade); re-list and re-attach */
   | { type: 'daemon'; state: 'connected' | 'disconnected' }
 
@@ -164,6 +232,142 @@ export interface Api {
   /** Closed sessions, newest first; resume with `create` */
   sessionHistory(): Promise<SessionRecord[]>
   forgetSession(id: string): Promise<void>
+
+  // Phase 4-5. Contract: docs/next/phase45-contract.md. Each call rejects with a message string.
+  // Agents (A3)
+  /** Token rows for the usage popover and Settings > Usage, from Claude transcripts and Codex rollouts */
+  agentUsage(): Promise<AgentUsage>
+  /** Plan limits now; changes arrive through `onUsageLimits` */
+  usageLimits(): Promise<UsageLimits>
+  onUsageLimits(cb: (limits: UsageLimits) => void): () => void
+  /** Tokens and cost of one agent session's conversation; null when it has no agent session yet */
+  sessionUsage(session: string): Promise<SessionUsage | null>
+  /** TCP ports the sessions' process trees listen on, for the ports popover */
+  sessionPorts(): Promise<SessionPort[]>
+  /** Kills the listener; refuses a pid that no longer listens on `port` */
+  killPort(port: number, pid: number): Promise<void>
+  // Chat (A4): ACP agents run inside ptyd and outlive the app
+  /** Starts the agent adapter; the chat is `starting` until it connects */
+  chatCreate(chat: NewChat): Promise<ChatInfo>
+  /** Sends a user turn; a disconnected chat starts its agent again first */
+  chatPrompt(chat: string, content: ChatContent[]): Promise<void>
+  /** Cancels the running turn; pending permission requests settle */
+  chatCancel(chat: string): Promise<void>
+  /** Answers a `permission` event; null option rejects it */
+  chatAnswer(chat: string, request: string, option: string | null): Promise<void>
+  /** Sets a `ChatOption` (model, effort, mode) */
+  chatSetOption(chat: string, option: string, value: string): Promise<void>
+  chatList(): Promise<ChatInfo[]>
+  /** Replays the log from `fromSeq` (0: all of it), then streams new entries in seq order */
+  chatAttach(chat: string, fromSeq: number, onEntry: (entry: ChatEntry) => void): Promise<ChatAttachment>
+  /** Stops the agent and forgets the chat; the conversation stays resumable from History */
+  chatClose(chat: string): Promise<void>
+  /** A chat was created, changed or closed, in any window */
+  onChats(cb: (e: ChatsEvent) => void): () => void
+  // MCP (A5)
+  /** The in-app MCP server and whether each agent has it registered */
+  mcpStatus(): Promise<McpStatus>
+  /** Registers the server with every installed agent that misses it or has an old entry */
+  mcpInstall(): Promise<McpInstallResult>
+  // Tickets (A5)
+  /** Jira (acli) and Notion tickets assigned to me, for "Your tickets" in Open worktree */
+  myTickets(): Promise<TicketList>
+  ticketDetail(source: TicketSource, key: string): Promise<TicketDetail>
+  /** Databases the Notion token can see, for Settings > Notion */
+  notionDatabases(): Promise<NotionDatabase[]>
+  // Settings (U6)
+  getSettings(): Promise<Settings>
+  /** Merges the patch, saves, returns the result and fires `onSettings` in every window */
+  updateSettings(patch: SettingsPatch): Promise<Settings>
+  onSettings(cb: (settings: Settings) => void): () => void
+  /** Whether a secret is in the keyring; secrets never come back to the UI */
+  hasSecret(secret: Secret): Promise<boolean>
+  setSecret(secret: Secret, value: string): Promise<void>
+  deleteSecret(secret: Secret): Promise<void>
+  // System (U6)
+  /** claude, codex, acli, gh, glab: installed, version, signed in */
+  cliTools(): Promise<CliTool[]>
+  appVersion(): Promise<string>
+  /** null when this is the newest version */
+  checkUpdate(): Promise<UpdateInfo | null>
+  /** Downloads and installs the update `checkUpdate` found, then restarts the app */
+  installUpdate(): Promise<void>
+  keepAwake(): Promise<KeepAwakeState>
+  /** Turns the toggle on or off; `settings.awake.mode` decides when it holds */
+  setKeepAwake(on: boolean): Promise<KeepAwakeState>
+  onKeepAwake(cb: (state: KeepAwakeState) => void): () => void
+}
+
+// Phase 4-5 types are the generated ones (bindings.ts carries their docs)
+export type {
+  AgentLimits,
+  AgentUsage,
+  AgentView,
+  ChatAgent,
+  ChatCapabilities,
+  ChatCommand,
+  ChatContent,
+  ChatEntry,
+  ChatEvent,
+  ChatInfo,
+  ChatOption,
+  ChatPreset,
+  ChatRole,
+  ChatStatus,
+  ChatsEvent,
+  CliTool,
+  Cost,
+  CursorStyle,
+  Features,
+  KeepAwakeMode,
+  KeepAwakeState,
+  LimitWindow,
+  LimitWindowName,
+  McpAgent,
+  McpInstall,
+  McpInstallResult,
+  McpInstallState,
+  McpStatus,
+  McpToolInfo,
+  NewChat,
+  NotionDatabase,
+  OptionCategory,
+  OptionValue,
+  PermissionKind,
+  PermissionOption,
+  PlanEntry,
+  Secret,
+  SessionPort,
+  SessionUsage,
+  Settings,
+  StopReason,
+  Ticket,
+  TicketDetail,
+  TicketError,
+  TicketKind,
+  TicketList,
+  TicketSource,
+  ToolCall,
+  ToolCallPatch,
+  ToolKind,
+  ToolLocation,
+  ToolOutput,
+  ToolStatus,
+  TrayLabel,
+  TurnUsage,
+  UpdateInfo,
+  UsageLimits,
+  UsageRow,
+}
+
+/** Any subset of the settings, one section deep: `{ terminal: { fontSize: 13 } }` */
+export type SettingsPatch = { [K in keyof Settings]?: Partial<Settings[K]> }
+
+export interface ChatAttachment {
+  /** The chat as of the attach; entries from `fromSeq` up to `info.seq` replay first */
+  info: ChatInfo
+  /** Stops this stream; the chat keeps running */
+  detach(): Promise<void>
 }
 
 // Phase 3: git, files, search, pull requests, history. Contract: docs/next/phase3-contract.md.

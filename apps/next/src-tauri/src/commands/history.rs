@@ -49,6 +49,7 @@ pub(super) async fn record_closed(info: SessionInfo, home: PathBuf) {
     };
     let recorded = blocking(move || {
         let place = places::resolve(Path::new(&info.cwd), &home);
+        let (messages, cost, first_prompt) = super::agents::record_stats(&home, &info);
         let record = SessionRecord {
             id: info.id,
             kind,
@@ -60,9 +61,9 @@ pub(super) async fn record_closed(info: SessionInfo, home: PathBuf) {
             command: info.command,
             created_at: info.created_at,
             closed_at: now_ms(),
-            messages: None,
-            cost: None,
-            first_prompt: None,
+            messages,
+            cost,
+            first_prompt,
         };
         history::record_session(&sessions_file(), &record)
     })

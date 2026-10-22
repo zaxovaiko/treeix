@@ -1,4 +1,6 @@
 import { useEffect, useEffectEvent, useRef, type ReactNode } from 'react'
+import { settingsNow } from '../features/agents/settings'
+import { McpSetup } from '../features/mcp/McpSetup'
 import type { Command } from '../lib/paletteSearch'
 import { IS_MAC } from '../shell/shortcuts'
 import type { ShellView } from '../shell/Shell'
@@ -13,6 +15,7 @@ export type DialogRequest =
   | { kind: 'worktrees'; cleanup?: boolean }
   | { kind: 'find' }
   | { kind: 'fileHistory'; root: string; file: string }
+  | { kind: 'mcp' }
 
 export interface Repo {
   path: string
@@ -42,6 +45,7 @@ export const dialogCommands = (view: ShellView): Command[] => [
   { id: 'dlg-find', group: 'Actions', label: 'Find in files', shortcut: hint('F'), icon: 'search', run: () => view.openDialog({ kind: 'find' }) },
   { id: 'dlg-worktrees', group: 'Actions', label: 'Worktrees', icon: 'branch', run: () => view.openDialog({ kind: 'worktrees' }) },
   { id: 'dlg-cleanup', group: 'Actions', label: 'Clean up worktrees...', icon: 'branch', run: () => view.openDialog({ kind: 'worktrees', cleanup: true }) },
+  ...(settingsNow()?.features.mcp ? [{ id: 'dlg-mcp', group: 'Actions', label: 'Set up Treeix MCP...', icon: 'gear', run: () => view.openDialog({ kind: 'mcp' }) } satisfies Command] : []),
 ]
 
 /** ⇧⌘N and ⇧⌘F (Ctrl+Shift on Linux, where a focused terminal keeps Ctrl+Shift+F for its find bar); captured before the terminal sees them */
@@ -73,6 +77,8 @@ export function Dialogs({ view, request, onClose }: { view: ShellView; request: 
       return <FindInFiles view={view} onClose={onClose} />
     case 'fileHistory':
       return <FileHistory view={view} root={request.root} file={request.file} onClose={onClose} />
+    case 'mcp':
+      return <McpSetup view={view} onClose={onClose} />
   }
 }
 

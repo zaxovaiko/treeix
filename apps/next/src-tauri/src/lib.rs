@@ -1,10 +1,13 @@
 mod commands;
 mod daemon;
+mod keep_awake;
 #[cfg(target_os = "macos")]
 mod menu;
 mod quick;
 mod service;
+mod tray;
 mod types;
+mod updater;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -76,9 +79,48 @@ fn specta() -> Builder<tauri::Wry> {
             read_history,
             session_history,
             forget_session,
+            // Phase 4: agents
+            agent_usage,
+            usage_limits,
+            session_usage,
+            session_ports,
+            kill_port,
+            // chat
+            chat_create,
+            chat_prompt,
+            chat_cancel,
+            chat_answer,
+            chat_set_option,
+            chat_list,
+            chat_attach,
+            chat_detach,
+            chat_close,
+            // MCP, tickets
+            mcp_status,
+            mcp_install,
+            my_tickets,
+            ticket_detail,
+            notion_databases,
+            // Phase 5: settings, secrets, system
+            get_settings,
+            update_settings,
+            has_secret,
+            set_secret,
+            delete_secret,
+            cli_tools,
+            check_update,
+            install_update,
+            keep_awake,
+            set_keep_awake,
         ])
         // Registering events is also what drops tauri's `TAURI_CHANNEL = null` placeholder type from the export
-        .events(collect_events![FsEvent])
+        .events(collect_events![
+            FsEvent,
+            UsageLimitsChanged,
+            ChatsEvent,
+            SettingsChanged,
+            KeepAwakeState
+        ])
 }
 
 #[cfg(debug_assertions)]
@@ -126,6 +168,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_denylist(&[quick::LABEL])
@@ -152,10 +195,13 @@ pub fn run() {
         .invoke_handler(specta.invoke_handler())
         .on_page_load(daemon::on_page_load)
         .setup(move |app| {
+            specta.mount_events(app);
             let daemon = Arc::new(daemon::Daemon::default());
             app.manage(daemon.clone());
             tauri::async_runtime::spawn(daemon.run(app.handle().clone()));
             quick::create(app.handle())?;
+            commands::mcp::start(app.handle());
+            commands::system::setup(app.handle());
             // macOS stops drawing frames in a covered window, and the runners wait on frames
             if let (Some(_), Some(window)) = (autorun(), app.get_webview_window("main")) {
                 window.set_always_on_top(true)?;
@@ -163,8 +209,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("tauri app failed to start");
+        .build(tauri::generate_context!())
+        .expect("tauri app failed to start")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::system::exit(app);
+            }
+        });
 }
 
 #[cfg(test)]

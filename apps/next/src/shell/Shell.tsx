@@ -6,15 +6,19 @@ import { Icon } from '../lib/icons'
 import { IN_TAURI, pickFolder, registerQuickShortcut, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, type Sessions } from './model'
-import { isCommandId, menuChord, shortcut, type CommandId } from './shortcuts'
+import { isCommandId, menuChord, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
-import { Settings } from './Settings'
+import { SettingsPage, useAppliedSettings } from '../pages/settings'
+import { settingsNow } from '../features/agents/settings'
+import { resolveShortcut } from '../lib/hotkeys'
 import { TabPanes } from './Panes'
 import { Palette } from './Palette'
 import { Dialogs, useDialogKeys, type DialogRequest } from '../dialogs'
 import { paneGrid } from '../panes/terminal/xterm'
 import { Panels } from '../panels/Panels'
 import { openFile } from '../panes/file/open'
+import { chatLeaf, isChatLeaf, leafChat } from '../panes/chat/open'
+import { getChat, initChats, useChatsVersion } from '../panes/chat/store'
 
 const PERSIST_MS = 300
 const AGENT_COMMAND: Partial<Record<SessionKind, string[]>> = { claude: ['claude'], codex: ['codex'] }
@@ -46,6 +50,9 @@ export interface ShellView {
 }
 
 const byId = (list: SessionInfo[]): Sessions => Object.fromEntries(list.map((s) => [s.id, s]))
+/** Chat leaves a restore keeps; none when ptyd can't list chats */
+const openChats = (api: Api): Promise<string[]> => api.chatList().then((list) => list.map((chat) => chatLeaf(chat.id)), () => [])
+const chatCwd = (leaf: string): string | undefined => (isChatLeaf(leaf) ? getChat(leafChat(leaf)).info?.cwd : undefined)
 
 export function Shell({ api }: { api: Api }) {
   const [ui, dispatch] = useReducer(reducer, initialUi)
@@ -64,19 +71,22 @@ export function Shell({ api }: { api: Api }) {
   const [dialog, setDialog] = useState<DialogRequest | null>(null)
   useDialogKeys(setDialog)
   const resolving = useRef(new Set<string>())
+  useEffect(() => initChats(api), [api])
+  // Chat tabs take their title, icon and place from the chat store
+  useChatsVersion()
   /** Panes closed while their process still ran; forgotten once it exits */
   const closing = useRef(new Set<string>())
 
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let cancelled = false
-    Promise.all([api.getUi(), api.sessions(), api.homeDir()]).then(
-      ([json, list, homeDir]) => {
+    Promise.all([api.getUi(), api.sessions(), api.homeDir(), openChats(api)]).then(
+      ([json, list, homeDir, chats]) => {
         if (cancelled) return
         const saved = parseUi(json)
         setHome(homeDir)
         setSessions(byId(list))
-        dispatch({ type: 'load', ui: restore(saved, list) })
+        dispatch({ type: 'load', ui: restore(saved, list, chats) })
         setUnreachable(false)
         setLoaded(true)
         if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
@@ -96,9 +106,9 @@ export function Shell({ api }: { api: Api }) {
 
   /** After a daemon restart: re-list, keep the layout, re-attach every terminal. The quick window may have a new session by now */
   const resync = () =>
-    Promise.all([api.sessions(), api.getUi()]).then(([list, json]) => {
+    Promise.all([api.sessions(), api.getUi(), openChats(api)]).then(([list, json, chats]) => {
       setSessions(byId(list))
-      dispatch({ type: 'load', ui: restore({ ...ui, quick: parseUi(json).quick }, list) })
+      dispatch({ type: 'load', ui: restore({ ...ui, quick: parseUi(json).quick }, list, chats) })
       setEpoch((n) => n + 1)
       setConnected(true)
     })
@@ -134,18 +144,19 @@ export function Shell({ api }: { api: Api }) {
   })
   useEffect(() => api.onEvent(onEvent), [api])
 
+  const chatCwds = ui.tabs.flatMap((tab) => leaves(tab.root)).flatMap((leaf) => chatCwd(leaf) ?? [])
   useEffect(() => {
-    const cwds = [...new Set(Object.values(sessions).map((s) => s.cwd))].filter((cwd) => !places[cwd] && !resolving.current.has(cwd))
+    const cwds = [...new Set([...Object.values(sessions).map((s) => s.cwd), ...chatCwds])].filter((cwd) => !places[cwd] && !resolving.current.has(cwd))
     if (!cwds.length) return
     cwds.forEach((cwd) => resolving.current.add(cwd))
     void api
       .places(cwds)
       .then((found) => setPlaces((all) => ({ ...all, ...Object.fromEntries(cwds.map((cwd, i) => [cwd, found[i]] as const).filter(([, p]) => p)) })))
       .finally(() => cwds.forEach((cwd) => resolving.current.delete(cwd)))
-  }, [api, sessions, places])
+  }, [api, sessions, places, chatCwds.join('\n')])
 
   const placeOf = (session: string): Place => {
-    const cwd = sessions[session]?.cwd ?? home
+    const cwd = sessions[session]?.cwd ?? chatCwd(session) ?? home
     return places[cwd] ?? fallbackPlace(cwd, home)
   }
   const placeOfTab = (tab: Tab): Place => {
@@ -177,6 +188,7 @@ export function Shell({ api }: { api: Api }) {
 
   // Before the terminals mount, so they open with the right colors
   useLayoutEffect(() => applyTheme(ui.theme, ui.ui), [ui.theme, ui.ui])
+  useAppliedSettings(api, ui.theme, (theme) => dispatch({ type: 'set', patch: { theme } }))
   useEffect(() => {
     if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer })
   }, [loaded, ui.theme, ui.ui, ui.renderer])
@@ -269,7 +281,7 @@ export function Shell({ api }: { api: Api }) {
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     // The settings recorder is taking a chord
     if (document.querySelector('.krec.on')) return
-    const id = shortcut(e)
+    const id = resolveShortcut(e, settingsNow()?.keys ?? {})
     if (!id || (IN_TAURI && menuChord(e))) return
     e.preventDefault()
     e.stopPropagation()
@@ -328,7 +340,7 @@ export function Shell({ api }: { api: Api }) {
         {!vertical && <Panels view={view} hidden={page !== null} />}
         <main className="card center">
           {page === 'settings' ? (
-            <Settings view={view} onClose={() => setPage(null)} />
+            <SettingsPage view={view} onClose={() => setPage(null)} />
           ) : empty ? (
             <Welcome view={view} />
           ) : (

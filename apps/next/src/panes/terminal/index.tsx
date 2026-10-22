@@ -9,6 +9,7 @@ import { dropText } from './drop'
 import type { Renderer } from './renderer'
 import { FindBar, SessionBar } from './bars'
 import { IS_MAC, openXterm, searchDecorations, webglFor, type Xterm } from './xterm'
+import { settingsNow } from '../../features/agents/settings'
 
 export interface TerminalPaneProps {
   api: Api
@@ -140,6 +141,10 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
   })
   term.onBinary((data) => hooks.gone() || send(Uint8Array.from(data, (char) => char.charCodeAt(0))))
   term.onResize(({ cols, rows }) => void api.resize(sessionId, cols, rows))
+  const copy = (text: string): Promise<void> => (IN_TAURI ? writeText(text) : navigator.clipboard.writeText(text))
+  term.onSelectionChange(() => {
+    if (settingsNow()?.terminal.copyOnSelect && term.hasSelection()) void copy(term.getSelection())
+  })
 
   const perform = (action: KeyAction, event: KeyboardEvent): void => {
     if (action.type === 'send') {
@@ -147,7 +152,7 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
       send(action.data)
     } else if (action.type === 'copy' && term.hasSelection()) {
       event.preventDefault()
-      void (IN_TAURI ? writeText(term.getSelection()) : navigator.clipboard.writeText(term.getSelection()))
+      void copy(term.getSelection())
     } else if (action.type === 'paste' && IN_TAURI) {
       // Linux Ctrl+Shift+V; a browser pastes natively. term.paste adds the bracketed-paste markers when the program asked for them
       event.preventDefault()

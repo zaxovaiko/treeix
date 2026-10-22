@@ -1,5 +1,7 @@
-import { useState, type PointerEvent } from 'react'
-import type { Place } from '../ipc/api'
+import { useEffect, useState, type PointerEvent } from 'react'
+import { PortsItem, TabTags } from '../features/agents/PortsItem'
+import { UsagePill } from '../features/agents/UsagePill'
+import type { Api, Place, ProgressState } from '../ipc/api'
 import { Icon } from '../lib/icons'
 import { DOT_LABEL, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
 import { keyHint, withHint } from './shortcuts'
@@ -30,6 +32,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
         {lights}
         <HStrip view={view} />
         <div className="tb-r" data-tauri-drag-region>
+          <UsagePill api={view.api} />
           <button className="kbar mini" onClick={() => run('palette')} title="Search sessions and commands">
             <Icon name="search" />
             <kbd>{keyHint('palette')}</kbd>
@@ -56,6 +59,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
         <kbd>{keyHint('palette')}</kbd>
       </button>
       <div className="tb-r" data-tauri-drag-region>
+        <UsagePill api={view.api} />
         <button className="icon" onClick={() => run('toggle-theme')} title="Toggle theme">
           <Icon name="moon" />
         </button>
@@ -72,6 +76,7 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
   const dot = tabDot(tab, sessions)
   const panes = leaves(tab.root).length
   const restored = leaves(tab.root).some((id) => sessions[id]?.status === 'restored')
+  const progress = useProgress(view.api, leaves(tab.root))
   return (
     <div className={`trow ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })}>
       <Ki kind={tabKind(tab, sessions)} dot={dot} />
@@ -89,6 +94,8 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
               {panes}
             </span>
           )}
+          {progress && <span className={`tag ${progress.state === 'error' ? 'red' : ''}`}>{progress.percent}%</span>}
+          <TabTags view={view} tab={tab} />
         </div>
       </div>
       <button className="icon sm x" onClick={stop(() => closeTab(tab))} title="Close">
@@ -96,6 +103,22 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
       </button>
     </div>
   )
+}
+
+/** The latest OSC 9;4 progress with a percent among `sessions` */
+function useProgress(api: Api, sessions: string[]) {
+  const [progress, setProgress] = useState<{ session: string; state: ProgressState; percent: number } | null>(null)
+  const key = sessions.join(' ')
+  useEffect(
+    () =>
+      api.onEvent((e) => {
+        if (e.type !== 'progress' || !key.split(' ').includes(e.session)) return
+        const measured = e.state === 'normal' || e.state === 'paused' || e.state === 'error'
+        setProgress((p) => (measured ? e : p?.session === e.session ? null : p))
+      }),
+    [api, key]
+  )
+  return progress
 }
 
 function PlusHere({ view, place }: ViewProps & { place: Place }) {
@@ -321,6 +344,7 @@ export function StatusBar({ view }: ViewProps) {
         </span>
       )}
       <span className="grow" />
+      <PortsItem view={view} />
       {needing.length > 0 && (
         <button className="sb st-need" onClick={() => dispatch({ type: 'activate', tabId: needing[0].id })}>
           {needing.length} need you

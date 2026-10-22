@@ -1,13 +1,15 @@
 import type { Place, SessionInfo, SessionKind, SessionStatus } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
 import { leaves, type Tab } from './state'
+import { isChatLeaf, leafChat } from '../panes/chat/open'
+import { getChat, titleOf } from '../panes/chat/store'
 
-/** Dot classes from the prototype: run, need, done, err, exit; idle shows none */
-export type Dot = 'run' | 'need' | 'done' | 'err' | 'exit' | 'idle'
+/** Dot classes from the prototype: run, need, done, err, exit; idle shows none. watch: an agent waiting on a background task */
+export type Dot = 'run' | 'watch' | 'need' | 'done' | 'err' | 'exit' | 'idle'
 
-const DOT: Record<SessionStatus, Dot> = { running: 'run', needs: 'need', done: 'done', idle: 'idle', exited: 'exit', error: 'err', restored: 'idle', crashed: 'err' }
+const DOT: Record<SessionStatus, Dot> = { running: 'run', needs: 'need', done: 'done', idle: 'idle', exited: 'exit', error: 'err', restored: 'idle', crashed: 'err', watching: 'watch' }
 export const statusDot = (status: SessionStatus): Dot => DOT[status]
-export const DOT_LABEL: Record<Dot, string> = { run: 'Running', need: 'Needs you', err: 'Crashed', done: 'Done', exit: 'Exited', idle: 'Idle' }
+export const DOT_LABEL: Record<Dot, string> = { run: 'Running', watch: 'Watching', need: 'Needs you', err: 'Crashed', done: 'Done', exit: 'Exited', idle: 'Idle' }
 
 export const KIND_ICON: Record<SessionKind, IconName> = { shell: 'terminal', claude: 'claude', codex: 'codex', routine: 'terminal' }
 
@@ -19,7 +21,7 @@ const tabSessions = (tab: Tab, sessions: Sessions) => leaves(tab.root).flatMap((
 /** The worst state among the tab's panes */
 export function tabDot(tab: Tab, sessions: Sessions): Dot {
   const dots = tabSessions(tab, sessions).map((s) => DOT[s.status])
-  return (['need', 'err', 'run', 'done', 'exit'] as const).find((d) => dots.includes(d)) ?? 'idle'
+  return (['need', 'err', 'run', 'watch', 'done', 'exit'] as const).find((d) => dots.includes(d)) ?? 'idle'
 }
 
 /** An agent pane names the tab, else its first pane */
@@ -33,8 +35,14 @@ const LIVE = new Set<SessionStatus>(['running', 'needs', 'done', 'idle', 'error'
 /** Panes with a live process across these tabs; the quick terminal's session has no tab here, so it isn't counted */
 export const liveCount = (tabs: Tab[], sessions: Sessions) => tabs.flatMap((tab) => leaves(tab.root)).filter((id) => sessions[id] && LIVE.has(sessions[id].status)).length
 
-export const tabKind = (tab: Tab, sessions: Sessions): SessionKind => lead(tab, sessions)?.kind ?? 'shell'
-export const tabTitle = (tab: Tab, sessions: Sessions) => tab.title ?? lead(tab, sessions)?.title ?? 'zsh'
+/** A tab of chats only is named by its focused chat */
+const chatOf = (tab: Tab) => (isChatLeaf(tab.focus) ? getChat(leafChat(tab.focus)) : null)
+
+export const tabKind = (tab: Tab, sessions: Sessions): SessionKind => lead(tab, sessions)?.kind ?? chatOf(tab)?.info?.agent ?? 'shell'
+export const tabTitle = (tab: Tab, sessions: Sessions) => {
+  const chat = chatOf(tab)
+  return tab.title ?? lead(tab, sessions)?.title ?? (chat ? titleOf(chat) : 'zsh')
+}
 
 export function Ki({ kind, dot = 'idle', sm }: { kind: SessionKind; dot?: Dot; sm?: boolean }) {
   return (

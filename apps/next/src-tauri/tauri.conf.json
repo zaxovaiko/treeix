@@ -55,5 +55,14 @@
     "externalBin": [
       "binaries/treeix-ptyd"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/zaxovaiko/treeix/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_MINISIGN_PUBLIC_KEY_SEE_DOCS_NEXT_UPDATER_MD",
+      "requireSignedVersion": true
+    }
   }
 }

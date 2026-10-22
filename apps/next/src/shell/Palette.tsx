@@ -6,6 +6,8 @@ import { placeLabel } from './state'
 import { keyHint, type CommandId } from './shortcuts'
 import type { ShellView } from './Shell'
 import { dialogCommands } from '../dialogs'
+import { chatCommands } from '../panes/chat/open'
+import { settingsNow } from '../features/agents/settings'
 
 const ACTIONS: [CommandId, string][] = [
   ['new-shell', 'New shell here'],
@@ -49,7 +51,9 @@ function commands(view: ShellView): Command[] {
       run: () => view.dispatch({ type: 'activate', tabId: tab.id }),
     })
   )
-  return [...actions, ...dialogCommands(view), ...tabs]
+  const focused = view.activeTab ? view.sessions[view.activeTab.focus] : undefined
+  const chats = settingsNow()?.features.chat ? chatCommands(view, focused?.cwd ?? view.home, focused) : []
+  return [...actions, ...chats, ...dialogCommands(view), ...tabs]
 }
 
 const Marked = ({ text, marks }: { text: string; marks: Set<number> }) => <>{[...text].map((ch, i) => (marks.has(i) ? <mark key={i}>{ch}</mark> : ch))}</>

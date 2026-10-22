@@ -1,6 +1,8 @@
 //! `treeix-ptyd`: the daemon that owns every PTY. The app is a client over a Unix socket
 //! (`treeix_proto`), so shells outlive app restarts.
 
+mod chat;
+mod hooks;
 mod osc;
 mod procinfo;
 mod server;

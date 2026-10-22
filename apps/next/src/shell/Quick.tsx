@@ -5,7 +5,8 @@ import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
 import { paneGrid } from '../panes/terminal/xterm'
 import { IN_TAURI, UI_CHANGED } from '../lib/native'
-import { applyTheme } from '../styles/theme'
+import { useAppliedSettings } from '../pages/settings'
+import { applyTheme, type Mode } from '../styles/theme'
 import { parseUi, type UiState } from './state'
 
 type Look = Pick<UiState, 'theme' | 'ui' | 'renderer'>
@@ -29,12 +30,15 @@ async function quickSession(api: Api, onLook: (look: Look) => void): Promise<str
 export function Quick({ api }: { api: Api }) {
   const [session, setSession] = useState<string | null>(null)
   const [renderer, setRenderer] = useState<Renderer>('auto')
+  const [mode, setMode] = useState<Mode>('dark')
+  useAppliedSettings(api, mode, setMode)
 
   useEffect(() => {
     let cancelled = false
     let current: string | null = null
     const look = ({ theme, ui, renderer }: Look) => {
       applyTheme(theme, ui)
+      setMode(theme)
       setRenderer(renderer)
     }
     const open = () =>

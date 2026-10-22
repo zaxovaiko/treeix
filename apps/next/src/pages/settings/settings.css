@@ -1,0 +1,38 @@
+/* Settings page controls (prototype round 6); the page frame (.gtop, .setp, .snav, .srow, .seg, .krec) is in styles/app.css */
+.setp .snav-i svg { width: 14px; height: 14px; flex: none; }
+.setp .snav .filter { margin-top: 0; }
+.setp .btn.pri { background: var(--primary); color: #fff; box-shadow: none; }
+.setp .btn.pri:hover { filter: brightness(1.12); }
+.setp .btn:disabled { opacity: .4; cursor: default; }
+.srow.col { flex-direction: column; align-items: stretch; gap: 6px; }
+.srow.col .sc { display: block; }
+.sd code, .sl code { font: 11px ui-monospace, Menlo, monospace; }
+.inp, .sel { height: 26px; min-width: 0; padding: 0 8px; border-radius: 7px; border: 0; background: var(--muted); box-shadow: inset 0 0 0 1px var(--input); font-size: 12px; color: var(--foreground); }
+.inp.num { text-align: right; }
+.inp:focus, .sel:focus { outline: 0; box-shadow: inset 0 0 0 1px var(--primary); }
+.sw { width: 30px; height: 18px; flex: none; border-radius: 9px; background: var(--input); position: relative; }
+.sw i { position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .12s; }
+.sw.on { background: var(--primary); }
+.sw.on i { transform: translateX(12px); }
+.sstat { display: inline-flex; align-items: center; }
+.sdot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; margin-right: 6px; background: var(--muted-foreground); }
+.sdot.ok { background: var(--green); }
+.sdot.warn { background: var(--amber); }
+.sdot.bad { background: var(--red); }
+.setp .ok { color: var(--green); }
+.setp .warn { color: var(--amber); }
+.sres { display: flex; align-items: center; gap: 6px; margin: 18px 0 0; font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+.sres:hover { color: var(--foreground); }
+.sres svg { width: 13px; height: 13px; }
+.thgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; padding: 4px 0 10px; }
+.thx { display: flex; flex-direction: column; gap: 5px; min-width: 0; text-align: left; }
+.thx .pv { height: 56px; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; box-shadow: inset 0 0 0 1px var(--border); }
+.thx.on .pv { box-shadow: 0 0 0 2px var(--primary); }
+.thx .pv i { display: block; height: 5px; border-radius: 3px; background: color-mix(in srgb, currentColor 35%, transparent); }
+.thx .nm { font-size: 11.5px; }
+.clirow { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 12px; border-bottom: 1px solid var(--border); }
+.clirow b { width: 52px; flex: none; }
+.clirow .ver { width: 56px; flex: none; }
+/* Search: a group or section with no matching row hides; the empty note shows only when nothing matched */
+.sgrp:not(:has(.srow)), .shit:not(:has(.srow)) { display: none; }
+.sinner:has(.srow) .snone { display: none; }

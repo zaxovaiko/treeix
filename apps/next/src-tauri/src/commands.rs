@@ -6,15 +6,27 @@ use tauri::{AppHandle, Manager, State};
 use treeix_core::places::{self, Place};
 use treeix_proto::{Request, Response};
 
+mod agents;
+mod chat;
 mod files;
 mod git;
 mod history;
+pub(crate) mod mcp;
 mod prs;
+mod settings;
+pub(crate) mod system;
+mod tickets;
 
+pub use agents::*;
+pub use chat::*;
 pub use files::*;
 pub use git::*;
 pub use history::*;
+pub use mcp::*;
 pub use prs::*;
+pub use settings::*;
+pub use system::*;
+pub use tickets::*;
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -46,9 +58,18 @@ pub async fn sessions(daemon: State<'_, Arc<Daemon>>) -> Result<Vec<SessionInfo>
 
 #[tauri::command]
 #[specta::specta]
-pub async fn create(daemon: State<'_, Arc<Daemon>>, opts: CreateSession) -> Result<SessionInfo> {
-    match daemon.request(Request::Create(opts.into())).await? {
-        Response::Created(info) => Ok(info.into()),
+pub async fn create(
+    app: AppHandle,
+    daemon: State<'_, Arc<Daemon>>,
+    opts: CreateSession,
+) -> Result<SessionInfo> {
+    let mut create = opts.into();
+    agents::prepare_agent(&app, &mut create)?;
+    match daemon.request(Request::Create(create)).await? {
+        Response::Created(info) => {
+            agents::find_codex_conversation(&app, &info);
+            Ok(info.into())
+        }
         other => Err(unexpected(other)),
     }
 }

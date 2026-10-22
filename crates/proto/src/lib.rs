@@ -6,9 +6,12 @@ use std::io;
 use std::path::PathBuf;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+pub mod chat;
+use chat::{ChatContent, ChatCreate, ChatEntry, ChatId, ChatInfo};
+
 /// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Shutdown,
 /// so an older app never takes down a newer daemon by connecting
-pub const PROTO_VERSION: u32 = 2;
+pub const PROTO_VERSION: u32 = 3;
 /// Data dir name; `.next` while the Tauri app ships beside the Electron one
 pub const APP_ID: &str = "com.dyvertex.treeix.next";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
@@ -37,6 +40,8 @@ pub enum SessionStatus {
     Restored,
     /// The daemon died while it ran; scrollback is from the last snapshot
     Crashed,
+    /// An agent's turn ended with a shell, monitor or subagent left running (its screen footer says so)
+    Watching,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -140,6 +145,47 @@ pub enum Request {
         channel: u32,
         bytes: u64,
     },
+    /// Starts an agent over ACP; replies Chat
+    ChatCreate(Box<ChatCreate>),
+    /// Starts a turn and replies at once; the turn streams as Chat events. Restarts a disconnected agent first
+    ChatPrompt {
+        chat: ChatId,
+        #[serde(with = "chat::as_json")]
+        content: Vec<ChatContent>,
+    },
+    ChatCancel {
+        chat: ChatId,
+    },
+    /// `option` None rejects the permission request
+    ChatAnswer {
+        chat: ChatId,
+        request: String,
+        option: Option<String>,
+    },
+    ChatSetOption {
+        chat: ChatId,
+        option: String,
+        value: String,
+    },
+    /// Replies Chats
+    ChatList,
+    /// Replies Chat, then sends this client the log from `from_seq` and every new event as Chat events
+    ChatAttach {
+        chat: ChatId,
+        from_seq: u64,
+    },
+    ChatDetach {
+        chat: ChatId,
+    },
+    /// Stops the agent and drops the chat and its log
+    ChatClose {
+        chat: ChatId,
+    },
+    /// The app found a terminal agent's conversation id (codex rollouts); broadcasts AgentSession when it changed
+    SetAgentSession {
+        session: SessionId,
+        agent_session: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,6 +199,8 @@ pub enum Response {
     },
     Sessions(Vec<SessionInfo>),
     Ui(Option<String>),
+    Chat(ChatInfo),
+    Chats(Vec<ChatInfo>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -207,6 +255,38 @@ pub enum Event {
         seq: u64,
         snapshot: Vec<u8>,
     },
+    /// The agent's conversation id became known or changed (statusline, /clear, resume)
+    AgentSession {
+        session: SessionId,
+        agent_session: String,
+    },
+    /// One log entry of an attached chat, in seq order
+    Chat {
+        chat: ChatId,
+        #[serde(with = "chat::as_json")]
+        entry: ChatEntry,
+    },
+    /// A chat was created or its info changed (status, title, agent session); goes to every client
+    ChatChanged(ChatInfo),
+    ChatRemoved {
+        chat: ChatId,
+    },
+    /// OSC 9;4 progress of the session's program; Off clears it
+    Progress {
+        session: SessionId,
+        state: ProgressState,
+        percent: u8,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProgressState {
+    Off,
+    Normal,
+    Error,
+    /// Busy with no percent
+    Indeterminate,
+    Paused,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

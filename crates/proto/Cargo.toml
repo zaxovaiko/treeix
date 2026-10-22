@@ -8,3 +8,8 @@ license.workspace = true
 serde.workspace = true
 postcard.workspace = true
 tokio.workspace = true
+serde_json.workspace = true
+specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"], optional = true }
+
+[features]
+specta = ["dep:specta"]

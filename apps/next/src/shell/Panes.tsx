@@ -1,6 +1,8 @@
 import { lazy, Suspense, type CSSProperties, type PointerEvent } from 'react'
 import { TerminalPane } from '../panes/terminal'
 import { closeFileLeaf, isFileLeaf, leafRoot, resolvePath } from '../panes/file/open'
+import { closeChat, isChatLeaf, leafChat } from '../panes/chat/open'
+import { titleOf, useChatState } from '../panes/chat/store'
 import { Icon } from '../lib/icons'
 import { DOT_LABEL, KIND_ICON, statusDot } from './model'
 import { withHint } from './shortcuts'
@@ -9,6 +11,18 @@ import type { ShellView } from './Shell'
 
 // Monaco and the diff renderer load with the first file view, not at startup
 const FilePane = lazy(() => import('../panes/file').then((m) => ({ default: m.FilePane })))
+const ChatPane = lazy(() => import('../panes/chat').then((m) => ({ default: m.ChatPane })))
+
+/** A chat leaf's header: its agent and title */
+function ChatHead({ leaf }: { leaf: string }) {
+  const chat = useChatState(leafChat(leaf))
+  return (
+    <>
+      <Icon name={chat.info?.agent ?? 'claude'} />
+      <span className="trunc grow">{titleOf(chat)}</span>
+    </>
+  )
+}
 
 /** A path printed in a terminal: the file view when it's inside the session's checkout, else its default app */
 function openPrinted(view: ShellView, session: string, { path, line }: { path: string; line: number | null }) {
@@ -58,12 +72,19 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
         const focused = id === tab.focus
         const dot = info ? statusDot(info.status) : 'idle'
         const file = isFileLeaf(id)
+        const chat = isChatLeaf(id)
         return (
           <div key={id} className={`pane ${multi ? (focused ? 'focus' : 'dimmed') : ''}`} style={box(rect)}>
             {multi && (
               <div className="phd" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
-                <Icon name={file ? 'folder' : KIND_ICON[info?.kind ?? 'shell']} />
-                <span className="trunc grow">{file ? leafRoot(id).split('/').pop() : (info?.title ?? 'zsh')}</span>
+                {chat ? (
+                  <ChatHead leaf={id} />
+                ) : (
+                  <>
+                    <Icon name={file ? 'folder' : KIND_ICON[info?.kind ?? 'shell']} />
+                    <span className="trunc grow">{file ? leafRoot(id).split('/').pop() : (info?.title ?? 'zsh')}</span>
+                  </>
+                )}
                 {dot !== 'idle' && <span className={`st-${dot}`}>{DOT_LABEL[dot].toLowerCase()}</span>}
                 <button className="icon sm" onClick={() => view.split('row', id)} title={withHint('Split right', 'split-right')}>
                   <Icon name="split" />
@@ -71,7 +92,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                 <button className="icon sm" onClick={() => view.split('col', id)} title={withHint('Split down', 'split-down')}>
                   <Icon name="splitDown" />
                 </button>
-                <button className="icon sm" onClick={() => (file ? closeFileLeaf(view, id) : view.closePane(id))} title={withHint('Close pane', 'close-pane')}>
+                <button className="icon sm" onClick={() => (file ? closeFileLeaf(view, id) : chat ? closeChat(view, id) : view.closePane(id))} title={withHint('Close pane', 'close-pane')}>
                   <Icon name="x" />
                 </button>
               </div>
@@ -80,6 +101,12 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
               <div className="pterm" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
                 <Suspense fallback={<div className="empty">Loading...</div>}>
                   <FilePane view={view} id={id} />
+                </Suspense>
+              </div>
+            ) : chat ? (
+              <div className="pterm" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
+                <Suspense fallback={<div className="empty">Loading...</div>}>
+                  <ChatPane key={`${id}:${epoch}`} view={view} leaf={id} focused={active && focused} />
                 </Suspense>
               </div>
             ) : (

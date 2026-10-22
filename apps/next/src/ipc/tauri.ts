@@ -1,6 +1,7 @@
 import { Channel } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import { listen } from '@tauri-apps/api/event'
-import type { Api, Attachment, FsChange, SessionEvent, WorktreeStep } from './api'
+import type { Api, Attachment, ChatAttachment, ChatEntry, FsChange, SessionEvent, WorktreeStep } from './api'
 import { commands, events, type Frame } from './bindings'
 import { FRAME, parseFrame } from '../panes/terminal/stream'
 
@@ -32,6 +33,19 @@ function watch(root: string, file: string | null, cb: (change: FsChange) => void
     void unlisten.then((stop) => stop())
     commands.unwatch(id).catch(() => {})
   }
+}
+
+/** Entries replayed and live arrive on one channel in seq order; the app drops duplicates */
+async function chatAttach(chat: string, fromSeq: number, onEntry: (entry: ChatEntry) => void): Promise<ChatAttachment> {
+  const channel = new Channel<ChatEntry>()
+  channel.onmessage = onEntry
+  const info = await commands.chatAttach(chat, fromSeq, channel)
+  return { info, detach: () => done(commands.chatDetach(chat, channel.id)) }
+}
+
+function on<T, P>(event: { listen(cb: (e: { payload: P }) => void): Promise<() => void> }, pick: (payload: P) => T, cb: (value: T) => void): () => void {
+  const unlisten = event.listen(({ payload }) => cb(pick(payload)))
+  return () => void unlisten.then((stop) => stop())
 }
 
 export function tauriApi(): Api {
@@ -107,5 +121,43 @@ export function tauriApi(): Api {
     readHistory: commands.readHistory,
     sessionHistory: commands.sessionHistory,
     forgetSession: (id) => done(commands.forgetSession(id)),
+
+    agentUsage: commands.agentUsage,
+    usageLimits: commands.usageLimits,
+    onUsageLimits: (cb) => on(events.usageLimitsChanged, (p) => p.limits, cb),
+    sessionUsage: commands.sessionUsage,
+    sessionPorts: commands.sessionPorts,
+    killPort: (port, pid) => done(commands.killPort(port, pid)),
+
+    chatCreate: commands.chatCreate,
+    chatPrompt: (chat, content) => done(commands.chatPrompt(chat, content)),
+    chatCancel: (chat) => done(commands.chatCancel(chat)),
+    chatAnswer: (chat, request, option) => done(commands.chatAnswer(chat, request, option)),
+    chatSetOption: (chat, option, value) => done(commands.chatSetOption(chat, option, value)),
+    chatList: commands.chatList,
+    chatAttach,
+    chatClose: (chat) => done(commands.chatClose(chat)),
+    onChats: (cb) => on(events.chatsEvent, (p) => p, cb),
+
+    mcpStatus: commands.mcpStatus,
+    mcpInstall: commands.mcpInstall,
+    myTickets: commands.myTickets,
+    ticketDetail: commands.ticketDetail,
+    notionDatabases: commands.notionDatabases,
+
+    getSettings: commands.getSettings,
+    updateSettings: (patch) => commands.updateSettings(patch),
+    onSettings: (cb) => on(events.settingsChanged, (p) => p.settings, cb),
+    hasSecret: commands.hasSecret,
+    setSecret: (secret, value) => done(commands.setSecret(secret, value)),
+    deleteSecret: (secret) => done(commands.deleteSecret(secret)),
+
+    cliTools: commands.cliTools,
+    appVersion: getVersion,
+    checkUpdate: commands.checkUpdate,
+    installUpdate: () => done(commands.installUpdate()),
+    keepAwake: commands.keepAwake,
+    setKeepAwake: commands.setKeepAwake,
+    onKeepAwake: (cb) => on(events.keepAwakeState, (p) => p, cb),
   }
 }

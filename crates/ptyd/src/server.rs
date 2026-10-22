@@ -39,6 +39,7 @@ pub struct Daemon {
     state_write: Mutex<()>,
     pub shutdown: Notify,
     stopping: AtomicBool,
+    pub chats: crate::chat::Chats,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -69,6 +70,7 @@ impl Daemon {
             }
             sessions.insert(session.id.clone(), session);
         }
+        let chats = crate::chat::Chats::load(&data_dir);
         Arc::new(Self {
             data_dir,
             build,
@@ -80,6 +82,7 @@ impl Daemon {
             state_write: Mutex::new(()),
             shutdown: Notify::new(),
             stopping: AtomicBool::new(false),
+            chats,
         })
     }
 
@@ -101,14 +104,14 @@ impl Daemon {
         lock(&self.sessions).contains_key(id)
     }
 
-    fn session(&self, id: &str) -> Result<Arc<Session>, String> {
+    pub(crate) fn session(&self, id: &str) -> Result<Arc<Session>, String> {
         lock(&self.sessions)
             .get(id)
             .cloned()
             .ok_or_else(|| format!("no session {id}"))
     }
 
-    fn sessions(&self) -> Vec<Arc<Session>> {
+    pub(crate) fn sessions(&self) -> Vec<Arc<Session>> {
         lock(&self.sessions).values().cloned().collect()
     }
 
@@ -159,6 +162,7 @@ impl Daemon {
         for session in &sessions {
             session.signal(Signal::SIGHUP);
         }
+        self.chats.stop();
         tracing::info!("stopped with {} sessions", sessions.len());
     }
 
@@ -198,6 +202,7 @@ impl Daemon {
                 }
             }
         });
+        crate::hooks::watch(self);
     }
 
     pub async fn serve(self: Arc<Self>, stream: UnixStream) -> anyhow::Result<()> {
@@ -236,6 +241,7 @@ impl Daemon {
             }
         };
         lock(&self.clients).remove(&client);
+        crate::chat::client_gone(&self, client);
         for session in self.sessions() {
             if session.detach(|viewer| viewer.0 == client) {
                 self.snapshot_in_background(session);
@@ -256,6 +262,21 @@ impl Daemon {
                     let _ = outbox.send(ServerMsg::Resp { id, resp: Err(e) });
                 }
             }
+            return;
+        }
+        if matches!(
+            req,
+            Request::ChatCreate(_)
+                | Request::ChatPrompt { .. }
+                | Request::ChatCancel { .. }
+                | Request::ChatAnswer { .. }
+                | Request::ChatSetOption { .. }
+                | Request::ChatList
+                | Request::ChatAttach { .. }
+                | Request::ChatDetach { .. }
+                | Request::ChatClose { .. }
+        ) {
+            crate::chat::handle(self, client, outbox, id, req);
             return;
         }
         let shutdown = matches!(req, Request::Shutdown);
@@ -305,7 +326,17 @@ impl Daemon {
                 self.mark_state_dirty();
                 Ok(Response::Ok)
             }
-            Request::Attach { .. } | Request::AttachChannel { .. } => {
+            Request::Attach { .. }
+            | Request::AttachChannel { .. }
+            | Request::ChatCreate(_)
+            | Request::ChatPrompt { .. }
+            | Request::ChatCancel { .. }
+            | Request::ChatAnswer { .. }
+            | Request::ChatSetOption { .. }
+            | Request::ChatList
+            | Request::ChatAttach { .. }
+            | Request::ChatDetach { .. }
+            | Request::ChatClose { .. } => {
                 unreachable!("answered in handle")
             }
             Request::Detach { session } => self.detach(&session, (client, None)),
@@ -330,6 +361,19 @@ impl Daemon {
                 Ok(Response::Sessions(list))
             }
             Request::GetUi => Ok(Response::Ui(lock(&self.ui).clone())),
+            Request::SetAgentSession {
+                session,
+                agent_session,
+            } => {
+                if self.session(&session)?.set_agent_session(&agent_session) {
+                    self.broadcast(Event::AgentSession {
+                        session,
+                        agent_session,
+                    });
+                    self.mark_state_dirty();
+                }
+                Ok(Response::Ok)
+            }
             Request::PutUi { json } => {
                 *lock(&self.ui) = Some(json);
                 self.mark_state_dirty();

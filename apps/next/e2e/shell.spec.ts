@@ -57,7 +57,7 @@ test('split right and down, move focus, close panes', async ({ page }) => {
   expect(down.box.x).toBe(right.box.x)
   expect(down.box.y).toBeGreaterThanOrEqual(right.box.y + right.box.height - 1)
   await expect(down.pane).toHaveClass(/focus/)
-  await expect(activeRow(page).locator('.tag')).toContainText('3')
+  await expect(activeRow(page).locator('.tag:not(.mono)')).toContainText('3')
 
   await page.keyboard.press('Meta+Alt+ArrowUp')
   await expect(right.pane).toHaveClass(/focus/)

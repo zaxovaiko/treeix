@@ -1,13 +1,17 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
-import type { Branch, GitStatus, NewWorktree as Request, PullRequest, StepId, Worktree, WorktreeStep } from '../ipc/api'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { launch } from '../features/agents/launch'
+import { raceTargets, type AgentName, type Target } from '../features/agents/race'
+import { useSettings } from '../features/agents/settings'
+import { FIcon } from '../features/agents/icons'
+import { ticketBranch, ticketPrompt, ticketRows } from '../features/tickets/branch'
+import { useTickets } from '../features/tickets/useTickets'
+import type { Branch, GitStatus, NewWorktree as Request, PullRequest, Ticket, Worktree, WorktreeStep } from '../ipc/api'
 import { Icon } from '../lib/icons'
 import { IS_MAC } from '../shell/shortcuts'
 import type { ShellView } from '../shell/Shell'
 import { Glyph } from './icons'
 import { goTo, Modal, reposOf, type DialogRequest } from './index'
-import { branchCheck, branchRows, localName, prDir, setupCommand, worktreeDir } from './logic'
-
-type Agent = 'claude' | 'codex' | null
+import { branchCheck, branchRows, localName, prDir, setupCommand, worktreeDir, type BranchRow } from './logic'
 
 interface RepoData {
   branches: Branch[]
@@ -18,14 +22,17 @@ interface RepoData {
   names: string[]
 }
 
-type StepKey = StepId | 'open'
 interface Step {
-  key: StepKey
+  /** `<target>:<step id>`, or `open` */
+  key: string
   label: string
   command: string
   state: 'todo' | 'cur' | 'done' | 'fail' | 'skipped'
   error: string | null
 }
+
+/** A branch suggestion or one of your tickets */
+type SuggRow = BranchRow | { ticket: Ticket }
 
 const STATE: Record<WorktreeStep['state'], Step['state']> = { running: 'cur', done: 'done', failed: 'fail', skipped: 'skipped' }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
@@ -44,12 +51,23 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
   const [hi, setHi] = useState(0)
   const [valid, setValid] = useState<boolean | null>(null)
   const [base, setBase] = useState('')
-  const [agent, setAgent] = useState<Agent>('claude')
+  const [agents, setAgents] = useState<AgentName[]>(['claude'])
+  const [prompt, setPrompt] = useState('')
+  const [ticket, setTicket] = useState<Ticket | null>(null)
+  const [shellSplit, setShellSplit] = useState(true)
+  const [draftPr, setDraftPr] = useState(false)
   const [copyEnv, setCopyEnv] = useState(true)
   const [runSetup, setRunSetup] = useState(true)
   const [steps, setSteps] = useState<Step[] | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [sent, setSent] = useState<Request | null>(null)
+  /** The race target that failed, where Retry starts; earlier targets' worktrees are in `paths` */
+  const [failedAt, setFailedAt] = useState(0)
+  const paths = useRef<string[]>([])
+  const settings = useSettings(api)
+  const { tickets } = useTickets(api, settings)
+  const agent = agents[0] ?? null
+  const racing = mode === 'branch' && agents.length > 1
 
   useEffect(() => {
     if (!repo) return
@@ -106,44 +124,61 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
   const ctx = { repoPath: repo, branches: data?.branches ?? [], worktrees: data?.worktrees ?? [], open: new Set(view.ordered.map((t) => view.placeOfTab(t).path)), prs: data?.prs ?? [] }
   const check = data ? branchCheck({ ...ctx, name: branch, valid: branch ? valid : true, hasCommits: data.status?.head !== null, repoName }) : null
   const known = ctx.branches.some((b) => localName(b.name) === branch)
-  const rows = picking && data ? branchRows(ctx, name) : []
+  const branchList = picking && data ? branchRows(ctx, name) : []
+  const ticketList = picking && data ? ticketRows(tickets, ctx.branches.map((b) => b.name), name) : []
+  const rows: SuggRow[] = [...branchList.filter((r) => r.create), ...ticketList.map((t) => ({ ticket: t })), ...branchList.filter((r) => !r.create)]
   const current = Math.min(hi, rows.length - 1)
-  const go = mode === 'branch' && check?.level === 'go' ? check.worktree : null
+  const go = mode === 'branch' && !racing && check?.level === 'go' ? check.worktree : null
   const ready = !!data && (mode === 'pr' ? !!pr : !check || check.level === 'info' || check.level === 'go')
   const dir = pr ? prDir(pr.number, pr.provider === 'gitlab') : worktreeDir(branch || '...')
 
-  const run = (req: Request) => {
+  const task = agent ? prompt.trim() : ''
+  const canDraft = hasRemote && !!task && mode === 'branch'
+  const targetsOf = (req: Request): Target[] => (req.branch === null ? [{ branch: '', agent }] : raceTargets(req.branch, racing ? agents : agents.slice(0, 1)))
+  const start = (cwds: string[], targets: Target[]) =>
+    launch(view, cwds.map((cwd, i) => ({ cwd, agent: targets[i].agent })), { prompt: task, shell: shellSplit && !!agent, draftPr: draftPr && canDraft })
+
+  /** Adds each target's worktree from `from` on (earlier ones are done), then starts the agents side by side */
+  const run = async (req: Request, from = 0) => {
+    const targets = targetsOf(req)
     const plan: Step[] = []
-    const add = (key: StepKey, label: string, command: string) => plan.push({ key, label, command, state: 'todo', error: null })
-    if (req.pr !== null || hasRemote) add('fetch', req.pr !== null ? `Fetch #${req.pr}` : 'Fetch origin', 'git fetch origin')
-    add('add', `Add ${dir}`, req.pr !== null ? `git worktree add --detach ${dir} FETCH_HEAD` : `git worktree add ${dir} ${req.branch}`)
-    if (req.copyEnv) add('env', 'Copy .env', 'cp .env')
-    if (req.setup) add('setup', 'Run setup', req.setup)
-    add('open', agent ? `Start ${cap(agent)}` : 'Open a shell', agent ?? 'zsh')
-    setSteps(plan)
+    targets.forEach((t, i) => {
+      if (i < from) return
+      const add = (key: string, label: string, command: string) => plan.push({ key: `${i}:${key}`, label, command, state: 'todo', error: null })
+      const tdir = req.pr !== null ? dir : worktreeDir(t.branch)
+      if (i === 0 && (req.pr !== null || hasRemote)) add('fetch', req.pr !== null ? `Fetch #${req.pr}` : 'Fetch origin', 'git fetch origin')
+      add('add', `Add ${tdir}`, req.pr !== null ? `git worktree add --detach ${tdir} FETCH_HEAD` : `git worktree add ${tdir} ${t.branch}`)
+      if (req.copyEnv) add('env', 'Copy .env', 'cp .env')
+      if (req.setup) add('setup', 'Run setup', req.setup)
+    })
+    plan.push({ key: 'open', label: targets.length > 1 ? `Start ${agents.map(cap).join(' and ')} side by side` : agent ? `Start ${cap(agent)}` : 'Open a shell', command: targets.length > 1 ? agents.join(' · ') : (agent ?? 'zsh'), state: 'todo', error: null })
+    setSteps((prev) => [...(prev ?? []).filter((x) => Number(x.key.split(':')[0]) < from), ...plan])
     setFailure(null)
     setSent(req)
-    api
-      .addWorktree(req, (s) => setSteps((all) => all?.map((x) => (x.key === s.step ? { ...x, state: STATE[s.state], command: s.command || x.command, error: s.error } : x)) ?? null))
-      .then(
-        (path) => {
-          view.newSession(agent ?? 'shell', path)
-          onClose()
-        },
-        (e: unknown) => setFailure(e instanceof Error ? e.message : String(e))
-      )
+    for (let i = from; i < targets.length; i++) {
+      const onStep = (s: WorktreeStep) => setSteps((all) => all?.map((x) => (x.key === `${i}:${s.step}` ? { ...x, state: STATE[s.state], command: s.command || x.command, error: s.error } : x)) ?? null)
+      try {
+        paths.current[i] = await api.addWorktree({ ...req, branch: req.branch === null ? null : targets[i].branch, skipFetch: req.skipFetch || i > 0 }, onStep)
+      } catch (e: unknown) {
+        setFailedAt(i)
+        return setFailure(e instanceof Error ? e.message : String(e))
+      }
+    }
+    await start(paths.current.slice(0, targets.length), targets)
+    onClose()
   }
 
   const submit = () => {
     if (!ready || steps) return
     if (go) {
-      goTo(view, go.path, agent ?? 'shell')
+      if (task) void start([go.path], [{ branch, agent }])
+      else goTo(view, go.path, agent ?? 'shell')
       return onClose()
     }
-    run({
+    void run({
       repoPath: repo,
       branch: pr ? null : branch,
-      base: pr || known ? null : base || null,
+      base: pr ? null : racing && known ? branch : known ? null : base || null,
       pr: pr?.number ?? null,
       copyEnv: hasEnv && copyEnv,
       setup: setup && runSetup ? setup : null,
@@ -151,13 +186,21 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
     })
   }
 
-  const pick = (value: string) => {
-    setName(value)
+  const pick = (row: SuggRow) => {
     setPicking(false)
+    if (!('ticket' in row)) return setName(row.name)
+    const t = row.ticket
+    setName(ticketBranch(t))
+    setTicket(t)
+    if (prompt.trim()) return
+    void api.ticketDetail(t.source, t.key).then(
+      (detail) => setPrompt((p) => p.trim() ? p : ticketPrompt(detail)),
+      () => setPrompt((p) => p.trim() ? p : `${t.key}: ${t.title}`)
+    )
   }
 
   const onBranchKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && picking && rows[current]) pick(rows[current].name)
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && picking && rows[current]) pick(rows[current])
     else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && rows.length) setHi((current + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length)
     else if (e.key === 'Escape' && picking) setPicking(false)
     else return
@@ -165,12 +208,13 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
   }
 
   if (steps && sent) {
-    const fetchFailed = steps.some((s) => s.key === 'fetch' && s.state === 'fail')
+    const fetchFailed = steps.some((s) => s.key === '0:fetch' && s.state === 'fail')
+    const count = targetsOf(sent).length
     return (
       <Modal className="nw" busy={!failure} onClose={onClose}>
         <h3>
           {sent.pr !== null ? <Glyph name="pr" /> : <Icon name="branch" />}
-          {sent.pr !== null ? `Checking out #${sent.pr}` : `Opening ${sent.branch}`}
+          {sent.pr !== null ? `Checking out #${sent.pr}` : count > 1 ? `Opening ${count} worktrees` : `Opening ${sent.branch}`}
           <span className="grow" />
           <span className="dim" style={{ fontWeight: 400, fontSize: 12 }}>
             {repoName}
@@ -201,11 +245,11 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
                 Cancel
               </button>
               {fetchFailed && sent.pr === null && (
-                <button className="btn" onClick={() => run({ ...sent, skipFetch: true })}>
+                <button className="btn" onClick={() => void run({ ...sent, skipFetch: true }, failedAt)}>
                   Continue without fetching
                 </button>
               )}
-              <button className="btn pri" autoFocus onClick={() => run(sent)}>
+              <button className="btn pri" autoFocus onClick={() => void run(sent, failedAt)}>
                 <Glyph name="reload" />
                 Retry
               </button>
@@ -221,7 +265,9 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
   }
 
   const bases = data ? baseOptions(data, hasRemote) : []
-  const label = mode === 'pr' ? 'Check out' : go ? (go.path === repo ? 'Open repo folder' : 'Open worktree') : known ? 'Check out' : 'Create worktree'
+  const label = mode === 'pr' ? 'Check out' : racing ? `Create ${agents.length} worktrees` : go ? (go.path === repo ? 'Open repo folder' : 'Open worktree') : known ? 'Check out' : 'Create worktree'
+  const raceOn = !!settings?.features.race && mode === 'branch'
+  const toggleAgent = (a: AgentName) => setAgents(agents.includes(a) ? agents.filter((x) => x !== a) : raceOn ? [...agents, a] : [a])
 
   return (
     <Modal className="nw" onClose={onClose}>
@@ -307,22 +353,38 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
               />
               {rows.length > 0 && (
                 <div className="sugg" onMouseDown={(e) => e.preventDefault()}>
-                  {rows.map((r, i) => (
-                    <button key={`${r.create}${r.name}`} className={`mi ${i === current ? 'on' : ''}`} onMouseMove={() => setHi(i)} onClick={() => pick(r.name)}>
-                      {r.create ? <Icon name="plus" /> : r.remote ? <Glyph name="globe" /> : <Icon name="branch" />}
-                      <span className="trunc">
-                        {r.create ? (
-                          <>
-                            Create <b>{r.name}</b> from {base}
-                          </>
+                  {rows.map((r, i) => {
+                    const label = 'ticket' in r ? (i === 0 || !('ticket' in rows[i - 1]) ? 'Your tickets' : null) : !r.create && ticketList.length && i > 0 && 'ticket' in rows[i - 1] ? 'Branches' : null
+                    return (
+                      <div key={'ticket' in r ? `t${r.ticket.source}${r.ticket.key}` : `${r.create}${r.name}`} style={{ display: 'contents' }}>
+                        {label && <div className="mlabel">{label}</div>}
+                        {'ticket' in r ? (
+                          <button className={`mi ${i === current ? 'on' : ''}`} title={`Branch ${ticketBranch(r.ticket)}`} onMouseMove={() => setHi(i)} onClick={() => pick(r)}>
+                            <FIcon name={r.ticket.source} />
+                            <span className="trunc">
+                              <span className="mono dim">{r.ticket.source === 'jira' ? r.ticket.key : r.ticket.project ?? 'Notion'}</span> {r.ticket.title}
+                            </span>
+                            <span className="d">{r.ticket.status}</span>
+                          </button>
                         ) : (
-                          r.name
+                          <button className={`mi ${i === current ? 'on' : ''}`} onMouseMove={() => setHi(i)} onClick={() => pick(r)}>
+                            {r.create ? <Icon name="plus" /> : r.remote ? <Glyph name="globe" /> : <Icon name="branch" />}
+                            <span className="trunc">
+                              {r.create ? (
+                                <>
+                                  Create <b>{r.name}</b> from {base}
+                                </>
+                              ) : (
+                                r.name
+                              )}
+                            </span>
+                            {r.pr !== null && <span className="tag">#{r.pr}</span>}
+                            {!r.create && <span className={`d ${r.missing ? 'err' : ''}`}>{r.detail}</span>}
+                          </button>
                         )}
-                      </span>
-                      {r.pr !== null && <span className="tag">#{r.pr}</span>}
-                      {!r.create && <span className={`d ${r.missing ? 'err' : ''}`}>{r.detail}</span>}
-                    </button>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -341,10 +403,17 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
         ) : (
           <PrPicker prs={data?.prs ?? null} selected={pr} onPick={setPrNumber} dir={dir} />
         )}
+        <div className="fld nwtask">
+          <label htmlFor="nw-task">
+            Task for the agent <span className="dim">optional</span>
+            {ticket && <span className="tag mono">{ticket.key}</span>}
+          </label>
+          <textarea id="nw-task" value={prompt} disabled={!agent} placeholder={agent ? 'What should the agent do in this worktree?' : 'Pick an agent to give it a task'} onChange={(e) => setPrompt(e.target.value)} />
+        </div>
         <div className="thenopen">
           <span>Then open</span>
           {(['claude', 'codex'] as const).map((a) => (
-            <button key={a} className={`tog ${agent === a ? 'on' : ''}`} onClick={() => setAgent(agent === a ? null : a)}>
+            <button key={a} className={`tog ${agents.includes(a) ? 'on' : ''}`} onClick={() => toggleAgent(a)}>
               <span className={a}>
                 <Icon name={a} />
               </span>
@@ -352,27 +421,39 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
             </button>
           ))}
           <span className="dim" style={{ fontSize: 11 }}>
-            {agent ? '' : 'none: a shell'}
+            {!agent ? 'none: a shell' : racing ? 'both: they race, one worktree each' : raceOn ? 'pick both to race them' : ''}
           </span>
         </div>
-        {(hasEnv || setup) && !go && (
+        {(((hasEnv || setup) && !go) || agent) && (
           <div className="opts">
-            {hasEnv && (
+            {hasEnv && !go && (
               <label className="chk">
                 <input type="checkbox" checked={copyEnv} onChange={(e) => setCopyEnv(e.target.checked)} />
                 Copy .env from the repo folder <span className="dim">(git-ignored)</span>
               </label>
             )}
-            {setup && (
+            {setup && !go && (
               <label className="chk">
                 <input type="checkbox" checked={runSetup} onChange={(e) => setRunSetup(e.target.checked)} />
                 Run setup: <span className="mono">{setup}</span>
               </label>
             )}
+            {agent && !go && (
+              <label className="chk">
+                <input type="checkbox" checked={shellSplit} onChange={(e) => setShellSplit(e.target.checked)} />
+                Open a shell split {racing ? 'under each agent' : 'under the agent'}
+              </label>
+            )}
+            {agent && mode === 'branch' && (
+              <label className="chk" title={hasRemote ? undefined : 'No remote, so there is nowhere to open it'}>
+                <input type="checkbox" checked={draftPr && canDraft} disabled={!canDraft} onChange={(e) => setDraftPr(e.target.checked)} />
+                Open a draft PR when the agent finishes {!hasRemote ? <span className="dim">(no remote)</span> : !task && <span className="dim">(needs a task)</span>}
+              </label>
+            )}
           </div>
         )}
         <div className="mft">
-          <span className="dim mono trunc">{go ? go.path : `${repo}/${dir}`}</span>
+          <span className="dim mono trunc">{go ? go.path : racing ? `${repo}/${dir}-{${agents.join(',')}}` : `${repo}/${dir}`}</span>
           <button className="btn" onClick={onClose}>
             Cancel
           </button>

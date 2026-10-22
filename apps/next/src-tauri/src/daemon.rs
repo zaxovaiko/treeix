@@ -91,10 +91,12 @@ impl Daemon {
         }
         let dropped = self.streams.lock().unwrap().drop_webview(label);
         let daemon = self.clone();
+        let label = label.to_owned();
         tauri::async_runtime::spawn(async move {
             for (session, channel) in dropped {
                 daemon.detach_quietly(session, channel).await;
             }
+            crate::commands::drop_webview_chats(&daemon, &label).await;
         });
     }
 
@@ -155,6 +157,10 @@ impl Daemon {
                             state: DaemonState::Connected,
                         },
                     );
+                    let daemon = self.clone();
+                    tauri::async_runtime::spawn(async move {
+                        crate::commands::reattach_chats(&daemon).await
+                    });
                     self.read(reader, &app).await;
                     tracing::warn!("daemon disconnected");
                     self.hello.send_replace(None);
@@ -196,8 +202,13 @@ impl Daemon {
                     self.relay(session, channel, Frame::resync(seq, &snapshot))
                         .await
                 }
+                Ok(Some(ServerMsg::Event(
+                    event
+                    @ (Event::Chat { .. } | Event::ChatChanged(_) | Event::ChatRemoved { .. }),
+                ))) => crate::commands::on_chat_event(app, event),
                 Ok(Some(ServerMsg::Event(event))) => {
                     if let Some(event) = SessionEvent::from_proto(event) {
+                        crate::commands::on_session_event(app, &event);
                         emit(app, event);
                     }
                 }
