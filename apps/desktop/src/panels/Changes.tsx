@@ -190,8 +190,11 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
           <span className="grow">{error}</span>
         </div>
       )}
-      <div className="dim psum">
-        {scope === 'base' ? `${branch ?? status.head} → ${status.base}` : 'uncommitted'} · {patches.length} files <span className="ok">+{additions}</span> <span className="err">-{deletions}</span>
+      <div className="dim psum dots">
+        <span className="trunc">{scope === 'base' ? `${branch ?? status.head} → ${status.base}` : 'uncommitted'}</span>
+        <span className="mid">
+          {patches.length} files <span className="ok">+{additions}</span> <span className="err">-{deletions}</span>
+        </span>
       </div>
       <div className="clist">
         {patches.length ? (
@@ -199,7 +202,10 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
             const s = conflicts.has(p.path) ? 'conflicted' : p.status
             const dirty = local.some((c) => c.path === p.path)
             return (
-              <div key={p.path} className={`crow ${p.path === current?.path ? 'on' : ''}`} onClick={() => setFile(p.path)} title={p.oldPath ? `${p.oldPath} → ${p.path}` : p.path}>
+              <div key={p.path} className={`crow ${p.path === current?.path ? 'on' : ''}`} onClick={() => {
+                  setFile(p.path)
+                  setConfirm(null)
+                }} title={p.oldPath ? `${p.oldPath} → ${p.path}` : p.path}>
                 <span className={`s ${STATUS_CLASS[s]}`}>{STATUS_LETTER[s]}</span>
                 <span className="grow trunc">
                   <span className={STATUS_CLASS[s]}>{baseName(p.path)}</span> <span className="d">{dirName(p.path)}</span>
@@ -323,9 +329,9 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
         )}
         <span className="grow" />
         {!onBase && patches.length > 0 && (
-          <button className="btn sm" onClick={() => void askAgent(view, 'claude', root, `Review the changes in ${branch ?? status.head} against ${status.base}.`, `Review ${branch ?? status.head}`)}>
+          <button className="btn sm" title="Ask Claude to review" onClick={() => void askAgent(view, 'claude', root, `Review the changes in ${branch ?? status.head} against ${status.base}.`, `Review ${branch ?? status.head}`)}>
             <Icon name="claude" />
-            Ask Claude to review
+            Review
           </button>
         )}
       </div>

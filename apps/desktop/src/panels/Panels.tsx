@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useState, type PointerEvent } from 'react'
 import type { GitStatus, PullRequest } from '../ipc/api'
 import { useSettings } from '../features/agents/settings'
 import { fallbackPlace } from '../shell/model'
-import { withHint } from '../shell/shortcuts'
+import { shortcutsPaused, withHint } from '../shell/shortcuts'
 import { PANEL, type PanelId } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
 import { Changes } from './Changes'
@@ -32,8 +32,10 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const place = activeTab ? view.placeOfTab(activeTab) : fallbackPlace(home, home)
   const root = place.path
   const scratch = place.kind === 'scratch'
-  const graph = useSettings(api)?.features.graph ?? false
-  const shown = hidden ? null : ui.panel
+  const features = useSettings(api)?.features
+  const graph = features?.graph ?? false
+  const prsOn = features?.prs ?? true
+  const shown = hidden || (ui.panel === 'prs' && !prsOn) ? null : ui.panel
 
   // Git status and file changes of the focused place: one watcher feeds every panel and the badge
   const [git, setGit] = useState<{ root: string; status: GitStatus | null }>({ root: '', status: null })
@@ -60,6 +62,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   /** Bumped by the refresh button, window focus and the timer */
   const [prTick, setPrTick] = useState(0)
   useEffect(() => {
+    if (!prsOn) return
     let live = true
     const repos = repoKey ? repoKey.split('\n') : []
     void Promise.all([api.listPullRequests(repos), api.prProviders(), Promise.all(repos.map((r) => api.listWorktrees(r).catch(() => [])))]).then(
@@ -68,7 +71,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
       () => live && setPrs((last) => ({ ...last, offline: true })),
     )
     return () => void (live = false)
-  }, [api, repoKey, prTick])
+  }, [api, repoKey, prTick, prsOn])
   const refreshPrs = () => setPrTick((n) => n + 1)
   useEffect(() => {
     window.addEventListener('focus', refreshPrs)
@@ -86,7 +89,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   }
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     const id = panelKey(e)
-    if (!id) return
+    if (!id || (id === 'prs' && !prsOn) || shortcutsPaused()) return
     e.preventDefault()
     e.stopPropagation()
     toggle(id)
@@ -104,7 +107,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
 
   const bar = (
     <div className="actbar" key="bar">
-      {ITEMS.map(([id, icon, tip]) => (
+      {ITEMS.filter(([id]) => id !== 'prs' || prsOn).map(([id, icon, tip]) => (
         <button key={id} className={`icon ${shown === id ? 'on' : ''}`} onClick={() => toggle(id)} title={tip}>
           <PIcon name={icon === 'folder' && shown === id ? 'folderOpen' : icon} />
           {!!badges[id] && <span className="ndot">{badges[id]}</span>}

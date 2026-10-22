@@ -44,9 +44,15 @@ function tagOf(pr: PullRequest): [string, string] {
   return pr.review ? REVIEW[pr.review.state] : ['', 'No review']
 }
 
+const EMPTY: Record<Filter, string> = { all: 'No pull requests', mine: 'None of yours open', review: 'No reviews waiting', routines: 'No routine has opened one yet' }
+
+/** The filter outlives switching panels */
+let lastFilter: Filter = 'all'
+
 export function Prs({ view, data }: { view: ShellView; data: PrData }) {
   const { api } = view
-  const [filter, setFilter] = useState<Filter>('all')
+  const [filter, keepFilter] = useState(lastFilter)
+  const setFilter = (f: Filter) => keepFilter((lastFilter = f))
   /** Per PR: the running check out step, or the last error */
   const [busy, setBusy] = useState<Record<string, { text: string; error?: boolean }>>({})
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null)
@@ -238,19 +244,26 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
                 </span>
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="t">
-                    <a onClick={() => void api.openUrl(pr.url)} title="Open in browser">
+                    <a
+                      href={pr.url}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        void api.openUrl(pr.url)
+                      }}
+                      title="Open in browser"
+                    >
                       {pr.title}
                     </a>
                   </div>
-                  <div className="m">
+                  <div className="m dots">
                     <span className={`prov ${pr.provider === 'gitlab' ? 'gl' : 'gh'}`}>{PROVIDER[pr.provider][0]}</span>
                     <span>
                       {lastPart(pr.repoPath)} {pr.provider === 'gitlab' ? '!' : '#'}
                       {pr.number}
                     </span>
-                    <span>· {pr.author}</span>
-                    <span>· {ago(Date.parse(pr.updatedAt))}</span>
-                    {wt && !wt.main && <span className="dim">· {wt.branch ?? lastPart(wt.path)}</span>}
+                    <span className="mid">{pr.author}</span>
+                    <span className="mid">{ago(Date.parse(pr.updatedAt))}</span>
+                    {wt && !wt.main && <span className="mid dim">{wt.branch ?? lastPart(wt.path)}</span>}
                   </div>
                   <div className="m">
                     {pr.state === 'open' && pr.pipeline && (
@@ -271,7 +284,7 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
             )
           })
         ) : (
-          <div className="empty">{filter === 'review' ? 'No reviews waiting' : 'Nothing here'}</div>
+          <div className="empty">{EMPTY[filter]}</div>
         )}
       </div>
       <div className="cfoot dim" style={{ fontSize: 11 }}>

@@ -26,12 +26,18 @@ interface Repo {
 
 const lastPart = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 
+/** The filter outlives switching panels */
+let lastKind: Kind = 'all'
+
 export function History({ view, place }: { view: ShellView; place: Place }) {
   const { api } = view
   const [records, setRecords] = useState<SessionRecord[]>([])
   const [places, setPlaces] = useState<Record<string, Place>>({})
   const [repos, setRepos] = useState<Record<string, Repo>>({})
-  const [kind, setKind] = useState<Kind>('all')
+  const [kind, keepKind] = useState(lastKind)
+  const setKind = (k: Kind) => keepKind((lastKind = k))
+  /** Bumped to drop an in-flight load that predates a forget */
+  const [loads, setLoads] = useState(0)
   const [q, setQ] = useState('')
   const [here, setHere] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +59,7 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
       setRepos(Object.fromEntries(roots.map((root, i) => [root, { worktrees: loaded[i][0], branches: loaded[i][1] }])))
     })
     return () => void (live = false)
-  }, [api, sessionIds])
+  }, [api, sessionIds, loads])
 
   const where = (r: SessionRecord): Where => {
     const p = places[r.cwd]
@@ -79,6 +85,7 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
     if (fork) return
     await api.forgetSession(r.id)
     setRecords((all) => all.filter((x) => x.id !== r.id))
+    setLoads((n) => n + 1)
   }
   const attempt = (call: Promise<unknown>) => void call.then(() => setError(null), (e: unknown) => setError(String(e)))
   const recreate = (r: SessionRecord, repoRoot: string) =>
@@ -108,7 +115,7 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
       </Head>
       <label className="filter">
         <Icon name="search" />
-        <input placeholder="Search every Claude and Codex session" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
+        <input placeholder="Search sessions" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQ('')} />
       </label>
       <label className="chk">
         <input type="checkbox" checked={here} onChange={(e) => setHere(e.target.checked)} />
@@ -150,12 +157,12 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
                     {r.title}
                     <RunMark view={view} run={r.run} />
                   </div>
-                  <div className="m">
+                  <div className="m dots">
                     <span>{w.label}</span>
                     {w.why && <span className={`tag ${w.why === 'worktree missing' ? 'red' : ''}`}>{w.why}</span>}
-                    {r.messages !== null && <span>· {r.messages} msgs</span>}
-                    {r.cost !== null && <span>· ${r.cost.toFixed(2)}</span>}
-                    <span>· {ago(r.closedAt)}</span>
+                    {r.messages !== null && <span className="mid">{r.messages} msgs</span>}
+                    {r.cost !== null && <span className="mid">${r.cost.toFixed(2)}</span>}
+                    <span className="mid">{ago(r.closedAt)}</span>
                   </div>
                   {r.firstPrompt && <div className="m trunc first">{r.firstPrompt}</div>}
                   <div className="a">
