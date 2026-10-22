@@ -104,12 +104,16 @@ jobs:
         run: sh apps/desktop/scripts/build-voice.sh release
 
       # tauri bundles externalBin as binaries/<name>-<target>; build-ptyd.sh builds the host arch only, and a
-      # universal app takes one fat binary
+      # universal app takes one fat binary. Each per-arch compile also checks for its own <name>-<arch> file
       - name: Universal treeix-ptyd sidecar
+        working-directory: apps/desktop/src-tauri/binaries
         run: |
           for arch in aarch64 x86_64; do cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$arch-apple-darwin"; done
-          lipo -create -output "apps/desktop/src-tauri/binaries/treeix-ptyd-$TARGET" \
-            target/aarch64-apple-darwin/release/treeix-ptyd target/x86_64-apple-darwin/release/treeix-ptyd
+          lipo -create -output "treeix-ptyd-$TARGET" \
+            "$GITHUB_WORKSPACE/target/aarch64-apple-darwin/release/treeix-ptyd" "$GITHUB_WORKSPACE/target/x86_64-apple-darwin/release/treeix-ptyd"
+          for name in treeix-ptyd treeix-voice treeix-meetings; do
+            for arch in aarch64 x86_64; do cp "$name-$TARGET" "$name-$arch-apple-darwin"; done
+          done
 
       # Tauri signs with APPLE_SIGNING_IDENTITY and notarizes with the API key (its APPLE_API_KEY is the key id,
       # APPLE_API_KEY_PATH the .p8)
