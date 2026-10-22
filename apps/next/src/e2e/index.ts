@@ -17,7 +17,8 @@ const SHELL_START_MS = 15_000
 interface Tapped {
   snapshot: Uint8Array
   seq: number
-  frames: [Uint8Array, number][]
+  /** A resync frame replaces the screen with the snapshot it carries */
+  frames: [bytes: Uint8Array, seq: number, resync: boolean][]
   /** The pane's size at attach, then each resize it asked for and how many frames had arrived by then */
   cols: number
   rows: number
@@ -37,10 +38,10 @@ function tap(api: Api) {
     return resize(id, cols, rows)
   }
   api.attach = async (id, onData): Promise<Attachment> => {
-    const frames: [Uint8Array, number][] = []
-    const attachment = await original(id, (bytes, seq) => {
-      frames.push([bytes, seq])
-      onData(bytes, seq)
+    const frames: Tapped['frames'] = []
+    const attachment = await original(id, (bytes, seq, resync) => {
+      frames.push([bytes, seq, !!resync])
+      onData(bytes, seq, resync)
     })
     const { cols, rows } = attachment.info
     const tapped = { snapshot: attachment.snapshot, seq: attachment.seq, frames, cols, rows, resizes: [], attaches: (panes.get(id)?.attaches ?? 0) + 1, attached: true }
@@ -72,9 +73,14 @@ async function render(pane: Tapped): Promise<string[]> {
   term.unicode.activeVersion = '11'
   await write(term, pane.snapshot)
   const resizeAt = (frame: number) => pane.resizes.filter(([at]) => at === frame).forEach(([, cols, rows]) => term.resize(cols, rows))
-  for (const [i, [bytes, seq]] of pane.frames.entries()) {
+  let from = pane.seq
+  for (const [i, [bytes, seq, resync]] of pane.frames.entries()) {
     resizeAt(i)
-    await write(term, bytesFrom(bytes, seq, pane.seq))
+    if (resync) {
+      term.reset()
+      from = seq
+    }
+    await write(term, resync ? bytes : bytesFrom(bytes, seq, from))
   }
   resizeAt(pane.frames.length)
   const buffer = term.buffer.active

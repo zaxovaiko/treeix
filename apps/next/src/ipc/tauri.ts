@@ -1,29 +1,37 @@
 import { Channel } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import type { Api, Attachment, SessionEvent } from './api'
-import { commands, type Frame } from './bindings'
-
-// Channel frame layout, written by src-tauri/src/types.rs: [u8 kind][u64 LE seq][payload]
-const SNAPSHOT = 0
-const HEADER = 9
+import type { Api, Attachment, FsChange, SessionEvent, WorktreeStep } from './api'
+import { commands, events, type Frame } from './bindings'
+import { FRAME, parseFrame } from '../panes/terminal/stream'
 
 const done = (call: Promise<unknown>): Promise<void> => call.then(() => undefined)
 
-async function attach(id: string, onData: (bytes: Uint8Array, seq: number) => void): Promise<Attachment> {
+async function attach(id: string, onData: (bytes: Uint8Array, seq: number, resync?: boolean) => void): Promise<Attachment> {
   let resolveSnapshot: (bytes: Uint8Array) => void = () => {}
   const snapshot = new Promise<Uint8Array>((resolve) => (resolveSnapshot = resolve))
   const channel = new Channel<Frame>()
   channel.onmessage = (message) => {
     // Raw channel bodies arrive as an ArrayBuffer, not the number[] specta derives for Frame
-    const frame = message as unknown as ArrayBuffer
-    const view = new DataView(frame)
-    const bytes = new Uint8Array(frame, HEADER)
-    if (view.getUint8(0) === SNAPSHOT) resolveSnapshot(bytes)
-    else onData(bytes, Number(view.getBigUint64(1, true)))
+    const { kind, seq, bytes } = parseFrame(message as unknown as ArrayBuffer)
+    if (kind === FRAME.snapshot) resolveSnapshot(bytes)
+    else onData(bytes, seq, kind === FRAME.resync)
   }
   // The snapshot is sent before the reply, and channel messages keep their order, so data never precedes it
   const { seq, info } = await commands.attach(id, channel)
-  return { snapshot: await snapshot, seq, info, detach: () => done(commands.detach(id, channel.id)) }
+  return { snapshot: await snapshot, seq, info, ack: (bytes) => done(commands.ack(id, channel.id, bytes)), detach: () => done(commands.detach(id, channel.id)) }
+}
+
+/** One `watch` per subscriber, told apart by id (unique across windows); the event carries every watch's changes */
+function watch(root: string, file: string | null, cb: (change: FsChange) => void): () => void {
+  const id = crypto.randomUUID()
+  const unlisten = events.fsEvent.listen(({ payload }) => {
+    if (payload.id === id) cb({ paths: payload.paths, git: payload.git })
+  })
+  commands.watch(id, root, file).catch((e: unknown) => console.warn('watch failed', root, file, e))
+  return () => {
+    void unlisten.then((stop) => stop())
+    commands.unwatch(id).catch(() => {})
+  }
 }
 
 export function tauriApi(): Api {
@@ -44,7 +52,6 @@ export function tauriApi(): Api {
     attach,
     write: (id, data) => done(typeof data === 'string' ? commands.write(id, data) : commands.writeBytes(id, Array.from(data))),
     resize: (id, cols, rows) => done(commands.resize(id, cols, rows)),
-    ack: (id, bytes) => done(commands.ack(id, bytes)),
     kill: (id) => done(commands.kill(id)),
     remove: (id) => done(commands.remove(id)),
     restart: (id) => done(commands.restart(id)),
@@ -57,5 +64,48 @@ export function tauriApi(): Api {
       const unlisten = listen<SessionEvent>('session-event', (event) => cb(event.payload))
       return () => void unlisten.then((stop) => stop())
     },
+
+    listWorktrees: commands.listWorktrees,
+    gitStatus: commands.gitStatus,
+    diff: commands.diff,
+    readFileAt: commands.readFileAt,
+    fileLog: commands.fileLog,
+    commitDiff: (root, sha, file) => commands.commitDiff(root, sha, file ?? null),
+    listBranches: commands.listBranches,
+    checkBranchName: commands.checkBranchName,
+    createBranch: (repoPath, name, base) => done(commands.createBranch(repoPath, name, base)),
+    deleteBranch: (repoPath, name, force) => done(commands.deleteBranch(repoPath, name, force)),
+    addWorktree(request, onStep) {
+      const channel = new Channel<WorktreeStep>()
+      channel.onmessage = onStep
+      return commands.addWorktree(request, channel)
+    },
+    removeWorktree: (path, force, deleteBranch) => done(commands.removeWorktree(path, force, deleteBranch)),
+    pruneWorktrees: (repoPath) => done(commands.pruneWorktrees(repoPath)),
+    discardChanges: (root, file) => done(commands.discardChanges(root, file)),
+
+    listFiles: commands.listFiles,
+    listDirectory: commands.listDirectory,
+    readFile: commands.readFile,
+    saveFile: (root, file, contents, expected) => done(commands.saveFile(root, file, contents, expected)),
+    createPath: (root, file) => done(commands.createPath(root, file)),
+    renamePath: (root, from, to) => done(commands.renamePath(root, from, to)),
+    trashPath: (root, file) => done(commands.trashPath(root, file)),
+    revealInFinder: (path) => done(commands.revealInFinder(path)),
+    openPath: (path) => done(commands.openPath(path)),
+    openUrl: (url) => done(commands.openUrl(url)),
+    searchText: commands.searchText,
+    watchFile: (root, file, cb) => watch(root, file, () => cb()),
+    watchPlace: (root, cb) => watch(root, null, cb),
+
+    listPullRequests: commands.listPullRequests,
+    prChecks: commands.prChecks,
+    mergePullRequest: (pr, method, deleteBranch) => done(commands.mergePullRequest(pr, method, deleteBranch)),
+    prProviders: commands.prProviders,
+
+    listHistory: commands.listHistory,
+    readHistory: commands.readHistory,
+    sessionHistory: commands.sessionHistory,
+    forgetSession: (id) => done(commands.forgetSession(id)),
   }
 }

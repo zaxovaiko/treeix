@@ -5,6 +5,7 @@ import { KIND_ICON, tabKind, tabTitle } from './model'
 import { placeLabel } from './state'
 import { keyHint, type CommandId } from './shortcuts'
 import type { ShellView } from './Shell'
+import { dialogCommands } from '../dialogs'
 
 const ACTIONS: [CommandId, string][] = [
   ['new-shell', 'New shell here'],
@@ -48,7 +49,7 @@ function commands(view: ShellView): Command[] {
       run: () => view.dispatch({ type: 'activate', tabId: tab.id }),
     })
   )
-  return [...actions, ...tabs]
+  return [...actions, ...dialogCommands(view), ...tabs]
 }
 
 const Marked = ({ text, marks }: { text: string; marks: Set<number> }) => <>{[...text].map((ch, i) => (marks.has(i) ? <mark key={i}>{ch}</mark> : ch))}</>

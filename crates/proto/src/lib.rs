@@ -8,7 +8,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Shutdown,
 /// so an older app never takes down a newer daemon by connecting
-pub const PROTO_VERSION: u32 = 1;
+pub const PROTO_VERSION: u32 = 2;
 /// Data dir name; `.next` while the Tauri app ships beside the Electron one
 pub const APP_ID: &str = "com.dyvertex.treeix.next";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
@@ -103,7 +103,7 @@ pub enum Request {
     Detach {
         session: SessionId,
     },
-    /// Bytes the frontend has finished rendering; reading the PTY resumes once unacked drops below the low mark
+    /// Bytes the frontend has finished rendering. A client that fell behind gets a Resync once it has caught up
     Ack {
         session: SessionId,
         bytes: u64,
@@ -124,6 +124,21 @@ pub enum Request {
     /// screen is left alone
     Clear {
         session: SessionId,
+    },
+    /// Attach for one of several views on this connection (the app's webview channels): each gets its own
+    /// snapshot, ChannelData, flow control and Resync
+    AttachChannel {
+        session: SessionId,
+        channel: u32,
+    },
+    DetachChannel {
+        session: SessionId,
+        channel: u32,
+    },
+    AckChannel {
+        session: SessionId,
+        channel: u32,
+        bytes: u64,
     },
 }
 
@@ -176,6 +191,21 @@ pub enum Event {
     Created(SessionInfo),
     Removed {
         session: SessionId,
+    },
+    /// Data for an AttachChannel stream
+    ChannelData {
+        session: SessionId,
+        channel: u32,
+        seq: u64,
+        bytes: Vec<u8>,
+    },
+    /// The client fell more than the high-water mark behind and got no Data since. This screen (as on Attach)
+    /// replaces what it skipped, and Data continues from `seq`. `channel` is None for a plain Attach
+    Resync {
+        session: SessionId,
+        channel: Option<u32>,
+        seq: u64,
+        snapshot: Vec<u8>,
     },
 }
 

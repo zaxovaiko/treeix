@@ -1,10 +1,23 @@
-import type { CSSProperties, PointerEvent } from 'react'
+import { lazy, Suspense, type CSSProperties, type PointerEvent } from 'react'
 import { TerminalPane } from '../panes/terminal'
+import { closeFileLeaf, isFileLeaf, leafRoot, resolvePath } from '../panes/file/open'
 import { Icon } from '../lib/icons'
 import { DOT_LABEL, KIND_ICON, statusDot } from './model'
 import { withHint } from './shortcuts'
 import { paneRects, splitHandles, type Handle, type Rect, type Tab } from './state'
 import type { ShellView } from './Shell'
+
+// Monaco and the diff renderer load with the first file view, not at startup
+const FilePane = lazy(() => import('../panes/file').then((m) => ({ default: m.FilePane })))
+
+/** A path printed in a terminal: the file view when it's inside the session's checkout, else its default app */
+function openPrinted(view: ShellView, session: string, { path, line }: { path: string; line: number | null }) {
+  const home = path.startsWith('~/')
+  const absolute = resolvePath(home ? view.home : (view.sessions[session]?.cwd ?? view.home), home ? path.slice(2) : path)
+  const root = view.placeOf(session).key
+  if (absolute.startsWith(`${root}/`)) view.openFile(root, absolute.slice(root.length + 1), line ?? undefined)
+  else void view.api.openPath(absolute)
+}
 
 const pct = (n: number) => `${n * 100}%`
 const box = (r: Rect): CSSProperties => ({ left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) })
@@ -44,12 +57,13 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
         const info = sessions[id]
         const focused = id === tab.focus
         const dot = info ? statusDot(info.status) : 'idle'
+        const file = isFileLeaf(id)
         return (
           <div key={id} className={`pane ${multi ? (focused ? 'focus' : 'dimmed') : ''}`} style={box(rect)}>
             {multi && (
               <div className="phd" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
-                <Icon name={KIND_ICON[info?.kind ?? 'shell']} />
-                <span className="trunc grow">{info?.title ?? 'zsh'}</span>
+                <Icon name={file ? 'folder' : KIND_ICON[info?.kind ?? 'shell']} />
+                <span className="trunc grow">{file ? leafRoot(id).split('/').pop() : (info?.title ?? 'zsh')}</span>
                 {dot !== 'idle' && <span className={`st-${dot}`}>{DOT_LABEL[dot].toLowerCase()}</span>}
                 <button className="icon sm" onClick={() => view.split('row', id)} title={withHint('Split right', 'split-right')}>
                   <Icon name="split" />
@@ -57,14 +71,22 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                 <button className="icon sm" onClick={() => view.split('col', id)} title={withHint('Split down', 'split-down')}>
                   <Icon name="splitDown" />
                 </button>
-                <button className="icon sm" onClick={() => view.closePane(id)} title={withHint('Close pane', 'close-pane')}>
+                <button className="icon sm" onClick={() => (file ? closeFileLeaf(view, id) : view.closePane(id))} title={withHint('Close pane', 'close-pane')}>
                   <Icon name="x" />
                 </button>
               </div>
             )}
-            <div className="pterm">
-              <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} renderer={view.ui.renderer} />
-            </div>
+            {file ? (
+              <div className="pterm" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
+                <Suspense fallback={<div className="empty">Loading...</div>}>
+                  <FilePane view={view} id={id} />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="pterm">
+                <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} onOpenFile={([target]) => target && openPrinted(view, id, target)} renderer={view.ui.renderer} />
+              </div>
+            )}
           </div>
         )
       })}

@@ -6,6 +6,16 @@ use tauri::{AppHandle, Manager, State};
 use treeix_core::places::{self, Place};
 use treeix_proto::{Request, Response};
 
+mod files;
+mod git;
+mod history;
+mod prs;
+
+pub use files::*;
+pub use git::*;
+pub use history::*;
+pub use prs::*;
+
 type Result<T> = std::result::Result<T, String>;
 
 fn unexpected(resp: Response) -> String {
@@ -47,11 +57,12 @@ pub async fn create(daemon: State<'_, Arc<Daemon>>, opts: CreateSession) -> Resu
 #[tauri::command]
 #[specta::specta]
 pub async fn attach(
+    webview: tauri::Webview,
     daemon: State<'_, Arc<Daemon>>,
     id: String,
     channel: Channel<Frame>,
 ) -> Result<Attached> {
-    match daemon.attach(id, channel).await? {
+    match daemon.attach(id, webview.label().into(), channel).await? {
         Response::Attached { seq, info, .. } => Ok(Attached {
             seq,
             info: info.into(),
@@ -107,8 +118,18 @@ pub async fn resize(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn ack(daemon: State<'_, Arc<Daemon>>, id: String, bytes: u64) -> Result<()> {
-    ok(&daemon, Request::Ack { session: id, bytes }).await
+pub async fn ack(
+    daemon: State<'_, Arc<Daemon>>,
+    id: String,
+    channel: u32,
+    bytes: u64,
+) -> Result<()> {
+    let req = Request::AckChannel {
+        session: id,
+        channel,
+        bytes,
+    };
+    ok(&daemon, req).await
 }
 
 #[tauri::command]
@@ -119,8 +140,16 @@ pub async fn kill(daemon: State<'_, Arc<Daemon>>, id: String) -> Result<()> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn remove(daemon: State<'_, Arc<Daemon>>, id: String) -> Result<()> {
-    ok(&daemon, Request::Remove { session: id }).await
+pub async fn remove(app: AppHandle, daemon: State<'_, Arc<Daemon>>, id: String) -> Result<()> {
+    let closing = sessions(daemon.clone())
+        .await?
+        .into_iter()
+        .find(|s| s.id == id);
+    ok(&daemon, Request::Remove { session: id }).await?;
+    if let (Some(info), Ok(home)) = (closing, app.path().home_dir()) {
+        history::record_closed(info, home).await;
+    }
+    Ok(())
 }
 
 #[tauri::command]

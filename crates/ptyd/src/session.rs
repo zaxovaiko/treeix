@@ -24,9 +24,11 @@ use treeix_proto::{Event, Response, ServerMsg, SessionId, SessionInfo, SessionSt
 const READ_BUF: usize = 64 * 1024;
 const MAX_DATA_FRAME: usize = 64 * 1024;
 const COALESCE: Duration = Duration::from_millis(5);
-/// Unacked bytes above which the reader stops reading the PTY
+/// Unacked bytes above which a client lags: it gets no Data until it is back under LOW_WATER, then a Resync
 const HIGH_WATER: u64 = 1024 * 1024;
 const LOW_WATER: u64 = 256 * 1024;
+/// A lagging client without ack progress for this long pauses the PTY (a frozen or gone renderer)
+const STUCK: Duration = Duration::from_secs(5);
 const HISTORY: usize = 10_000;
 pub const ATTACH_HISTORY: usize = 5_000;
 const KILL_GRACE: Duration = Duration::from_secs(2);
@@ -63,19 +65,32 @@ impl Vt {
     }
 }
 
+/// An attached stream: a connection, and the channel on it for AttachChannel
+pub type Viewer = (ClientId, Option<u32>);
+
 #[derive(Default)]
 struct Flow {
-    clients: HashMap<ClientId, Attached>,
-    paused: bool,
+    clients: HashMap<Viewer, Attached>,
     /// Killed or exiting: read without waiting for acks
     closing: bool,
 }
 
 struct Attached {
-    /// Bytes before this seq were in the attach snapshot
+    /// Bytes before this seq were in the attach or resync snapshot
     from_seq: u64,
+    /// Bytes sent and not acked yet
     unacked: u64,
+    /// Skipping output until it has caught up
+    lagging: bool,
+    /// Last ack, or when it started lagging
+    progress: Instant,
     outbox: Outbox,
+}
+
+impl Attached {
+    fn stuck(&self) -> bool {
+        self.lagging && self.progress.elapsed() >= STUCK
+    }
 }
 
 struct Process {
@@ -280,15 +295,10 @@ impl Session {
         let _ = tx.send(Output::Exit(code));
     }
 
+    /// Lagging clients don't hold the reader back; only a stuck one does, so memory stays bounded
     fn wait_for_credit(&self) {
         let mut flow = lock(&self.flow);
-        loop {
-            let unacked = flow.clients.values().map(|c| c.unacked).max().unwrap_or(0);
-            if flow.closing || unacked < LOW_WATER || (!flow.paused && unacked <= HIGH_WATER) {
-                flow.paused = false;
-                return;
-            }
-            flow.paused = true;
+        while !flow.closing && flow.clients.values().any(Attached::stuck) {
             flow = self.credit.wait(flow).unwrap_or_else(|e| e.into_inner());
         }
     }
@@ -305,10 +315,7 @@ impl Session {
             vt.seq += bytes.len() as u64;
             self.seq.store(vt.seq, Ordering::Release);
             // Under the screen lock, so an Attach sees either this chunk in its snapshot or here
-            let mut flow = lock(&self.flow);
-            for client in flow.clients.values_mut() {
-                client.unacked += bytes.len() as u64;
-            }
+            let flow = lock(&self.flow);
             if !flow.clients.is_empty() {
                 let _ = tx.send(Output::Data {
                     seq,
@@ -373,25 +380,28 @@ impl Session {
         }
     }
 
-    /// Sends queued output to attached clients, trimming what their snapshot already had
+    /// Sends queued output to attached clients, trimming what their snapshot already had. A client more than
+    /// HIGH_WATER behind starts lagging and skips the rest
     fn flush(&self, pending: &mut Pending) {
         if pending.bytes.is_empty() {
             return;
         }
-        let flow = lock(&self.flow);
-        for client in flow.clients.values() {
+        let mut flow = lock(&self.flow);
+        for (&(_, channel), client) in &mut flow.clients {
             let skip = client.from_seq.saturating_sub(pending.seq) as usize;
-            if skip >= pending.bytes.len() {
+            if client.lagging || skip >= pending.bytes.len() {
                 continue;
             }
             let mut seq = pending.seq + skip as u64;
             for chunk in pending.bytes[skip..].chunks(MAX_DATA_FRAME) {
-                let data = Event::Data {
-                    session: self.id.clone(),
-                    seq,
-                    bytes: chunk.to_vec(),
-                };
+                if client.unacked > HIGH_WATER {
+                    client.lagging = true;
+                    client.progress = Instant::now();
+                    break;
+                }
+                let data = self.data(channel, seq, chunk.to_vec());
                 let _ = client.outbox.send(ServerMsg::Event(data));
+                client.unacked += chunk.len() as u64;
                 seq += chunk.len() as u64;
             }
         }
@@ -422,24 +432,37 @@ impl Session {
         daemon.mark_state_dirty();
     }
 
+    fn data(&self, channel: Option<u32>, seq: u64, bytes: Vec<u8>) -> Event {
+        let session = self.id.clone();
+        match channel {
+            None => Event::Data {
+                session,
+                seq,
+                bytes,
+            },
+            Some(channel) => Event::ChannelData {
+                session,
+                channel,
+                seq,
+                bytes,
+            },
+        }
+    }
+
     /// Replies with the screen as ANSI and starts streaming Data from the same seq
-    pub fn attach(&self, client: ClientId, outbox: &Outbox, req_id: u64) {
+    pub fn attach(&self, viewer: Viewer, outbox: &Outbox, req_id: u64) {
         let mut vt = lock(&self.vt);
         vt.settle();
         let snapshot = snapshot::serialize(&mut vt.term, ATTACH_HISTORY);
         let seq = vt.seq;
         let mut flow = lock(&self.flow);
-        // A second attach on the same connection (quick terminal + main window) keeps the older from_seq, or
-        // the bytes still in the coalescer would skip the first channel; the newer one drops what it has
-        let from_seq = flow
-            .clients
-            .get(&client)
-            .map_or(seq, |c| c.from_seq.min(seq));
         flow.clients.insert(
-            client,
+            viewer,
             Attached {
-                from_seq,
+                from_seq: seq,
                 unacked: 0,
+                lagging: false,
+                progress: Instant::now(),
                 outbox: outbox.clone(),
             },
         );
@@ -456,19 +479,52 @@ impl Session {
         self.credit.notify_all();
     }
 
-    /// True when it was the last attached client
-    pub fn detach(&self, client: ClientId) -> bool {
+    /// Detaches the viewers `which` picks; true when they were the last attached
+    pub fn detach(&self, which: impl Fn(&Viewer) -> bool) -> bool {
         let mut flow = lock(&self.flow);
-        let removed = flow.clients.remove(&client).is_some();
+        let before = flow.clients.len();
+        flow.clients.retain(|viewer, _| !which(viewer));
         self.credit.notify_all();
-        removed && flow.clients.is_empty()
+        flow.clients.len() < before && flow.clients.is_empty()
     }
 
-    pub fn ack(&self, client: ClientId, bytes: u64) {
-        if let Some(c) = lock(&self.flow).clients.get_mut(&client) {
+    pub fn ack(&self, viewer: Viewer, bytes: u64) {
+        let caught_up = {
+            let mut flow = lock(&self.flow);
+            let Some(c) = flow.clients.get_mut(&viewer) else {
+                return;
+            };
             c.unacked = c.unacked.saturating_sub(bytes);
-        }
+            c.progress = Instant::now();
+            c.lagging && c.unacked <= LOW_WATER
+        };
         self.credit.notify_all();
+        if caught_up {
+            self.resync(viewer);
+        }
+    }
+
+    /// A lagging client caught up: the screen as it is now replaces the output it skipped
+    fn resync(&self, viewer: Viewer) {
+        let mut vt = lock(&self.vt);
+        vt.settle();
+        let snapshot = snapshot::serialize(&mut vt.term, ATTACH_HISTORY);
+        let seq = vt.seq;
+        let mut flow = lock(&self.flow);
+        // Another ack may have resynced it meanwhile
+        let Some(client) = flow.clients.get_mut(&viewer).filter(|c| c.lagging) else {
+            return;
+        };
+        client.lagging = false;
+        client.from_seq = seq;
+        let resync = Event::Resync {
+            session: self.id.clone(),
+            channel: viewer.1,
+            seq,
+            snapshot,
+        };
+        // Under the flow lock, like the attach reply: no Data past `seq` overtakes it
+        let _ = client.outbox.send(ServerMsg::Event(resync));
     }
 
     pub fn write(&self, bytes: Vec<u8>) {

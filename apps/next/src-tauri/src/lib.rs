@@ -37,9 +37,48 @@ fn specta() -> Builder<tauri::Wry> {
             set_quick_shortcut,
             autorun,
             autorun_done,
+            // Phase 3: git
+            list_worktrees,
+            git_status,
+            diff,
+            read_file_at,
+            file_log,
+            commit_diff,
+            list_branches,
+            check_branch_name,
+            create_branch,
+            delete_branch,
+            add_worktree,
+            remove_worktree,
+            prune_worktrees,
+            discard_changes,
+            // files, search, watch
+            list_files,
+            list_directory,
+            read_file,
+            save_file,
+            create_path,
+            rename_path,
+            trash_path,
+            reveal_in_finder,
+            open_path,
+            open_url,
+            search_text,
+            watch,
+            unwatch,
+            // pull requests
+            list_pull_requests,
+            pr_checks,
+            merge_pull_request,
+            pr_providers,
+            // local history, closed sessions
+            list_history,
+            read_history,
+            session_history,
+            forget_session,
         ])
-        // Registering events (none) is what drops tauri's `TAURI_CHANNEL = null` placeholder type from the export
-        .events(collect_events![])
+        // Registering events is also what drops tauri's `TAURI_CHANNEL = null` placeholder type from the export
+        .events(collect_events![FsEvent])
 }
 
 #[cfg(debug_assertions)]
@@ -111,6 +150,7 @@ pub fn run() {
 
     builder
         .invoke_handler(specta.invoke_handler())
+        .on_page_load(daemon::on_page_load)
         .setup(move |app| {
             let daemon = Arc::new(daemon::Daemon::default());
             app.manage(daemon.clone());

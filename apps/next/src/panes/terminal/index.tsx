@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import type { Api, Attachment, SessionInfo, SessionStatus } from '../../ipc/api'
-import { ackBatcher, bytesFrom } from './stream'
+import { ackBatcher, attachStream } from './stream'
 import { type KeyAction, terminalKey } from './keys'
 import { findRowFileLinks, findWebLinks } from './fileLinks'
 import { dropText } from './drop'
@@ -116,29 +116,17 @@ export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpen
 function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: boolean, hooks: PaneHooks) {
   const view = openXterm(host, webgl)
   const { term, fit } = view
-  const acks = ackBatcher((bytes) => void api.ack(sessionId, bytes))
   let closed = false
   let attachment: Attachment | null = null
-  /** Data that arrived before the snapshot; null once the snapshot is written */
-  let early: [Uint8Array, number][] | null = []
-  let snapshotEnd = 0
-
-  const render = (bytes: Uint8Array, seq: number): void => {
-    term.write(bytesFrom(bytes, seq, snapshotEnd), () => acks.rendered(bytes.length))
-  }
+  const acks = ackBatcher((bytes) => void attachment?.ack(bytes))
+  const stream = attachStream(term, (bytes) => bytes > 0 && acks.rendered(bytes))
   // Restart reuses this attachment: ptyd keeps the session's clients and its seq runs on
   api
-    .attach(sessionId, (bytes, seq) => {
-      if (early) early.push([bytes, seq])
-      else render(bytes, seq)
-    })
+    .attach(sessionId, stream.onData)
     .then((attached) => {
       if (closed) return void attached.detach()
       attachment = attached
-      snapshotEnd = attached.seq
-      term.write(attached.snapshot)
-      for (const [bytes, seq] of early ?? []) render(bytes, seq)
-      early = null
+      stream.snapshot(attached.snapshot, attached.seq)
       hooks.attached(attached.info)
       if (attached.info.cols !== term.cols || attached.info.rows !== term.rows) void api.resize(sessionId, term.cols, term.rows)
     })

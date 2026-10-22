@@ -1,7 +1,7 @@
 //! The socket server: handshake, requests, event fan-out, persistence timers.
 
 use crate::procinfo;
-use crate::session::Session;
+use crate::session::{Session, Viewer};
 use crate::state::{self, SavedSession, State};
 use anyhow::{Context, bail};
 use nix::sys::signal::{Signal, killpg};
@@ -237,7 +237,7 @@ impl Daemon {
         };
         lock(&self.clients).remove(&client);
         for session in self.sessions() {
-            if session.detach(client) {
+            if session.detach(|viewer| viewer.0 == client) {
                 self.snapshot_in_background(session);
             }
         }
@@ -245,9 +245,13 @@ impl Daemon {
     }
 
     fn handle(self: &Arc<Self>, client: ClientId, outbox: &Outbox, id: u64, req: Request) {
-        if let Request::Attach { session } = &req {
+        if let Request::Attach { session } | Request::AttachChannel { session, .. } = &req {
+            let channel = match req {
+                Request::AttachChannel { channel, .. } => Some(channel),
+                _ => None,
+            };
             match self.session(session) {
-                Ok(session) => session.attach(client, outbox, id),
+                Ok(session) => session.attach((client, channel), outbox, id),
                 Err(e) => {
                     let _ = outbox.send(ServerMsg::Resp { id, resp: Err(e) });
                 }
@@ -301,16 +305,23 @@ impl Daemon {
                 self.mark_state_dirty();
                 Ok(Response::Ok)
             }
-            Request::Attach { .. } => unreachable!("answered in handle"),
-            Request::Detach { session } => {
-                let session = self.session(&session)?;
-                if session.detach(client) {
-                    self.snapshot_in_background(session);
-                }
-                Ok(Response::Ok)
+            Request::Attach { .. } | Request::AttachChannel { .. } => {
+                unreachable!("answered in handle")
+            }
+            Request::Detach { session } => self.detach(&session, (client, None)),
+            Request::DetachChannel { session, channel } => {
+                self.detach(&session, (client, Some(channel)))
             }
             Request::Ack { session, bytes } => {
-                self.session(&session)?.ack(client, bytes);
+                self.session(&session)?.ack((client, None), bytes);
+                Ok(Response::Ok)
+            }
+            Request::AckChannel {
+                session,
+                channel,
+                bytes,
+            } => {
+                self.session(&session)?.ack((client, Some(channel)), bytes);
                 Ok(Response::Ok)
             }
             Request::List => {
@@ -346,6 +357,14 @@ impl Daemon {
                 Ok(Response::Ok)
             }
         }
+    }
+
+    fn detach(self: &Arc<Self>, session: &str, viewer: Viewer) -> Result<Response, String> {
+        let session = self.session(session)?;
+        if session.detach(|v| *v == viewer) {
+            self.snapshot_in_background(session);
+        }
+        Ok(Response::Ok)
     }
 
     fn create(self: &Arc<Self>, create: CreateSession) -> anyhow::Result<SessionInfo> {

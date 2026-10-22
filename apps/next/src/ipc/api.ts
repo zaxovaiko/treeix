@@ -70,6 +70,8 @@ export interface Attachment {
   /** Seq the snapshot ends at */
   seq: number
   info: SessionInfo
+  /** Bytes xterm has rendered (write callback); a view that falls behind gets a resync once it caught up */
+  ack(bytes: number): Promise<void>
   /** Stops the stream; the session keeps running in the daemon */
   detach(): Promise<void>
 }
@@ -78,11 +80,10 @@ export interface Api {
   hello(): Promise<{ proto: number; build: string; daemonPid: number }>
   sessions(): Promise<SessionInfo[]>
   create(opts: CreateSession): Promise<SessionInfo>
-  /** `onData` gets output from `seq` on. Call `ack` with bytes once xterm has rendered them (write callback) */
-  attach(id: string, onData: (bytes: Uint8Array, seq: number) => void): Promise<Attachment>
+  /** `onData` gets output from `seq` on. `resync`: the view fell behind, `bytes` is the screen that replaces it */
+  attach(id: string, onData: (bytes: Uint8Array, seq: number, resync?: boolean) => void): Promise<Attachment>
   write(id: string, data: string | Uint8Array): Promise<void>
   resize(id: string, cols: number, rows: number): Promise<void>
-  ack(id: string, bytes: number): Promise<void>
   kill(id: string): Promise<void>
   remove(id: string): Promise<void>
   /** Runs an exited, restored or crashed session's command again in place, keeping its scrollback */
@@ -96,7 +97,312 @@ export interface Api {
   places(paths: string[]): Promise<Place[]>
   homeDir(): Promise<string>
   onEvent(cb: (e: SessionEvent) => void): () => void
+
+  // Git
+  /** Main checkout first, then linked worktrees, missing ones included */
+  listWorktrees(repoPath: string): Promise<Worktree[]>
+  /** Null when `path` is not in a git checkout */
+  gitStatus(path: string): Promise<GitStatus | null>
+  diff(path: string, scope: DiffScope): Promise<FilePatch[]>
+  /** The file at `rev` (`HEAD`, `origin/main`, a sha); null when missing there or binary. Replaces readHeadFile */
+  readFileAt(root: string, file: string, rev: string): Promise<string | null>
+  /** Commits that touched the file, newest first */
+  fileLog(root: string, file: string): Promise<Commit[]>
+  /** What one commit changed, only `file` when given */
+  commitDiff(root: string, sha: string, file?: string): Promise<FilePatch[]>
+  /** Local branches plus remote-only ones, newest commit first */
+  listBranches(repoPath: string): Promise<Branch[]>
+  checkBranchName(name: string): Promise<boolean>
+  createBranch(repoPath: string, name: string, base: string): Promise<void>
+  /** Safe delete unless `force` */
+  deleteBranch(repoPath: string, name: string, force: boolean): Promise<void>
+  /** Resolves with the new worktree's path; `onStep` gets each step's progress. Rejects when a step fails; call again to Retry */
+  addWorktree(request: NewWorktree, onStep: (step: WorktreeStep) => void): Promise<string>
+  /** Refuses the main checkout; `deleteBranch` also force-deletes its branch */
+  removeWorktree(path: string, force: boolean, deleteBranch: boolean): Promise<void>
+  pruneWorktrees(repoPath: string): Promise<void>
+  /** Restores a tracked file to HEAD, deletes an untracked one */
+  discardChanges(root: string, file: string): Promise<void>
+
+  // Files
+  /** Null when the root is gone */
+  listFiles(root: string): Promise<PlaceFiles | null>
+  /** Names in one folder, folders ending with `/` */
+  listDirectory(root: string, folder: string): Promise<string[]>
+  /** Null for binary files and files over 2 MB */
+  readFile(root: string, file: string): Promise<string | null>
+  /** Snapshots the old version into local history first. Rejects with SAVE_CONFLICT when the disk no longer matches `expected`; null overwrites */
+  saveFile(root: string, file: string, contents: string, expected: string | null): Promise<void>
+  /** A path ending in `/` creates a folder */
+  createPath(root: string, file: string): Promise<void>
+  renamePath(root: string, from: string, to: string): Promise<void>
+  /** Moves to the Trash */
+  trashPath(root: string, file: string): Promise<void>
+  revealInFinder(path: string): Promise<void>
+  /** Opens with the default app */
+  openPath(path: string): Promise<void>
+  /** http(s) only */
+  openUrl(url: string): Promise<void>
+  /** Rejects with the regex error when `regex` is on and the pattern is invalid */
+  searchText(roots: string[], query: string, options: SearchOptions): Promise<SearchResult>
+  /** Calls back on changes to one file, our own saves included; returns the unsubscribe */
+  watchFile(root: string, file: string, cb: () => void): () => void
+  /** Calls back on debounced changes anywhere under a place (Explorer, Changes, git status); returns the unsubscribe */
+  watchPlace(root: string, cb: (change: FsChange) => void): () => void
+
+  // Pull requests
+  listPullRequests(repoPaths: string[]): Promise<PullRequestList>
+  prChecks(pr: PrRef): Promise<Check[]>
+  mergePullRequest(pr: PrRef, method: MergeMethod, deleteBranch: boolean): Promise<void>
+  /** gh and glab: installed, signed in, as whom */
+  prProviders(): Promise<ProviderStatus[]>
+
+  // History
+  /** Local snapshots of a file, newest first */
+  listHistory(root: string, file: string): Promise<HistoryEntry[]>
+  readHistory(root: string, file: string, id: string): Promise<string>
+  /** Closed sessions, newest first; resume with `create` */
+  sessionHistory(): Promise<SessionRecord[]>
+  forgetSession(id: string): Promise<void>
 }
+
+// Phase 3: git, files, search, pull requests, history. Contract: docs/next/phase3-contract.md.
+// Paths named `file` are relative to `root` (a place's path); a path that resolves outside the root is refused.
+
+/** One `git worktree list` entry */
+export interface Worktree {
+  path: string
+  /** Short sha; empty before the first commit */
+  head: string
+  /** Null when detached */
+  branch: string | null
+  /** The repo's main checkout */
+  main: boolean
+  /** Folder is gone; `pruneWorktrees` drops it */
+  missing: boolean
+}
+
+export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked' | 'conflicted'
+
+export interface Change {
+  path: string
+  status: ChangeStatus
+  oldPath: string | null
+}
+
+/** Everything the Changes panel, sidebar badges and Cleanup dialog show about one checkout */
+export interface GitStatus {
+  branch: string | null
+  /** Short sha; null before the first commit */
+  head: string | null
+  /** Like `origin/feat/x`; null when never pushed */
+  upstream: string | null
+  ahead: number
+  behind: number
+  /** Upstream deleted, typically after its PR merged */
+  gone: boolean
+  /** Default branch, like `main` */
+  base: string | null
+  /** Commits on this branch not in the base */
+  baseAhead: number
+  merged: boolean
+  /** Interrupted rebase: `step` of `total` applied */
+  rebase: { step: number; total: number } | null
+  conflicts: string[]
+  /** Uncommitted, untracked included */
+  changes: Change[]
+}
+
+/** `local`: uncommitted vs HEAD. `base`: what the PR shows, merge base with the base branch vs the working tree */
+export type DiffScope = 'local' | 'base'
+
+export interface FilePatch {
+  path: string
+  oldPath: string | null
+  status: ChangeStatus
+  /** `diff --git` text with headers; empty for binary files */
+  patch: string
+  additions: number
+  deletions: number
+}
+
+export interface Branch {
+  /** Remote-only branches are named like `origin/feat/x` */
+  name: string
+  remote: boolean
+  ahead: number
+  behind: number
+  gone: boolean
+  merged: boolean
+  /** Unix seconds of the last commit */
+  committedAt: number
+  author: string
+  /** Worktree that has it checked out */
+  worktree: string | null
+}
+
+export interface Commit {
+  sha: string
+  author: string
+  /** Unix seconds */
+  date: number
+  subject: string
+}
+
+/** Open worktree dialog request. Exactly one of `branch` or `pr` */
+export interface NewWorktree {
+  repoPath: string
+  /** Checked out if local, tracks origin if only there, otherwise created from `base` */
+  branch: string | null
+  /** Start point for a new branch; default `origin/<default branch>` */
+  base: string | null
+  /** PR/MR number: fetches its head into a detached `pr-N` / `mr-N` worktree */
+  pr: number | null
+  copyEnv: boolean
+  /** Setup command run in the new worktree, like `bun install` */
+  setup: string | null
+  /** "Continue without fetching" after a failed fetch */
+  skipFetch: boolean
+}
+
+export type StepId = 'fetch' | 'add' | 'env' | 'setup'
+export type StepState = 'running' | 'done' | 'failed' | 'skipped'
+
+export interface WorktreeStep {
+  step: StepId
+  state: StepState
+  /** Command line shown next to the step */
+  command: string
+  error: string | null
+}
+
+export interface PlaceFiles {
+  /** Relative paths, .gitignore respected */
+  files: string[]
+  /** Ignored paths; folders end with `/` and are not expanded */
+  ignored: string[]
+}
+
+/** A debounced change under a watched place */
+export interface FsChange {
+  /** Relative paths, `.git` excluded */
+  paths: string[]
+  /** Something under `.git` changed: re-read git status */
+  git: boolean
+}
+
+export interface SearchOptions {
+  caseSensitive: boolean
+  wholeWord: boolean
+  regex: boolean
+}
+
+export interface SearchMatch {
+  /** The searched root it is under */
+  root: string
+  path: string
+  /** 1-based */
+  line: number
+  /** 0-based, UTF-16 units of `text` */
+  column: number
+  length: number
+  text: string
+}
+
+export interface SearchResult {
+  matches: SearchMatch[]
+  /** A limit was hit (2000 matches, 100 per file) */
+  truncated: boolean
+}
+
+export type Provider = 'github' | 'gitlab'
+export type CheckStatus = 'passed' | 'failed' | 'running' | 'skipped'
+export type MergeMethod = 'merge' | 'squash' | 'rebase'
+
+export interface PullRequest {
+  provider: Provider
+  repoPath: string
+  number: number
+  title: string
+  author: string
+  authorAvatarUrl: string | null
+  sourceBranch: string
+  targetBranch: string
+  /** Short sha of the head commit */
+  head: string
+  state: 'open' | 'merged' | 'closed'
+  draft: boolean
+  /** RFC 3339 */
+  updatedAt: string
+  url: string
+  additions: number | null
+  deletions: number | null
+  changedFiles: number | null
+  /** Your relation to an open PR */
+  review: {
+    state: 'yours' | 'requested' | 'approved' | 'changes' | 'commented' | 'unreviewed'
+    newCommits: number
+    changesRequested: boolean
+  } | null
+  conflicts: boolean
+  /** CI on the head commit; `done` of `total` for "CI 3/5" */
+  pipeline: { status: CheckStatus; done: number; total: number; url: string } | null
+}
+
+export interface PullRequestList {
+  pullRequests: PullRequest[]
+  /** Repos that could not be listed; the rest still are */
+  errors: { repoPath: string; message: string }[]
+}
+
+export interface PrRef {
+  provider: Provider
+  repoPath: string
+  number: number
+}
+
+export interface Check {
+  name: string
+  status: CheckStatus
+  url: string | null
+}
+
+export interface ProviderStatus {
+  provider: Provider
+  installed: boolean
+  signedIn: boolean
+  /** Your login, which "Mine" filters on */
+  user: string | null
+}
+
+export interface HistoryEntry {
+  /** Ms timestamp as a string */
+  id: string
+  savedAt: number
+  bytes: number
+}
+
+/** A closed session, for the History panel */
+export interface SessionRecord {
+  id: string
+  kind: 'shell' | 'claude' | 'codex'
+  title: string
+  cwd: string
+  branch: string | null
+  repoRoot: string | null
+  /** What `claude --resume` / `codex resume` takes */
+  agentSession: string | null
+  command: string[]
+  createdAt: number
+  closedAt: number
+  /** Transcript stats; null until Phase 4 */
+  messages: number | null
+  cost: number | null
+  firstPrompt: string | null
+}
+
+/** The message `saveFile` rejects with when the file changed on disk */
+export const SAVE_CONFLICT = 'SAVE_CONFLICT'
 
 let current: Api | null = null
 

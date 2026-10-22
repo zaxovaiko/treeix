@@ -5,7 +5,7 @@ use specta::Type;
 use tauri::ipc::{InvokeResponseBody, IpcResponse};
 use treeix_proto as proto;
 
-/// One channel message: `[u8 kind: 0 snapshot, 1 data][u64 LE seq][payload]`, delivered as a raw ArrayBuffer
+/// One channel message: `[u8 kind: 0 snapshot, 1 data, 2 resync][u64 LE seq][payload]`, delivered as a raw ArrayBuffer
 #[derive(Type)]
 pub struct Frame(Vec<u8>);
 
@@ -16,6 +16,11 @@ impl Frame {
 
     pub fn data(seq: u64, bytes: &[u8]) -> Self {
         Self::new(1, seq, bytes)
+    }
+
+    /// The channel fell behind and skipped output: this screen replaces it, data continues from `seq`
+    pub fn resync(seq: u64, snapshot: &[u8]) -> Self {
+        Self::new(2, seq, snapshot)
     }
 
     fn new(kind: u8, seq: u64, bytes: &[u8]) -> Self {
@@ -226,7 +231,9 @@ impl SessionEvent {
     /// None for Data, which goes to the session's channel instead
     pub fn from_proto(event: proto::Event) -> Option<Self> {
         Some(match event {
-            proto::Event::Data { .. } => return None,
+            proto::Event::Data { .. }
+            | proto::Event::ChannelData { .. }
+            | proto::Event::Resync { .. } => return None,
             proto::Event::Status { session, status } => Self::Status {
                 session,
                 status: status.into(),

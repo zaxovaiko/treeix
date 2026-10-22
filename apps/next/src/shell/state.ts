@@ -14,6 +14,9 @@ export interface Tab {
   place?: string
 }
 
+/** Side panels on the right, opened from the activity bar */
+export type PanelId = 'explorer' | 'changes' | 'prs' | 'history'
+
 export interface RecentPlace {
   path: string
   name: string
@@ -29,6 +32,9 @@ export interface UiState {
   collapsed: string[]
   sidebar: boolean
   sidebarWidth: number
+  /** Open side panel; null when closed */
+  panel: PanelId | null
+  panelWidth: number
   orientation: 'vertical' | 'horizontal'
   ui: 'compact' | 'islands'
   theme: 'dark' | 'light'
@@ -41,6 +47,7 @@ export interface UiState {
 }
 
 export const SIDEBAR = { min: 180, max: 520, initial: 276 }
+export const PANEL = { min: 260, max: 640, initial: 344 }
 
 export const initialUi: UiState = {
   tabs: [],
@@ -49,6 +56,8 @@ export const initialUi: UiState = {
   collapsed: [],
   sidebar: true,
   sidebarWidth: SIDEBAR.initial,
+  panel: null,
+  panelWidth: PANEL.initial,
   orientation: 'vertical',
   ui: 'compact',
   theme: 'dark',
@@ -107,7 +116,7 @@ export type Action =
   | { type: 'toggleCollapsed'; key: string }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {

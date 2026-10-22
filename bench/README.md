@@ -28,7 +28,7 @@ GUI runs are wrapped in `caffeinate -d -i`. With the display off or the screen l
 
 1. `bun bench/gen.ts` (inputs in /tmp/treeix-bench).
 2. `cd apps/next && bun run tauri build --bundles app`, then start the bundle's binary with `TREEIX_AUTORUN=bench` and a scratch `TREEIX_DATA_DIR`. It runs the bench once the window has loaded, writes `bench-<millis>.json` to the data dir and quits; stop its `treeix-ptyd` after. In a dev build, `await __treeixBench()` in the webview console does the same and logs the JSON.
-   - throughput: `cat` of `mixed-100m.ans` and `plain-50m.txt` from the start signal until the session exited and every byte was drawn (xterm write callback + a frame), MB/s of file bytes. It stages its own 960x600 terminals over the app.
+   - throughput: `cat` of `mixed-100m.ans` and `plain-50m.txt` from the start signal until the session exited and its final screen was drawn (xterm write callback + a frame), MB/s of file bytes. Under flood fast-forward (below) this measures ptyd, not xterm. It stages its own 960x600 terminals over the app.
    - keyToEcho: 300 samples (10 warm-up dropped) of one char written to a plain `cat`, until its tty echo is drawn and a frame passed; p50/p95/p99 ms.
    - reveal: 30 samples of a fresh xterm + WebGL + attach + 5000-line snapshot + a frame on a live session; p50/p95/p99 ms.
 3. Paste the JSON into the results file under `"tauri"`.
@@ -36,3 +36,7 @@ GUI runs are wrapped in `caffeinate -d -i`. With the display off or the screen l
 ## Reveal policy
 
 Hidden panes dispose their Terminal and WebGL context entirely. The plan's fallback (an LRU of 3 hidden instances kept without WebGL) applies only if reveal p95 > 50 ms; see the latest results file for the numbers behind the choice.
+
+## Floods
+
+ptyd never waits for a slow pane. Each attached channel (a webview pane; the main window and the quick terminal are separate channels on one connection) counts unacked bytes on its own. Past `HIGH_WATER` (1 MB) the channel is marked lagging: ptyd keeps reading and parsing the PTY at full speed but stops sending it Data. Once its acks bring it to `LOW_WATER` (256 KB) or below, ptyd sends one Resync (the ANSI snapshot, as on attach, plus its seq) and live Data resumes from that seq. The pane resets, writes the snapshot and acks on from there, so a `cat` of a huge file finishes at detached speed and the pane jumps to the latest screen; intermediate output is in scrollback only up to the snapshot's history. The PTY is paused only when a lagging channel has made no ack progress for 5 s (a stuck client), as a memory guard. A reloaded webview drops its channels on page load.

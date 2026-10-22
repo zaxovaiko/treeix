@@ -11,7 +11,10 @@ import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome
 import { Settings } from './Settings'
 import { TabPanes } from './Panes'
 import { Palette } from './Palette'
+import { Dialogs, useDialogKeys, type DialogRequest } from '../dialogs'
 import { paneGrid } from '../panes/terminal/xterm'
+import { Panels } from '../panels/Panels'
+import { openFile } from '../panes/file/open'
 
 const PERSIST_MS = 300
 const AGENT_COMMAND: Partial<Record<SessionKind, string[]>> = { claude: ['claude'], codex: ['codex'] }
@@ -37,6 +40,9 @@ export interface ShellView {
   split: (dir: SplitDir, from?: string) => void
   closePane: (session: string) => void
   closeTab: (tab: Tab) => void
+  openDialog: (request: DialogRequest) => void
+  /** Opens `file` (relative to `root`) in the file view, at a 1-based line and 0-based column when given */
+  openFile: (root: string, file: string, line?: number, column?: number) => void
 }
 
 const byId = (list: SessionInfo[]): Sessions => Object.fromEntries(list.map((s) => [s.id, s]))
@@ -55,6 +61,8 @@ export function Shell({ api }: { api: Api }) {
   const [epoch, setEpoch] = useState(0)
   const [palette, setPalette] = useState(false)
   const [page, setPage] = useState<'settings' | null>(null)
+  const [dialog, setDialog] = useState<DialogRequest | null>(null)
+  useDialogKeys(setDialog)
   const resolving = useRef(new Set<string>())
   /** Panes closed while their process still ran; forgotten once it exits */
   const closing = useRef(new Set<string>())
@@ -289,7 +297,7 @@ export function Shell({ api }: { api: Api }) {
       </div>
     )
 
-  const view: ShellView = { api, ui, dispatch, sessions, home, groups, ordered, activeTab, placeOf, placeOfTab, run, newSession, split, closePane, closeTab }
+  const view: ShellView = { api, ui, dispatch, sessions, home, groups, ordered, activeTab, placeOf, placeOfTab, run, newSession, split, closePane, closeTab, openDialog: setDialog, openFile: (root, file, line, column) => openFile({ ui, dispatch }, root, file, line, column) }
   const vertical = ui.orientation === 'vertical'
   const tabsInTitle = !vertical && ui.ui === 'compact'
   const empty = ui.tabs.length === 0
@@ -317,6 +325,7 @@ export function Shell({ api }: { api: Api }) {
             <SidebarResize view={view} />
           </>
         )}
+        {!vertical && <Panels view={view} hidden={page !== null} />}
         <main className="card center">
           {page === 'settings' ? (
             <Settings view={view} onClose={() => setPage(null)} />
@@ -333,9 +342,11 @@ export function Shell({ api }: { api: Api }) {
               ))}
           </div>
         </main>
+        {vertical && <Panels view={view} hidden={page !== null} />}
       </div>
       <StatusBar view={view} />
       {palette && <Palette view={view} onClose={() => setPalette(false)} />}
+      {dialog && <Dialogs key={dialog.kind} view={view} request={dialog} onClose={() => setDialog(null)} />}
     </div>
   )
 }

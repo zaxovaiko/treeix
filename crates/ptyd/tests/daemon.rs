@@ -135,67 +135,189 @@ async fn printf_bytes_and_exit_code() {
     );
 }
 
+/// Seconds from create to exit of `command`, nobody attached
+async fn detached_secs(client: &mut Client, command: &str) -> f64 {
+    let started = Instant::now();
+    let info = created(client, command).await;
+    loop {
+        match client.next_event().await.unwrap().expect("connection open") {
+            Event::Exit { session, .. } if session == info.id => break,
+            _ => {}
+        }
+    }
+    started.elapsed().as_secs_f64()
+}
+
+/// 32 MB of colored lines to `cat`: `yes` writes two bytes per syscall, too slow through a tty to flood
+fn flood_file(dir: &Path) -> String {
+    let mut out = Vec::with_capacity(33 * 1024 * 1024);
+    for i in 0.. {
+        if out.len() >= 32 * 1024 * 1024 {
+            break;
+        }
+        let line = format!(
+            "\x1b[3{}m{i:08} the quick brown fox jumps over the lazy dog\x1b[0m\n",
+            i % 8
+        );
+        out.extend_from_slice(line.as_bytes());
+    }
+    let path = dir.join("flood.txt");
+    std::fs::write(&path, out).unwrap();
+    format!("sleep 0.3; cat '{}'", path.display())
+}
+const UNACKED_CEILING: u64 = 1024 * 1024 + 64 * 1024;
+
 #[tokio::test]
-async fn flow_control_bounds_memory_and_loses_nothing() {
+async fn a_slow_client_lags_without_slowing_the_producer() {
     let dir = tempfile::tempdir().unwrap();
     let _server = treeix_ptyd::spawn_in_process(dir.path().into());
     let mut client = connect(dir.path()).await;
-    let info = created(&mut client, "sleep 0.3; yes | head -c 50000000").await;
+    let flood = flood_file(dir.path());
+    let detached = detached_secs(&mut client, &flood).await;
+
+    let started = Instant::now();
+    let info = created(&mut client, &flood).await;
     let (_, mut seq, _) = attach(&mut client, &info.id).await;
     let baseline = rss_bytes();
-    let (mut received, mut acked, mut peak_unacked, mut peak_rss) = (0u64, 0u64, 0u64, 0u64);
-    let (mut yes, mut newlines) = (0usize, 0usize);
-    let code = loop {
+    let (mut peak_rss, mut resyncs) = (0u64, 0);
+    let (mut attached, mut end) = (None, None);
+    while end != Some(seq) {
         match client.next_event().await.unwrap().expect("connection open") {
             Event::Data {
                 session,
                 seq: at,
                 bytes,
             } if session == info.id => {
-                assert_eq!(at, seq);
+                assert_eq!(at, seq, "Data continues from the attach or the last resync");
                 seq += bytes.len() as u64;
-                received += bytes.len() as u64;
-                yes += bytes.iter().filter(|&&b| b == b'y').count();
-                newlines += bytes.iter().filter(|&&b| b == b'\n').count();
-                peak_unacked = peak_unacked.max(received - acked);
+                // A renderer at 4 MB/s, a tenth of xterm's, acking each frame once drawn
+                tokio::time::sleep(Duration::from_micros(bytes.len() as u64 / 4)).await;
+                client
+                    .send(Request::Ack {
+                        session: info.id.clone(),
+                        bytes: bytes.len() as u64,
+                    })
+                    .await
+                    .unwrap();
             }
-            Event::Exit { session, code } if session == info.id => break code,
+            Event::Resync {
+                session,
+                channel,
+                seq: at,
+                ..
+            } if session == info.id => {
+                assert_eq!(channel, None);
+                assert!(at >= seq, "resyncs only move forward");
+                seq = at;
+                resyncs += 1;
+                peak_rss = peak_rss.max(rss_bytes());
+            }
+            Event::Exit { session, .. } if session == info.id => {
+                attached = Some(started.elapsed().as_secs_f64());
+                end = Some(info_seq(&mut client, &info.id).await);
+            }
             _ => {}
         }
-        // A slow renderer: takes 20 ms per 768 KB, so the daemon hits its 1 MB ceiling meanwhile
-        if received - acked >= 768 * 1024 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            client
-                .send(Request::Ack {
-                    session: info.id.clone(),
-                    bytes: received - acked,
-                })
-                .await
-                .unwrap();
-            acked = received;
-            peak_rss = peak_rss.max(rss_bytes());
-        }
-    };
-    assert_eq!(code, Some(0));
-    // Every byte the daemon read arrived. Not byte-equal to 75 MB: under backpressure the macOS
-    // tty occasionally emits ONLCR's `\r` twice
-    assert_eq!((yes, newlines), (25_000_000, 25_000_000));
-    assert_eq!(
-        received,
-        wait_for_info(&mut client, &info.id, |s| s.status == SessionStatus::Exited)
-            .await
-            .seq
-    );
+    }
+    let attached = attached.unwrap();
+    // Throttled to the renderer it would take 8 s
     assert!(
-        peak_unacked <= 1024 * 1024 + 64 * 1024,
-        "unacked peaked at {peak_unacked}"
+        attached < detached * 2.0 + 1.0,
+        "attached {attached:.2} s, detached {detached:.2} s"
     );
+    assert!(resyncs > 0);
     let growth = peak_rss.saturating_sub(baseline);
     assert!(
         growth < 96 * 1024 * 1024,
         "RSS grew by {} MB",
         growth / 1024 / 1024
     );
+}
+
+async fn info_seq(client: &mut Client, session: &str) -> u64 {
+    list(client)
+        .await
+        .into_iter()
+        .find(|s| s.id == session)
+        .expect("session")
+        .seq
+}
+
+#[tokio::test]
+async fn channels_on_one_connection_lag_independently_and_resync_to_the_screen() {
+    let dir = tempfile::tempdir().unwrap();
+    let _server = treeix_ptyd::spawn_in_process(dir.path().into());
+    let mut client = connect(dir.path()).await;
+    let info = created(&mut client, "sleep 0.3; yes | head -c 6000000").await;
+    for channel in [1, 2] {
+        let resp = client
+            .request(Request::AttachChannel {
+                session: info.id.clone(),
+                channel,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(resp, Response::Attached { seq: 0, .. }));
+    }
+    let (mut live, mut yes, mut stalled) = (0u64, 0usize, 0u64);
+    loop {
+        match client.next_event().await.unwrap().expect("connection open") {
+            Event::ChannelData {
+                channel: 1,
+                seq,
+                bytes,
+                ..
+            } => {
+                assert_eq!(seq, live);
+                live += bytes.len() as u64;
+                yes += bytes.iter().filter(|&&b| b == b'y').count();
+                client
+                    .send(Request::AckChannel {
+                        session: info.id.clone(),
+                        channel: 1,
+                        bytes: bytes.len() as u64,
+                    })
+                    .await
+                    .unwrap();
+            }
+            // Never acks, like a channel of a webview that went away
+            Event::ChannelData {
+                channel: 2, bytes, ..
+            } => stalled += bytes.len() as u64,
+            Event::Resync { .. } => panic!("nobody caught up"),
+            Event::Exit { session, .. } if session == info.id => break,
+            _ => {}
+        }
+    }
+    assert_eq!(yes, 3_000_000, "the acking channel got every byte");
+    assert!(
+        stalled <= UNACKED_CEILING,
+        "{stalled} sent to the stalled channel"
+    );
+    let end = info_seq(&mut client, &info.id).await;
+    assert_eq!(live, end);
+    client
+        .send(Request::AckChannel {
+            session: info.id.clone(),
+            channel: 2,
+            bytes: stalled,
+        })
+        .await
+        .unwrap();
+    let snapshot = loop {
+        if let Event::Resync {
+            channel,
+            seq,
+            snapshot,
+            ..
+        } = client.next_event().await.unwrap().expect("connection open")
+        {
+            assert_eq!((channel, seq), (Some(2), end));
+            break snapshot;
+        }
+    };
+    let (screen, _, _) = attach(&mut client, &info.id).await;
+    assert_eq!(snapshot, screen, "the resync is the final screen");
 }
 
 #[tokio::test]

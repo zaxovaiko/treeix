@@ -2,7 +2,7 @@
 // Inputs come from `bun bench/gen.ts`, see bench/README.md
 import type { Terminal } from '@xterm/xterm'
 import { api as defaultApi, type Api } from '../../ipc/api'
-import { ackBatcher, bytesFrom } from './stream'
+import { ackBatcher, attachStream } from './stream'
 import { openXterm } from './xterm'
 
 const DIR = '/tmp/treeix-bench'
@@ -66,19 +66,19 @@ function titled(api: Api, id: string, title: string): Promise<void> {
 async function attachStaged(api: Api, id: string) {
   const host = stage()
   const view = openXterm(host, true)
-  const acks = ackBatcher((bytes) => void api.ack(id, bytes))
+  let ack = async (_bytes: number): Promise<void> => {}
+  const acks = ackBatcher((bytes) => void ack(bytes))
   let end = 0
-  let from = 0
   let waiter: { until: number; done: () => void } | null = null
-  const attachment = await api.attach(id, (bytes, seq) => {
-    view.term.write(bytesFrom(bytes, seq, from), () => {
-      acks.rendered(bytes.length)
-      end = Math.max(end, seq + bytes.length)
-      if (waiter && end >= waiter.until) waiter.done()
-    })
+  const stream = attachStream(view.term, (bytes, seq) => {
+    if (bytes > 0) acks.rendered(bytes)
+    end = Math.max(end, seq)
+    if (waiter && end >= waiter.until) waiter.done()
   })
-  from = end = attachment.seq
-  await written(view.term, attachment.snapshot)
+  const attachment = await api.attach(id, stream.onData)
+  ack = attachment.ack
+  stream.snapshot(attachment.snapshot, attachment.seq)
+  await written(view.term, new Uint8Array())
   return {
     view,
     /** Seq up to which output has been written to xterm */

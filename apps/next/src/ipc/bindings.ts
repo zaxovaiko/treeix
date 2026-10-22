@@ -35,8 +35,8 @@ async writeBytes(id: string, data: number[]) : Promise<null> {
 async resize(id: string, cols: number, rows: number) : Promise<null> {
     return await TAURI_INVOKE("resize", { id, cols, rows });
 },
-async ack(id: string, bytes: number) : Promise<null> {
-    return await TAURI_INVOKE("ack", { id, bytes });
+async ack(id: string, channel: number, bytes: number) : Promise<null> {
+    return await TAURI_INVOKE("ack", { id, channel, bytes });
 },
 async kill(id: string) : Promise<null> {
     return await TAURI_INVOKE("kill", { id });
@@ -82,12 +82,206 @@ async autorun() : Promise<string | null> {
  */
 async autorunDone(report: string, code: number) : Promise<string> {
     return await TAURI_INVOKE("autorun_done", { report, code });
+},
+/**
+ * Main checkout first, then linked worktrees, missing ones included
+ */
+async listWorktrees(repoPath: string) : Promise<Worktree[]> {
+    return await TAURI_INVOKE("list_worktrees", { repoPath });
+},
+/**
+ * None when `path` is not inside a git checkout
+ */
+async gitStatus(path: string) : Promise<GitStatus | null> {
+    return await TAURI_INVOKE("git_status", { path });
+},
+async diff(path: string, scope: DiffScope) : Promise<FilePatch[]> {
+    return await TAURI_INVOKE("diff", { path, scope });
+},
+/**
+ * The file at a revision (`HEAD`, `origin/main`, a sha); None when it has no such file or it is binary
+ */
+async readFileAt(root: string, file: string, rev: string) : Promise<string | null> {
+    return await TAURI_INVOKE("read_file_at", { root, file, rev });
+},
+/**
+ * Commits that touched the file, newest first, following renames
+ */
+async fileLog(root: string, file: string) : Promise<Commit[]> {
+    return await TAURI_INVOKE("file_log", { root, file });
+},
+/**
+ * What one commit changed, limited to `file` when set
+ */
+async commitDiff(root: string, sha: string, file: string | null) : Promise<FilePatch[]> {
+    return await TAURI_INVOKE("commit_diff", { root, sha, file });
+},
+/**
+ * Local branches plus remote-only ones, newest commit first
+ */
+async listBranches(repoPath: string) : Promise<Branch[]> {
+    return await TAURI_INVOKE("list_branches", { repoPath });
+},
+/**
+ * `git check-ref-format --branch`
+ */
+async checkBranchName(name: string) : Promise<boolean> {
+    return await TAURI_INVOKE("check_branch_name", { name });
+},
+async createBranch(repoPath: string, name: string, base: string) : Promise<null> {
+    return await TAURI_INVOKE("create_branch", { repoPath, name, base });
+},
+/**
+ * Safe delete unless `force` (squash-merged branches need it)
+ */
+async deleteBranch(repoPath: string, name: string, force: boolean) : Promise<null> {
+    return await TAURI_INVOKE("delete_branch", { repoPath, name, force });
+},
+/**
+ * Sends each step's progress on `on_step`, resolves with the worktree path. Idempotent per branch / PR, so Retry calls it again
+ */
+async addWorktree(request: NewWorktree, onStep: TAURI_CHANNEL<WorktreeStep>) : Promise<string> {
+    return await TAURI_INVOKE("add_worktree", { request, onStep });
+},
+/**
+ * Refuses the main checkout. `delete_branch` force-deletes its branch afterwards
+ */
+async removeWorktree(path: string, force: boolean, deleteBranch: boolean) : Promise<null> {
+    return await TAURI_INVOKE("remove_worktree", { path, force, deleteBranch });
+},
+/**
+ * `git worktree prune`: forgets worktrees whose folder is gone
+ */
+async pruneWorktrees(repoPath: string) : Promise<null> {
+    return await TAURI_INVOKE("prune_worktrees", { repoPath });
+},
+/**
+ * Restores a tracked file to HEAD, deletes an untracked one
+ */
+async discardChanges(root: string, file: string) : Promise<null> {
+    return await TAURI_INVOKE("discard_changes", { root, file });
+},
+/**
+ * None when the root no longer exists
+ */
+async listFiles(root: string) : Promise<PlaceFiles | null> {
+    return await TAURI_INVOKE("list_files", { root });
+},
+/**
+ * Names in one folder, folders ending with `/`, ignored ones included
+ */
+async listDirectory(root: string, folder: string) : Promise<string[]> {
+    return await TAURI_INVOKE("list_directory", { root, folder });
+},
+/**
+ * None for binary files and files over 2 MB
+ */
+async readFile(root: string, file: string) : Promise<string | null> {
+    return await TAURI_INVOKE("read_file", { root, file });
+},
+/**
+ * Snapshots the previous version into local history first. Fails with `SAVE_CONFLICT` when the file no longer matches `expected`; None overwrites
+ */
+async saveFile(root: string, file: string, contents: string, expected: string | null) : Promise<null> {
+    return await TAURI_INVOKE("save_file", { root, file, contents, expected });
+},
+/**
+ * A path ending in `/` creates a folder; parents are created too
+ */
+async createPath(root: string, file: string) : Promise<null> {
+    return await TAURI_INVOKE("create_path", { root, file });
+},
+async renamePath(root: string, from: string, to: string) : Promise<null> {
+    return await TAURI_INVOKE("rename_path", { root, from, to });
+},
+/**
+ * Moves to the system Trash
+ */
+async trashPath(root: string, file: string) : Promise<null> {
+    return await TAURI_INVOKE("trash_path", { root, file });
+},
+async revealInFinder(path: string) : Promise<null> {
+    return await TAURI_INVOKE("reveal_in_finder", { path });
+},
+/**
+ * Opens with the default app
+ */
+async openPath(path: string) : Promise<null> {
+    return await TAURI_INVOKE("open_path", { path });
+},
+/**
+ * Opens an http(s) URL in the browser; other schemes are refused
+ */
+async openUrl(url: string) : Promise<null> {
+    return await TAURI_INVOKE("open_url", { url });
+},
+/**
+ * Fails with the regex error when `options.regex` and the pattern does not compile
+ */
+async searchText(roots: string[], query: string, options: SearchOptions) : Promise<SearchResult> {
+    return await TAURI_INVOKE("search_text", { roots, query, options });
+},
+/**
+ * Emits `FsEvent { id }` on changes under `root`, or to `file` alone when set. Same id again replaces the watch
+ */
+async watch(id: string, root: string, file: string | null) : Promise<null> {
+    return await TAURI_INVOKE("watch", { id, root, file });
+},
+async unwatch(id: string) : Promise<null> {
+    return await TAURI_INVOKE("unwatch", { id });
+},
+/**
+ * Open PRs plus recently merged / closed ones of every repo; a repo that fails lands in `errors`, not the whole call
+ */
+async listPullRequests(repoPaths: string[]) : Promise<PullRequestList> {
+    return await TAURI_INVOKE("list_pull_requests", { repoPaths });
+},
+/**
+ * The head commit's checks (GitHub) or pipeline jobs (GitLab)
+ */
+async prChecks(pr: PrRef) : Promise<Check[]> {
+    return await TAURI_INVOKE("pr_checks", { pr });
+},
+async mergePullRequest(pr: PrRef, method: MergeMethod, deleteBranch: boolean) : Promise<null> {
+    return await TAURI_INVOKE("merge_pull_request", { pr, method, deleteBranch });
+},
+/**
+ * gh and glab: installed, signed in, as whom
+ */
+async prProviders() : Promise<ProviderStatus[]> {
+    return await TAURI_INVOKE("pr_providers");
+},
+/**
+ * Snapshots of a file, newest first
+ */
+async listHistory(root: string, file: string) : Promise<HistoryEntry[]> {
+    return await TAURI_INVOKE("list_history", { root, file });
+},
+async readHistory(root: string, file: string, id: string) : Promise<string> {
+    return await TAURI_INVOKE("read_history", { root, file, id });
+},
+/**
+ * Closed sessions, newest first
+ */
+async sessionHistory() : Promise<SessionRecord[]> {
+    return await TAURI_INVOKE("session_history");
+},
+/**
+ * Drops a record from History
+ */
+async forgetSession(id: string) : Promise<null> {
+    return await TAURI_INVOKE("forget_session", { id });
 }
 }
 
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+fsEvent: FsEvent
+}>({
+fsEvent: "fs-event"
+})
 
 /** user-defined constants **/
 
@@ -96,17 +290,345 @@ async autorunDone(report: string, code: number) : Promise<string> {
 /** user-defined types **/
 
 export type Attached = { seq: number; info: SessionInfo }
+/**
+ * A local branch, or a remote-only one
+ */
+export type Branch = { 
+/**
+ * Remote-only branches are named like `origin/feat/x`
+ */
+name: string; remote: boolean; ahead: number; behind: number; gone: boolean; merged: boolean; 
+/**
+ * Unix seconds of the last commit
+ */
+committedAt: number; 
+/**
+ * Author of the last commit
+ */
+author: string; 
+/**
+ * Worktree that has it checked out
+ */
+worktree: string | null }
+/**
+ * One uncommitted file
+ */
+export type Change = { path: string; status: ChangeStatus; 
+/**
+ * Source of a rename
+ */
+oldPath: string | null }
+/**
+ * A file's state, from `git status` or a diff
+ */
+export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflicted"
+/**
+ * One CI check or pipeline job
+ */
+export type Check = { name: string; status: CheckStatus; url: string | null }
+export type CheckStatus = "passed" | "failed" | "running" | "skipped"
+/**
+ * One commit from `git log`
+ */
+export type Commit = { sha: string; author: string; 
+/**
+ * Unix seconds
+ */
+date: number; subject: string }
 export type CreateSession = { kind: SessionKind; cwd: string | null; command?: string[]; env?: ([string, string])[]; cols: number; rows: number; title: string | null; routine: string | null }
 /**
- * One channel message: `[u8 kind: 0 snapshot, 1 data][u64 LE seq][payload]`, delivered as a raw ArrayBuffer
+ * What `diff` compares the working tree against
+ */
+export type DiffScope = 
+/**
+ * Uncommitted: HEAD vs the working tree, untracked files as additions
+ */
+"local" | 
+/**
+ * What the PR shows: the merge base with the base branch vs the working tree
+ */
+"base"
+/**
+ * One file's unified diff
+ */
+export type FilePatch = { path: string; oldPath: string | null; status: ChangeStatus; 
+/**
+ * `diff --git` text with headers; empty for binary files
+ */
+patch: string; additions: number; deletions: number }
+/**
+ * One channel message: `[u8 kind: 0 snapshot, 1 data, 2 resync][u64 LE seq][payload]`, delivered as a raw ArrayBuffer
  */
 export type Frame = number[]
+/**
+ * A debounced change under a root registered with `watch`
+ */
+export type FsEvent = { 
+/**
+ * The id passed to `watch`
+ */
+id: string; 
+/**
+ * Relative paths that changed, `.git` excluded
+ */
+paths: string[]; 
+/**
+ * Something under `.git` changed: git status is stale
+ */
+git: boolean }
+/**
+ * Everything the Changes panel, the sidebar badges and the Cleanup dialog show about one checkout
+ */
+export type GitStatus = { 
+/**
+ * None when detached
+ */
+branch: string | null; 
+/**
+ * Short sha; None before the first commit
+ */
+head: string | null; 
+/**
+ * Like `origin/feat/x`; None when the branch was never pushed
+ */
+upstream: string | null; 
+/**
+ * Commits not pushed to / not pulled from the upstream
+ */
+ahead: number; behind: number; 
+/**
+ * The upstream was deleted, typically after its PR merged
+ */
+gone: boolean; 
+/**
+ * The repo's default branch, like `main`; None without one
+ */
+base: string | null; 
+/**
+ * Commits on this branch that are not in `origin/<base>` (or `<base>`)
+ */
+baseAhead: number; 
+/**
+ * Branch has commits and all of them are in the base (or the upstream is gone)
+ */
+merged: boolean; rebase: Rebase | null; 
+/**
+ * Paths with unresolved conflicts
+ */
+conflicts: string[]; 
+/**
+ * Uncommitted changes, untracked files included
+ */
+changes: Change[] }
 export type Hello = { proto: number; build: string; daemonPid: number }
+/**
+ * One saved version of a file
+ */
+export type HistoryEntry = { 
+/**
+ * Millisecond timestamp as a string
+ */
+id: string; 
+/**
+ * Unix ms
+ */
+savedAt: number; bytes: number }
+export type MergeMethod = "merge" | "squash" | "rebase"
+/**
+ * What the Open worktree dialog asks for. Exactly one of `branch` or `pr` is set
+ */
+export type NewWorktree = { repoPath: string; 
+/**
+ * Checked out if it exists locally, tracks `origin/<branch>` if only there, otherwise created from `base`
+ */
+branch: string | null; 
+/**
+ * Start point for a new branch; default `origin/<default branch>`
+ */
+base: string | null; 
+/**
+ * PR/MR number: fetches its head and adds a detached `pr-N` / `mr-N` worktree
+ */
+pr: number | null; 
+/**
+ * Copy the main checkout's `.env` and `.env.*` files
+ */
+copyEnv: boolean; 
+/**
+ * Shell command run in the new worktree, like `bun install`
+ */
+setup: string | null; 
+/**
+ * "Continue without fetching" after a failed fetch; ignored for PRs
+ */
+skipFetch: boolean }
+/**
+ * CI on the head commit: GitHub's checks rolled up, GitLab's pipeline
+ */
+export type Pipeline = { status: CheckStatus; 
+/**
+ * Finished checks of `total`, for "CI 3/5"
+ */
+done: number; total: number; url: string }
 export type Place = { key: string; kind: PlaceKind; name: string; path: string; repoRoot: string | null; repoName: string | null; branch: string | null; head: string | null; missing: boolean }
+/**
+ * Every file in a place, for the Explorer and quick open
+ */
+export type PlaceFiles = { 
+/**
+ * Relative paths, `.gitignore` respected
+ */
+files: string[]; 
+/**
+ * Ignored paths; folders end with `/` and are not expanded
+ */
+ignored: string[] }
 export type PlaceKind = "root" | "worktree" | "git" | "folder" | "scratch" | "detached"
+/**
+ * One repo that could not be listed (CLI missing, signed out, offline)
+ */
+export type PrError = { repoPath: string; message: string }
+/**
+ * Identifies a PR for checks and merge
+ */
+export type PrRef = { provider: Provider; repoPath: string; number: number }
+export type PrState = "open" | "merged" | "closed"
+export type Provider = "github" | "gitlab"
+/**
+ * Whether a provider's CLI is usable, for the panel footer and the signed-out banner
+ */
+export type ProviderStatus = { provider: Provider; installed: boolean; signedIn: boolean; 
+/**
+ * Your login, which "Mine" filters on
+ */
+user: string | null }
+export type PullRequest = { provider: Provider; 
+/**
+ * Local repo it was listed for
+ */
+repoPath: string; number: number; title: string; author: string; authorAvatarUrl: string | null; sourceBranch: string; targetBranch: string; 
+/**
+ * Short sha of the head commit
+ */
+head: string; state: PrState; draft: boolean; 
+/**
+ * RFC 3339
+ */
+updatedAt: string; url: string; additions: number | null; deletions: number | null; 
+/**
+ * None when the provider list leaves it out (GitLab)
+ */
+changedFiles: number | null; review: Review | null; 
+/**
+ * Open and can't merge cleanly; false while the provider is still computing it
+ */
+conflicts: boolean; pipeline: Pipeline | null }
+export type PullRequestList = { pullRequests: PullRequest[]; errors: PrError[] }
+/**
+ * An interrupted rebase: `step` of `total` commits applied
+ */
+export type Rebase = { step: number; total: number }
+/**
+ * What kind of session a record is
+ */
+export type RecordKind = "shell" | "claude" | "codex"
+export type Review = { state: ReviewState; 
+/**
+ * Commits pushed after your review
+ */
+newCommits: number; 
+/**
+ * Someone else's latest review requests changes
+ */
+changesRequested: boolean }
+/**
+ * Your relation to an open PR
+ */
+export type ReviewState = "yours" | "requested" | "approved" | "changes" | "commented" | "unreviewed"
+export type SearchMatch = { 
+/**
+ * The searched root the match is under
+ */
+root: string; 
+/**
+ * Relative to `root`
+ */
+path: string; 
+/**
+ * 1-based
+ */
+line: number; 
+/**
+ * 0-based, in UTF-16 code units of the line (what Monaco and JS strings use)
+ */
+column: number; length: number; text: string }
+export type SearchOptions = { caseSensitive: boolean; wholeWord: boolean; regex: boolean }
+export type SearchResult = { matches: SearchMatch[]; 
+/**
+ * A limit was hit
+ */
+truncated: boolean }
 export type SessionInfo = { id: string; kind: SessionKind; cwd: string; title: string; status: SessionStatus; pid: number | null; exitCode: number | null; cols: number; rows: number; createdAt: number; command: string[]; seq: number; agentSession: string | null; routine: string | null }
 export type SessionKind = "shell" | "claude" | "codex" | "routine"
+/**
+ * A closed session, for the History panel
+ */
+export type SessionRecord = { 
+/**
+ * The daemon session id it had
+ */
+id: string; kind: RecordKind; title: string; cwd: string; 
+/**
+ * Branch it ran on, to offer "Recreate worktree" once the folder is gone
+ */
+branch: string | null; repoRoot: string | null; 
+/**
+ * Claude / Codex session id that `--resume` takes
+ */
+agentSession: string | null; command: string[]; 
+/**
+ * Unix ms
+ */
+createdAt: number; closedAt: number; 
+/**
+ * Agent transcript stats; None until Phase 4 reads transcripts
+ */
+messages: number | null; cost: number | null; firstPrompt: string | null }
 export type SessionStatus = "running" | "needs" | "done" | "idle" | "exited" | "error" | "restored" | "crashed"
+export type StepId = "fetch" | "add" | "env" | "setup"
+export type StepState = "running" | "done" | "failed" | "skipped"
+/**
+ * One `git worktree list --porcelain` entry
+ */
+export type Worktree = { path: string; 
+/**
+ * Short sha; empty in a repo with no commits yet
+ */
+head: string; 
+/**
+ * None when detached
+ */
+branch: string | null; 
+/**
+ * The repo's main checkout
+ */
+main: boolean; 
+/**
+ * Folder is gone; `prune_worktrees` drops it
+ */
+missing: boolean }
+/**
+ * Progress of one worktree creation step
+ */
+export type WorktreeStep = { step: StepId; state: StepState; 
+/**
+ * The command line shown next to the step
+ */
+command: string; 
+/**
+ * stderr (or the tail of the output) when failed
+ */
+error: string | null }
 
 /** tauri-specta globals **/
 
