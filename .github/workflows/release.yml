@@ -83,7 +83,10 @@ jobs:
           rustup toolchain install
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
+      # Saved even when a later step fails, so a broken run still warms the next one
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       # tauri.conf.json takes its version from package.json; the bump lives only in this build
       - run: npm version --no-git-tag-version --allow-same-version --prefix apps/desktop "${TAG#v}" > /dev/null
@@ -92,8 +95,8 @@ jobs:
         working-directory: apps/desktop
 
       # The dictation and meetings helpers (Swift, FluidAudio). A cold universal build takes minutes, so the
-      # binaries are reused until the Swift sources change
-      - uses: actions/cache@v4
+      # binaries are reused until the Swift sources change. Saved right after the build, so a later failure keeps them
+      - uses: actions/cache/restore@v4
         id: voice
         with:
           path: |
@@ -102,15 +105,37 @@ jobs:
           key: voice-${{ hashFiles('apps/desktop/native/voice/Package.*', 'apps/desktop/native/voice/Sources/**') }}
       - if: steps.voice.outputs.cache-hit != 'true'
         run: sh apps/desktop/scripts/build-voice.sh release
+      - if: steps.voice.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            apps/desktop/src-tauri/binaries/treeix-voice-universal-apple-darwin
+            apps/desktop/src-tauri/binaries/treeix-meetings-universal-apple-darwin
+          key: ${{ steps.voice.outputs.cache-primary-key }}
 
       # tauri bundles externalBin as binaries/<name>-<target>; build-ptyd.sh builds the host arch only, and a
-      # universal app takes one fat binary. Each per-arch compile also checks for its own <name>-<arch> file
+      # universal app takes one fat binary. Reused until the Rust crates it builds from change
+      - uses: actions/cache/restore@v4
+        id: ptyd
+        with:
+          path: apps/desktop/src-tauri/binaries/treeix-ptyd-universal-apple-darwin
+          key: ptyd-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**') }}
       - name: Universal treeix-ptyd sidecar
-        working-directory: apps/desktop/src-tauri/binaries
+        if: steps.ptyd.outputs.cache-hit != 'true'
         run: |
           for arch in aarch64 x86_64; do cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$arch-apple-darwin"; done
-          lipo -create -output "treeix-ptyd-$TARGET" \
-            "$GITHUB_WORKSPACE/target/aarch64-apple-darwin/release/treeix-ptyd" "$GITHUB_WORKSPACE/target/x86_64-apple-darwin/release/treeix-ptyd"
+          lipo -create -output "apps/desktop/src-tauri/binaries/treeix-ptyd-$TARGET" \
+            target/aarch64-apple-darwin/release/treeix-ptyd target/x86_64-apple-darwin/release/treeix-ptyd
+      - if: steps.ptyd.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: apps/desktop/src-tauri/binaries/treeix-ptyd-universal-apple-darwin
+          key: ${{ steps.ptyd.outputs.cache-primary-key }}
+
+      # Each per-arch compile of the universal build checks for its own <name>-<arch> file
+      - name: Per-arch sidecar names
+        working-directory: apps/desktop/src-tauri/binaries
+        run: |
           for name in treeix-ptyd treeix-voice treeix-meetings; do
             for arch in aarch64 x86_64; do cp "$name-$TARGET" "$name-$arch-apple-darwin"; done
           done
@@ -200,7 +225,10 @@ jobs:
 
       - run: rustup toolchain install
 
+      # Saved even when a later step fails, so a broken run still warms the next one
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       # Tauri's Linux prerequisites (WebKitGTK 4.1, GTK, appindicator, rsvg, xdo for the global shortcut), patchelf for the AppImage
       - run: |

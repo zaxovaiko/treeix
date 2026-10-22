@@ -28,6 +28,8 @@ jobs:
       - run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       # Tauri's Linux prerequisites (WebKitGTK 4.1, GTK, appindicator, rsvg, xdo for the global shortcut)
       - if: runner.os == 'Linux'
@@ -92,6 +94,8 @@ jobs:
       - run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - run: bun bench/gen.ts
 
