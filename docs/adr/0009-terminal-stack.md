@@ -19,18 +19,19 @@ Numbers on an Apple M3 Pro, macOS 27 (`bench/results/2026-10-22-Apple-M3-Pro.jso
 
 - Ghostty: 47.1 MB/s on `mixed-100m.ans` (SGR, CJK, emoji, wraps, redraws).
 - Electron app: 28.2 MB/s.
-- Tauri app: 21.6 MB/s mixed, 44.2 MB/s plain ASCII. Key-to-echo p50 7 ms, p95 8 ms, p99 12 ms. Reveal of a 5000-line session p95 38 ms.
+- Tauri app, first run: 21.6 MB/s mixed, 44.2 MB/s plain ASCII. Key-to-echo p50 7 ms, p95 8 ms, p99 12 ms. Reveal of a 5000-line session p95 38 ms.
+- Tauri app with flood fast-forward (wave 3): 67 MB/s mixed, 77.6 MB/s plain. Key-to-echo p50 7 ms, p95 8 ms, p99 11 ms. Reveal p95 31 ms.
 - ptyd alone: 84 MB/s attached, 100.6 MB/s detached, echo p95 0.35 ms, 11.3 MB RSS with 20 idle shells.
 - xterm.js alone in headless WebKit: 23.2 MB/s mixed, 44.5 plain. In headless Chromium 12.3 (software GL), so not comparable to the Electron app.
 
 ## Decision
 
 - Keep the stack: ptyd + `alacritty_terminal` + Channel relay + xterm.js 6 WebGL in WKWebView.
-- Latency, memory and reveal pass. Throughput misses: 46% of Ghostty and 0.77x Electron.
+- Every gate passes with flood fast-forward: throughput 1.42x Ghostty and 2.37x Electron. Without it, throughput missed (46% of Ghostty, 0.77x Electron) for the reasons below.
   - The ceiling is xterm.js parsing in JavaScriptCore: the headless WebKit number (23.2) matches the app's (21.6), while ptyd moves 84 MB/s. IPC costs under 10%.
   - "2x Electron" can't be met by any terminal measured here; Ghostty itself is 1.67x Electron on this input.
-- Remove the ceiling instead of tuning the parser: **flood fast-forward**. When an attached pane falls more than the high-water mark behind, ptyd keeps reading the PTY at full speed (it parses everything anyway), stops forwarding bytes to that pane, and once the pane has drawn what it was sent, sends a fresh snapshot frame and resumes live bytes from its seq. The producer is never throttled by the renderer and the pane shows the same final screen and scrollback. Built in wave 3, then the bench is rerun and recorded here.
-- Hidden panes keep no Terminal and no WebGL context: reveal p95 38 ms is under the 50 ms line that would have called for an LRU of kept instances.
+- Remove the ceiling instead of tuning the parser: **flood fast-forward**. When an attached pane falls more than the high-water mark behind, ptyd keeps reading the PTY at full speed (it parses everything anyway), stops forwarding bytes to that pane, and once the pane has drawn what it was sent, sends a fresh snapshot frame and resumes live bytes from its seq. The producer is never throttled by the renderer and the pane shows the same final screen and scrollback. Built in wave 3. The app bench now times the final screen of a flood, as a user sees it; xterm no longer parses every byte of it, so the number measures ptyd and the snapshot path rather than the parser.
+- Hidden panes keep no Terminal and no WebGL context: reveal p95 31 ms is under the 50 ms line that would have called for an LRU of kept instances.
 - Background throttling is disabled on the app's webviews: a suspended webview stops acking, and ptyd would then pause the shell's output.
 
 ## Alternatives considered

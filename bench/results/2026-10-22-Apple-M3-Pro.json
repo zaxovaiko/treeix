@@ -3,19 +3,171 @@
   "machine": "Apple M3 Pro",
   "macos": "27.0",
   "ptyd": {
-  "attached_mb_s": 83.97633444884936,
-  "daemon_rss_mb_20_idle_shells": 11.34375,
-  "detached_mb_s": 100.57734595435144,
-  "echo_ms": {
-    "p50": 0.229084,
-    "p95": 0.345,
-    "p99": 0.42604200000000003
+    "attached_mb_s": 83.97633444884936,
+    "daemon_rss_mb_20_idle_shells": 11.34375,
+    "detached_mb_s": 100.57734595435144,
+    "echo_ms": {
+      "p50": 0.229084,
+      "p95": 0.345,
+      "p99": 0.42604200000000003
+    },
+    "file_mb": 104.8576,
+    "in_process": true
   },
-  "file_mb": 104.8576,
-  "in_process": true
-},
-  "ghostty": {"file":"/tmp/treeix-bench/mixed-100m.ans","mb":100,"runs":[2.136,2.125,2.089,2.127,2.056],"medianSeconds":2.125,"mbPerSecond":47.1},
-  "electron": {"file":"/tmp/treeix-bench/mixed-100m.ans","mb":100,"runs":[3.6607999999523164,3.513,3.4985,3.5415,3.669],"medianSeconds":3.5415,"mbPerSecond":28.23662289990117},
-  "frontendOnly": {"chromium":{"samples":40,"p50":20.8,"p95":25.9,"p99":64.2,"max":64.2,"openWebgl":{"samples":40,"p50":15.8,"p95":16.7,"p99":16.9,"max":16.9},"openDom":{"samples":40,"p50":16.6,"p95":17.3,"p99":17.5,"max":17.5},"throughput":[{"file":"mixed-100m.ans","mbPerSecond":12.3},{"file":"plain-50m.txt","mbPerSecond":12.7}],"webgl2":true},"webkit":{"samples":40,"p50":33,"p95":52,"p99":107,"max":107,"openWebgl":{"samples":40,"p50":16,"p95":18,"p99":20,"max":20},"openDom":{"samples":40,"p50":16,"p95":18,"p99":18,"max":18},"throughput":[{"file":"mixed-100m.ans","mbPerSecond":23.2},{"file":"plain-50m.txt","mbPerSecond":44.5}],"webgl2":true}},
-  "tauri": {"at": "2026-10-22T08:33:17.473Z", "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)", "throughput": [{"file": "/tmp/treeix-bench/mixed-100m.ans", "bytes": 104857622, "seconds": 4.628, "mbPerSecond": 21.6}, {"file": "/tmp/treeix-bench/plain-50m.txt", "bytes": 52428822, "seconds": 1.13, "mbPerSecond": 44.2}], "keyToEcho": {"samples": 300, "p50": 7, "p95": 8, "p99": 12, "max": 15}, "reveal": {"samples": 30, "p50": 33, "p95": 38, "p99": 59, "max": 59}}
+  "ghostty": {
+    "file": "/tmp/treeix-bench/mixed-100m.ans",
+    "mb": 100,
+    "runs": [
+      2.136,
+      2.125,
+      2.089,
+      2.127,
+      2.056
+    ],
+    "medianSeconds": 2.125,
+    "mbPerSecond": 47.1
+  },
+  "electron": {
+    "file": "/tmp/treeix-bench/mixed-100m.ans",
+    "mb": 100,
+    "runs": [
+      3.6607999999523164,
+      3.513,
+      3.4985,
+      3.5415,
+      3.669
+    ],
+    "medianSeconds": 3.5415,
+    "mbPerSecond": 28.23662289990117
+  },
+  "frontendOnly": {
+    "chromium": {
+      "samples": 40,
+      "p50": 20.8,
+      "p95": 25.9,
+      "p99": 64.2,
+      "max": 64.2,
+      "openWebgl": {
+        "samples": 40,
+        "p50": 15.8,
+        "p95": 16.7,
+        "p99": 16.9,
+        "max": 16.9
+      },
+      "openDom": {
+        "samples": 40,
+        "p50": 16.6,
+        "p95": 17.3,
+        "p99": 17.5,
+        "max": 17.5
+      },
+      "throughput": [
+        {
+          "file": "mixed-100m.ans",
+          "mbPerSecond": 12.3
+        },
+        {
+          "file": "plain-50m.txt",
+          "mbPerSecond": 12.7
+        }
+      ],
+      "webgl2": true
+    },
+    "webkit": {
+      "samples": 40,
+      "p50": 33,
+      "p95": 52,
+      "p99": 107,
+      "max": 107,
+      "openWebgl": {
+        "samples": 40,
+        "p50": 16,
+        "p95": 18,
+        "p99": 20,
+        "max": 20
+      },
+      "openDom": {
+        "samples": 40,
+        "p50": 16,
+        "p95": 18,
+        "p99": 18,
+        "max": 18
+      },
+      "throughput": [
+        {
+          "file": "mixed-100m.ans",
+          "mbPerSecond": 23.2
+        },
+        {
+          "file": "plain-50m.txt",
+          "mbPerSecond": 44.5
+        }
+      ],
+      "webgl2": true
+    }
+  },
+  "tauri": {
+    "at": "2026-10-22T10:06:30.171Z",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+    "throughput": [
+      {
+        "file": "/tmp/treeix-bench/mixed-100m.ans",
+        "bytes": 104857622,
+        "seconds": 1.493,
+        "mbPerSecond": 67
+      },
+      {
+        "file": "/tmp/treeix-bench/plain-50m.txt",
+        "bytes": 52428822,
+        "seconds": 0.644,
+        "mbPerSecond": 77.6
+      }
+    ],
+    "keyToEcho": {
+      "samples": 300,
+      "p50": 7,
+      "p95": 8,
+      "p99": 11,
+      "max": 12
+    },
+    "reveal": {
+      "samples": 30,
+      "p50": 27,
+      "p95": 31,
+      "p99": 55,
+      "max": 55
+    }
+  },
+  "tauriBeforeFastForward": {
+    "at": "2026-10-22T08:33:17.473Z",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+    "throughput": [
+      {
+        "file": "/tmp/treeix-bench/mixed-100m.ans",
+        "bytes": 104857622,
+        "seconds": 4.628,
+        "mbPerSecond": 21.6
+      },
+      {
+        "file": "/tmp/treeix-bench/plain-50m.txt",
+        "bytes": 52428822,
+        "seconds": 1.13,
+        "mbPerSecond": 44.2
+      }
+    ],
+    "keyToEcho": {
+      "samples": 300,
+      "p50": 7,
+      "p95": 8,
+      "p99": 12,
+      "max": 15
+    },
+    "reveal": {
+      "samples": 30,
+      "p50": 33,
+      "p95": 38,
+      "p99": 59,
+      "max": 59
+    }
+  }
 }
