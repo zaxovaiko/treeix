@@ -21,6 +21,9 @@ export type CommandId =
 
 const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme'])
 
+/** Chords the native menu binds (src-tauri/src/menu.rs): inside Tauri the menu fires them, keydown must not too */
+export const menuChord = (e: Keys): boolean => e.metaKey && !e.altKey && !e.ctrlKey && (e.shiftKey ? e.key.toLowerCase() === 'p' : e.code === 'Backslash' || e.key === ',')
+
 export const isCommandId = (id: string): id is CommandId => MENU_IDS.has(id) || /^tab-[1-9]$/.test(id) || /^focus-(left|right|up|down)$/.test(id)
 
 type Keys = Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'shiftKey' | 'altKey' | 'ctrlKey'>

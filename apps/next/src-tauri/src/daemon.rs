@@ -37,6 +37,9 @@ pub struct Daemon {
     writer: tokio::sync::Mutex<Option<OwnedWriteHalf>>,
     pending: Mutex<HashMap<u64, Pending>>,
     streams: Mutex<HashMap<SessionId, Channel<Frame>>>,
+    /// Channel of the newest attach per session. A pane hidden and shown again detaches its old channel
+    /// asynchronously; that detach must not undo the newer attach
+    latest: Mutex<HashMap<SessionId, u32>>,
     next_id: AtomicU64,
     hello: watch::Sender<Option<Hello>>,
 }
@@ -60,6 +63,10 @@ impl Daemon {
         session: SessionId,
         channel: Channel<Frame>,
     ) -> Result<Response, String> {
+        self.latest
+            .lock()
+            .unwrap()
+            .insert(session.clone(), channel.id());
         self.send(
             Request::Attach {
                 session: session.clone(),
@@ -69,7 +76,14 @@ impl Daemon {
         .await
     }
 
-    pub async fn detach(&self, session: SessionId) -> Result<Response, String> {
+    pub async fn detach(&self, session: SessionId, channel: u32) -> Result<Response, String> {
+        {
+            let mut latest = self.latest.lock().unwrap();
+            if latest.get(&session) != Some(&channel) {
+                return Ok(Response::Ok);
+            }
+            latest.remove(&session);
+        }
         self.streams.lock().unwrap().remove(&session);
         self.request(Request::Detach { session }).await
     }
@@ -123,6 +137,7 @@ impl Daemon {
                     *self.writer.lock().await = None;
                     self.pending.lock().unwrap().clear();
                     self.streams.lock().unwrap().clear();
+                    self.latest.lock().unwrap().clear();
                     emit(
                         &app,
                         SessionEvent::Daemon {

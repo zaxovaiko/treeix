@@ -19,7 +19,7 @@ export interface TerminalPaneProps {
 
 const RESIZE_DEBOUNCE_MS = 50
 
-if (import.meta.env.DEV || localStorage.getItem('treeix.bench') === '1') void import('./bench')
+if (import.meta.env.DEV) void import('./bench')
 
 export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpenFile }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)

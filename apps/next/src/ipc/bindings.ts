@@ -20,8 +20,8 @@ async create(opts: CreateSession) : Promise<SessionInfo> {
 async attach(id: string, channel: TAURI_CHANNEL<Frame>) : Promise<Attached> {
     return await TAURI_INVOKE("attach", { id, channel });
 },
-async detach(id: string) : Promise<null> {
-    return await TAURI_INVOKE("detach", { id });
+async detach(id: string, channel: number) : Promise<null> {
+    return await TAURI_INVOKE("detach", { id, channel });
 },
 async write(id: string, data: string) : Promise<null> {
     return await TAURI_INVOKE("write", { id, data });
@@ -66,10 +66,16 @@ async setQuickShortcut(accelerator: string | null) : Promise<null> {
     return await TAURI_INVOKE("set_quick_shortcut", { accelerator });
 },
 /**
- * Saves a frontend benchmark run next to the daemon's data; debug builds only
+ * The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)
  */
-async benchReport(json: string) : Promise<string> {
-    return await TAURI_INVOKE("bench_report", { json });
+async autorun() : Promise<string | null> {
+    return await TAURI_INVOKE("autorun");
+},
+/**
+ * Saves the autorun's report as data_dir/<name>-<millis>.json, then quits with its exit code
+ */
+async autorunDone(report: string, code: number) : Promise<string> {
+    return await TAURI_INVOKE("autorun_done", { report, code });
 }
 }
 

@@ -5,7 +5,7 @@ import { applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, type Sessions } from './model'
-import { isCommandId, shortcut, type CommandId } from './shortcuts'
+import { isCommandId, menuChord, shortcut, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Settings, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
 import { TabPanes } from './Panes'
 import { Palette } from './Palette'
@@ -227,7 +227,7 @@ export function Shell({ api }: { api: Api }) {
 
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     const id = shortcut(e)
-    if (!id) return
+    if (!id || ('__TAURI_INTERNALS__' in window && menuChord(e))) return
     e.preventDefault()
     e.stopPropagation()
     run(id)

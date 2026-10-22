@@ -62,8 +62,8 @@ pub async fn attach(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn detach(daemon: State<'_, Arc<Daemon>>, id: String) -> Result<()> {
-    match daemon.detach(id).await? {
+pub async fn detach(daemon: State<'_, Arc<Daemon>>, id: String, channel: u32) -> Result<()> {
+    match daemon.detach(id, channel).await? {
         Response::Ok => Ok(()),
         other => Err(unexpected(other)),
     }
@@ -175,20 +175,26 @@ pub fn set_quick_shortcut(app: AppHandle, accelerator: Option<String>) -> Result
     crate::quick::set_shortcut(&app, accelerator.as_deref()).map_err(|e| e.to_string())
 }
 
-/// Saves a frontend benchmark run next to the daemon's data; debug builds only
+/// The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)
 #[tauri::command]
 #[specta::specta]
-pub fn bench_report(json: String) -> Result<String> {
-    if !cfg!(debug_assertions) && !crate::bench_run() {
-        return Err("bench reports are only written by debug builds or TREEIX_BENCH runs".into());
-    }
+pub fn autorun() -> Option<String> {
+    crate::autorun()
+}
+
+/// Saves the autorun's report as data_dir/<name>-<millis>.json, then quits with its exit code
+#[tauri::command]
+#[specta::specta]
+pub fn autorun_done(app: AppHandle, report: String, code: i32) -> Result<String> {
+    let name = crate::autorun().ok_or("not started with TREEIX_AUTORUN")?;
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_millis();
     let dir = treeix_proto::data_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(format!("bench-{millis}.json"));
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{name}-{millis}.json"));
+    std::fs::write(&path, report).map_err(|e| e.to_string())?;
+    app.exit(code);
     Ok(path.to_string_lossy().into_owned())
 }

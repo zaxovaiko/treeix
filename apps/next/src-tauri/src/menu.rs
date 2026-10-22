@@ -1,5 +1,6 @@
 //! The macOS menu bar. Cmd+W, Cmd+T, Cmd+D and Cmd+K stay unbound: the frontend handles them per pane.
-//! Custom items reach the frontend as the `menu` app event with their id.
+//! Custom items reach the frontend as the `menu` app event with their id (CommandId in src/shell/shortcuts.ts).
+//! Their chords belong to the menu: the frontend leaves them alone inside Tauri (menuChord in src/shell/shortcuts.ts).
 
 use serde::Serialize;
 use tauri::menu::{Menu, MenuBuilder, MenuEvent, MenuItem, SubmenuBuilder};
@@ -37,11 +38,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()?;
     let view = SubmenuBuilder::new(app, "View")
         .item(&item("toggle-sidebar", "Toggle Sidebar", "CmdOrCtrl+\\")?)
-        .item(&item(
-            "command-palette",
-            "Command Palette…",
-            "CmdOrCtrl+Shift+P",
-        )?)
+        .item(&item("palette", "Command Palette…", "CmdOrCtrl+Shift+P")?)
         .separator()
         .fullscreen()
         .build()?;

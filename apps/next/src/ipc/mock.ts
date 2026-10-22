@@ -272,6 +272,12 @@ export function mockApi(): Api {
       if (!sims.delete(id)) return
       fire({ type: 'removed', session: id })
     },
+    async restart(id) {
+      const sim = get(id)
+      Object.assign(sim.info, { exitCode: null, pid: 40000 + next++ })
+      setStatus(sim, sim.info.kind === 'shell' ? 'idle' : 'running')
+      emit(sim, sim.info.kind === 'shell' ? prompt(sim.info.cwd) : banner(sim.info.kind === 'codex' ? 'codex' : 'claude', sim.info.cwd))
+    },
     getUi: async () => localStorage.getItem(UI_KEY),
     putUi: async (json) => localStorage.setItem(UI_KEY, json),
     places: async (paths) => paths.map(placeOf),

@@ -1,6 +1,7 @@
 //! The quick terminal: a hidden window summoned over any app and space by a global chord.
 //! On macOS it is a non-activating NSPanel so summoning it does not pull the main window forward.
 
+use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -20,6 +21,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     .visible_on_all_workspaces(true)
     .skip_taskbar(true)
     .visible(false)
+    // A suspended webview stops acking, and the daemon then pauses the shell's output
+    .background_throttling(BackgroundThrottlingPolicy::Disabled)
     .build()?;
     #[cfg(target_os = "macos")]
     panel::convert(&window)?;

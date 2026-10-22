@@ -23,7 +23,7 @@ async function attach(id: string, onData: (bytes: Uint8Array, seq: number) => vo
   }
   // The snapshot is sent before the reply, and channel messages keep their order, so data never precedes it
   const { seq, info } = await commands.attach(id, channel)
-  return { snapshot: await snapshot, seq, info, detach: () => done(commands.detach(id)) }
+  return { snapshot: await snapshot, seq, info, detach: () => done(commands.detach(id, channel.id)) }
 }
 
 export function tauriApi(): Api {
@@ -47,6 +47,7 @@ export function tauriApi(): Api {
     ack: (id, bytes) => done(commands.ack(id, bytes)),
     kill: (id) => done(commands.kill(id)),
     remove: (id) => done(commands.remove(id)),
+    restart: (id) => done(commands.restart(id)),
     getUi: commands.getUi,
     putUi: (json) => done(commands.putUi(json)),
     places: commands.places,

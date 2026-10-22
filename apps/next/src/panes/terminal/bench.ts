@@ -1,5 +1,5 @@
-// In-app terminal bench, Phase 0 gate. Loaded in dev builds or with localStorage 'treeix.bench' = '1';
-// run `await __treeixBench()` in the webview console. Inputs come from `bun bench/gen.ts`, see bench/README.md
+// In-app terminal bench, Phase 0 gate: `TREEIX_AUTORUN=bench` (src/autorun.ts), or `await __treeixBench()` in a dev build's console.
+// Inputs come from `bun bench/gen.ts`, see bench/README.md
 import type { Terminal } from '@xterm/xterm'
 import { api as defaultApi, type Api } from '../../ipc/api'
 import { ackBatcher, bytesFrom } from './stream'
@@ -10,6 +10,7 @@ const THROUGHPUT_FILES = [`${DIR}/mixed-100m.ans`, `${DIR}/plain-50m.txt`]
 const ECHO_SAMPLES = 300
 const ECHO_WARMUP = 10
 const REVEAL_SAMPLES = 30
+const DONE_TITLE = 'treeix-bench-done'
 
 export interface Spread {
   samples: number
@@ -49,10 +50,11 @@ function stage(): HTMLElement {
   return host
 }
 
-function exited(api: Api, id: string): Promise<void> {
+/** Resolves when the session sets its title to `title` */
+function titled(api: Api, id: string, title: string): Promise<void> {
   return new Promise((done) => {
     const stop = api.onEvent((event) => {
-      if ((event.type === 'exit' && event.session === id) || (event.type === 'status' && event.session === id && event.status === 'exited')) {
+      if (event.type === 'title' && event.session === id && event.title === title) {
         stop()
         done()
       }
@@ -98,12 +100,13 @@ async function finalSeq(api: Api, id: string): Promise<number> {
   return (await api.sessions()).find((session) => session.id === id)?.seq ?? 0
 }
 
-/** `cat` of a file: from the start signal until the session exited and every byte is drawn */
+/** `cat` of a file: from the start signal until its end marker (an OSC title) is drawn */
 async function throughput(api: Api, file: string) {
-  // No echo and no \n -> \r\n, so the bytes drawn are the file's; cat waits for the start signal
-  const command = ['/bin/sh', '-c', 'stty -echo -onlcr; read _; exec cat "$0"', file]
+  // No echo and no \n -> \r\n, so the bytes drawn are the file's; cat waits for the start signal.
+  // It stays alive after: the shell removes a shell session that exits cleanly, and with it the final seq
+  const command = ['/bin/sh', '-c', `stty -echo -onlcr; read _; cat "$0"; printf '\\033]2;${DONE_TITLE}\\007'; exec sleep 86400`, file]
   const session = await api.create({ kind: 'shell', command, cols: 120, rows: 40 })
-  const done = exited(api, session.id)
+  const done = titled(api, session.id, DONE_TITLE)
   const staged = await attachStaged(api, session.id)
   await sleep(300)
   const start = await finalSeq(api, session.id)
@@ -184,12 +187,7 @@ export async function runBench(api: Api): Promise<BenchResult> {
     reveal: await revealBench(api)
   }
   for (const file of THROUGHPUT_FILES) result.throughput.push(await throughput(api, file))
-  const json = JSON.stringify(result, null, 2)
-  console.log(json)
-  if ('__TAURI_INTERNALS__' in window) {
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('bench_report', { json }).catch((error: unknown) => console.warn('bench_report', error))
-  }
+  console.log(JSON.stringify(result, null, 2))
   return result
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { isCommandId, shortcut } from './shortcuts'
+import { isCommandId, menuChord, shortcut } from './shortcuts'
 
 const key = (k: string, mods: { shift?: boolean; alt?: boolean; ctrl?: boolean; meta?: boolean } = {}, code = '') => ({
   key: k,
@@ -31,4 +31,12 @@ test('menu ids are checked', () => {
   expect(isCommandId('split-down')).toBe(true)
   expect(isCommandId('tab-9')).toBe(true)
   expect(isCommandId('rm -rf')).toBe(false)
+})
+
+test('menu chords: only what src-tauri/src/menu.rs binds', () => {
+  expect(menuChord(key('\\', {}, 'Backslash'))).toBe(true)
+  expect(menuChord(key(','))).toBe(true)
+  expect(menuChord(key('P', { shift: true }))).toBe(true)
+  expect(menuChord(key('k'))).toBe(false)
+  expect(menuChord(key('t'))).toBe(false)
 })

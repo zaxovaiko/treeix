@@ -85,6 +85,8 @@ export interface Api {
   ack(id: string, bytes: number): Promise<void>
   kill(id: string): Promise<void>
   remove(id: string): Promise<void>
+  /** Runs an exited, restored or crashed session's command again in place, keeping its scrollback */
+  restart(id: string): Promise<void>
   /** Opaque UI state persisted by the daemon next to the sessions */
   getUi(): Promise<string | null>
   putUi(json: string): Promise<void>

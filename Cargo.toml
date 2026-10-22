@@ -23,3 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+# Stripping symbols from proc-macro dylibs breaks loading them on macOS 27 (E0463, mis-aligned LINKEDIT)
+[profile.release.build-override]
+strip = false
