@@ -64,4 +64,4 @@
 .fv-dlist .mi { height: auto; padding: 6px 8px; align-items: flex-start; white-space: normal; cursor: pointer; }
 .fv-dlist .mi .icon.sm { opacity: 0; } .fv-dlist .mi:hover .icon.sm { opacity: 1; }
 .fv-dlist .dim { font-size: 11px; }
-.fv-dft { flex: none; display: flex; justify-content: flex-end; padding: 8px; border-top: 1px solid var(--border); }
+.fv-dft { flex: none; display: flex; justify-content: flex-end; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }

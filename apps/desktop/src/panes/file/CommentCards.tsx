@@ -54,7 +54,22 @@ export function CommentDraft({ label, onSave, onCancel }: { label: string; onSav
 }
 
 /** The place's comments for agents, by file; a click opens the file at the comment */
-export function CommentsDrawer({ root, comments, onOpen, onClose }: { root: string; comments: ReviewComment[]; onOpen: (comment: ReviewComment) => void; onClose: () => void }) {
+export function CommentsDrawer({
+  root,
+  comments,
+  sendTo,
+  onSend,
+  onOpen,
+  onClose,
+}: {
+  root: string
+  comments: ReviewComment[]
+  /** Who gets the queue, like `Claude` or `a new Claude` */
+  sendTo: string
+  onSend: () => void
+  onOpen: (comment: ReviewComment) => void
+  onClose: () => void
+}) {
   const files = [...new Set(comments.map((comment) => comment.filePath))]
   return (
     <aside className="fv-drawer">
@@ -89,6 +104,9 @@ export function CommentsDrawer({ root, comments, onOpen, onClose }: { root: stri
       {comments.length > 0 && (
         <div className="fv-dft">
           <button className="btn sm ghost" onClick={() => clearComments(root)}>Clear the list</button>
+          <button className="btn sm pri" onClick={onSend}>
+            Send {comments.length} to {sendTo}
+          </button>
         </div>
       )}
     </aside>

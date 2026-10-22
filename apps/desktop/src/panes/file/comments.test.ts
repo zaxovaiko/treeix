@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test'
-import { addComment, clearComments, COMMENTS_KEY, deleteComment, extractFileLines, getComments, isReviewComment, linesLabel } from './comments'
+import { addComment, clearComments, COMMENTS_KEY, deleteComment, extractFileLines, getComments, isReviewComment, linesLabel, reviewPrompt } from './comments'
 
 const store = new Map<string, string>()
 globalThis.localStorage = {
@@ -33,4 +33,14 @@ test('stored junk is not a comment', () => {
   expect(isReviewComment({ id: '1', worktreePath: '/a', filePath: 'x', code: '', text: 't', range: { start: 1, end: 1 }, kind: 'file' })).toBe(true)
   expect(isReviewComment({ id: '1', worktreePath: '/a', filePath: 'x', code: '', text: 't', range: null, kind: 'file' })).toBe(false)
   expect(isReviewComment('nope')).toBe(false)
+})
+
+test('the queue goes as one prompt of references and notes', () => {
+  const comment = { id: 'a', worktreePath: '/w', code: 'const x = 1', kind: 'file' as const }
+  const prompt = reviewPrompt([
+    { ...comment, filePath: 'src/pty.ts', range: { start: 14, end: 8 }, text: 'Pass an explicit env' },
+    { ...comment, filePath: 'src/coalesce.ts', range: { start: 5, end: 5 }, text: 'Cap the buffer' },
+  ])
+  expect(prompt).toBe('Review comments. Address each one:\n\n1. src/pty.ts:8-14\nPass an explicit env\n\n2. src/coalesce.ts:5\nCap the buffer\n')
+  expect(prompt).not.toContain('const x')
 })

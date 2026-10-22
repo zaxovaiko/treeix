@@ -3,7 +3,8 @@ import type { ChangeStatus, GitStatus } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
 import type { ShellView } from '../../shell/Shell'
 import { CommentsDrawer } from './CommentCards'
-import { useComments } from './comments'
+import { askAgent } from '../../panels/common'
+import { clearComments, reviewPrompt, useComments } from './comments'
 import { FileIcon } from './icons'
 import { IMAGE_PATH, Media, PDF_PATH } from './Media'
 import { closeFile, closeFileLeaf, leafRoot, openFile, showFile, useFileTabs } from './open'
@@ -14,6 +15,8 @@ const STATUS_CLASS: Record<ChangeStatus, string> = { modified: 'gs-M', renamed: 
 const SAVE_LABEL: Record<SaveStatus, string> = { saved: 'Saved', pending: 'Unsaved', saving: 'Saving...', failed: 'Save failed' }
 
 /** A place's open files as editor tabs over one editor, a diff against HEAD, and the place's comments for agents */
+const GONE = new Set(['exited', 'restored', 'crashed'])
+
 export function FilePane({ view, id }: { view: ShellView; id: string }) {
   const { api } = view
   const root = leafRoot(id)
@@ -25,6 +28,19 @@ export function FilePane({ view, id }: { view: ShellView; id: string }) {
   const [save, setSave] = useState<{ status: SaveStatus; error: string | null }>({ status: 'saved', error: null })
   const comments = useComments().filter((comment) => comment.worktreePath === root)
   const text = file !== null && !IMAGE_PATH.test(file) && !PDF_PATH.test(file)
+  /** A live agent in this place gets the queue; otherwise a new Claude starts with it */
+  const agent = Object.values(view.sessions).find((s) => (s.kind === 'claude' || s.kind === 'codex') && !GONE.has(s.status) && view.placeOf(s.id).path === root)
+  const sendComments = () => {
+    const prompt = reviewPrompt(comments)
+    if (agent)
+      void api
+        .write(agent.id, `\x1b[200~${prompt}\x1b[201~`)
+        .then(() => api.write(agent.id, '\r'))
+        .then(() => view.dispatch({ type: 'focus', session: agent.id }))
+    else void askAgent(view, 'claude', root, prompt, 'Review comments')
+    clearComments(root)
+    setDrawer(false)
+  }
 
   // Tab colors and the gutter's base follow saves
   const saved = save.status === 'saved'
@@ -113,7 +129,16 @@ export function FilePane({ view, id }: { view: ShellView; id: string }) {
         ) : (
           <Media key={file} api={api} root={root} file={file} />
         )}
-        {drawer && <CommentsDrawer root={root} comments={comments} onOpen={(comment) => (setDiff(false), openFile(view, root, comment.filePath, comment.range.end))} onClose={() => setDrawer(false)} />}
+        {drawer && (
+          <CommentsDrawer
+            root={root}
+            comments={comments}
+            sendTo={agent ? (agent.kind === 'codex' ? 'Codex' : 'Claude') : 'a new Claude'}
+            onSend={sendComments}
+            onOpen={(comment) => (setDiff(false), openFile(view, root, comment.filePath, comment.range.end))}
+            onClose={() => setDrawer(false)}
+          />
+        )}
       </div>
     </div>
   )

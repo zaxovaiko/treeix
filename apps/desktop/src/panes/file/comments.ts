@@ -5,7 +5,7 @@ export interface LineRange {
   end: number
 }
 
-/** A note for the agent on lines of a file; Phase 4 sends them. Same shape and storage key as the Electron app's file comments */
+/** A note for the agent on lines of a file; the drawer sends them. Same shape and storage key as the Electron app's file comments */
 export interface ReviewComment {
   id: string
   worktreePath: string
@@ -29,6 +29,10 @@ export function extractFileLines(contents: string, { start, end }: LineRange): s
 export const rangeLabel = ({ start, end }: LineRange): string => (start === end ? `${start}` : `${Math.min(start, end)}-${Math.max(start, end)}`)
 
 /** "Line 4" or "Lines 4-9" */
+/** The queue as one prompt: `path:lines` and the note, never the code */
+export const reviewPrompt = (comments: ReviewComment[]): string =>
+  `Review comments. Address each one:\n\n${comments.map((comment, index) => `${index + 1}. ${comment.filePath}:${rangeLabel(comment.range)}\n${comment.text}`).join('\n\n')}\n`
+
 export const linesLabel = (range: LineRange): string => `${range.start === range.end ? 'Line' : 'Lines'} ${rangeLabel(range)}`
 
 export function isReviewComment(value: unknown): value is ReviewComment {
