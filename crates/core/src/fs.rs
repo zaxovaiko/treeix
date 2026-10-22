@@ -3,8 +3,8 @@
 
 use ignore::WalkBuilder;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use notify_debouncer_full::notify::{RecommendedWatcher, RecursiveMode};
-use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
+use notify_debouncer_full::notify::{self, RecommendedWatcher, RecursiveMode};
+use notify_debouncer_full::{DebounceEventResult, Debouncer, NoCache, new_debouncer_opt};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashSet;
@@ -235,8 +235,9 @@ pub fn trash_path(root: &Path, file: &str) -> Result<(), String> {
     trash::delete(inside_root(root, file)?).map_err(|e| format!("{file}: {e}"))
 }
 
-/// A live watch; dropping it stops the events
-pub type Watch = Debouncer<RecommendedWatcher, RecommendedCache>;
+/// A live watch; dropping it stops the events. No file id cache: on macOS it walks and stats the whole tree,
+/// `node_modules` and symlinks included, on every watch (seconds and a path per file), only to pair up renames
+pub type Watch = Debouncer<RecommendedWatcher, NoCache>;
 
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(200);
 
@@ -259,7 +260,7 @@ pub fn watch(
     let handler_root = root.clone();
     let handler_target = target.clone();
     let handler_git_dirs = git_dirs.clone();
-    let mut debouncer = new_debouncer(WATCH_DEBOUNCE, None, move |result: DebounceEventResult| {
+    let handler = move |result: DebounceEventResult| {
         let Ok(events) = result else {
             return;
         };
@@ -289,7 +290,14 @@ pub fn watch(
         if change.git || !change.paths.is_empty() {
             on_change(change);
         }
-    })
+    };
+    let mut debouncer = new_debouncer_opt(
+        WATCH_DEBOUNCE,
+        None,
+        handler,
+        NoCache,
+        notify::Config::default(),
+    )
     .map_err(|e| e.to_string())?;
     let watched = match &target {
         Some(target) => target.parent().unwrap_or(&root).to_path_buf(),

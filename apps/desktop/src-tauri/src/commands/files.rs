@@ -189,8 +189,9 @@ pub async fn search_text(
     blocking(move || search::search_text(&roots, &query, options)).await
 }
 
-fn watches() -> &'static Mutex<HashMap<String, Watch>> {
-    static WATCHES: OnceLock<Mutex<HashMap<String, Watch>>> = OnceLock::new();
+/// `None` while a watch is starting, so an `unwatch` meanwhile stops it instead of missing it
+fn watches() -> &'static Mutex<HashMap<String, Option<Watch>>> {
+    static WATCHES: OnceLock<Mutex<HashMap<String, Option<Watch>>>> = OnceLock::new();
     WATCHES.get_or_init(Default::default)
 }
 
@@ -198,6 +199,10 @@ fn watches() -> &'static Mutex<HashMap<String, Watch>> {
 #[tauri::command]
 #[specta::specta]
 pub async fn watch(app: AppHandle, id: String, root: String, file: Option<String>) -> Result<()> {
+    watches()
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(id.clone(), None);
     blocking(move || {
         let event_id = id.clone();
         let watch = fs::watch(Path::new(&root), file.as_deref(), move |change| {
@@ -210,10 +215,9 @@ pub async fn watch(app: AppHandle, id: String, root: String, file: Option<String
                 tracing::warn!("fs event not sent: {e}");
             }
         })?;
-        watches()
-            .lock()
-            .map_err(|e| e.to_string())?
-            .insert(id, watch);
+        if let Some(slot) = watches().lock().map_err(|e| e.to_string())?.get_mut(&id) {
+            *slot = Some(watch);
+        }
         Ok(())
     })
     .await
