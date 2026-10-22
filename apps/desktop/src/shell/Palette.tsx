@@ -22,6 +22,8 @@ const ACTIONS: [CommandId, string][] = [
   ['split-right', 'Split right'],
   ['split-down', 'Split down'],
   ['close-pane', 'Close pane'],
+  ['next-tab', 'Next tab'],
+  ['prev-tab', 'Previous tab'],
   ['toggle-tabs', 'Toggle tabs: vertical or horizontal'],
   ['toggle-ui', 'Toggle layout: Compact or Islands'],
   ['toggle-theme', 'Toggle theme: dark or light'],
@@ -37,15 +39,16 @@ const ACTION_ICON: Partial<Record<CommandId, Command['icon']>> = {
   'split-right': 'split',
   'split-down': 'splitDown',
   'close-pane': 'x',
+  'next-tab': 'right',
+  'prev-tab': 'left',
   'toggle-tabs': 'layout',
   'toggle-ui': 'layout',
-  'toggle-theme': 'moon',
   'toggle-sidebar': 'sideL',
   settings: 'gear',
 }
 
 function commands(view: ShellView): Command[] {
-  const actions = ACTIONS.map(([id, label]): Command => ({ id, group: 'Actions', label, shortcut: keyHint(id), icon: ACTION_ICON[id], run: () => view.run(id) }))
+  const actions = ACTIONS.map(([id, label]): Command => ({ id, group: 'Actions', label, shortcut: keyHint(id), icon: id === 'toggle-theme' ? (view.ui.theme === 'dark' ? 'sun' : 'moon') : ACTION_ICON[id], run: () => view.run(id) }))
   const tabs = view.ordered.map(
     (tab): Command => ({
       id: tab.id,
@@ -76,24 +79,32 @@ export function Palette({ view, onClose }: { view: ShellView; onClose: () => voi
   const [selected, setSelected] = useState(0)
   const results = paletteResults(commands(view), query)
   const current = Math.min(selected, results.length - 1)
+  // Read at first render, before the input's autoFocus moves it
+  const [opener] = useState(() => document.activeElement)
+  const dismiss = () => {
+    onClose()
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
+  }
 
+  // Focus goes back first, so a dialog the command opens returns it there too
   const pick = (result: Result | undefined) => {
     if (!result) return
-    onClose()
+    dismiss()
     result.command.run()
   }
 
+  // Tab stays put: the input is the palette's only stop, arrows move through the list
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') onClose()
+    if (e.key === 'Escape') dismiss()
     else if (e.key === 'Enter') pick(results[current])
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') setSelected((current + (e.key === 'ArrowDown' ? 1 : -1) + results.length) % Math.max(results.length, 1))
-    else return
+    else if (e.key !== 'Tab') return
     e.preventDefault()
   }
 
   return (
     <>
-      <div className="scrim" onMouseDown={onClose} />
+      <div className="scrim" onMouseDown={dismiss} />
       <div className="palette" role="dialog">
         <label className="pin">
           <Icon name="search" />

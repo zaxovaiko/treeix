@@ -112,7 +112,7 @@ export const keyHint = (id: CommandId, mac = IS_MAC): string | undefined => (mac
 /** `label (chord)` for a tooltip */
 export const withHint = (label: string, id: CommandId) => (keyHint(id) ? `${label} (${keyHint(id)})` : label)
 
-const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
+export const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
 
 /**
  * A global-shortcut accelerator (global-hotkey) from a recorded chord, e.g. `Control+Backquote`. Null until a
@@ -136,3 +136,6 @@ export function acceleratorLabel(accel: string, mac = IS_MAC): string {
   const key = code === 'IntlBackslash' ? (mac ? '§' : '<') : (CODE_LABEL[code] ?? code.replace(/^(Key|Digit|Numpad)/, ''))
   return parts.map((m) => MOD_LABEL[m]?.[mac ? 0 : 1] ?? `${m}+`).join('') + key
 }
+
+/** A dialog is up or the settings recorder is taking a chord */
+export const shortcutsPaused = () => document.querySelector('[aria-modal], .krec.on') !== null

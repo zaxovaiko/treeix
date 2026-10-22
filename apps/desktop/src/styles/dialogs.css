@@ -23,7 +23,7 @@
 
 .fld { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; flex: 1; min-width: 0; }
 .fld > label { font-size: 11px; font-weight: 500; color: var(--muted-foreground); }
-.fld input, .fld select { height: 30px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--muted); box-shadow: inset 0 0 0 1px var(--input); color: var(--foreground); font-size: 12.5px; }
+.fld input, .fld select { height: 26px; padding: 0 10px; border-radius: 7px; border: 0; background: var(--muted); box-shadow: inset 0 0 0 1px var(--input); color: var(--foreground); font-size: 12.5px; }
 .fld select:disabled { opacity: .5; }
 .frow2 { display: flex; gap: 10px; }
 .chk { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: 12px; }
@@ -32,8 +32,8 @@
 .chk input[type=checkbox]:checked::after { content: ""; width: 7px; height: 3.5px; border: 1.5px solid #fff; border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
 .mft { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 14px; font-size: 12px; }
 .mft > .dim { margin-right: auto; min-width: 0; }
-.banner { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 10px; border-radius: 8px; font-size: 12px; color: var(--amber); background: var(--amber-bg); }
-.banner svg { flex: none; width: 13px; height: 13px; }
+.modal .banner { margin: 0 0 12px; }
+.modal .banner svg { flex: none; width: 13px; height: 13px; }
 .warnl { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
 .warnl li { padding-left: 14px; position: relative; } .warnl li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--muted-foreground); }
 .warnl li.err { color: var(--red); } .warnl li.err::before { background: var(--red); }

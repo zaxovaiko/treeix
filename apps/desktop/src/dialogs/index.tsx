@@ -1,8 +1,8 @@
-import { useEffect, useEffectEvent, useRef, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { settingsNow } from '../features/agents/settings'
 import { McpSetup } from '../features/mcp/McpSetup'
 import type { Command } from '../lib/paletteSearch'
-import { IS_MAC } from '../shell/shortcuts'
+import { IS_MAC, shortcutsPaused } from '../shell/shortcuts'
 import type { ShellView } from '../shell/Shell'
 import { FileHistory } from './FileHistory'
 import { FindInFiles } from './FindInFiles'
@@ -51,7 +51,7 @@ export const dialogCommands = (view: ShellView): Command[] => [
 /** ⇧⌘N and ⇧⌘F (Ctrl+Shift on Linux, where a focused terminal keeps Ctrl+Shift+F for its find bar); captured before the terminal sees them */
 export function useDialogKeys(open: (request: DialogRequest) => void) {
   const onKey = useEffectEvent((e: KeyboardEvent) => {
-    if (!e.shiftKey || e.altKey || (IS_MAC ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey)) return
+    if (shortcutsPaused() || !e.shiftKey || e.altKey || (IS_MAC ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey)) return
     const key = e.key.toLowerCase()
     const inTerminal = !IS_MAC && e.target instanceof Element && e.target.closest('.xterm')
     const request: DialogRequest | null = key === 'n' ? { kind: 'newWorktree' } : key === 'f' && !inTerminal ? { kind: 'find' } : null
@@ -83,11 +83,34 @@ export function Dialogs({ view, request, onClose }: { view: ShellView; request: 
 }
 
 /** Scrim plus the box; Escape and a click outside close it unless `busy` */
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+/** Tab past either end wraps around inside the dialog */
+function trapTab(e: ReactKeyboardEvent, box: HTMLElement) {
+  const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0)
+  const first = items[0]
+  const last = items.at(-1)
+  const at = document.activeElement
+  if (!first || !last) e.preventDefault()
+  else if (e.shiftKey && (at === first || at === box)) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && at === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
 export function Modal({ className = '', busy = false, onClose, children }: { className?: string; busy?: boolean; onClose: () => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null)
+  // Read at first render, before a child's autoFocus moves it
+  const [opener] = useState(() => document.activeElement)
   useEffect(() => {
     if (!box.current?.contains(document.activeElement)) box.current?.focus()
-  }, [])
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
+    }
+  }, [opener])
   return (
     <>
       <div className="scrim" onMouseDown={() => !busy && onClose()} />
@@ -98,6 +121,7 @@ export function Modal({ className = '', busy = false, onClose, children }: { cla
         aria-modal
         tabIndex={-1}
         onKeyDown={(e) => {
+          if (e.key === 'Tab' && box.current) return trapTab(e, box.current)
           if (e.key !== 'Escape' || e.defaultPrevented) return
           e.preventDefault()
           if (!busy) onClose()

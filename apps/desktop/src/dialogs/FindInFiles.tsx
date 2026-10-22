@@ -57,7 +57,9 @@ export function FindInFiles({ view, onClose }: { view: ShellView; onClose: () =>
   const visible = groups.flatMap((g) => (expanded.has(g.path) ? g.matches : g.matches.slice(0, PER_FILE)))
   const current = Math.min(selected, visible.length - 1)
 
-  useEffect(() => list.current?.querySelector('.ffrow.on')?.scrollIntoView({ block: 'nearest' }), [current])
+  useEffect(() => {
+    list.current?.querySelector('.ffrow.on')?.scrollIntoView({ block: 'nearest' })
+  }, [current])
 
   const open = (m: SearchMatch | undefined) => {
     if (!m) return

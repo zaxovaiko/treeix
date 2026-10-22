@@ -295,7 +295,7 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
           </span>
         </h3>
         {notGit && (
-          <div className="banner">
+          <div className="banner amber">
             <Icon name="folder" />
             <span className="grow">{notGit} is not a git repo, so pick which repo gets the worktree.</span>
           </div>
@@ -364,7 +364,7 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
                       <div key={'ticket' in r ? `t${r.ticket.source}${r.ticket.key}` : `${r.create}${r.name}`} style={{ display: 'contents' }}>
                         {label && <div className="mlabel">{label}</div>}
                         {'ticket' in r ? (
-                          <button className={`mi ${i === current ? 'on' : ''}`} title={`Branch ${ticketBranch(r.ticket)}`} onMouseMove={() => setHi(i)} onClick={() => pick(r)}>
+                          <button className={`mi ${i === current ? 'on' : ''}`} tabIndex={-1} title={`Branch ${ticketBranch(r.ticket)}`} onMouseMove={() => setHi(i)} onClick={() => pick(r)}>
                             <FIcon name={r.ticket.source} />
                             <span className="trunc">
                               <span className="mono dim">{r.ticket.source === 'jira' ? r.ticket.key : r.ticket.project ?? 'Notion'}</span> {r.ticket.title}
@@ -372,7 +372,7 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
                             <span className="d">{r.ticket.status}</span>
                           </button>
                         ) : (
-                          <button className={`mi ${i === current ? 'on' : ''}`} onMouseMove={() => setHi(i)} onClick={() => pick(r)}>
+                          <button className={`mi ${i === current ? 'on' : ''}`} tabIndex={-1} onMouseMove={() => setHi(i)} onClick={() => pick(r)}>
                             {r.create ? <Icon name="plus" /> : r.remote ? <Glyph name="globe" /> : <Icon name="branch" />}
                             <span className="trunc">
                               {r.create ? (

@@ -22,8 +22,7 @@
 .hrow .t .rtc { margin-left: 5px; vertical-align: -1px; }
 
 .modal.rt { top: max(24px, calc(50vh - 330px)); transform: translate(-50%, 0); max-height: calc(100vh - 48px); overflow: auto; }
-.modal.rt .fld .seg { align-self: flex-start; height: 30px; align-items: center; }
-.modal.rt .opts .chk { padding: 0; }
+.modal.rt .fld .seg { align-self: flex-start; }
 .modal.rt .fld label .dim { font-weight: 400; }
 .modal.rt .fld input.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .modal.rt .fld input:disabled { opacity: .5; }

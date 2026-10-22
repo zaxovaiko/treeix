@@ -40,7 +40,6 @@
 /* MCP setup */
 .modal.mcp { width: 480px; }
 .modal.mcp > p { margin: -6px 0 12px; font-size: 12.5px; }
-.modal.mcp .banner { margin: 0 0 12px; }
 .mcpag { display: flex; flex-direction: column; margin-bottom: 8px; }
 .mcprow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 2px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
 .mcprow:last-child { border-bottom: 0; }
