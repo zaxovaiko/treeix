@@ -5,6 +5,7 @@ mod chat;
 mod hooks;
 mod osc;
 mod procinfo;
+mod remote;
 mod routines;
 mod server;
 mod session;
@@ -88,6 +89,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
     let daemon = Daemon::load(opts.data_dir.clone(), BUILD.to_owned());
     daemon.save_state(false);
     daemon.spawn_timers();
+    remote::listen(&daemon);
     tracing::info!(
         "listening on {} (build {BUILD}, pid {})",
         socket.display(),

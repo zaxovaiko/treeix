@@ -124,11 +124,18 @@ impl Chats {
         }
     }
 
-    fn get(&self, id: &str) -> Result<Arc<Chat>, String> {
+    pub(crate) fn get(&self, id: &str) -> Result<Arc<Chat>, String> {
         lock(&self.by_id)
             .get(id)
             .cloned()
             .ok_or_else(|| format!("no chat {id}"))
+    }
+
+    /// Oldest first
+    pub(crate) fn list(&self) -> Vec<ChatInfo> {
+        let mut list: Vec<ChatInfo> = lock(&self.by_id).values().map(|c| c.info()).collect();
+        list.sort_by_key(|info| info.created_at);
+        list
     }
 
     fn begin(&self, id: &str) -> u64 {
@@ -231,6 +238,14 @@ impl Chat {
 
     pub fn info(&self) -> ChatInfo {
         self.state().info.clone()
+    }
+
+    /// The info and up to the last `max` log entries from `from_seq` on, read together
+    pub(crate) fn since(&self, from_seq: u64, max: usize) -> (ChatInfo, Vec<ChatEntry>) {
+        let state = self.state();
+        let fresh = state.log.iter().filter(|entry| entry.seq >= from_seq);
+        let skip = fresh.clone().count().saturating_sub(max);
+        (state.info.clone(), fresh.skip(skip).cloned().collect())
     }
 
     fn save(&self, info: &ChatInfo) {
@@ -603,11 +618,7 @@ pub fn handle(daemon: &Arc<Daemon>, client: ClientId, outbox: &Outbox, id: u64, 
             }
             Err(e) => reply(Err(e)),
         },
-        Request::ChatList => {
-            let mut list: Vec<ChatInfo> = lock(&chats.by_id).values().map(|c| c.info()).collect();
-            list.sort_by_key(|info| info.created_at);
-            reply(Ok(Response::Chats(list)));
-        }
+        Request::ChatList => reply(Ok(Response::Chats(chats.list()))),
         Request::ChatAttach { chat, from_seq } => match chats.get(&chat) {
             Ok(chat) => chat.attach(client, outbox, id, from_seq),
             Err(e) => reply(Err(e)),

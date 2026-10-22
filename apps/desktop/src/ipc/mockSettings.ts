@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from '../features'
-import type { Api, KeepAwakeState, Secret, Settings, Ticket } from './api'
+import type { Api, KeepAwakeState, PhoneStatus, Secret, Settings, Ticket } from './api'
 
 // Phase 4-5 settings, system, MCP and tickets demo (owners U6, A5). Settings persist in localStorage like the ui state
 
@@ -7,6 +7,7 @@ type SettingsApi = Pick<
   Api,
   | 'getSettings' | 'updateSettings' | 'onSettings' | 'hasSecret' | 'setSecret' | 'deleteSecret'
   | 'cliTools' | 'appVersion' | 'checkUpdate' | 'installUpdate' | 'keepAwake' | 'setKeepAwake' | 'onKeepAwake'
+  | 'phoneStatus' | 'setPhone'
   | 'mcpStatus' | 'mcpInstall' | 'myTickets' | 'ticketDetail' | 'notionDatabases'
 >
 
@@ -18,6 +19,8 @@ const TICKETS: Ticket[] = [
   { key: 'TRX-58', source: 'jira', kind: 'task', title: 'Sign the Linux AppImage', status: 'To Do', url: 'https://treeix.atlassian.net/browse/TRX-58', project: 'TRX', updatedAt: '2026-10-18T11:40:00Z' },
   { key: '1a2b3c4d5e6f', source: 'notion', kind: 'task', title: 'Write the chat onboarding copy', status: 'Not started', url: 'https://www.notion.so/1a2b3c4d5e6f', project: 'Roadmap', updatedAt: '2026-10-19T14:00:00Z' },
 ]
+
+const NODE = { login: 'me@example.com', dnsName: 'mac.tail1234.ts.net' }
 
 const merge = (settings: Settings, patch: Record<string, unknown>): Settings => {
   const out: Record<string, unknown> = { ...settings }
@@ -36,6 +39,7 @@ export function settingsMock(): SettingsApi {
   const secrets = new Set<Secret>()
   let awake: KeepAwakeState = { on: false, active: false }
   let mcpInstalled = false
+  const phone = (): PhoneStatus => ({ node: NODE, problem: null, on: settings.phone.owner !== null, url: `https://${NODE.dnsName}/` })
 
   return {
     getSettings: async () => settings,
@@ -77,6 +81,14 @@ export function settingsMock(): SettingsApi {
     onKeepAwake(cb) {
       awakeListeners.add(cb)
       return () => awakeListeners.delete(cb)
+    },
+
+    phoneStatus: async () => phone(),
+    async setPhone(on) {
+      settings = merge(settings, { phone: { owner: on ? NODE.login : null } })
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+      settingsListeners.forEach((cb) => cb(settings))
+      return phone()
     },
 
     mcpStatus: async () => ({

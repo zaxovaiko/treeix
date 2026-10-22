@@ -693,6 +693,14 @@ impl Session {
         });
     }
 
+    /// The output seq, columns and styled rows (screen + up to `max_history` scrollback), for the phone page
+    pub fn view(&self, max_history: usize) -> (u64, usize, Vec<Vec<snapshot::Span>>) {
+        let mut vt = lock(&self.vt);
+        vt.settle();
+        let grid = vt.term.grid();
+        (vt.seq, grid.columns(), snapshot::spans(grid, max_history))
+    }
+
     /// The visible screen as text, one line per row, trailing blanks trimmed
     pub fn screen_text(&self) -> String {
         let vt = lock(&self.vt);

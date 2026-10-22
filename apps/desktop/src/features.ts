@@ -5,7 +5,7 @@ import type { Features, Settings } from './ipc/api'
 
 export type FeatureId = keyof Features
 
-export type SettingsSection = 'appearance' | 'terminal' | 'keys' | 'hotkey' | 'agents' | 'chats' | 'usage' | 'mcp' | 'jira' | 'notion' | 'prs' | 'awake' | 'routines' | 'browser' | 'voice' | 'recording' | 'features' | 'about'
+export type SettingsSection = 'appearance' | 'terminal' | 'keys' | 'hotkey' | 'agents' | 'chats' | 'usage' | 'mcp' | 'jira' | 'notion' | 'prs' | 'awake' | 'routines' | 'browser' | 'voice' | 'recording' | 'phone' | 'features' | 'about'
 
 export interface Feature {
   id: FeatureId
@@ -44,7 +44,7 @@ export const FEATURES = [
 export const SETTINGS_NAV: readonly [group: string, sections: readonly SettingsSection[]][] = [
   ['App', ['appearance', 'terminal', 'keys', 'hotkey']],
   ['Agents', ['agents', 'chats', 'routines', 'usage', 'mcp']],
-  ['Integrations', ['jira', 'notion', 'prs']],
+  ['Integrations', ['jira', 'notion', 'prs', ...(MAC ? (['phone'] as const) : [])]],
   ['Tools', ['browser', ...(MAC ? (['voice', 'recording'] as const) : []), 'awake']],
   ['More', ['features', 'about']],
 ]
@@ -84,4 +84,5 @@ export const DEFAULT_SETTINGS: Settings = {
   browser: { openLinks: false, searchUrl: 'https://www.google.com/search?q=%s', agents: true },
   dictation: { hotkey: ['MetaLeft', 'AltRight'], tapToToggle: true, sounds: true, model: 'parakeet-v3', vocabulary: [] },
   recording: { folder: null, language: '' },
+  phone: { owner: null },
 }

@@ -260,7 +260,13 @@ impl Daemon {
         result
     }
 
-    fn handle(self: &Arc<Self>, client: ClientId, outbox: &Outbox, id: u64, req: Request) {
+    pub(crate) fn handle(
+        self: &Arc<Self>,
+        client: ClientId,
+        outbox: &Outbox,
+        id: u64,
+        req: Request,
+    ) {
         if let Request::Attach { session } | Request::AttachChannel { session, .. } = &req {
             let channel = match req {
                 Request::AttachChannel { channel, .. } => Some(channel),

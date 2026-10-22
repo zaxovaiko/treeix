@@ -413,6 +413,15 @@ async keepAwake() : Promise<KeepAwakeState> {
 async setKeepAwake(on: boolean) : Promise<KeepAwakeState> {
     return await TAURI_INVOKE("set_keep_awake", { on });
 },
+async phoneStatus() : Promise<PhoneStatus> {
+    return await TAURI_INVOKE("phone_status");
+},
+/**
+ * On serves the page for the signed-in Tailscale account; both ways ask for the admin password
+ */
+async setPhone(on: boolean) : Promise<PhoneStatus> {
+    return await TAURI_INVOKE("set_phone", { on });
+},
 async routineList() : Promise<Routine[]> {
     return await TAURI_INVOKE("routine_list");
 },
@@ -1220,6 +1229,18 @@ setup: string | null;
  * "Continue without fetching" after a failed fetch; ignored for PRs
  */
 skipFetch: boolean }
+/**
+ * This Mac on the tailnet
+ */
+export type Node = { 
+/**
+ * The Tailscale account, like `you@example.com`
+ */
+login: string; 
+/**
+ * Like `mac.tail1234.ts.net`
+ */
+dnsName: string }
 export type Notion = { 
 /**
  * Database the tickets come from; the token is in the keyring
@@ -1230,6 +1251,27 @@ export type OptionCategory = "mode" | "model" | "effort" | "other"
 export type OptionValue = { value: string; name: string; description: string | null }
 export type PermissionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always"
 export type PermissionOption = { id: string; name: string; kind: PermissionKind }
+/**
+ * The phone page: ptyd's remote.sock behind `tailscale serve` (tailscale.rs)
+ */
+export type Phone = { 
+/**
+ * The Tailscale login the page answers; None is off
+ */
+owner: string | null }
+export type PhoneStatus = { 
+/**
+ * This Mac on the tailnet; None with `problem` saying why
+ */
+node: Node | null; problem: string | null; 
+/**
+ * An owner is set and `tailscale serve` points at remote.sock
+ */
+on: boolean; 
+/**
+ * `https://<this Mac>/`
+ */
+url: string | null }
 /**
  * CI on the head commit: GitHub's checks rolled up, GitLab's pipeline
  */
@@ -1591,7 +1633,7 @@ export type Settings = { features: Features; appearance: Appearance; terminal: T
 /**
  * Shortcut overrides: action id (shell/shortcuts.ts) to accelerator, empty string unbinds
  */
-keys: Partial<{ [key in string]: string }>; agents: Agents; chats: Chats; usage: Usage; jira: Jira; notion: Notion; prs: Prs; awake: Awake; updates: Updates; routines: Routines; browser: Browser; dictation: Dictation; recording: Recording }
+keys: Partial<{ [key in string]: string }>; agents: Agents; chats: Chats; usage: Usage; jira: Jira; notion: Notion; prs: Prs; awake: Awake; updates: Updates; routines: Routines; browser: Browser; dictation: Dictation; recording: Recording; phone: Phone }
 /**
  * Saved settings, from any window
  */

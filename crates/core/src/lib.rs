@@ -14,4 +14,5 @@ pub mod routines;
 pub mod search;
 pub mod secrets;
 pub mod settings;
+pub mod tailscale;
 pub mod tickets;

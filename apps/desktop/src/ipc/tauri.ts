@@ -159,6 +159,8 @@ export function tauriApi(): Api {
     keepAwake: commands.keepAwake,
     setKeepAwake: commands.setKeepAwake,
     onKeepAwake: (cb) => on(events.keepAwakeState, (p) => p, cb),
+    phoneStatus: commands.phoneStatus,
+    setPhone: commands.setPhone,
 
     routineList: commands.routineList,
     routinePut: commands.routinePut,

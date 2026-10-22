@@ -113,6 +113,8 @@ fn specta() -> Builder<tauri::Wry> {
             install_update,
             keep_awake,
             set_keep_awake,
+            phone_status,
+            set_phone,
             // Phase 6-7: routines
             routine_list,
             routine_put,

@@ -29,6 +29,7 @@ const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {
   browser: ['Browser', 'globe'],
   voice: ['Dictation', 'mic'],
   recording: ['Meeting recording', 'rec'],
+  phone: ['Phone', 'phone'],
   features: ['Features', 'gear'],
   about: ['About', 'alert'],
 }

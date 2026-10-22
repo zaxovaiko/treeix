@@ -354,6 +354,14 @@ pub struct Recording {
     pub language: String,
 }
 
+/// The phone page: ptyd's remote.sock behind `tailscale serve` (tailscale.rs)
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Phone {
+    /// The Tailscale login the page answers; None is off
+    pub owner: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Type)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -374,6 +382,7 @@ pub struct Settings {
     pub browser: Browser,
     pub dictation: Dictation,
     pub recording: Recording,
+    pub phone: Phone,
 }
 
 pub fn path(data_dir: &Path) -> PathBuf {

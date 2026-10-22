@@ -434,6 +434,51 @@ function Awake({ view, settings, update }: SectionProps) {
   )
 }
 
+function Phone({ view }: SectionProps) {
+  const [status, error, reload] = useLoad(() => view.api.phoneStatus())
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const toggle = async (on: boolean) => {
+    setBusy(true)
+    setFailed(null)
+    try {
+      await view.api.setPhone(on)
+    } catch (e) {
+      setFailed(message(e))
+    }
+    setBusy(false)
+    reload()
+  }
+  const problem = error ?? status?.problem
+  const url = status?.on ? status.url : null
+  return (
+    <Group>
+      <Row label="Phone page" desc="Agents, chats and routines in your phone's browser, only for your Tailscale account. Asks for your password each time it changes" keywords="phone mobile iphone tailscale remote">
+        {busy ? <Status tone="idle">Waiting for your password</Status> : <Switch label="Phone page" on={status?.on ?? false} onChange={(on) => void toggle(on)} />}
+      </Row>
+      <Row label="Tailscale" desc={problem ? 'Install Tailscale on this Mac and your phone, and sign in to both with one account' : undefined} keywords="tailscale account tailnet">
+        {problem ? <Status tone="bad">{problem}</Status> : status?.node && <Status tone="ok">{status.node.login}</Status>}
+      </Row>
+      {url && (
+        <Row label="Address" desc={url} keywords="phone url address link">
+          <button className="btn sm" onClick={() => void navigator.clipboard.writeText(url).then(() => setCopied(true))}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+          <button className="btn sm" onClick={() => void view.api.openUrl(url)}>
+            Open
+          </button>
+        </Row>
+      )}
+      {failed && (
+        <Row label="">
+          <span className="st-err">{failed}</span>
+        </Row>
+      )}
+    </Group>
+  )
+}
+
 const ART: Record<FeatureId, [PanelIconName | IconName, string]> = {
   usage: ['gauge', 'amber'],
   ports: ['plug', 'sky'],
@@ -548,6 +593,7 @@ export const SECTION_VIEWS: Record<SettingsSection, (props: SectionProps) => Rea
   browser: BrowserSection,
   voice: VoiceSection,
   recording: RecordingSection,
+  phone: Phone,
   features: Features,
   about: About,
 }

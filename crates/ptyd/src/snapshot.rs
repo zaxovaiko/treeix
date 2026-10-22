@@ -9,6 +9,7 @@ use alacritty_terminal::vte::ansi::{
     CharsetIndex, Color, CursorShape, CursorStyle, Handler, NamedPrivateMode, PrivateMode,
     StandardCharset,
 };
+use serde::Serialize;
 use std::io::Write;
 use std::ops::Range;
 
@@ -151,6 +152,80 @@ fn write_grid(out: &mut Vec<u8>, grid: &Grid<Cell>, max_history: usize) {
         write_link(out, None);
     }
     out.extend_from_slice(b"\x1b[0m");
+}
+
+/// A run of same-styled text for the phone page: text, fg, bg, and flags (bold 1, italic 2, underline 4,
+/// inverse 8, dim 16, strike 32, hidden 64)
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Span(String, Option<Paint>, Option<Paint>, u8);
+
+/// None is the theme's default; palette index 0-255 or `#rrggbb`
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum Paint {
+    Index(u8),
+    Rgb(String),
+}
+
+/// The screen and up to `max_history` scrollback lines, a list of spans per row, trailing blanks dropped
+pub fn spans(grid: &Grid<Cell>, max_history: usize) -> Vec<Vec<Span>> {
+    let history = grid.history_size().min(max_history) as i32;
+    let cols = grid.columns();
+    (-history..grid.screen_lines() as i32)
+        .map(|line| {
+            let row = &grid[Line(line)];
+            let end = (0..cols)
+                .rev()
+                .find(|&c| row[Column(c)] != Cell::default())
+                .map_or(0, |c| c + 1);
+            let mut spans: Vec<Span> = vec![];
+            for col in 0..end {
+                let cell = &row[Column(col)];
+                if cell
+                    .flags
+                    .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
+                {
+                    continue;
+                }
+                let (fg, bg, flags) = (paint(cell.fg), paint(cell.bg), span_flags(cell.flags));
+                if !spans
+                    .last()
+                    .is_some_and(|s| s.1 == fg && s.2 == bg && s.3 == flags)
+                {
+                    spans.push(Span(String::new(), fg, bg, flags));
+                }
+                if let Some(span) = spans.last_mut() {
+                    span.0.push(if cell.c == '\t' { ' ' } else { cell.c });
+                    span.0.extend(cell.zerowidth().unwrap_or_default());
+                }
+            }
+            spans
+        })
+        .collect()
+}
+
+fn paint(color: Color) -> Option<Paint> {
+    match color {
+        Color::Named(n) if (n as usize) < 16 => Some(Paint::Index(n as u8)),
+        Color::Named(_) => None,
+        Color::Indexed(i) => Some(Paint::Index(i)),
+        Color::Spec(c) => Some(Paint::Rgb(format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b))),
+    }
+}
+
+fn span_flags(flags: Flags) -> u8 {
+    [
+        (Flags::BOLD, 1),
+        (Flags::ITALIC, 2),
+        (Flags::ALL_UNDERLINES, 4),
+        (Flags::INVERSE, 8),
+        (Flags::DIM, 16),
+        (Flags::STRIKEOUT, 32),
+        (Flags::HIDDEN, 64),
+    ]
+    .into_iter()
+    .filter(|(flag, _)| flags.intersects(*flag))
+    .fold(0, |bits, (_, bit)| bits | bit)
 }
 
 fn write_cell(out: &mut Vec<u8>, pen: &mut Style, link: &mut Option<Hyperlink>, cell: &Cell) {
@@ -406,6 +481,23 @@ mod tests {
         input.extend_from_slice(&[b'x'; 25]);
         input.extend_from_slice("界e\u{301}\r\n$ \x1b[32m".as_bytes());
         input
+    }
+
+    #[test]
+    fn spans_carry_colors_flags_and_wide_chars_once() {
+        let term = term(b"plain \x1b[1;31mred\x1b[0m \x1b[38;2;1;2;3mrgb\x1b[0m \xe4\xb8\xad!\r\n");
+        let rows = spans(term.grid(), 0);
+        assert_eq!(
+            rows[0],
+            vec![
+                Span("plain ".into(), None, None, 0),
+                Span("red".into(), Some(Paint::Index(1)), None, 1),
+                Span(" ".into(), None, None, 0),
+                Span("rgb".into(), Some(Paint::Rgb("#010203".into())), None, 0),
+                Span(" \u{4e2d}!".into(), None, None, 0),
+            ]
+        );
+        assert!(rows[1].is_empty());
     }
 
     #[test]

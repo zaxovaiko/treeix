@@ -58,6 +58,8 @@ import type {
   NotionDatabase,
   OptionCategory,
   OptionValue,
+  Phone,
+  PhoneStatus,
   PermissionKind,
   PermissionOption,
   PlanEntry,
@@ -341,6 +343,9 @@ export interface Api {
   /** Turns the toggle on or off; `settings.awake.mode` decides when it holds */
   setKeepAwake(on: boolean): Promise<KeepAwakeState>
   onKeepAwake(cb: (state: KeepAwakeState) => void): () => void
+  phoneStatus(): Promise<PhoneStatus>
+  /** Serves the phone page over Tailscale or stops it; asks for the admin password */
+  setPhone(on: boolean): Promise<PhoneStatus>
   // Phase 6-7. Contract: docs/next/phase67-contract.md
   // Routines (R6 engine in ptyd, U7 UI): they fire in ptyd, also while the app is closed
   /** Every routine, by name */
@@ -470,6 +475,8 @@ export type {
   NotionDatabase,
   OptionCategory,
   OptionValue,
+  Phone,
+  PhoneStatus,
   PermissionKind,
   PermissionOption,
   PlanEntry,
