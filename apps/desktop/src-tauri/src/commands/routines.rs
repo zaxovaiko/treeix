@@ -1,5 +1,5 @@
 //! Routines: the app's side of the engine ptyd runs (crates/ptyd/src/routines). These only forward; changes
-//! from ptyd go to every window as `RoutinesEvent`. Contract: docs/next/phase67-contract.md. Owner: R6 (engine),
+//! from ptyd go to every window as `RoutinesEvent`. Contract: docs/contracts/phase67-contract.md. Owner: R6 (engine),
 //! U7 (UI)
 
 use super::{Result, ok, unexpected};

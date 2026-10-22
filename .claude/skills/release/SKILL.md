@@ -75,4 +75,4 @@ the release is published - no landing change needed.
 The Mac job needs `MAC_CERT_P12`, `MAC_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID` and
 `APPLE_API_ISSUER`, and both jobs need `TAURI_SIGNING_PRIVATE_KEY` (plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the
 key has one). There is no unsigned fallback: a missing secret fails the run before anything is published. Setup in
-`docs/releasing.md`, the update feed and the key in `docs/next/updater.md`.
+`docs/releasing.md`, the update feed and the key in `docs/updater.md`.

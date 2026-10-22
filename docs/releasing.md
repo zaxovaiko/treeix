@@ -23,7 +23,7 @@ and `fix` subjects grouped and scope first, other types left out, and a link to 
 - `latest.json`: the update feed, uploaded last.
 
 The release stays a draft until every job is done, so installed copies only see a complete one. In-app updates and
-the signing key: `docs/next/updater.md`.
+the signing key: `docs/updater.md`.
 
 ## Signing in CI
 

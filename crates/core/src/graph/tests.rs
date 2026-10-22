@@ -253,7 +253,7 @@ fn package_name_keeps_the_scope() {
     assert_eq!(package_name("node:fs"), "node:fs");
 }
 
-/// The graph of this repo; what differs from the old scan is in docs/next/graph.md
+/// The graph of this repo; what differs from the old scan is in docs/graph.md
 #[test]
 fn scan_this_repo() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

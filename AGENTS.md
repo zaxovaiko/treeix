@@ -16,5 +16,5 @@
 # E2E and repros
 
 - UI e2e runs headless on the mock daemon, no window: `bunx playwright test` in `apps/desktop`.
-- The in-app e2e drives a built app against the real daemon: `TREEIX_AUTORUN=e2e TREEIX_DATA_DIR=$(mktemp -d) <app binary>`. Always a fresh data dir, never the user's. Steps and the report: `docs/next/testing.md`.
+- The in-app e2e drives a built app against the real daemon: `TREEIX_AUTORUN=e2e TREEIX_DATA_DIR=$(mktemp -d) <app binary>`. Always a fresh data dir, never the user's. Steps and the report: `docs/testing.md`.
 - That one is not headless: autorun keeps the window on top, because macOS stops drawing covered windows. Ask before running it or any other check that shows or screen-captures the app.

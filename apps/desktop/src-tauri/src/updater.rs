@@ -1,4 +1,4 @@
-//! App updates through tauri-plugin-updater: `latest.json` on the GitHub release, minisign-signed (docs/next/updater.md).
+//! App updates through tauri-plugin-updater: `latest.json` on the GitHub release, minisign-signed (docs/updater.md).
 //! Checked on start when `settings.updates.autoCheck` is on, from the tray menu and from Settings > About
 
 use crate::commands::UpdateInfo;

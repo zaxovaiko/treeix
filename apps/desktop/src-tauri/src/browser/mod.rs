@@ -1,7 +1,7 @@
 //! The browser pane's webviews: one child webview per `browser:<id>` pane leaf, laid over the pane's rect in the
 //! main window with `Window::add_child` (tauri `unstable`). This module is the only user of that API. An injected
 //! script reports console and network entries and serves the agent tools (snapshot, click, type).
-//! Contract: docs/next/phase67-contract.md. Owner: B7
+//! Contract: docs/contracts/phase67-contract.md. Owner: B7
 
 mod cookies;
 mod tools;

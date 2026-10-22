@@ -87,4 +87,4 @@ bun bench/compare.ts bench/baseline/macos-latest.json result.json
 
 ## Releases
 
-Pushes to `main` publish the release; see [releasing.md](../releasing.md).
+Pushes to `main` publish the release; see [releasing.md](releasing.md).

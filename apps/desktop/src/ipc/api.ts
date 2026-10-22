@@ -280,7 +280,7 @@ export interface Api {
   sessionHistory(): Promise<SessionRecord[]>
   forgetSession(id: string): Promise<void>
 
-  // Phase 4-5. Contract: docs/next/phase45-contract.md. Each call rejects with a message string.
+  // Phase 4-5. Contract: docs/contracts/phase45-contract.md. Each call rejects with a message string.
   // Agents (A3)
   /** Token rows for the usage popover and Settings > Usage, from Claude transcripts and Codex rollouts */
   agentUsage(): Promise<AgentUsage>
@@ -346,7 +346,7 @@ export interface Api {
   phoneStatus(): Promise<PhoneStatus>
   /** Serves the phone page over Tailscale or stops it; asks for the admin password */
   setPhone(on: boolean): Promise<PhoneStatus>
-  // Phase 6-7. Contract: docs/next/phase67-contract.md
+  // Phase 6-7. Contract: docs/contracts/phase67-contract.md
   // Routines (R6 engine in ptyd, U7 UI): they fire in ptyd, also while the app is closed
   /** Every routine, by name */
   routineList(): Promise<Routine[]>
@@ -536,7 +536,7 @@ export interface ChatAttachment {
   detach(): Promise<void>
 }
 
-// Phase 3: git, files, search, pull requests, history. Contract: docs/next/phase3-contract.md.
+// Phase 3: git, files, search, pull requests, history. Contract: docs/contracts/phase3-contract.md.
 // Paths named `file` are relative to `root` (a place's path); a path that resolves outside the root is refused.
 
 /** One `git worktree list` entry */

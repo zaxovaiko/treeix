@@ -1,7 +1,7 @@
 //! The routines engine: ptyd fires agent runs on a schedule, a gh/acli event or a webhook, also while the app is
 //! closed. Routines live in `<data dir>/routines/routines.json`, runs in `routines/runs.jsonl`; a run is a
 //! `SessionKind::Routine` session, and its History record (`SessionRecord.run`) is written when it ends.
-//! Contract: docs/next/phase67-contract.md. Owner: R6
+//! Contract: docs/contracts/phase67-contract.md. Owner: R6
 
 pub mod budget;
 pub mod schedule;

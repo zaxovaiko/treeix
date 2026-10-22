@@ -2,7 +2,7 @@
 //! sidecars: `treeix-voice` (hotkey, microphone, Parakeet, its own HUD, pasting) and `treeix-meetings` (call
 //! audio, transcript with speakers). Both speak JSON lines over stdin/stdout (Electron's dictation and meetings
 //! protocol.ts). Recordings go to settings.recording.folder as `<date> <title>/` with transcript.md and note.md.
-//! Contract: docs/next/phase67-contract.md. Owner: V7
+//! Contract: docs/contracts/phase67-contract.md. Owner: V7
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

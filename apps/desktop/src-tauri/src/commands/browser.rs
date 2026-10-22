@@ -1,5 +1,5 @@
 //! Browser pane commands over crate::browser. Webview work that waits (creating one, checking a dev server) runs
-//! off the main thread, which it waits on. Contract: docs/next/phase67-contract.md. Owner: B7
+//! off the main thread, which it waits on. Contract: docs/contracts/phase67-contract.md. Owner: B7
 
 use super::Result;
 use super::files::blocking;

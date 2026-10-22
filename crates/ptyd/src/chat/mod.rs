@@ -1,6 +1,6 @@
 //! Chats over ACP: ptyd runs each agent's adapter (agent-client-protocol) so a chat outlives the app.
 //! Each chat keeps a log of `ChatEntry`s (last 5000) in `<data dir>/chats/`; attaching replays it from a seq,
-//! then streams. Contract: docs/next/phase45-contract.md
+//! then streams. Contract: docs/contracts/phase45-contract.md
 
 mod agent;
 mod events;

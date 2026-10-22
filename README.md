@@ -53,8 +53,9 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - Every repository and worktree in one sidebar, an Explorer, and Changes with split or unified diffs. Line comments queue in a drawer and go to the Claude Code or Codex session in that worktree as its next prompt.
 - Shells and agents live in the daemon, so quitting Treeix leaves them running. Sidebar or horizontal tabs, recursive splits, sessions grouped by repo and worktree, a quick terminal on a global shortcut, and notifications. Closed sessions reopen from History and the agent resumes its conversation.
 - GitHub and GitLab pull requests go through `gh` and `glab`: list, check out, open, merge, and the CI checks. The Open worktree dialog starts from a branch, a pull request or a Jira or Notion ticket, and copies your `.env` files across.
-- Routines are agent runs on a schedule, on a GitHub or Jira event (review requested, CI failed, a PR comment, a ticket assigned) or on a local webhook. They run in the repo, in a fresh worktree or in the pull request's worktree, with a turn budget and permissions. The daemon runs them, so they fire with Treeix closed.
+- Routines are agent runs on a schedule, on a GitHub or Jira event (review requested, CI failed, a PR comment, a ticket assigned) or on a local webhook. They run in the repo, in a fresh worktree or in the pull request's worktree, with a turn budget and permissions. The daemon runs them, so they fire with Treeix closed. Each routine picks what a run leaves: local commits, a draft pull request, or a push to the pull request it worked on. Treeix commits, pushes and opens the pull request itself, so agents never get push or pull request tools, and the pull requests panel filters routine pull requests.
 - Claude and Codex also run as a chat beside the terminal, kept across restarts. Race sends one prompt to several agents, a worktree each. The MCP server lets agents open files, panes and worktrees in Treeix.
+- Settings, Phone serves a mobile page to your own Tailscale network, answered only for your Tailscale login. Answer agents that need you, type into terminals, reply in chats, run or switch routines and open the pull requests they made, with Treeix closed too.
 - A Monaco editor with diffs, find in files and file history.
 
 <details>
@@ -69,7 +70,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 - The command palette searches commands, worktrees, sessions, files, pull requests and settings in one go.
 - Keep awake holds the Mac awake while agents work, with the lid closed if you ask.
 - 14 dark and 8 light themes, including Vercel, Claude, Apple, Xcode, VS Code, GitHub, Solarized, Nord and Dracula.
-- Usage, ports, chat, MCP, Jira, Notion, pull requests, keep awake, Race, routines, the browser, plans, the module graph, dictation and recording each have a switch in Settings. A feature that is off does no work and disappears from the UI.
+- Usage, ports, chat, MCP, Jira, Notion, pull requests, keep awake, Race, routines, the browser, plans, the module graph, dictation, recording and the phone page each have a switch in Settings. A feature that is off does no work and disappears from the UI.
 
 </details>
 
@@ -95,9 +96,9 @@ The command line tools are optional, and a feature stays quiet without its own: 
 
 ## Roadmap
 
-- A mobile app, to keep an eye on your agents away from the Mac.
+- Sessions on your other machines over Tailscale and SSH, in the same sidebar.
 - A design pass over every screen, so the app feels like one product.
-- A history archive, so past sessions are kept, searchable and one click from reopening.
+- A Windows build.
 
 Missing something? [Open an issue](https://github.com/zaxovaiko/treeix/issues/new) and say what you'd use it for.
 

@@ -8,7 +8,7 @@ bun run dev   # the UI in a browser, on a mock daemon
 bun run app   # the Tauri app with the real daemon
 ```
 
-macOS 14 or newer, Apple silicon, [Bun](https://bun.sh) and the Rust toolchain in `rust-toolchain.toml`. The optional command line tools (`gh`, `glab`, `acli`, `claude`, `codex`) are only needed for the features that use them.
+macOS 13.3 or newer or Linux, [Bun](https://bun.sh) and the Rust toolchain in `rust-toolchain.toml`. The optional command line tools (`gh`, `glab`, `acli`, `claude`, `codex`, `tailscale`) are only needed for the features that use them.
 
 ## Before opening a pull request
 
@@ -20,7 +20,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-All have to pass; [docs/next/testing.md](docs/next/testing.md) covers the other layers and what CI runs. UI changes need a screenshot of the change in the app.
+All have to pass; [docs/testing.md](docs/testing.md) covers the other layers and what CI runs. UI changes need a screenshot of the change in the app.
 
 ## House style
 
