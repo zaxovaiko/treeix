@@ -4,9 +4,17 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "treeix_ptyd"
+path = "src/lib.rs"
+
 [[bin]]
 name = "treeix-ptyd"
 path = "src/main.rs"
+
+[[bin]]
+name = "ptyd-bench"
+path = "src/bin/ptyd-bench.rs"
 
 [dependencies]
 treeix-proto.workspace = true
@@ -16,3 +24,12 @@ tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+alacritty_terminal = "0.26"
+portable-pty = "0.9"
+nix = { version = "0.30", features = ["signal", "process", "term", "user", "fs"] }
+libc = "0.2"
+zstd = "0.13"
+getrandom = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

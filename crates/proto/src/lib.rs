@@ -77,31 +77,59 @@ pub struct CreateSession {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Request {
     Create(CreateSession),
-    Write { session: SessionId, data: Vec<u8> },
-    Resize { session: SessionId, cols: u16, rows: u16 },
+    Write {
+        session: SessionId,
+        data: Vec<u8>,
+    },
+    Resize {
+        session: SessionId,
+        cols: u16,
+        rows: u16,
+    },
     /// SIGHUP to the process group, SIGKILL after a grace period
-    Kill { session: SessionId },
+    Kill {
+        session: SessionId,
+    },
     /// Forget an exited session and its snapshot
-    Remove { session: SessionId },
+    Remove {
+        session: SessionId,
+    },
     /// Start streaming Data for a session. The reply carries the screen + scrollback as ANSI
     /// and the seq it ends at; Data events continue from there
-    Attach { session: SessionId },
-    Detach { session: SessionId },
+    Attach {
+        session: SessionId,
+    },
+    Detach {
+        session: SessionId,
+    },
     /// Bytes the frontend has finished rendering; reading the PTY resumes once unacked drops below the low mark
-    Ack { session: SessionId, bytes: u64 },
+    Ack {
+        session: SessionId,
+        bytes: u64,
+    },
     List,
     /// Opaque UI state (tabs, split trees, groups, collapse), persisted next to the sessions
     GetUi,
-    PutUi { json: String },
+    PutUi {
+        json: String,
+    },
     /// Snapshot everything and exit (upgrade, tests)
     Shutdown,
+    /// Start an exited, restored or crashed session again with its command and cwd, keeping its id
+    Restart {
+        session: SessionId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Response {
     Ok,
     Created(SessionInfo),
-    Attached { snapshot: Vec<u8>, seq: u64, info: SessionInfo },
+    Attached {
+        snapshot: Vec<u8>,
+        seq: u64,
+        info: SessionInfo,
+    },
     Sessions(Vec<SessionInfo>),
     Ui(Option<String>),
 }
@@ -109,16 +137,40 @@ pub enum Response {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Event {
     /// Output of an attached session; `seq` is the offset of the first byte
-    Data { session: SessionId, seq: u64, bytes: Vec<u8> },
-    Status { session: SessionId, status: SessionStatus },
-    Exit { session: SessionId, code: Option<i32> },
-    Title { session: SessionId, title: String },
-    Cwd { session: SessionId, cwd: String },
+    Data {
+        session: SessionId,
+        seq: u64,
+        bytes: Vec<u8>,
+    },
+    Status {
+        session: SessionId,
+        status: SessionStatus,
+    },
+    Exit {
+        session: SessionId,
+        code: Option<i32>,
+    },
+    Title {
+        session: SessionId,
+        title: String,
+    },
+    Cwd {
+        session: SessionId,
+        cwd: String,
+    },
     /// OSC 9 / OSC 777 desktop notification
-    Notify { session: SessionId, title: String, body: String },
-    Bell { session: SessionId },
+    Notify {
+        session: SessionId,
+        title: String,
+        body: String,
+    },
+    Bell {
+        session: SessionId,
+    },
     Created(SessionInfo),
-    Removed { session: SessionId },
+    Removed {
+        session: SessionId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -129,8 +181,15 @@ pub enum ClientMsg {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ServerMsg {
-    Hello { proto: u32, build: String, pid: u32 },
-    Resp { id: u64, resp: Result<Response, String> },
+    Hello {
+        proto: u32,
+        build: String,
+        pid: u32,
+    },
+    Resp {
+        id: u64,
+        resp: Result<Response, String>,
+    },
     Event(Event),
 }
 
@@ -162,12 +221,17 @@ pub fn encode<T: Serialize>(msg: &T) -> io::Result<Vec<u8>> {
     Ok(out)
 }
 
-pub async fn write_frame<W: AsyncWrite + Unpin, T: Serialize>(w: &mut W, msg: &T) -> io::Result<()> {
+pub async fn write_frame<W: AsyncWrite + Unpin, T: Serialize>(
+    w: &mut W,
+    msg: &T,
+) -> io::Result<()> {
     w.write_all(&encode(msg)?).await
 }
 
 /// `Ok(None)` on a clean EOF between frames
-pub async fn read_frame<R: AsyncRead + Unpin, T: DeserializeOwned>(r: &mut R) -> io::Result<Option<T>> {
+pub async fn read_frame<R: AsyncRead + Unpin, T: DeserializeOwned>(
+    r: &mut R,
+) -> io::Result<Option<T>> {
     let mut len = [0u8; 4];
     match r.read_exact(&mut len).await {
         Ok(_) => {}
@@ -176,11 +240,16 @@ pub async fn read_frame<R: AsyncRead + Unpin, T: DeserializeOwned>(r: &mut R) ->
     }
     let len = u32::from_le_bytes(len) as usize;
     if len > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("frame of {len} bytes")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame of {len} bytes"),
+        ));
     }
     let mut body = vec![0u8; len];
     r.read_exact(&mut body).await?;
-    postcard::from_bytes(&body).map(Some).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    postcard::from_bytes(&body)
+        .map(Some)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 #[cfg(test)]
@@ -190,9 +259,20 @@ mod tests {
     #[tokio::test]
     async fn frames_round_trip() {
         let msgs = vec![
-            ServerMsg::Hello { proto: PROTO_VERSION, build: "t".into(), pid: 1 },
-            ServerMsg::Event(Event::Data { session: "s1".into(), seq: 42, bytes: b"\x1b[31mhi".to_vec() }),
-            ServerMsg::Resp { id: 7, resp: Err("no such session".into()) },
+            ServerMsg::Hello {
+                proto: PROTO_VERSION,
+                build: "t".into(),
+                pid: 1,
+            },
+            ServerMsg::Event(Event::Data {
+                session: "s1".into(),
+                seq: 42,
+                bytes: b"\x1b[31mhi".to_vec(),
+            }),
+            ServerMsg::Resp {
+                id: 7,
+                resp: Err("no such session".into()),
+            },
         ];
         let mut buf = Vec::new();
         for m in &msgs {
@@ -200,7 +280,10 @@ mod tests {
         }
         let mut r = buf.as_slice();
         for m in &msgs {
-            assert_eq!(read_frame::<_, ServerMsg>(&mut r).await.unwrap().as_ref(), Some(m));
+            assert_eq!(
+                read_frame::<_, ServerMsg>(&mut r).await.unwrap().as_ref(),
+                Some(m)
+            );
         }
         assert_eq!(read_frame::<_, ServerMsg>(&mut r).await.unwrap(), None);
     }

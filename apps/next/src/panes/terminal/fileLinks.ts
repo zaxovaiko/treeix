@@ -1,0 +1,75 @@
+// Copied from packages/plugins/terminal/renderer/fileLinks.ts until the pure modules move into packages/ui
+/** A file path printed in a terminal line, with where it sits so the terminal can underline it */
+export type FileLink = { start: number; end: number; path: string; line: number | null }
+
+// Absolute, home-relative or relative paths with at least one slash, optionally followed by :line or :line:column
+const FILE_PATH = /(?<![\w/.~-])((?:~|\.{1,2})?\/?[\w@+-][\w.@+-]*(?:\/[\w.@+-]+)+)(?::(\d+)(?::\d+)?)?/g
+
+// A bare file name like pty.ts:42; only code and doc extensions, so example.com and v1.2 stay text
+const FILE_NAME =
+  /(?<![\w/.~@-])([\w-][\w.-]*\.(?:tsx?|jsx?|mjs|cjs|json|mdx?|css|scss|html|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cs|php|sh|ya?ml|toml|sql|vue|svelte|txt|lock))(?::(\d+)(?::\d+)?)?(?![\w/])/g
+
+/** File paths in one line of terminal text; `start` is the index of the first character, `end` the one after the last */
+export function findFileLinks(text: string): FileLink[] {
+  const links: FileLink[] = []
+  for (const match of text.matchAll(FILE_NAME)) {
+    const start = match.index ?? 0
+    links.push({ start, end: start + match[0].length, path: match[1], line: match[2] ? Number(match[2]) : null })
+  }
+  for (const match of text.matchAll(FILE_PATH)) {
+    // Sentences end right after a path ("see docs/a.md."), the dot isn't part of it
+    const path = match[1].replace(/[.,;:/]+$/, '')
+    // Fractions and dates like 3/4 or 2026/09 aren't files
+    if (!/[a-z]/i.test(path)) continue
+    const start = match.index ?? 0
+    const end = start + (match[2] ? match[0].length : path.length)
+    if (/^https?:$/.test(text.slice(Math.max(0, start - 6), start)) || text.slice(Math.max(0, start - 3), start) === '://') continue
+    links.push({ start, end, path, line: match[2] ? Number(match[2]) : null })
+  }
+  return links.sort((a, b) => a.start - b.start)
+}
+
+/** A path in one row, with what to try in order when clicked */
+export type RowFileLink = { start: number; end: number; targets: { path: string; line: number | null }[] }
+
+/**
+ * File links in one row. Agents cut paths longer than the screen over two rows without marking the wrap, so `before` and
+ * `after` are the rows around it when the cut may run through them; a path joined over the cut is tried first, then the
+ * part on this row. `start` and `end` stay within this row
+ */
+export function findRowFileLinks(text: string, before: string | null, after: string | null): RowFileLink[] {
+  const own = findFileLinks(text)
+  const lead = text.length - text.trimStart().length
+  const body = text.trimEnd()
+  const head = before?.trimEnd().match(/[\w.@+~/-]+$/)?.[0] ?? ''
+  const tail = after?.trimStart().match(/^[\w.@+~/:-]+/)?.[0] ?? ''
+  const joined = head + body.slice(lead) + tail
+  const tailStart = joined.length - tail.length
+  const shift = lead - head.length
+  const crossing = findFileLinks(joined)
+    .filter((link) => (head && link.start < head.length && link.end > head.length) || (tail && link.start < tailStart && link.end > tailStart))
+    .map((link) => ({ start: Math.max(link.start + shift, lead), end: Math.min(link.end + shift, body.length), path: link.path, line: link.line }))
+  const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }): boolean => a.start < b.end && a.end > b.start
+  return [
+    ...crossing.map((link) => ({
+      start: link.start,
+      end: link.end,
+      targets: [link, ...own.filter((part) => overlaps(part, link))].map(({ path, line }) => ({ path, line }))
+    })),
+    ...own.filter((link) => !crossing.some((other) => overlaps(link, other))).map(({ start, end, path, line }) => ({ start, end, targets: [{ path, line }] }))
+  ].sort((a, b) => a.start - b.start)
+}
+
+/** A web address printed in a terminal line */
+export type WebLink = { start: number; end: number; url: string }
+
+const WEB_URL = /https?:\/\/[^\s<>"'`]+/g
+
+/** Web addresses in one line of terminal text, without the punctuation that ends a sentence or closes brackets around them */
+export function findWebLinks(text: string): WebLink[] {
+  return [...text.matchAll(WEB_URL)].map((match) => {
+    const url = match[0].replace(/[.,;:!?)\]}]+$/, '')
+    const start = match.index ?? 0
+    return { start, end: start + url.length, url }
+  })
+}

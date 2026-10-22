@@ -14,10 +14,20 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 treeix-proto.workspace = true
 treeix-core.workspace = true
-tauri = { version = "2", features = ["macos-private-api"] }
+tauri = { version = "2.12", features = ["macos-private-api", "specta"] }
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.22", features = ["derive"] }
+specta-typescript = "=0.0.9"
+tauri-plugin-global-shortcut = "=2.4.1"
+tauri-plugin-clipboard-manager = "=2.5.0"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-nspanel = "=2.1.1"
+smappservice-rs = "=0.1.3"

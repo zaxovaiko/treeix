@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Main and quick terminal windows",
   "windows": ["main", "quick"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "clipboard-manager:allow-read-text", "clipboard-manager:allow-write-text"]
 }

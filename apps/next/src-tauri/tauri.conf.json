@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.dyvertex.treeix.next",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "sh scripts/build-ptyd.sh debug && bun run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "sh scripts/build-ptyd.sh && bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -21,15 +21,38 @@
         "minHeight": 420,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 10
+        }
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.png"],
-    "macOS": { "minimumSystemVersion": "13.3" }
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.3",
+      "files": {
+        "Library/LaunchAgents/com.dyvertex.treeix.next.ptyd.plist": "./LaunchAgents/com.dyvertex.treeix.next.ptyd.plist"
+      }
+    },
+    "externalBin": [
+      "binaries/treeix-ptyd"
+    ]
   }
 }
