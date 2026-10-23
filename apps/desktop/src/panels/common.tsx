@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, type ReactNode } from 'react'
+import { useContext, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { CreateSession, Place } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
 import { paneGrid } from '../panes/terminal/xterm'
@@ -113,6 +113,19 @@ export function Menu({ at, items, onClose }: { at: { x: number; y: number }; ite
     </div>
   )
 }
+
+/** A right-click menu: `open(items)` is the onContextMenu handler, render `menu` once */
+export function useContextMenu() {
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null)
+  const open = (items: MenuItem[]) => (e: ReactMouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenu({ at: { x: e.clientX, y: e.clientY }, items })
+  }
+  return [menu && <Menu at={menu.at} items={menu.items} onClose={() => setMenu(null)} />, open] as const
+}
+
+export const copyText = (text: string) => void navigator.clipboard.writeText(text)
 
 /** Opens a new session in its own tab, sized to the center card */
 export async function openSession(view: ShellView, opts: Omit<CreateSession, 'cols' | 'rows'>) {

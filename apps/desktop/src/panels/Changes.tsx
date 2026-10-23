@@ -3,7 +3,7 @@ import type { DiffScope, FilePatch, GitStatus, Place, PullRequest } from '../ipc
 import { Icon } from '../lib/icons'
 import type { PanelId } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
-import { askAgent, Head, NoFolder, PIcon } from './common'
+import { askAgent, copyText, Head, NoFolder, PIcon, useContextMenu } from './common'
 import { parseHunks, STATUS_CLASS, STATUS_LETTER } from './logic'
 
 const GONE = new Set(['exited', 'restored', 'crashed'])
@@ -29,6 +29,7 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
   const [comment, setComment] = useState<{ key: string; text: string } | null>(null)
   const [sent, setSent] = useState<Sent[]>([])
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [menu, openMenu] = useContextMenu()
   const [error, setError] = useState<string | null>(null)
   /** The git command running in the background; the place watcher picks up what it changes */
   const [running, setRunning] = useState<string | null>(null)
@@ -116,6 +117,7 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
   const hunks = current ? parseHunks(current.patch) : []
   return (
     <>
+      {menu}
       <Head title="Changes" place={place}>
         {onBase ? (
           <span className="tag" title={`On ${status.base ?? 'the base branch'} there is no base to compare with`}>
@@ -218,7 +220,12 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
               <div key={p.path} className={`crow ${p.path === current?.path ? 'on' : ''}`} onClick={() => {
                   setFile(p.path)
                   setConfirm(null)
-                }} title={p.oldPath ? `${p.oldPath} → ${p.path}` : p.path}>
+                }} onContextMenu={openMenu([
+                  { label: 'Open file', icon: 'file', run: () => view.openFile(root, p.path) },
+                  { label: 'Copy path', run: () => copyText(`${root}/${p.path}`) },
+                  { label: 'Copy relative path', run: () => copyText(p.path) },
+                  ...(dirty ? [{ label: 'Discard changes', icon: 'undo' as const, danger: true, run: () => setConfirm(p.path) }] : []),
+                ])} title={p.oldPath ? `${p.oldPath} → ${p.path}` : p.path}>
                 <span className={`s ${STATUS_CLASS[s]}`}>{STATUS_LETTER[s]}</span>
                 <span className="grow trunc">
                   <span className={STATUS_CLASS[s]}>{baseName(p.path)}</span> <span className="d">{dirName(p.path)}</span>

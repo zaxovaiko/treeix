@@ -3,7 +3,7 @@ import type { Ticket, TicketList } from '../ipc/api'
 import { FIcon } from '../features/agents/icons'
 import { Icon } from '../lib/icons'
 import type { ShellView } from '../shell/Shell'
-import { Head, PIcon } from './common'
+import { copyText, Head, PIcon, useContextMenu } from './common'
 import { ago } from './logic'
 
 const KIND: Record<Ticket['kind'], string> = { task: '', bug: 'red', story: 'green' }
@@ -18,8 +18,10 @@ export function Tickets({ view, data, refresh, repo }: { view: ShellView; data: 
   const statuses = [...new Set([...data.tickets.map((t) => t.status), filters.status].filter(Boolean))].sort((a, b) => a.localeCompare(b))
   const q = filters.q.trim().toLowerCase()
   const list = data.tickets.filter((t) => (!filters.status || t.status === filters.status) && (!q || `${t.key} ${t.title} ${t.project ?? ''}`.toLowerCase().includes(q)))
+  const [menu, openMenu] = useContextMenu()
   return (
     <>
+      {menu}
       <Head title="Tickets">
         <button className="icon sm" onClick={refresh} title="Refresh">
           <PIcon name="reload" />
@@ -50,7 +52,15 @@ export function Tickets({ view, data, refresh, repo }: { view: ShellView; data: 
       <div className="pscroll">
         {list.length ? (
           list.map((t) => (
-            <div key={`${t.source}${t.key}`} className="pr">
+            <div
+              key={`${t.source}${t.key}`}
+              className="pr"
+              onContextMenu={openMenu([
+                ...(t.url ? [{ label: 'Open in browser', run: () => void view.api.openUrl(t.url ?? '') }, { label: 'Copy link', run: () => copyText(t.url ?? '') }] : []),
+                ...(t.source === 'jira' ? [{ label: 'Copy key', run: () => copyText(t.key) }] : []),
+                { label: 'Start in worktree', icon: 'tree', run: () => view.openDialog({ kind: 'newWorktree', repo: repo ?? undefined, ticket: t }) },
+              ])}
+            >
               <FIcon name={t.source} />
               <div className="grow" style={{ minWidth: 0 }}>
                 <div className="t">

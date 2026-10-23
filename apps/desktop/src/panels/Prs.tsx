@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { MergeMethod, PullRequest, ProviderStatus, Worktree } from '../ipc/api'
 import { Icon } from '../lib/icons'
 import type { ShellView } from '../shell/Shell'
-import { askAgent, Head, Menu, PIcon, runIn, type MenuItem } from './common'
+import { askAgent, copyText, Head, Menu, PIcon, runIn, type MenuItem } from './common'
 import { ago, ciText, isMine } from './logic'
 
 /** What the host loaded; the PR list refreshes on focus and every minute while this panel shows */
@@ -302,7 +302,21 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
             const [tagColor, tagText] = tagOf(pr)
             const state = busy[idOf(pr)]
             return (
-              <div key={idOf(pr)} className="pr">
+              <div
+                key={idOf(pr)}
+                className="pr"
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setMenu({
+                    at: { x: e.clientX, y: e.clientY },
+                    items: [
+                      { label: 'Open in browser', run: () => void api.openUrl(pr.url) },
+                      { label: 'Copy link', run: () => copyText(pr.url) },
+                      ...(wt ? [] : [{ label: 'Check out in a worktree', icon: 'tree' as const, run: () => checkOut(pr) }]),
+                    ],
+                  })
+                }}
+              >
                 <span className={pr.state === 'merged' ? 'violet' : pr.draft || pr.state === 'closed' ? 'dim' : pr.pipeline?.status === 'failed' ? 'err' : 'ok'}>
                   <PIcon name="pr" />
                 </span>

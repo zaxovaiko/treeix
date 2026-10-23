@@ -9,7 +9,7 @@ import { DOT_LABEL, GROUP_COLORS, Ki, liveCount, placeColor, placeIcon, placeNam
 import { keyHint, withHint } from './shortcuts'
 import { leaves, placeLabel, SIDEBAR, type Group, type PlaceTabs, type Tab } from './state'
 import type { ShellView } from './Shell'
-import { Menu, type MenuItem } from '../panels/common'
+import { copyText, Menu, useContextMenu, type MenuItem } from '../panels/common'
 
 type ViewProps = { view: ShellView }
 
@@ -76,14 +76,24 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
   )
 }
 
+/** Right-click on a tab, in the sidebar or the strip */
+const tabMenu = (view: ShellView, tab: Tab): MenuItem[] => [
+  { label: 'Split right', icon: 'split', run: () => view.split('row', tab.focus) },
+  { label: 'Split down', icon: 'splitDown', run: () => view.split('col', tab.focus) },
+  { label: 'Copy folder path', run: () => copyText(view.placeOfTab(tab).path) },
+  { label: 'Close tab', icon: 'x', danger: true, run: () => view.closeTab(tab) },
+]
+
 function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
   const { ui, sessions, dispatch, closeTab } = view
+  const [menu, openMenu] = useContextMenu()
   const dot = tabDot(tab, sessions)
   const panes = leaves(tab.root).length
   const restored = leaves(tab.root).some((id) => sessions[id]?.status === 'restored')
   const progress = useProgress(view.api, leaves(tab.root))
   return (
-    <div className={`trow ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })}>
+    <div className={`trow ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })} onContextMenu={openMenu(tabMenu(view, tab))}>
+      {menu}
       <Ki kind={tabKind(tab, sessions)} dot={dot} />
       <div className="grow">
         <div className="t1">
@@ -274,9 +284,11 @@ export function SidebarResize({ view }: ViewProps) {
 export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
   const { ui, sessions, dispatch, closeTab, run } = view
   const [menu, openMenu] = useColorMenu(view)
+  const [tabMenuEl, openTabMenu] = useContextMenu()
   return (
     <div className="hstrip">
       {menu}
+      {tabMenuEl}
       <div className="hscroll" data-tauri-drag-region>
         {view.groups.flatMap((group) =>
           group.places.map(({ place, tabs }) => {
@@ -289,7 +301,7 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
               ...(closed
                 ? []
                 : tabs.map((tab) => (
-                    <div key={tab.id} className={`htab ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })}>
+                    <div key={tab.id} className={`htab ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })} onContextMenu={openTabMenu(tabMenu(view, tab))}>
                       <Ki kind={tabKind(tab, sessions)} dot={tabDot(tab, sessions)} sm />
                       <span className="trunc">{tabTitle(tab, sessions)}</span>
                       <RoutineClock view={view} tab={tab} />

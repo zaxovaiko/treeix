@@ -5,6 +5,7 @@ import { closeFileLeaf, isFileLeaf, leafRoot, resolvePath } from '../panes/file/
 import { closeChat, isChatLeaf, leafChat } from '../panes/chat/open'
 import { titleOf, useChatState } from '../panes/chat/store'
 import { Icon } from '../lib/icons'
+import { useContextMenu, type MenuItem } from '../panels/common'
 import { BrowserHead, closeBrowser, isBrowserLeaf } from '../features/browser/open'
 import { closePlan, isPlanLeaf, PlanHead } from '../features/plans/open'
 import { DOT_LABEL, KIND_ICON, SETTINGS_LEAF, statusDot } from './model'
@@ -74,6 +75,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
   const { api, sessions, dispatch } = view
   const rects = paneRects(tab.root)
   const multi = rects.size > 1
+  const [menu, openMenu] = useContextMenu()
 
   const drag = (handle: Handle) => (e: PointerEvent<HTMLDivElement>) => {
     const el = e.currentTarget
@@ -91,6 +93,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
 
   return (
     <div className="panes" hidden={!active}>
+      {menu}
       {[...rects].sort(([a], [b]) => a.localeCompare(b)).map(([id, rect]) => {
         const info = sessions[id]
         const focused = id === tab.focus
@@ -101,10 +104,15 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
         const plan = isPlanLeaf(id)
         const settings = id === SETTINGS_LEAF
         const close = () => (file ? closeFileLeaf(view, id) : chat ? closeChat(view, id) : browser ? closeBrowser(view, id) : plan ? closePlan(view, id) : settings ? dispatch({ type: 'remove', session: id }) : view.closePane(id))
+        const paneMenu: MenuItem[] = [
+          { label: 'Split right', icon: 'split', run: () => view.split('row', id) },
+          { label: 'Split down', icon: 'splitDown', run: () => view.split('col', id) },
+          { label: 'Close pane', icon: 'x', danger: true, run: close },
+        ]
         return (
           <div key={id} className={`pane ${multi ? (focused ? 'focus' : 'dimmed') : ''}`} style={box(rect)}>
             {multi && (
-              <div className="phd" onMouseDown={() => dispatch({ type: 'focus', session: id })}>
+              <div className="phd" onMouseDown={() => dispatch({ type: 'focus', session: id })} onContextMenu={openMenu(paneMenu)}>
                 {chat ? (
                   <ChatHead leaf={id} />
                 ) : browser ? (
@@ -158,7 +166,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
               </div>
             ) : (
               <div className="pterm">
-                <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} onOpenFile={(targets) => void openPrinted(view, id, targets)} renderer={view.ui.renderer} />
+                <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} onOpenFile={(targets) => void openPrinted(view, id, targets)} renderer={view.ui.renderer} menu={paneMenu} />
               </div>
             )}
           </div>

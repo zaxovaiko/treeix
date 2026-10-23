@@ -196,3 +196,25 @@ test('recordings and dictations can be deleted from Settings', async ({ page }) 
   await page.getByRole('button', { name: 'Clear' }).click()
   await expect(page.getByText('Nothing dictated yet')).toBeVisible()
 })
+
+test('right-click shows our menus, never the browser one', async ({ page }) => {
+  await open(page)
+  const menu = page.locator('.pop.menu')
+  await tabRows(page).first().click({ button: 'right' })
+  await expect(menu.getByRole('button', { name: 'Split right' })).toBeVisible()
+  await menu.getByRole('button', { name: 'Split right' }).click()
+  await expect(panes(page)).toHaveCount(2)
+
+  await terminal(page).first().click({ button: 'right' })
+  await expect(menu.getByRole('button', { name: 'Paste' })).toBeVisible()
+  await menu.getByRole('button', { name: 'Close pane' }).click()
+  await expect(panes(page)).toHaveCount(1)
+
+  // Anywhere without a menu of its own, the browser's (Reload, Inspect Element) is held back
+  const prevented = await page.evaluate(() => {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    document.querySelector('.titlebar, header, body')?.dispatchEvent(event)
+    return event.defaultPrevented
+  })
+  expect(prevented).toBe(true)
+})

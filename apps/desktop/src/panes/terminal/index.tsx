@@ -10,6 +10,7 @@ import type { Renderer } from './renderer'
 import { FindBar, SessionBar } from './bars'
 import { IS_MAC, openXterm, searchDecorations, webglFor, type Xterm } from './xterm'
 import { settingsNow } from '../../features/agents/settings'
+import { useContextMenu, type MenuItem } from '../../panels/common'
 
 export interface TerminalPaneProps {
   api: Api
@@ -22,10 +23,14 @@ export interface TerminalPaneProps {
   onOpenFile?(targets: { path: string; line: number | null }[]): void
   /** `auto` (default): WebGL, except the DOM renderer on Linux */
   renderer?: Renderer
+  /** Right-click items after Copy, Paste, Select All, Clear and Find */
+  menu?: MenuItem[]
 }
 
 const RESIZE_DEBOUNCE_MS = 50
 const IN_TAURI = '__TAURI_INTERNALS__' in window
+const copyText = (text: string): Promise<void> => (IN_TAURI ? writeText(text) : navigator.clipboard.writeText(text))
+const readClipboard = (): Promise<string> => (IN_TAURI ? readText() : navigator.clipboard.readText())
 /** No process behind the session: the bar offers Restart and Close */
 const GONE = new Set<SessionStatus>(['exited', 'restored', 'crashed'])
 
@@ -47,7 +52,7 @@ interface PaneHooks {
   focus(): void
 }
 
-export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpenFile, renderer = 'auto' }: TerminalPaneProps) {
+export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpenFile, renderer = 'auto', menu = [] }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<Xterm | null>(null)
   const [session, setSession] = useState<SessionState | null>(null)
@@ -104,8 +109,23 @@ export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpen
     view?.term.focus()
   }
 
+  const [menuEl, openMenu] = useContextMenu()
+  const termMenu = (): MenuItem[] => {
+    if (!view) return menu
+    const { term } = view
+    return [
+      ...(term.hasSelection() ? [{ label: 'Copy', run: () => void copyText(term.getSelection()) }] : []),
+      { label: 'Paste', run: () => void readClipboard().then((text) => term.paste(text)) },
+      { label: 'Select All', run: () => term.selectAll() },
+      ...(term.buffer.active.type === 'normal' ? [{ label: 'Clear', run: () => (term.clear(), void api.clear(sessionId)) }] : []),
+      { label: 'Find', icon: 'search' as const, run: () => setFind((n) => n + 1) },
+      ...menu,
+    ]
+  }
+
   return (
-    <div className="term" hidden={!visible} data-session-id={sessionId} onMouseDown={onFocus}>
+    <div className="term" hidden={!visible} data-session-id={sessionId} onMouseDown={onFocus} onContextMenu={(e) => openMenu(termMenu())(e)}>
+      {menuEl}
       <div ref={hostRef} className="term-host" />
       {view && find > 0 && <FindBar search={view.search} decorations={() => searchDecorations(view.term.element ?? document.body)} signal={find} onClose={closeFind} />}
       {session && gone && <SessionBar status={session.status} exitCode={session.exitCode} onRestart={restart} onClose={() => void api.remove(sessionId)} />}
@@ -141,9 +161,8 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
   })
   term.onBinary((data) => hooks.gone() || send(Uint8Array.from(data, (char) => char.charCodeAt(0))))
   term.onResize(({ cols, rows }) => void api.resize(sessionId, cols, rows))
-  const copy = (text: string): Promise<void> => (IN_TAURI ? writeText(text) : navigator.clipboard.writeText(text))
   term.onSelectionChange(() => {
-    if (settingsNow()?.terminal.copyOnSelect && term.hasSelection()) void copy(term.getSelection())
+    if (settingsNow()?.terminal.copyOnSelect && term.hasSelection()) void copyText(term.getSelection())
   })
 
   const perform = (action: KeyAction, event: KeyboardEvent): void => {
@@ -152,7 +171,7 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
       send(action.data)
     } else if (action.type === 'copy' && term.hasSelection()) {
       event.preventDefault()
-      void copy(term.getSelection())
+      void copyText(term.getSelection())
     } else if (action.type === 'paste' && IN_TAURI) {
       // Linux Ctrl+Shift+V; a browser pastes natively. term.paste adds the bracketed-paste markers when the program asked for them
       event.preventDefault()
