@@ -113,20 +113,28 @@ function UsageDetails({ api, limits }: { api: Api; limits: UsageLimits }) {
             ))}
           </div>
           <Shares title="By model" shares={week.models} />
-          <Shares title="By project" shares={week.projects} />
+          <Shares title="By project" shares={week.projects} label={folderLabels(week.projects)} />
         </div>
       )}
     </>
   )
 }
 
-function Shares({ title, shares }: { title: string; shares: Share[] }) {
+/** A project's last folder, with its parent when another project ends in the same folder */
+function folderLabels(shares: Share[]): (name: string) => string {
+  const tail = (path: string, parts: number) => path.split('/').slice(-parts).join('/')
+  const counts = new Map<string, number>()
+  for (const s of shares) counts.set(tail(s.name, 1), (counts.get(tail(s.name, 1)) ?? 0) + 1)
+  return (name) => tail(name, (counts.get(tail(name, 1)) ?? 0) > 1 ? 2 : 1)
+}
+
+function Shares({ title, shares, label = (name) => name }: { title: string; shares: Share[]; label?: (name: string) => string }) {
   return (
     <>
       <div className="mlabel">{title}</div>
       {shares.slice(0, 4).map((s) => (
-        <div key={s.name} className="ushare">
-          <span className="trunc">{s.name}</span>
+        <div key={s.name} className="ushare" title={s.name}>
+          <span className="trunc">{label(s.name)}</span>
           <span className="num">{compact(s.tokens)}</span>
           <span className="num">{usd(s.cost)}</span>
         </div>

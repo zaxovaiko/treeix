@@ -51,7 +51,7 @@ pub struct Parsed {
 }
 
 // Bumped when parsing changes, so every log is read again
-const CACHE_VERSION: u32 = 2;
+const CACHE_VERSION: u32 = 3;
 const CACHE_FILE: &str = "usage-cache.json";
 const PRICES_FILE: &str = "prices.json";
 // The price list ccusage and most token counters read; fetched at most daily
@@ -115,6 +115,8 @@ pub fn claude_rows<'a>(lines: impl IntoIterator<Item = &'a str>, home: &str) -> 
     let mut seen = HashSet::new();
     let mut titles = BTreeMap::new();
     let mut named = HashSet::new();
+    // Claude's cwd follows its `cd`s; the session counts toward the folder it started in
+    let mut started_in: HashMap<String, String> = HashMap::new();
     for line in lines {
         if line.contains("-title\"") {
             let Some(entry) = parse_line(line) else {
@@ -167,12 +169,15 @@ pub fn claude_rows<'a>(lines: impl IntoIterator<Item = &'a str>, home: &str) -> 
             continue;
         }
         let session = text(entry.get("sessionId"));
+        let cwd = started_in
+            .entry(session.to_owned())
+            .or_insert_with(|| text(entry.get("cwd")).to_owned());
         tally.add(
             [
                 day,
                 "claude".into(),
                 if model.is_empty() { "unknown" } else { model }.into(),
-                project_of(text(entry.get("cwd")), home),
+                project_of(cwd, home),
                 if session.is_empty() {
                     "unknown"
                 } else {
@@ -579,6 +584,20 @@ mod tests {
                 cache_write: 40,
             }]
         );
+    }
+
+    #[test]
+    fn claude_rows_count_a_session_toward_the_folder_it_started_in() {
+        let reply = |id: &str, cwd: &str| {
+            json!({
+                "type": "assistant", "timestamp": AT, "cwd": cwd, "sessionId": "s1", "requestId": id,
+                "message": { "id": id, "model": "m", "usage": { "input_tokens": 1 } }
+            })
+            .to_string()
+        };
+        let parsed = rows_of(&[reply("a", "/opt/app"), reply("b", "/opt/app/sub")], true);
+        let projects: Vec<&str> = parsed.rows.iter().map(|r| r.project.as_str()).collect();
+        assert_eq!(projects, ["/opt/app"]);
     }
 
     #[test]
