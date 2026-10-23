@@ -1115,6 +1115,20 @@ pub fn dictation_history() -> Result<Vec<DictationEntry>, String> {
     Ok(read_history(&history_path()))
 }
 
+/// Drops the dictation at `at`, or every one when None
+pub fn dictation_forget(at: Option<u64>) -> Result<(), String> {
+    forget_dictation(&history_path(), at).map_err(|e| e.to_string())
+}
+
+fn forget_dictation(path: &Path, at: Option<u64>) -> io::Result<()> {
+    let mut history = read_history(path);
+    history.retain(|entry| at.is_some_and(|at| entry.at != at));
+    if history.is_empty() && !path.exists() {
+        return Ok(());
+    }
+    std::fs::write(path, serde_json::to_vec(&history)?)
+}
+
 pub fn recording_status(app: &AppHandle) -> Result<RecordingStatus, String> {
     Ok(lock(&voice(app).recording).clone())
 }
@@ -1239,6 +1253,17 @@ fn list_recordings(root: &Path) -> Vec<RecordingInfo> {
 /// Refuses an id that is not a folder name in the recordings folder
 pub fn recording_read(id: &str) -> Result<RecordingNote, String> {
     read_recording(&recordings_root(), id)
+}
+
+/// Moves a recording's folder to the Trash
+pub fn recording_delete(id: &str) -> Result<(), String> {
+    delete_recording(&recordings_root(), id)
+}
+
+fn delete_recording(root: &Path, id: &str) -> Result<(), String> {
+    let folder = meeting_folder(root, id)?;
+    read_meeting(&folder).ok_or_else(|| format!("No recording {id}"))?;
+    treeix_core::fs::trash_path(root, id)
 }
 
 fn read_recording(root: &Path, id: &str) -> Result<RecordingNote, String> {
@@ -1375,6 +1400,12 @@ mod tests {
         let history = read_history(&path);
         assert_eq!(history.len(), HISTORY_LIMIT);
         assert_eq!(history[0].at, 59);
+
+        forget_dictation(&path, Some(59)).expect("forget one");
+        assert_eq!(read_history(&path)[0].at, 58);
+        assert_eq!(read_history(&path).len(), HISTORY_LIMIT - 1);
+        forget_dictation(&path, None).expect("forget all");
+        assert!(read_history(&path).is_empty());
     }
 
     #[test]
@@ -1441,7 +1472,11 @@ mod tests {
         assert_eq!(note.transcript[1].at, 3_725_000);
         for bad in ["../elsewhere", "a/b", "..", ".hidden", ""] {
             assert!(read_recording(&root, bad).is_err(), "{bad}");
+            assert!(delete_recording(&root, bad).is_err(), "{bad}");
         }
+        // Only recording folders go to the Trash
+        std::fs::create_dir_all(root.join("not a recording")).expect("dir");
+        assert!(delete_recording(&root, "not a recording").is_err());
     }
 
     #[test]

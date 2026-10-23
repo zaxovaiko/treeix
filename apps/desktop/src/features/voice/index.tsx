@@ -236,6 +236,8 @@ export function VoiceSection({ view, settings, update }: SectionProps) {
     api.dictationHistory().then(setHistory, () => {})
     return api.onVoice((e) => e.type === 'dictated' && setHistory((h) => [e.entry, ...h.filter((x) => x.at !== e.entry.at)].slice(0, 50)))
   }, [api])
+  const forget = (at: number | null) =>
+    api.dictationForget(at).then(() => setHistory((h) => (at === null ? [] : h.filter((x) => x.at !== at))), fail("Couldn't delete"))
   const access = (kind: 'microphone' | 'accessibility', label: string, desc: string) => {
     const state = status?.[kind] ?? 'notAsked'
     return (
@@ -299,9 +301,20 @@ export function VoiceSection({ view, settings, update }: SectionProps) {
       </Group>
       <Group title="History">
         {history.length ? (
-          history.slice(0, 20).map((h) => (
-            <Row key={h.at} label={h.text} desc={`${new Date(h.at).toLocaleString()}${h.app ? ` · ${h.app}` : ''}${h.raw !== h.text ? ` · heard "${h.raw}"` : ''}`} />
-          ))
+          <>
+            {history.slice(0, 20).map((h) => (
+              <Row key={h.at} label={h.text} desc={`${new Date(h.at).toLocaleString()}${h.app ? ` · ${h.app}` : ''}${h.raw !== h.text ? ` · heard "${h.raw}"` : ''}`}>
+                <button className="btn sm" onClick={() => forget(h.at)}>
+                  Delete
+                </button>
+              </Row>
+            ))}
+            <Row label="Clear history" desc="Forgets every dictation">
+              <button className="btn sm" onClick={() => forget(null)}>
+                Clear
+              </button>
+            </Row>
+          </>
         ) : (
           <Row label="Nothing dictated yet" />
         )}
@@ -348,6 +361,9 @@ export function RecordingSection({ view, settings, update }: SectionProps) {
             <Row key={m.id} label={m.title} desc={`${new Date(m.startedAt).toLocaleString()} · ${clock(m.durationMs)}`} keywords="meeting notes transcript">
               <button className="btn sm" onClick={() => openNotes(view, m)}>
                 {m.hasNote ? 'Open notes' : 'Open transcript'}
+              </button>
+              <button className="btn sm" title="Moves its folder to the Trash" onClick={() => api.recordingDelete(m.id).then(() => setSaved((all) => all.filter((r) => r.id !== m.id)), fail("Couldn't delete"))}>
+                Delete
               </button>
             </Row>
           ))

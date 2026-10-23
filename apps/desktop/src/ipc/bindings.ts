@@ -549,6 +549,12 @@ async voiceRequestAccess(kind: AccessKind) : Promise<null> {
 async dictationHistory() : Promise<DictationEntry[]> {
     return await TAURI_INVOKE("dictation_history");
 },
+/**
+ * Drops one dictation by its `at`, or the whole history when null
+ */
+async dictationForget(at: number | null) : Promise<null> {
+    return await TAURI_INVOKE("dictation_forget", { at });
+},
 async recordingStatus() : Promise<RecordingStatus> {
     return await TAURI_INVOKE("recording_status");
 },
@@ -569,6 +575,12 @@ async recordings() : Promise<RecordingInfo[]> {
 },
 async recordingRead(id: string) : Promise<RecordingNote> {
     return await TAURI_INVOKE("recording_read", { id });
+},
+/**
+ * Moves the recording's folder to the Trash
+ */
+async recordingDelete(id: string) : Promise<null> {
+    return await TAURI_INVOKE("recording_delete", { id });
 }
 }
 

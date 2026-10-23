@@ -194,12 +194,14 @@ export function tauriApi(): Api {
     voiceModelDelete: (model) => done(commands.voiceModelDelete(model)),
     voiceRequestAccess: (kind) => done(commands.voiceRequestAccess(kind)),
     dictationHistory: commands.dictationHistory,
+    dictationForget: (at) => done(commands.dictationForget(at)),
     recordingStatus: commands.recordingStatus,
     recordingStart: commands.recordingStart,
     recordingPause: commands.recordingPause,
     recordingStop: commands.recordingStop,
     recordings: commands.recordings,
     recordingRead: commands.recordingRead,
+    recordingDelete: (id) => done(commands.recordingDelete(id)),
     onVoice: (cb) => on(events.voiceEvent, (p) => p, cb),
   }
 }

@@ -5,8 +5,8 @@ import type { Api, DictationEntry, DictationStatus, RecordingInfo, RecordingStat
 
 type VoiceApi = Pick<
   Api,
-  | 'dictationStatus' | 'dictationToggle' | 'voiceModelDownload' | 'voiceModelDelete' | 'voiceRequestAccess' | 'dictationHistory'
-  | 'recordingStatus' | 'recordingStart' | 'recordingPause' | 'recordingStop' | 'recordings' | 'recordingRead' | 'onVoice'
+  | 'dictationStatus' | 'dictationToggle' | 'voiceModelDownload' | 'voiceModelDelete' | 'voiceRequestAccess' | 'dictationHistory' | 'dictationForget'
+  | 'recordingStatus' | 'recordingStart' | 'recordingPause' | 'recordingStop' | 'recordings' | 'recordingRead' | 'recordingDelete' | 'onVoice'
 >
 
 const AT = Date.UTC(2026, 9, 22, 11)
@@ -91,6 +91,9 @@ export function voiceMock(): VoiceApi {
     voiceModelDelete: async (id) => model(id, { phase: 'missing', progress: null }),
     voiceRequestAccess: async (kind) => setDictation(kind === 'microphone' ? { microphone: 'granted' } : { accessibility: 'granted' }),
     dictationHistory: async () => history,
+    async dictationForget(at) {
+      history = at === null ? [] : history.filter((h) => h.at !== at)
+    },
     recordingStatus: async () => recording,
     async recordingStart(title) {
       if (recording.phase !== 'idle') throw new Error('already recording')
@@ -117,6 +120,9 @@ export function voiceMock(): VoiceApi {
       return setRecording({ phase: 'saving' })
     },
     recordings: async () => saved,
+    async recordingDelete(id) {
+      saved = saved.filter((r) => r.id !== id)
+    },
     async recordingRead(id) {
       const info = saved.find((r) => r.id === id)
       if (!info) throw new Error(`no recording ${id}`)

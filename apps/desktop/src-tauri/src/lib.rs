@@ -146,12 +146,14 @@ fn specta() -> Builder<tauri::Wry> {
             voice_model_delete,
             voice_request_access,
             dictation_history,
+            dictation_forget,
             recording_status,
             recording_start,
             recording_pause,
             recording_stop,
             recordings,
             recording_read,
+            recording_delete,
         ])
         // Registering events is also what drops tauri's `TAURI_CHANNEL = null` placeholder type from the export
         .events(collect_events![

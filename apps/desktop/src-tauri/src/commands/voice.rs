@@ -46,6 +46,13 @@ pub async fn dictation_history() -> Result<Vec<DictationEntry>> {
     blocking(voice::dictation_history).await
 }
 
+/// Drops one dictation by its `at`, or the whole history when null
+#[tauri::command]
+#[specta::specta]
+pub async fn dictation_forget(at: Option<u64>) -> Result<()> {
+    blocking(move || voice::dictation_forget(at)).await
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn recording_status(app: AppHandle) -> Result<RecordingStatus> {
@@ -81,4 +88,11 @@ pub async fn recordings() -> Result<Vec<RecordingInfo>> {
 #[specta::specta]
 pub async fn recording_read(id: String) -> Result<RecordingNote> {
     blocking(move || voice::recording_read(&id)).await
+}
+
+/// Moves the recording's folder to the Trash
+#[tauri::command]
+#[specta::specta]
+pub async fn recording_delete(id: String) -> Result<()> {
+    blocking(move || voice::recording_delete(&id)).await
 }

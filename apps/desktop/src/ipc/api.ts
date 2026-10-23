@@ -408,6 +408,8 @@ export interface Api {
   voiceRequestAccess(kind: AccessKind): Promise<void>
   /** Recent dictations, newest first */
   dictationHistory(): Promise<DictationEntry[]>
+  /** Drops one dictation by its `at`, or the whole history when null */
+  dictationForget(at: number | null): Promise<void>
   recordingStatus(): Promise<RecordingStatus>
   /** Records the microphone and system audio; null title names it by date */
   recordingStart(title: string | null): Promise<RecordingStatus>
@@ -417,6 +419,8 @@ export interface Api {
   /** Saved recordings, newest first */
   recordings(): Promise<RecordingInfo[]>
   recordingRead(id: string): Promise<RecordingNote>
+  /** Moves the recording's folder to the Trash */
+  recordingDelete(id: string): Promise<void>
   /** Dictation and recording status, partial words, live transcript lines, saved recordings */
   onVoice(cb: (e: VoiceEvent) => void): () => void
 }
