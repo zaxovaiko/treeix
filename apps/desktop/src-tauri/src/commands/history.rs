@@ -40,7 +40,11 @@ pub async fn forget_session(id: String) -> Result<()> {
 }
 
 /// Keeps a removed session for the History panel, with the branch and repo it ran in; routines are not kept
-pub(super) async fn record_closed(info: SessionInfo, home: PathBuf) {
+pub(super) async fn record_closed(mut info: SessionInfo, home: PathBuf) {
+    // A shell's conversation is the claude it ran (ptyd reads it off the process), so it resumes as that claude
+    if matches!(info.kind, SessionKind::Shell) && info.agent_session.is_some() {
+        info.kind = SessionKind::Claude;
+    }
     let kind = match info.kind {
         SessionKind::Shell => RecordKind::Shell,
         SessionKind::Claude => RecordKind::Claude,

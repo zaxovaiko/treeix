@@ -719,6 +719,16 @@ impl Session {
                 _ => SessionKind::Shell,
             };
             self.set_kind(daemon, kind);
+            if kind == SessionKind::Claude
+                && let Some(conversation) = crate::hooks::shell_claude_conversation(foreground)
+                && self.set_agent_session(&conversation)
+            {
+                daemon.broadcast(Event::AgentSession {
+                    session: self.id.clone(),
+                    agent_session: conversation,
+                });
+                daemon.mark_state_dirty();
+            }
             if kind == SessionKind::Shell {
                 // An interactive shell owns the terminal only at its prompt; one running a command has no job
                 // control to tell, so it stays Running

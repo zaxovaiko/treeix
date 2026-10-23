@@ -141,6 +141,15 @@ fn status_line_conversation(text: &str) -> Option<String> {
     (!id.is_empty()).then(|| id.to_owned())
 }
 
+/// Claude started in a shell has no hooks, but keeps its conversation in `~/.claude/sessions/<pid>.json`
+pub fn shell_claude_conversation(pid: i32) -> Option<String> {
+    let home = std::env::var_os("HOME")?;
+    let path = Path::new(&home).join(format!(".claude/sessions/{pid}.json"));
+    let input: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
+    let id = input.get("sessionId")?.as_str()?;
+    (!id.is_empty()).then(|| id.to_owned())
+}
+
 /// What the watcher last saw of a session, so an unchanged one costs two small reads
 #[derive(Default)]
 struct Seen {
