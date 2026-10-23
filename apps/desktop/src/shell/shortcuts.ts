@@ -31,8 +31,33 @@ export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.u
 
 type Keys = Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'shiftKey' | 'altKey' | 'ctrlKey'>
 
-/** What the native menu (src-tauri/src/menu.rs, macOS only) binds when settings.keys leaves the item alone */
-const MENU_KEYS: Record<string, string> = { settings: 'Super+Comma', 'toggle-sidebar': 'Super+Backslash', palette: 'Shift+Super+KeyP' }
+/** What the native menu (src-tauri/src/menu.rs, macOS only) binds when settings.keys leaves the item alone; '' is unbound */
+const MENU_KEYS: Record<string, string> = {
+  settings: 'Super+Comma',
+  'new-shell': '',
+  'new-claude': 'Shift+Super+KeyC',
+  'new-codex': 'Shift+Super+KeyX',
+  'open-folder': 'Super+KeyO',
+  record: 'Shift+Super+KeyR',
+  'close-pane': '',
+  palette: 'Shift+Super+KeyP',
+  'toggle-sidebar': 'Super+Backslash',
+  'module-graph': 'Shift+Super+KeyG',
+  'toggle-tabs': '',
+  'toggle-ui': '',
+  'toggle-theme': '',
+  'zoom-in': 'Super+Equal',
+  'zoom-out': 'Super+Minus',
+  'zoom-reset': 'Super+Digit0',
+  'split-right': '',
+  'split-down': 'Shift+Super+KeyD',
+  'focus-left': 'Alt+Super+ArrowLeft',
+  'focus-right': 'Alt+Super+ArrowRight',
+  'focus-up': 'Alt+Super+ArrowUp',
+  'focus-down': 'Alt+Super+ArrowDown',
+  'next-tab': 'Shift+Super+BracketRight',
+  'prev-tab': 'Shift+Super+BracketLeft',
+}
 
 /** Whether the native menu owns this chord, rebound ones included ('' unbinds): inside Tauri it fires them, keydown must not too */
 export function menuChord(e: Keys, keys: Partial<Record<string, string>>, mac = IS_MAC): boolean {

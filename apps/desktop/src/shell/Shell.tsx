@@ -8,7 +8,7 @@ import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, res
 import { fallbackPlace, GroupColors, SETTINGS_LEAF, type Sessions } from './model'
 import { isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
-import { followedMode, useAppliedSettings } from '../pages/settings'
+import { followedMode, RELEASES, showSettingsSection, useAppliedSettings } from '../pages/settings'
 import { settingsNow } from '../features/agents/settings'
 import { toggleRecording } from '../features/voice'
 import { useBrowserAgentPanes } from '../features/browser/open'
@@ -307,7 +307,9 @@ export function Shell({ api }: { api: Api }) {
     if (shortcutsPaused()) return
     const keys = settingsNow()?.keys ?? {}
     const id = resolveShortcut(e, keys)
-    if (!id || (IN_TAURI && menuChord(e, keys))) return
+    if (!id) return
+    // The menu runs it; the pane under focus (editor, terminal) must not take the keys too
+    if (IN_TAURI && menuChord(e, keys)) return e.stopPropagation()
     e.preventDefault()
     e.stopPropagation()
     run(id)
@@ -319,7 +321,13 @@ export function Shell({ api }: { api: Api }) {
   }, [])
 
   const onMenu = useEffectEvent((id: string) => {
-    if (isCommandId(id) && !shortcutsPaused()) run(id)
+    if (shortcutsPaused()) return
+    if (isCommandId(id)) return run(id)
+    if (id === 'shortcuts') {
+      run('settings')
+      return showSettingsSection('keys')
+    }
+    if (id === 'changelog') void api.openUrl(RELEASES)
   })
   useEffect(() => {
     if (!IN_TAURI) return

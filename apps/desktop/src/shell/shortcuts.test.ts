@@ -80,12 +80,19 @@ test('menu chords: only what src-tauri/src/menu.rs binds, and only on macOS', ()
   expect(menuChord(key('k', {}, 'KeyK'), {}, true)).toBe(false)
   expect(menuChord(key('t', {}, 'KeyT'), {}, true)).toBe(false)
   expect(menuChord(key(',', {}, 'Comma'), {}, false)).toBe(false)
+  expect(menuChord(key('o', {}, 'KeyO'), {}, true)).toBe(true)
+  expect(menuChord(key('ArrowLeft', { alt: true }, 'ArrowLeft'), {}, true)).toBe(true)
+  expect(menuChord(key('}', { shift: true }, 'BracketRight'), {}, true)).toBe(true)
+  expect(menuChord(key('d', {}, 'KeyD'), {}, true)).toBe(false)
+  expect(menuChord(key('w', {}, 'KeyW'), {}, true)).toBe(false)
 })
 
 test('menu chords follow settings.keys', () => {
   expect(menuChord(key('P', { shift: true }, 'KeyP'), { palette: 'Shift+Super+KeyO' }, true)).toBe(false)
   expect(menuChord(key('O', { shift: true }, 'KeyO'), { palette: 'Shift+Super+KeyO' }, true)).toBe(true)
   expect(menuChord(key(',', {}, 'Comma'), { settings: '' }, true)).toBe(false)
+  // Unbound in the menu by default, bound once rebound
+  expect(menuChord(key('n', {}, 'KeyN'), { 'new-shell': 'Super+KeyN' }, true)).toBe(true)
 })
 
 test('records global shortcut accelerators', () => {

@@ -561,7 +561,7 @@ function Features({ settings, update }: SectionProps) {
   )
 }
 
-const RELEASES = 'https://github.com/zaxovaiko/treeix/releases'
+export const RELEASES = 'https://github.com/zaxovaiko/treeix/releases'
 
 /** The release's notes (GitHub markdown); links open in the browser */
 function ReleaseNotes({ view, notes }: { view: ShellView; notes: string }) {

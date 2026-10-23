@@ -11,6 +11,7 @@ import './settings.css'
 
 export { followedMode, useAppliedSettings } from './apply'
 export { showSettingsSection } from './nav'
+export { RELEASES } from './sections'
 
 const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {
   appearance: ['Appearance', 'moon'],
