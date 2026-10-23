@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent } from 'react'
 import { Icon } from '../lib/icons'
 import { paletteResults, type Command, type Result } from '../lib/paletteSearch'
-import { KIND_ICON, tabKind, tabTitle } from './model'
+import { GROUP_COLORS, KIND_ICON, tabKind, tabTitle } from './model'
 import { placeLabel } from './state'
 import { keyHint, type CommandId } from './shortcuts'
 import type { ShellView } from './Shell'
@@ -72,7 +72,11 @@ function commands(view: ShellView): Command[] {
     ...(features?.graph ? graphCommands(view) : []),
     ...(features?.recording ? voiceCommands(view) : []),
   ]
-  return [...actions, ...chats, ...phase67, ...dialogCommands(view), ...tabs]
+  const place = view.activeTab && view.placeOfTab(view.activeTab)
+  const colors = place
+    ? GROUP_COLORS.map(([name, color]): Command => ({ id: `color-${name}`, group: 'Actions', label: `Group color: ${name}`, detail: placeLabel(place), run: () => view.dispatch({ type: 'color', key: place.key, color }) }))
+    : []
+  return [...actions, ...chats, ...phase67, ...dialogCommands(view), ...colors, ...tabs]
 }
 
 const Marked = ({ text, marks }: { text: string; marks: Set<number> }) => <>{[...text].map((ch, i) => (marks.has(i) ? <mark key={i}>{ch}</mark> : ch))}</>

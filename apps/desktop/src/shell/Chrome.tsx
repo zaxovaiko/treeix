@@ -1,14 +1,15 @@
-import { useEffect, useState, type PointerEvent } from 'react'
+import { useEffect, useState, type MouseEvent, type PointerEvent } from 'react'
 import { PortsItem, TabTags } from '../features/agents/PortsItem'
 import { UsagePill } from '../features/agents/UsagePill'
 import { RoutineClock, RoutinesHost } from '../features/routines'
 import { VoiceTitleItems } from '../features/voice'
 import type { Api, Place, ProgressState } from '../ipc/api'
 import { Icon } from '../lib/icons'
-import { DOT_LABEL, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
+import { DOT_LABEL, GROUP_COLORS, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
 import { keyHint, withHint } from './shortcuts'
 import { leaves, placeLabel, SIDEBAR, type Group, type PlaceTabs, type Tab } from './state'
 import type { ShellView } from './Shell'
+import { Menu, type MenuItem } from '../panels/common'
 
 type ViewProps = { view: ShellView }
 
@@ -136,12 +137,28 @@ function PlusHere({ view, place }: ViewProps & { place: Place }) {
   )
 }
 
+/** Right-click on a group picks its color */
+function useColorMenu(view: ShellView) {
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; key: string } | null>(null)
+  const open = (key: string) => (e: MouseEvent) => {
+    e.preventDefault()
+    setMenu({ at: { x: e.clientX, y: e.clientY }, key })
+  }
+  const items = (key: string): MenuItem[] => [
+    ...GROUP_COLORS.map(([label, color]) => ({ label, color, run: () => view.dispatch({ type: 'color', key, color }) })),
+    { label: 'Default color', run: () => view.dispatch({ type: 'color', key, color: null }) },
+  ]
+  return [menu && <Menu at={menu.at} items={items(menu.key)} onClose={() => setMenu(null)} />, open] as const
+}
+
 function PlaceRows({ view, entry }: ViewProps & { entry: PlaceTabs }) {
   const { place, tabs } = entry
   const closed = view.ui.collapsed.includes(place.key)
+  const [menu, openMenu] = useColorMenu(view)
   return (
     <>
-      <div className={`wt ${place.missing ? 'missing' : ''}`} style={{ '--c': placeColor(place) }} onClick={() => view.dispatch({ type: 'toggleCollapsed', key: place.key })}>
+      {menu}
+      <div className={`wt ${place.missing ? 'missing' : ''}`} style={{ '--c': placeColor(place, view.ui.colors) }} onClick={() => view.dispatch({ type: 'toggleCollapsed', key: place.key })} onContextMenu={openMenu(place.key)} title="Right-click for a color">
         <Chev closed={closed} />
         <span className="wic">
           <Icon name={placeIcon(place)} />
@@ -256,14 +273,16 @@ export function SidebarResize({ view }: ViewProps) {
 /** Horizontal tabs: a colored chip per place, then its tabs */
 export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
   const { ui, sessions, dispatch, closeTab, run } = view
+  const [menu, openMenu] = useColorMenu(view)
   return (
     <div className="hstrip">
+      {menu}
       <div className="hscroll" data-tauri-drag-region>
         {view.groups.flatMap((group) =>
           group.places.map(({ place, tabs }) => {
             const closed = ui.collapsed.includes(place.key)
             return [
-              <button key={`c${place.key}`} className="gchip" style={{ '--c': placeColor(place) }} onClick={() => dispatch({ type: 'toggleCollapsed', key: place.key })} title={tilde(place.path, view.home)}>
+              <button key={`c${place.key}`} className="gchip" style={{ '--c': placeColor(place, ui.colors) }} onClick={() => dispatch({ type: 'toggleCollapsed', key: place.key })} onContextMenu={openMenu(place.key)} title={`${tilde(place.path, view.home)}. Right-click for a color`}>
                 {placeLabel(place)}
                 {closed && <span className="n">{tabs.length}</span>}
               </button>,
@@ -319,7 +338,7 @@ export function CenterTop({ view }: ViewProps) {
           <>
             <span className="dim">{place.repoName}</span>
             <span className="sep">/</span>
-            <span style={{ color: placeColor(place) }}>{placeName(place)}</span>
+            <span style={{ color: placeColor(place, view.ui.colors) }}>{placeName(place)}</span>
           </>
         ) : (
           <span className="dim">{tilde(place.path, view.home)}</span>

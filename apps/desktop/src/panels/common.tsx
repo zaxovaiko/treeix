@@ -1,9 +1,9 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useContext, useEffect, useRef, type ReactNode } from 'react'
 import type { CreateSession, Place } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
 import { paneGrid } from '../panes/terminal/xterm'
 import { newTabId } from '../shell/state'
-import { placeColor, placeIcon, placeName } from '../shell/model'
+import { GroupColors, placeColor, placeIcon, placeName } from '../shell/model'
 import type { ShellView } from '../shell/Shell'
 
 // Line icons only the panels use, same 24px stroke style as lib/icons
@@ -37,6 +37,7 @@ export const isGit = (place: Place) => place.kind !== 'folder' && place.kind !==
 
 /** The place a panel shows, as the header chip */
 export function PlaceTag({ place }: { place: Place }) {
+  const colors = useContext(GroupColors)
   if (place.kind === 'scratch')
     return (
       <span className="tag">
@@ -51,7 +52,7 @@ export function PlaceTag({ place }: { place: Place }) {
       </span>
     )
   return (
-    <span className="tag" style={{ color: placeColor(place) }} title={place.path}>
+    <span className="tag" style={{ color: placeColor(place, colors) }} title={place.path}>
       <Icon name={placeIcon(place)} />
       <span className="trunc">{placeName(place)}</span>
     </span>
@@ -75,6 +76,8 @@ export interface MenuItem {
   label: string
   icon?: PanelIconName | IconName
   danger?: boolean
+  /** A swatch before the label */
+  color?: string
   run: () => void
 }
 
@@ -103,6 +106,7 @@ export function Menu({ at, items, onClose }: { at: { x: number; y: number }; ite
           }}
         >
           {item.icon && <PIcon name={item.icon} />}
+          {item.color && <span className="sw" style={{ background: item.color }} />}
           {item.label}
         </button>
       ))}

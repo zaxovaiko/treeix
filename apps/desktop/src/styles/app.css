@@ -147,6 +147,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .mi:hover, .mi.on { background: var(--accent); }
 .mi kbd, .mi .d { margin-left: auto; }
 .mi .d { color: var(--muted-foreground); font-size: 11px; }
+.mi .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .mi .d + kbd { margin-left: 0; }
 .mi mark { background: none; color: var(--foreground); font-weight: 600; }
 .mlabel { padding: 6px 8px 3px; font-size: 10.5px; font-weight: 600; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }

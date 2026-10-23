@@ -1,3 +1,4 @@
+import { createContext } from 'react'
 import type { Place, SessionInfo, SessionKind, SessionStatus } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
 import { leaves, type Tab } from './state'
@@ -60,10 +61,25 @@ export function Ki({ kind, dot = 'idle', sm }: { kind: TabKind; dot?: Dot; sm?: 
   )
 }
 
-const COLORS = ['#8b5cf6', '#0ea5e9', '#10b981', '#f43f5e', '#14b8a6', '#f59e0b', '#ec4899']
+/** Colors a group can take; slate is the base checkout's */
+export const GROUP_COLORS = [
+  ['Slate', '#64748b'],
+  ['Violet', '#8b5cf6'],
+  ['Sky', '#0ea5e9'],
+  ['Emerald', '#10b981'],
+  ['Rose', '#f43f5e'],
+  ['Teal', '#14b8a6'],
+  ['Amber', '#f59e0b'],
+  ['Pink', '#ec4899'],
+] as const
+const COLORS = GROUP_COLORS.slice(1).map(([, color]) => color)
 
-/** Stable per place: checkouts on the base folder are slate, worktrees get a color from their path */
-export function placeColor(place: Place): string {
+/** Hand-picked group colors (`UiState.colors`) for components without the view */
+export const GroupColors = createContext<Record<string, string>>({})
+
+/** The picked color, else stable per place: checkouts on the base folder are slate, worktrees get a color from their path */
+export function placeColor(place: Place, colors: Record<string, string> = {}): string {
+  if (colors[place.key]) return colors[place.key]
   if (place.kind === 'root' || place.kind === 'git') return '#64748b'
   if (place.kind === 'folder' || place.kind === 'scratch') return '#94a3b8'
   let hash = 0

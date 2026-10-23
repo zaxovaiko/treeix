@@ -116,3 +116,9 @@ test('zoom steps by 10% and stays between 50% and 200%', () => {
   expect(zoomed(2, 1)).toBe(2)
   expect(zoomed(0.5, -1)).toBe(0.5)
 })
+
+test('a group color is picked per place and resets to the default', () => {
+  const picked = reducer(initialUi, { type: 'color', key: '/repo', color: '#f43f5e' })
+  expect(picked.colors).toEqual({ '/repo': '#f43f5e' })
+  expect(reducer(picked, { type: 'color', key: '/repo', color: null }).colors).toEqual({})
+})

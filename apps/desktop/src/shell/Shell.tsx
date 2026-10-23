@@ -5,7 +5,7 @@ import { applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
 import { IN_TAURI, pickFolder, registerQuickShortcut, setZoom, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, zoomed, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
-import { fallbackPlace, SETTINGS_LEAF, type Sessions } from './model'
+import { fallbackPlace, GroupColors, SETTINGS_LEAF, type Sessions } from './model'
 import { isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
 import { followedMode, useAppliedSettings } from '../pages/settings'
@@ -337,53 +337,55 @@ export function Shell({ api }: { api: Api }) {
   const empty = ui.tabs.length === 0
 
   return (
-    <div className="win">
-      <TitleBar view={view} tabbed={tabsInTitle && !empty} />
-      {!connected && (
-        <div className="offline">
-          <Icon name="alert" />
-          {unreachable ? "Can't reach the terminal host" : 'Reconnecting to the terminal host...'}
-          {unreachable && (
-            <button className="btn sm" onClick={retry}>
-              Retry
-            </button>
-          )}
-        </div>
-      )}
-      <div className="body">
-        {vertical && ui.sidebar && (
-          <>
-            <aside className="card side" style={{ width: ui.sidebarWidth }}>
-              <Sidebar view={view} />
-            </aside>
-            <SidebarResize view={view} />
-          </>
-        )}
-        {!vertical && <Panels view={view} hidden={page !== null} />}
-        <main className="card center">
-          {page === 'graph' ? (
-            <Suspense fallback={<div className="empty">Loading...</div>}>
-              <GraphPage view={view} onClose={() => setPage(null)} />
-            </Suspense>
-          ) : empty ? (
-            <Welcome view={view} />
-          ) : (
-            vertical ? <CenterTop view={view} /> : !tabsInTitle && <HStrip view={view} actions />
-          )}
-          <div className="stage" hidden={page !== null || empty}>
-            {[...ui.tabs]
-              .sort((a, b) => a.id.localeCompare(b.id))
-              .map((tab) => (
-                <TabPanes key={tab.id} view={view} tab={tab} active={tab.id === ui.active && page === null} epoch={epoch} />
-              ))}
+    <GroupColors value={ui.colors}>
+      <div className="win">
+        <TitleBar view={view} tabbed={tabsInTitle && !empty} />
+        {!connected && (
+          <div className="offline">
+            <Icon name="alert" />
+            {unreachable ? "Can't reach the terminal host" : 'Reconnecting to the terminal host...'}
+            {unreachable && (
+              <button className="btn sm" onClick={retry}>
+                Retry
+              </button>
+            )}
           </div>
-        </main>
-        {vertical && <Panels view={view} hidden={page !== null} />}
+        )}
+        <div className="body">
+          {vertical && ui.sidebar && (
+            <>
+              <aside className="card side" style={{ width: ui.sidebarWidth }}>
+                <Sidebar view={view} />
+              </aside>
+              <SidebarResize view={view} />
+            </>
+          )}
+          {!vertical && <Panels view={view} hidden={page !== null} />}
+          <main className="card center">
+            {page === 'graph' ? (
+              <Suspense fallback={<div className="empty">Loading...</div>}>
+                <GraphPage view={view} onClose={() => setPage(null)} />
+              </Suspense>
+            ) : empty ? (
+              <Welcome view={view} />
+            ) : (
+              vertical ? <CenterTop view={view} /> : !tabsInTitle && <HStrip view={view} actions />
+            )}
+            <div className="stage" hidden={page !== null || empty}>
+              {[...ui.tabs]
+                .sort((a, b) => a.id.localeCompare(b.id))
+                .map((tab) => (
+                  <TabPanes key={tab.id} view={view} tab={tab} active={tab.id === ui.active && page === null} epoch={epoch} />
+                ))}
+            </div>
+          </main>
+          {vertical && <Panels view={view} hidden={page !== null} />}
+        </div>
+        <StatusBar view={view} />
+        {palette && <Palette view={view} onClose={() => setPalette(false)} />}
+        {dialog && <Dialogs key={dialog.kind} view={view} request={dialog} onClose={() => setDialog(null)} />}
       </div>
-      <StatusBar view={view} />
-      {palette && <Palette view={view} onClose={() => setPalette(false)} />}
-      {dialog && <Dialogs key={dialog.kind} view={view} request={dialog} onClose={() => setDialog(null)} />}
-    </div>
+    </GroupColors>
   )
 }
 

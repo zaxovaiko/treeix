@@ -46,6 +46,8 @@ export interface UiState {
   quickShortcut: string | null
   /** Page zoom of both windows, 1 = 100% */
   zoom: number
+  /** Group colors picked by hand, by place key */
+  colors: Record<string, string>
 }
 
 export const SIDEBAR = { min: 180, max: 520, initial: 276 }
@@ -72,6 +74,7 @@ export const initialUi: UiState = {
   renderer: 'auto',
   quickShortcut: null,
   zoom: 1,
+  colors: {},
 }
 
 export const leaves = (node: SplitNode): string[] => (node.type === 'pane' ? [node.session] : [...leaves(node.a), ...leaves(node.b)])
@@ -121,6 +124,8 @@ export type Action =
   | { type: 'activate'; tabId: string }
   | { type: 'ratio'; tabId: string; path: string; ratio: number }
   | { type: 'toggleCollapsed'; key: string }
+  /** null: back to the default color */
+  | { type: 'color'; key: string; color: string | null }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
   | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick' | 'zoom'>> }
@@ -154,6 +159,10 @@ export function reducer(state: UiState, action: Action): UiState {
     case 'ratio': {
       const ratio = Math.min(0.9, Math.max(0.1, action.ratio))
       return { ...state, tabs: state.tabs.map((t) => (t.id === action.tabId ? { ...t, root: setRatio(t.root, action.path, ratio) } : t)) }
+    }
+    case 'color': {
+      const colors = Object.fromEntries(Object.entries(state.colors).filter(([key]) => key !== action.key))
+      return { ...state, colors: action.color ? { ...colors, [action.key]: action.color } : colors }
     }
     case 'toggleCollapsed': {
       const has = state.collapsed.includes(action.key)
