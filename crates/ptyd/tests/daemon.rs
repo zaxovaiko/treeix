@@ -409,9 +409,14 @@ async fn shutdown_restores_sessions_ui_and_restart() {
     let dir = tempfile::tempdir().unwrap();
     let server = treeix_ptyd::spawn_in_process(dir.path().into());
     let mut client = connect(dir.path()).await;
+    // Only the first run turns mouse tracking on, like a TUI that was running when the host went down
+    let marker = dir.path().join("ran");
     let info = created(
         &mut client,
-        r"printf 'persist \033[35mme\033[0m'; sleep 100",
+        &format!(
+            r"printf 'persist \033[35mme\033[0m'; [ -e {0} ] || printf '\033[?1003h\033[?1006h'; touch {0}; sleep 100",
+            marker.display()
+        ),
     )
     .await;
     let before = wait_for_info(&mut client, &info.id, |s| s.seq > 0).await;
@@ -486,6 +491,10 @@ async fn shutdown_restores_sessions_ui_and_restart() {
             .count(),
         2,
         "old screen kept above"
+    );
+    assert!(
+        !String::from_utf8_lossy(&snapshot).contains("\x1b[?1003h"),
+        "the old program's mouse tracking is off"
     );
     client.request(Request::Shutdown).await.unwrap();
 }

@@ -355,8 +355,13 @@ impl Session {
 
         let (tx, rx) = unbounded_channel();
         if restart {
-            // Leave the old program's screen modes and start on a fresh line
-            self.ingest(daemon, b"\x1b[?1049l\x1b[0m\x1b[?25h\r\n", &tx);
+            // Leave the old program's screen and input modes and start on a fresh line. Mouse
+            // tracking left on would type the pointer's reports into the new shell
+            self.ingest(
+                daemon,
+                b"\x1b[?1049l\x1b[0m\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?2004l\r\n",
+                &tx,
+            );
         }
         tokio::spawn(coalesce(self.clone(), daemon.clone(), rx));
         let (session, daemon) = (self.clone(), daemon.clone());
