@@ -26,6 +26,9 @@ export const ACTIONS = [
   ['toggle-theme', 'Light or dark'],
   ['module-graph', 'Module graph'],
   ['record', 'Record a meeting'],
+  ['zoom-in', 'Zoom in'],
+  ['zoom-out', 'Zoom out'],
+  ['zoom-reset', 'Actual size'],
 ] as const satisfies readonly (readonly [CommandId, string])[]
 
 export type ActionId = (typeof ACTIONS)[number][0]
@@ -37,10 +40,10 @@ const EXTRA_DEFAULTS: Partial<Record<ActionId, string>> = { 'new-claude': 'Shift
 
 const CODES = [
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((c) => `Key${c}`),
-  ...'123456789'.split('').map((d) => `Digit${d}`),
-  'Comma', 'Backslash', 'BracketLeft', 'BracketRight', 'Tab', 'PageUp', 'PageDown',
+  ...'0123456789'.split('').map((d) => `Digit${d}`),
+  'Comma', 'Equal', 'Minus', 'Backslash', 'BracketLeft', 'BracketRight', 'Tab', 'PageUp', 'PageDown',
 ]
-const CODE_KEYS: Record<string, string> = { Comma: ',', Backslash: '\\', BracketLeft: '[', BracketRight: ']' }
+const CODE_KEYS: Record<string, string> = { Comma: ',', Equal: '=', Minus: '-', Backslash: '\\', BracketLeft: '[', BracketRight: ']' }
 /** Fewest modifiers first, so the first hit is the chord the hints show */
 const MODS = ['', 'Control+', 'Super+', 'Control+Shift+', 'Shift+Super+', 'Alt+Super+']
 

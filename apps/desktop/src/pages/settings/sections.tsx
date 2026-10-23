@@ -3,9 +3,9 @@ import { FEATURES, THEMES, type FeatureId, type SettingsSection } from '../../fe
 import type { CliTool, KeepAwakeState, McpStatus, NotionDatabase, Settings, SettingsPatch, UpdateInfo } from '../../ipc/api'
 import { ACTIONS, conflict, defaultKeys, keyFor, type ActionId, type Keymap } from '../../lib/hotkeys'
 import { registerQuickShortcut } from '../../lib/native'
-import { IS_MAC } from '../../shell/shortcuts'
+import { IS_MAC, keyHint } from '../../shell/shortcuts'
 import type { ShellView } from '../../shell/Shell'
-import type { UiState } from '../../shell/state'
+import { ZOOM, type UiState } from '../../shell/state'
 import type { Mode } from '../../styles/theme'
 import { RoutinesSection } from '../../features/routines'
 import { BrowserSection } from '../../features/browser'
@@ -97,10 +97,15 @@ function Appearance(props: SectionProps) {
         <Row label="Density" desc="Compact runs edge to edge with 1px lines. Islands floats rounded panels">
           <Seg value={view.ui.ui} options={[['compact', 'Compact'], ['islands', 'Islands']]} onChange={(ui) => setUi(view, { ui })} />
         </Row>
+        <Row label="Zoom" desc={`The whole window. ${keyHint('zoom-in')} and ${keyHint('zoom-out')} step it, ${keyHint('zoom-reset')} resets`} keywords="scale size bigger smaller">
+          <Select value={view.ui.zoom} options={ZOOM_STEPS.map((z) => [z, `${Math.round(z * 100)}%`] as const)} onChange={(zoom) => setUi(view, { zoom })} />
+        </Row>
       </Group>
     </>
   )
 }
+
+const ZOOM_STEPS = Array.from({ length: Math.round((ZOOM.max - ZOOM.min) / ZOOM.step) + 1 }, (_, i) => Math.round((ZOOM.min + i * ZOOM.step) * 10) / 10)
 
 const FONTS = ['JetBrains Mono', 'SF Mono', 'Menlo', 'Fira Code', 'Berkeley Mono', 'IBM Plex Mono', 'ui-monospace']
 

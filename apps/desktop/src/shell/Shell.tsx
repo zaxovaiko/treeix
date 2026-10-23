@@ -3,8 +3,8 @@ import { emit, listen } from '@tauri-apps/api/event'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
-import { IN_TAURI, pickFolder, registerQuickShortcut, UI_CHANGED } from '../lib/native'
-import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
+import { IN_TAURI, pickFolder, registerQuickShortcut, setZoom, UI_CHANGED } from '../lib/native'
+import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, zoomed, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, SETTINGS_LEAF, type Sessions } from './model'
 import { isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
@@ -196,8 +196,9 @@ export function Shell({ api }: { api: Api }) {
   useAppliedSettings(api, ui.theme, (theme) => dispatch({ type: 'set', patch: { theme } }))
   useBrowserAgentPanes({ api, dispatch, activeTab, placeOfTab })
   useEffect(() => {
-    if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer })
-  }, [loaded, ui.theme, ui.ui, ui.renderer])
+    if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer, zoom: ui.zoom })
+  }, [loaded, ui.theme, ui.ui, ui.renderer, ui.zoom])
+  useEffect(() => void setZoom(ui.zoom).catch((e: unknown) => console.warn('zoom:', e)), [ui.zoom])
 
   const focusCwd = () => (activeTab ? (sessions[activeTab.focus]?.cwd ?? home) : home)
 
@@ -282,6 +283,12 @@ export function Shell({ api }: { api: Api }) {
       case 'record':
         if (settingsNow()?.features.recording) void toggleRecording(api).catch((e: unknown) => console.warn('recording:', e))
         return
+      case 'zoom-in':
+        return dispatch({ type: 'set', patch: { zoom: zoomed(ui.zoom, 1) } })
+      case 'zoom-out':
+        return dispatch({ type: 'set', patch: { zoom: zoomed(ui.zoom, -1) } })
+      case 'zoom-reset':
+        return dispatch({ type: 'set', patch: { zoom: 1 } })
       case 'toggle-tabs':
         return dispatch({ type: 'set', patch: { orientation: ui.orientation === 'vertical' ? 'horizontal' : 'vertical' } })
       case 'toggle-ui':

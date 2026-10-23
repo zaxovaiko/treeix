@@ -19,5 +19,12 @@ export async function registerQuickShortcut(accelerator: string | null): Promise
   await commands.setQuickShortcut(accelerator)
 }
 
-/** App event the main window sends when theme, density or renderer change, so the quick terminal follows live */
+/** Page zoom of this window; the browser build zooms the page with CSS */
+export async function setZoom(scale: number): Promise<void> {
+  if (!IN_TAURI) return void (document.documentElement.style.zoom = String(scale))
+  const { getCurrentWebview } = await import('@tauri-apps/api/webview')
+  await getCurrentWebview().setZoom(scale)
+}
+
+/** App event the main window sends when theme, density, renderer or zoom change, so the quick terminal follows live */
 export const UI_CHANGED = 'ui-changed'

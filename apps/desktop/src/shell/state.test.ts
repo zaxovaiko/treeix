@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import type { Place, SessionInfo } from '../ipc/api'
 import { liveCount } from './model'
-import { groupTabs, initialUi, leaves, neighbor, parseUi, reducer, restore, tabPlace, type UiState } from './state'
+import { groupTabs, initialUi, leaves, neighbor, parseUi, reducer, restore, tabPlace, zoomed, type UiState } from './state'
 
 const info = (id: string, createdAt = 0): SessionInfo => ({
   id,
@@ -108,4 +108,11 @@ test('live count: only panes in tabs with a running process, so not the quick te
   const s = restore({ ...initialUi, quick: 'q' }, [info('a'), info('b'), { ...info('c'), status: 'exited' }, info('q')])
   const sessions = Object.fromEntries([info('a'), info('b'), { ...info('c'), status: 'exited' as const }, info('q')].map((x) => [x.id, x]))
   expect(liveCount(s.tabs, sessions)).toBe(2)
+})
+
+test('zoom steps by 10% and stays between 50% and 200%', () => {
+  expect(zoomed(1, 1)).toBe(1.1)
+  expect(zoomed(0.7, -1)).toBe(0.6)
+  expect(zoomed(2, 1)).toBe(2)
+  expect(zoomed(0.5, -1)).toBe(0.5)
 })

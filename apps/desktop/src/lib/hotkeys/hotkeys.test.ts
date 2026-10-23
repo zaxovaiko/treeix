@@ -8,10 +8,12 @@ test('defaults come from the built-in shortcuts', () => {
   expect(mac.settings).toBe('Super+Comma')
   expect(mac['split-down']).toBe('Shift+Super+KeyD')
   expect(mac['new-claude']).toBe('Shift+Super+KeyC')
+  expect([mac['zoom-in'], mac['zoom-out'], mac['zoom-reset']]).toEqual(['Super+Equal', 'Super+Minus', 'Super+Digit0'])
   const linux = defaultKeys(false)
   expect(linux['new-shell']).toBe('Control+Shift+KeyT')
   expect(linux.settings).toBe('Control+Comma')
   expect(linux['new-claude']).toBeUndefined()
+  expect(linux['zoom-in']).toBe('Control+Shift+Equal')
 })
 
 test('an override moves an action, an empty one unbinds it', () => {

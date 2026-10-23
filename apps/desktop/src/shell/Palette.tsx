@@ -29,6 +29,9 @@ const ACTIONS: [CommandId, string][] = [
   ['toggle-theme', 'Toggle theme: dark or light'],
   ['toggle-sidebar', 'Toggle sidebar'],
   ['settings', 'Settings'],
+  ['zoom-in', 'Zoom in'],
+  ['zoom-out', 'Zoom out'],
+  ['zoom-reset', 'Reset zoom'],
 ]
 
 const ACTION_ICON: Partial<Record<CommandId, Command['icon']>> = {

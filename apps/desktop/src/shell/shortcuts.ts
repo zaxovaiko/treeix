@@ -19,10 +19,13 @@ export type CommandId =
   | 'toggle-theme'
   | 'module-graph'
   | 'record'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'zoom-reset'
   | `tab-${number}`
   | `focus-${Direction}`
 
-const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme', 'module-graph', 'record'])
+const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme', 'module-graph', 'record', 'zoom-in', 'zoom-out', 'zoom-reset'])
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
@@ -48,9 +51,13 @@ export function shortcut(e: Keys, mac = IS_MAC): CommandId | null {
   return ctrlTab(e) ?? (mac ? macShortcut(e) : linuxShortcut(e))
 }
 
+/** Browser zoom keys; Shift+= is + */
+const ZOOM: Record<string, CommandId> = { Equal: 'zoom-in', Minus: 'zoom-out', Digit0: 'zoom-reset' }
+
 function macShortcut(e: Keys): CommandId | null {
   if (!e.metaKey || e.ctrlKey) return null
   if (e.altKey) return ARROWS[e.key] && !e.shiftKey ? `focus-${ARROWS[e.key]}` : null
+  if (ZOOM[e.code]) return ZOOM[e.code]
   const key = e.key.toLowerCase()
   if (e.shiftKey) {
     if (e.code === 'BracketLeft') return 'prev-tab'
@@ -68,7 +75,7 @@ function macShortcut(e: Keys): CommandId | null {
 }
 
 /** Ctrl+Shift+G is Changes (panels/Panels.tsx), so the module graph takes M */
-const LINUX_CTRL_SHIFT: Record<string, CommandId> = { KeyT: 'new-shell', KeyO: 'open-folder', KeyW: 'close-pane', KeyP: 'palette', KeyD: 'split-right', KeyE: 'split-down', KeyB: 'toggle-sidebar', KeyM: 'module-graph', KeyR: 'record' }
+const LINUX_CTRL_SHIFT: Record<string, CommandId> = { KeyT: 'new-shell', KeyO: 'open-folder', KeyW: 'close-pane', KeyP: 'palette', KeyD: 'split-right', KeyE: 'split-down', KeyB: 'toggle-sidebar', KeyM: 'module-graph', KeyR: 'record', ...ZOOM }
 
 /** Like GNOME Terminal and Konsole: app chords are Ctrl+Shift, so plain Ctrl+<key> stays the shell's */
 function linuxShortcut(e: Keys): CommandId | null {
@@ -92,6 +99,9 @@ const MAC_HINTS: Partial<Record<CommandId, string>> = {
   settings: '⌘,',
   'module-graph': '⇧⌘G',
   record: '⇧⌘R',
+  'zoom-in': '⌘=',
+  'zoom-out': '⌘-',
+  'zoom-reset': '⌘0',
 }
 const LINUX_HINTS: Partial<Record<CommandId, string>> = {
   'new-shell': 'Ctrl+Shift+T',
@@ -104,6 +114,9 @@ const LINUX_HINTS: Partial<Record<CommandId, string>> = {
   settings: 'Ctrl+,',
   'module-graph': 'Ctrl+Shift+M',
   record: 'Ctrl+Shift+R',
+  'zoom-in': 'Ctrl+Shift+=',
+  'zoom-out': 'Ctrl+Shift+-',
+  'zoom-reset': 'Ctrl+Shift+0',
 }
 
 /** The chord shown next to a command in buttons, tooltips and the palette */

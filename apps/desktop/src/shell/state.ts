@@ -44,10 +44,16 @@ export interface UiState {
   renderer: Renderer
   /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null: none */
   quickShortcut: string | null
+  /** Page zoom of both windows, 1 = 100% */
+  zoom: number
 }
 
 export const SIDEBAR = { min: 180, max: 520, initial: 276 }
 export const PANEL = { min: 260, max: 640, initial: 344 }
+export const ZOOM = { min: 0.5, max: 2, step: 0.1 }
+
+/** `by` steps from `zoom`, kept in range and on the 10% grid */
+export const zoomed = (zoom: number, by: number) => Math.round(Math.min(ZOOM.max, Math.max(ZOOM.min, zoom + by * ZOOM.step)) * 10) / 10
 
 export const initialUi: UiState = {
   tabs: [],
@@ -65,6 +71,7 @@ export const initialUi: UiState = {
   quick: null,
   renderer: 'auto',
   quickShortcut: null,
+  zoom: 1,
 }
 
 export const leaves = (node: SplitNode): string[] => (node.type === 'pane' ? [node.session] : [...leaves(node.a), ...leaves(node.b)])
@@ -116,7 +123,7 @@ export type Action =
   | { type: 'toggleCollapsed'; key: string }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick' | 'zoom'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {

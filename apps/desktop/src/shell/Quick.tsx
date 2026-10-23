@@ -4,12 +4,12 @@ import type { Api } from '../ipc/api'
 import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
 import { paneGrid } from '../panes/terminal/xterm'
-import { IN_TAURI, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, setZoom, UI_CHANGED } from '../lib/native'
 import { followedMode, useAppliedSettings } from '../pages/settings'
 import { applyTheme, type Mode } from '../styles/theme'
 import { parseUi, type UiState } from './state'
 
-type Look = Pick<UiState, 'theme' | 'ui' | 'renderer'>
+type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom'>
 
 const GONE = new Set(['exited', 'restored', 'crashed'])
 
@@ -36,8 +36,9 @@ export function Quick({ api }: { api: Api }) {
   useEffect(() => {
     let cancelled = false
     let current: string | null = null
-    const look = ({ theme, ui, renderer }: Look) => {
+    const look = ({ theme, ui, renderer, zoom }: Look) => {
       applyTheme(theme, ui)
+      void setZoom(zoom).catch((e: unknown) => console.warn('zoom:', e))
       setMode(theme)
       setRenderer(renderer)
     }
