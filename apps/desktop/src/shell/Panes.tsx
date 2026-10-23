@@ -1,5 +1,6 @@
 import { lazy, Suspense, type CSSProperties, type PointerEvent } from 'react'
 import { TerminalPane } from '../panes/terminal'
+import { filesEndingWith } from '../panes/terminal/fileLinks'
 import { closeFileLeaf, isFileLeaf, leafRoot, resolvePath } from '../panes/file/open'
 import { closeChat, isChatLeaf, leafChat } from '../panes/chat/open'
 import { titleOf, useChatState } from '../panes/chat/store'
@@ -29,13 +30,31 @@ function ChatHead({ leaf }: { leaf: string }) {
   )
 }
 
-/** A path printed in a terminal: the file view when it's inside the session's checkout, else its default app */
-function openPrinted(view: ShellView, session: string, { path, line }: { path: string; line: number | null }) {
-  const home = path.startsWith('~/')
-  const absolute = resolvePath(home ? view.home : (view.sessions[session]?.cwd ?? view.home), home ? path.slice(2) : path)
+/**
+ * A path printed in a terminal, in the file view: the first target that exists, under its own checkout when it's outside the
+ * session's. One that resolves to nothing (cut short, relative to another folder) is looked up in the session's checkout
+ */
+async function openPrinted(view: ShellView, session: string, targets: { path: string; line: number | null }[]) {
+  const { api, home } = view
   const root = view.placeOf(session).key
-  if (absolute.startsWith(`${root}/`)) view.openFile(root, absolute.slice(root.length + 1), line ?? undefined)
-  else void view.api.openPath(absolute)
+  const cwd = view.sessions[session]?.cwd ?? home
+  for (const { path, line } of targets) {
+    const absolute = path.startsWith('~/') ? resolvePath(home, path.slice(2)) : resolvePath(cwd, path)
+    const cut = absolute.lastIndexOf('/')
+    const dir = absolute.slice(0, cut) || '/'
+    const names = await api.listDirectory(dir, '').catch((): string[] => [])
+    const name = absolute.slice(cut + 1)
+    if (names.includes(`${name}/`)) return api.openPath(absolute)
+    if (!names.includes(name)) continue
+    const [place] = absolute.startsWith(`${root}/`) ? [{ key: root }] : await api.places([dir]).catch(() => [])
+    const base = place && absolute.startsWith(`${place.key}/`) ? place.key : dir
+    return view.openFile(base, absolute.slice(base.length + 1), line ?? undefined)
+  }
+  const files = (await api.listFiles(root).catch(() => null))?.files ?? []
+  for (const { path, line } of targets) {
+    const [file] = filesEndingWith(files, path)
+    if (file) return view.openFile(root, file, line ?? undefined)
+  }
 }
 
 const pct = (n: number) => `${n * 100}%`
@@ -139,7 +158,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
               </div>
             ) : (
               <div className="pterm">
-                <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} onOpenFile={([target]) => target && openPrinted(view, id, target)} renderer={view.ui.renderer} />
+                <TerminalPane key={`${id}:${epoch}`} api={api} sessionId={id} visible={active} focused={active && focused} onFocus={() => dispatch({ type: 'focus', session: id })} onOpenFile={(targets) => void openPrinted(view, id, targets)} renderer={view.ui.renderer} />
               </div>
             )}
           </div>

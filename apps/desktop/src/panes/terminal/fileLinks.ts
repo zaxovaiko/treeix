@@ -60,6 +60,19 @@ export function findRowFileLinks(text: string, before: string | null, after: str
   ].sort((a, b) => a.start - b.start)
 }
 
+/**
+ * The checkout's files a printed path may mean when it resolves to nothing: an agent cut its front ("…/src/a.ts") or it is
+ * relative to another folder. Shortest first, so a bare `a.ts` picks the shallowest
+ */
+export function filesEndingWith(files: string[], path: string): string[] {
+  const tail = path
+    .split('/')
+    .filter((part) => part && !/^[.~…]+$/.test(part))
+    .join('/')
+  if (!tail) return []
+  return files.filter((file) => file === tail || file.endsWith(`/${tail}`)).sort((a, b) => a.length - b.length)
+}
+
 /** A web address printed in a terminal line */
 export type WebLink = { start: number; end: number; url: string }
 

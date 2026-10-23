@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { findFileLinks, findRowFileLinks, findWebLinks } from './fileLinks'
+import { filesEndingWith, findFileLinks, findRowFileLinks, findWebLinks } from './fileLinks'
 
 const paths = (text: string) => findFileLinks(text).map(({ path, line }) => (line ? `${path}:${line}` : path))
 
@@ -44,4 +44,12 @@ test('findRowFileLinks keeps a path that only looks cut', () => {
     ]
   ])
   expect(findRowFileLinks('edit pty.ts', null, 'and more').map((link) => link.targets)).toEqual([[{ path: 'pty.ts', line: null }]])
+})
+
+test('filesEndingWith finds a cut or relative path in the checkout, shallowest first', () => {
+  const files = ['apps/desktop/src/a.ts', 'src/a.ts', 'docs/src/b.md', 'xsrc/a.ts']
+  expect(filesEndingWith(files, '/src/a.ts')).toEqual(['src/a.ts', 'apps/desktop/src/a.ts'])
+  expect(filesEndingWith(files, '../../b.md')).toEqual(['docs/src/b.md'])
+  expect(filesEndingWith(files, 'a.ts')).toEqual(['src/a.ts', 'xsrc/a.ts', 'apps/desktop/src/a.ts'])
+  expect(filesEndingWith(files, './')).toEqual([])
 })
