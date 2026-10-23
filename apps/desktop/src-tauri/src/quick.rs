@@ -1,6 +1,7 @@
 //! The quick terminal: a hidden window summoned over any app and space by a global chord.
 //! On macOS it is a non-activating NSPanel so summoning it does not pull the main window forward; elsewhere an
-//! always-on-top, undecorated, taskbar-less window. Both hide when they lose focus.
+//! always-on-top, undecorated, taskbar-less window. Both drop from the top edge of the screen under the pointer,
+//! as wide as it, and hide when they lose focus.
 
 use global_hotkey::hotkey::HotKey;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
@@ -17,7 +18,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         WebviewUrl::App("index.html?window=quick".into()),
     )
     .title("Quick Terminal")
-    .inner_size(960.0, 480.0)
+    // The height the user drags it to is kept; the width always spans the screen
+    .inner_size(960.0, 420.0)
     .decorations(false)
     .resizable(true)
     .always_on_top(true)
@@ -46,10 +48,29 @@ pub fn toggle(app: &AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
+            drop_down(&window);
             let _ = window.show();
             let _ = window.set_focus();
         }
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn drop_down(window: &tauri::WebviewWindow) {
+    let monitor = window
+        .cursor_position()
+        .ok()
+        .and_then(|p| window.monitor_from_point(p.x, p.y).ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else {
+        return;
+    };
+    let area = monitor.work_area();
+    let _ = window.set_position(area.position);
+    let _ = window.set_size(tauri::PhysicalSize::new(
+        area.size.width,
+        size.height.min(area.size.height),
+    ));
 }
 
 // global-hotkey directly, not tauri-plugin-global-shortcut: the plugin pins global-hotkey 0.8, which has no
@@ -109,6 +130,8 @@ mod panel {
     use super::LABEL;
     use std::sync::Arc;
     use tauri::{AppHandle, WebviewWindow};
+    // tauri_panel! brings MainThreadMarker, NSEvent, NSWindow, NSRect, NSPoint and NSSize in
+    use tauri_nspanel::objc2_app_kit::NSScreen;
     use tauri_nspanel::{
         CollectionBehavior, ManagerExt, PanelLevel, StyleMask, WebviewWindowExt, tauri_panel,
     };
@@ -156,9 +179,43 @@ mod panel {
         };
         if panel.is_visible() {
             panel.hide();
-        } else {
-            panel.show_and_make_key();
+            return;
         }
+        let Some(mtm) = MainThreadMarker::new() else {
+            return panel.show_and_make_key();
+        };
+        let window: &NSWindow = panel.as_panel();
+        let Some(area) = screen_under_pointer(mtm) else {
+            return panel.show_and_make_key();
+        };
+        let height = window.frame().size.height.min(area.size.height);
+        let top = area.origin.y + area.size.height;
+        let at = |y| {
+            NSRect::new(
+                NSPoint::new(area.origin.x, y),
+                NSSize::new(area.size.width, height),
+            )
+        };
+        // Slides down from above the top edge, so its size, and the shell's grid, stay put while it moves
+        window.setFrame_display(at(top), false);
+        panel.show_and_make_key();
+        window.setFrame_display_animate(at(top - height), true, true);
+    }
+
+    /// The visible frame (below the menu bar, beside the Dock) of the screen the pointer is on
+    fn screen_under_pointer(mtm: MainThreadMarker) -> Option<NSRect> {
+        let pointer = NSEvent::mouseLocation();
+        let inside = |r: NSRect| {
+            pointer.x >= r.origin.x
+                && pointer.x < r.origin.x + r.size.width
+                && pointer.y >= r.origin.y
+                && pointer.y < r.origin.y + r.size.height
+        };
+        NSScreen::screens(mtm)
+            .iter()
+            .find(|s| inside(s.frame()))
+            .or_else(|| NSScreen::mainScreen(mtm))
+            .map(|s| s.visibleFrame())
     }
 }
 
