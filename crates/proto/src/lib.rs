@@ -314,6 +314,11 @@ pub enum Event {
     },
     /// A run was queued, started, progressed (turns, cost) or ended; goes to every client
     RunChanged(RoutineRun),
+    /// A shell started Claude or Codex in the foreground, or got back to its prompt
+    Kind {
+        session: SessionId,
+        kind: SessionKind,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

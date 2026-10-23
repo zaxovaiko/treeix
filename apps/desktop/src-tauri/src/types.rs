@@ -262,6 +262,11 @@ pub enum SessionEvent {
         state: ProgressState,
         percent: u8,
     },
+    /// A shell started Claude or Codex in the foreground, or got back to its prompt
+    Kind {
+        session: String,
+        kind: SessionKind,
+    },
 }
 
 impl SessionEvent {
@@ -311,6 +316,10 @@ impl SessionEvent {
                 session,
                 state: state.into(),
                 percent,
+            },
+            proto::Event::Kind { session, kind } => Self::Kind {
+                session,
+                kind: kind.into(),
             },
         })
     }

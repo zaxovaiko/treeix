@@ -1,4 +1,4 @@
-//! Working directory, name and start time of a process (the PTY's foreground process group leader).
+//! Working directory, name, program and start time of a process (the PTY's foreground process group leader).
 
 #[cfg(target_os = "macos")]
 pub fn cwd(pid: i32) -> Option<String> {
@@ -30,6 +30,49 @@ pub fn name(pid: i32) -> Option<String> {
     (len > 0).then(|| String::from_utf8_lossy(&buf[..len as usize]).into_owned())
 }
 
+/// The program as typed, from argv[0]: `claude` runs a binary named after its version, so `name` won't do
+#[cfg(target_os = "macos")]
+pub fn program(pid: i32) -> Option<String> {
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+    let mut size: libc::size_t = 0;
+    // SAFETY: a null buffer asks for the size only
+    let sized = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            3,
+            std::ptr::null_mut(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if sized != 0 {
+        return None;
+    }
+    let mut buf = vec![0u8; size];
+    // SAFETY: buf holds `size` bytes, and sysctl writes at most that and updates `size`
+    let read = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            3,
+            buf.as_mut_ptr().cast(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if read != 0 {
+        return None;
+    }
+    // argc, the executable's path, NUL padding, then argv
+    let mut fields = buf
+        .get(4..size)?
+        .split(|&b| b == 0)
+        .filter(|f| !f.is_empty());
+    fields.next()?;
+    basename(fields.next()?)
+}
+
 /// Microseconds since the epoch
 #[cfg(target_os = "macos")]
 pub fn start_time(pid: i32) -> Option<u64> {
@@ -54,6 +97,17 @@ pub fn name(pid: i32) -> Option<String> {
     Some(comm.trim_end().to_owned()).filter(|n| !n.is_empty())
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn program(pid: i32) -> Option<String> {
+    let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    basename(cmdline.split(|&b| b == 0).next()?)
+}
+
+fn basename(path: &[u8]) -> Option<String> {
+    let name = path.rsplit(|&b| b == b'/').next()?;
+    (!name.is_empty()).then(|| String::from_utf8_lossy(name).into_owned())
+}
+
 /// Clock ticks since boot; only compared with itself
 #[cfg(not(target_os = "macos"))]
 pub fn start_time(pid: i32) -> Option<u64> {
@@ -75,6 +129,11 @@ mod tests {
         let cwd = std::env::current_dir().unwrap().canonicalize().unwrap();
         assert_eq!(super::cwd(pid).map(std::path::PathBuf::from), Some(cwd));
         assert!(super::name(pid).is_some_and(|n| !n.is_empty()));
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(
+            super::program(pid).as_deref(),
+            exe.file_name().and_then(|n| n.to_str())
+        );
         let started = super::start_time(pid);
         assert!(started.is_some_and(|t| t > 0));
         assert_eq!(super::start_time(pid), started);

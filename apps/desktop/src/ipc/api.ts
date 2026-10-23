@@ -176,6 +176,8 @@ export type SessionEvent =
   | { type: 'agentSession'; session: string; agentSession: string }
   /** OSC 9;4 progress the session reported; `off` once it ends or the session exits */
   | { type: 'progress'; session: string; state: ProgressState; percent: number }
+  /** A shell started Claude or Codex in the foreground, or got back to its prompt */
+  | { type: 'kind'; session: string; kind: SessionKind }
   /** The daemon restarted (crash or upgrade); re-list and re-attach */
   | { type: 'daemon'; state: 'connected' | 'disconnected' }
 

@@ -1,8 +1,8 @@
 //! Agent status from Claude's hooks: each session's agent writes `input|working|done` to
 //! `$TREEIX_AGENT_STATUS/<TREEIX_SESSION>` and its statusline JSON to `usage-<TREEIX_SESSION>`.
 //! The watcher maps them onto SessionStatus (Watching when the screen footer shows background work) and
-//! broadcasts Event::AgentSession when the conversation id changes. Codex has no hooks and is read off its
-//! screen. Port of the Electron terminal plugin's hooks.ts and agentStatus.ts
+//! broadcasts Event::AgentSession when the conversation id changes. Codex, and Claude started in a shell, have no
+//! hooks and are read off the screen. Port of the Electron terminal plugin's hooks.ts and agentStatus.ts
 //!
 //! "Done until shown" is the app's: ptyd reports Done, the app shows a done session on screen as idle.
 
@@ -173,21 +173,20 @@ pub fn watch(daemon: &Arc<Daemon>) {
                 let kind = session.info().kind;
                 if matches!(kind, SessionKind::Claude | SessionKind::Codex) && session.is_live() {
                     let seen = seen.entry(session.id.clone()).or_default();
-                    poll(&daemon, &session, kind, &dir, seen);
+                    poll(&daemon, &session, &dir, seen);
+                } else {
+                    // A shell back at its prompt starts fresh with its next agent
+                    seen.remove(&session.id);
                 }
             }
         }
     });
 }
 
-fn poll(
-    daemon: &Daemon,
-    session: &crate::session::Session,
-    kind: SessionKind,
-    dir: &Path,
-    seen: &mut Seen,
-) {
-    if kind == SessionKind::Claude {
+/// Only a launched Claude has the hooks (`--settings`); one started in a shell is read off its screen like Codex
+fn poll(daemon: &Daemon, session: &crate::session::Session, dir: &Path, seen: &mut Seen) {
+    let hooked = session.launched == SessionKind::Claude;
+    if hooked {
         let usage = dir.join(format!("{USAGE_PREFIX}{}", session.id));
         let modified = fs::metadata(&usage).and_then(|m| m.modified()).ok();
         if modified != seen.usage_modified {
@@ -204,12 +203,10 @@ fn poll(
             }
         }
     }
-    let hook = match kind {
-        SessionKind::Claude => fs::read_to_string(dir.join(&session.id))
-            .ok()
-            .and_then(|t| Hook::parse(&t)),
-        _ => None,
-    };
+    let hook = hooked
+        .then(|| fs::read_to_string(dir.join(&session.id)).ok())
+        .flatten()
+        .and_then(|t| Hook::parse(&t));
     let seq = session.info().seq;
     // The screen only matters while no hook says input or working
     let screen_matters = !matches!(hook, Some(Hook::Input | Hook::Working));
@@ -223,15 +220,14 @@ fn poll(
     } else {
         String::new()
     };
-    let state = agent_state(hook, kind == SessionKind::Claude, &screen);
-    let finished = match kind {
-        SessionKind::Claude => hook == Some(Hook::Done),
-        _ => {
-            std::mem::replace(&mut seen.worked, state == AgentState::Running)
-                && state == AgentState::Idle
-        }
+    let state = agent_state(hook, hooked, &screen);
+    let finished = if hooked {
+        hook == Some(Hook::Done)
+    } else {
+        std::mem::replace(&mut seen.worked, state == AgentState::Running)
+            && state == AgentState::Idle
     };
-    if kind != SessionKind::Claude && state == AgentState::Input {
+    if !hooked && state == AgentState::Input {
         seen.worked = true;
     }
     let status = agent_status(session.info().status, state, finished);

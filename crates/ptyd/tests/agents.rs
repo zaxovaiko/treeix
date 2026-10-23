@@ -84,3 +84,26 @@ async fn osc_9_4_progress_reaches_clients_and_clears_on_exit() {
     }
     assert_eq!(seen, [(ProgressState::Normal, 42), (ProgressState::Off, 0)]);
 }
+
+#[tokio::test]
+async fn a_shell_running_claude_turns_into_a_claude_session_until_it_exits() {
+    let dir = tempfile::tempdir().unwrap();
+    let _server = treeix_ptyd::spawn_in_process(dir.path().into());
+    let mut client = Client::connect(&dir.path().join("ptyd.sock"))
+        .await
+        .expect("connect");
+    let info = created(
+        &mut client,
+        SessionKind::Shell,
+        r#"exec bash -c 'exec -a claude bash -c "sleep 3; exec -a zsh sleep 10"'"#,
+    )
+    .await;
+    let mut kinds = Vec::new();
+    while kinds.len() < 2 {
+        match client.next_event().await.unwrap().expect("connection open") {
+            Event::Kind { session, kind } if session == info.id => kinds.push(kind),
+            _ => {}
+        }
+    }
+    assert_eq!(kinds, [SessionKind::Claude, SessionKind::Shell]);
+}

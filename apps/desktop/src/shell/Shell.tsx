@@ -129,6 +129,8 @@ export function Shell({ api }: { api: Api }) {
         return patch(e.session, { title: e.title })
       case 'cwd':
         return patch(e.session, { cwd: e.cwd })
+      case 'kind':
+        return patch(e.session, { kind: e.kind })
       case 'exit':
         patch(e.session, { status: 'exited', exitCode: e.code })
         // A clean shell exit closes its pane; a failed one stays to show why. Closed panes are forgotten either way
@@ -225,6 +227,7 @@ export function Shell({ api }: { api: Api }) {
 
   const closePane = (session: string) => {
     dispatch({ type: 'remove', session })
+    if (session === SETTINGS_LEAF) return
     const info = sessions[session]
     if (!info || GONE.has(info.status)) void api.remove(session)
     else {

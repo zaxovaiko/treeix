@@ -129,7 +129,11 @@ impl Daemon {
             .sessions()
             .iter()
             .map(|s| SavedSession {
-                info: s.info(),
+                // A shell comes back as a shell, whatever agent it ran
+                info: SessionInfo {
+                    kind: s.launched,
+                    ..s.info()
+                },
                 env: s.env.clone(),
                 started: s.started(),
             })
