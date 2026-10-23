@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { clock, formatVocabulary, hotkeyLabel, parseVocabulary } from './text'
+import { clock, formatVocabulary, hotkeyLabel, isHotkeyModifier, parseVocabulary } from './text'
 
 test('clock counts minutes, then hours', () => {
   expect(clock(0)).toBe('0:00')
@@ -24,4 +24,9 @@ test('vocabulary round-trips through its text form', () => {
     { text: 'a', aliases: ['b', 'c'] },
     { text: 'TRX', aliases: ['12:30'] },
   ])
+})
+
+test('only the modifiers the helper knows can be recorded', () => {
+  expect(isHotkeyModifier('AltRight')).toBe(true)
+  expect(isHotkeyModifier('KeyA')).toBe(false)
 })

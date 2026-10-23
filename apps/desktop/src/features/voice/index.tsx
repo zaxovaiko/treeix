@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { Api, DictationEntry, DictationStatus, RecordingInfo, RecordingStatus, TranscriptLine, VoiceEvent } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
 import type { Command } from '../../lib/paletteSearch'
@@ -9,7 +9,7 @@ import type { ShellView } from '../../shell/Shell'
 import { launch } from '../agents/launch'
 import { useSettings } from '../agents/settings'
 import { toast, Toasts } from '../routines/toasts'
-import { clock, formatVocabulary, hotkeyLabel, parseVocabulary } from './text'
+import { clock, formatVocabulary, hotkeyLabel, isHotkeyModifier, parseVocabulary } from './text'
 import '../../styles/voice.css'
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -185,6 +185,45 @@ const HELPER_TEXT = {
 const HOTKEYS = [['MetaLeft', 'AltRight'], ['AltRight'], ['MetaRight'], ['Fn'], ['ControlLeft', 'AltLeft']]
 const MODELS: Record<string, string> = { 'parakeet-v3': 'Parakeet v3, 25 languages', 'parakeet-v2': 'Parakeet v2, English only, more accurate' }
 
+/** Records the modifiers held together, saved when the first one is let go; Escape cancels */
+function HoldRecorder({ onChange }: { onChange: (keys: string[]) => void }) {
+  const [held, setHeld] = useState<string[] | null>(null)
+  const self = useRef<HTMLButtonElement>(null)
+  const save = useEffectEvent(onChange)
+  const recording = held !== null
+  useEffect(() => {
+    if (!recording) return
+    let keys: string[] = []
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return setHeld(null)
+      if (!isHotkeyModifier(e.code)) return
+      e.preventDefault()
+      if (!keys.includes(e.code)) setHeld((keys = [...keys, e.code]))
+    }
+    const up = () => {
+      if (!keys.length) return
+      save(keys)
+      setHeld(null)
+    }
+    const away = (e: PointerEvent) => {
+      if (!(e.target instanceof Node && self.current?.contains(e.target))) setHeld(null)
+    }
+    window.addEventListener('keydown', down, true)
+    window.addEventListener('keyup', up, true)
+    window.addEventListener('pointerdown', away, true)
+    return () => {
+      window.removeEventListener('keydown', down, true)
+      window.removeEventListener('keyup', up, true)
+      window.removeEventListener('pointerdown', away, true)
+    }
+  }, [recording])
+  return (
+    <button ref={self} className={`krec ${recording ? 'on' : ''}`} aria-label="Record hold to talk keys" title="Click, then hold the modifier keys and let go" onClick={() => setHeld(recording ? null : [])}>
+      {!recording ? 'Record' : held.length ? hotkeyLabel(held) : 'Hold keys...'}
+    </button>
+  )
+}
+
 /** Settings > Dictation: hotkey, model, permissions, vocabulary, history */
 export function VoiceSection({ view, settings, update }: SectionProps) {
   const { api } = view
@@ -224,6 +263,7 @@ export function VoiceSection({ view, settings, update }: SectionProps) {
       <Group title="Hotkey">
         <Row label="Hold to talk" desc="Hold the keys and speak; release to insert" keywords="hotkey shortcut">
           <Select value={key} options={hotkeys.map((h) => [h.join('+'), hotkeyLabel(h)] as const)} onChange={(v) => set({ hotkey: v.split('+') })} />
+          <HoldRecorder onChange={(hotkey) => set({ hotkey })} />
         </Row>
         <Row label="Tap to toggle" desc="A quick tap keeps listening until the next tap">
           <Switch label="Tap to toggle" on={d.tapToToggle} onChange={(tapToToggle) => set({ tapToToggle })} />

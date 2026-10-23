@@ -12,6 +12,9 @@ const KEY_LABELS: Record<string, string> = {
   Fn: 'Fn',
 }
 
+/** The modifiers the voice helper can hold, by `KeyboardEvent.code` */
+export const isHotkeyModifier = (code: string): boolean => Object.hasOwn(KEY_LABELS, code)
+
 /** `Left ⌘ Right ⌥` for the saved `KeyboardEvent.code`s */
 export const hotkeyLabel = (keys: string[]): string => keys.map((key) => KEY_LABELS[key] ?? key).join(' ')
 
