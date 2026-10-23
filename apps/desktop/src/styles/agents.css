@@ -4,6 +4,8 @@
 .pill { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 999px; font-size: 11px; color: var(--muted-foreground); box-shadow: inset 0 0 0 1px var(--input); white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
 .pill:hover { color: var(--foreground); background: var(--accent); }
 .pill svg { width: 13px; height: 13px; flex: none; }
+.pagent { display: inline-flex; align-items: center; gap: 6px; }
+.pagent + .pagent { padding-left: 8px; box-shadow: inset 1px 0 var(--border); }
 .titlebar.tabbed .pill { padding: 0 7px; }
 [data-ui="compact"] .pill { height: 22px; }
 .meter { width: 30px; height: 4px; border-radius: 2px; background: var(--input); overflow: hidden; display: inline-block; flex: none; }

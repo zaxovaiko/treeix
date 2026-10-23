@@ -25,18 +25,19 @@ export interface PillPart {
 }
 
 /** The title bar pill: Claude's limits (Codex when only it reports), the chosen window first */
-export function pillParts(limits: UsageLimits | null, window: LimitWindowName): { agent: LimitAgent; main: PillPart; other: PillPart | null } | null {
-  const agent = limits?.claude ? 'claude' : limits?.codex ? 'codex' : null
-  const own = agent && limits?.[agent]
-  if (!agent || !own) return null
+/** One part per agent with limits, Claude first; with both, each shows only its chosen window to keep the pill short */
+export function pillParts(limits: UsageLimits | null, window: LimitWindowName): { agent: LimitAgent; main: PillPart; other: PillPart | null }[] {
   const other: LimitWindowName = window === 'weekly' ? 'fiveHour' : 'weekly'
-  const part = (name: LimitWindowName) => {
-    const w = own[name]
-    return w ? { label: SHORT[name], percent: Math.round(w.usedPercent) } : null
-  }
-  const main = part(window) ?? part(other)
-  if (!main) return null
-  return { agent, main, other: main.label === SHORT[window] ? part(other) : null }
+  const parts = (['claude', 'codex'] as const).flatMap((agent) => {
+    const own = limits?.[agent]
+    const part = (name: LimitWindowName) => {
+      const w = own?.[name]
+      return w ? { label: SHORT[name], percent: Math.round(w.usedPercent) } : null
+    }
+    const main = part(window) ?? part(other)
+    return main ? [{ agent, main, other: main.label === SHORT[window] ? part(other) : null }] : []
+  })
+  return parts.length > 1 ? parts.map((p) => ({ ...p, other: null })) : parts
 }
 
 export const rowTokens = (r: UsageRow) => r.input + r.output + r.cacheRead + r.cacheWrite

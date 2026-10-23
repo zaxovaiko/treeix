@@ -22,15 +22,18 @@ test('level', () => {
 
 describe('pillParts', () => {
   const w = (usedPercent: number) => ({ usedPercent, resetsAt: null })
-  test('chosen window first, Claude before Codex', () => {
+  test('one part per agent, chosen window only when both have limits', () => {
     const limits = { claude: { fiveHour: w(64.4), weekly: w(38), updatedAt: null }, codex: { fiveHour: w(1), weekly: w(2), updatedAt: null } }
-    expect(pillParts(limits, 'fiveHour')).toEqual({ agent: 'claude', main: { label: '5h', percent: 64 }, other: { label: 'wk', percent: 38 } })
-    expect(pillParts(limits, 'weekly')?.main).toEqual({ label: 'wk', percent: 38 })
+    expect(pillParts(limits, 'fiveHour')).toEqual([
+      { agent: 'claude', main: { label: '5h', percent: 64 }, other: null },
+      { agent: 'codex', main: { label: '5h', percent: 1 }, other: null },
+    ])
+    expect(pillParts({ ...limits, codex: null }, 'fiveHour')).toEqual([{ agent: 'claude', main: { label: '5h', percent: 64 }, other: { label: 'wk', percent: 38 } }])
   })
-  test('falls back to Codex and to the window that is known', () => {
-    expect(pillParts({ claude: null, codex: { fiveHour: w(8), weekly: null, updatedAt: null } }, 'weekly')).toEqual({ agent: 'codex', main: { label: '5h', percent: 8 }, other: null })
-    expect(pillParts({ claude: null, codex: null }, 'weekly')).toBeNull()
-    expect(pillParts(null, 'weekly')).toBeNull()
+  test('falls back to the window that is known', () => {
+    expect(pillParts({ claude: null, codex: { fiveHour: w(8), weekly: null, updatedAt: null } }, 'weekly')).toEqual([{ agent: 'codex', main: { label: '5h', percent: 8 }, other: null }])
+    expect(pillParts({ claude: null, codex: null }, 'weekly')).toEqual([])
+    expect(pillParts(null, 'weekly')).toEqual([])
   })
 })
 

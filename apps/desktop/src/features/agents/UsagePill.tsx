@@ -29,18 +29,21 @@ export function UsagePill({ api }: { api: Api }) {
   const limits = useLimits(api, on)
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const close = useCallback(() => setAnchor(null), [])
-  const parts = settings && pillParts(limits, settings.usage.window)
-  if (!on || !parts || !limits) return null
-  const { agent, main, other } = parts
+  const parts = settings ? pillParts(limits, settings.usage.window) : []
+  if (!on || !parts.length || !limits) return null
   return (
     <>
-      <button className="pill" title={`${AGENT_NAME[agent]} plan limits. Click for usage`} onClick={(e) => setAnchor(anchor ? null : e.currentTarget.getBoundingClientRect())}>
-        <Icon name={agent} />
-        {main.label}
-        <span className={`meter ${level(main.percent)}`}>
-          <b style={{ width: `${Math.min(100, main.percent)}%` }} />
-        </span>
-        {main.percent}%{other && ` · ${other.label} ${other.percent}%`}
+      <button className="pill" title={`${parts.map((p) => AGENT_NAME[p.agent]).join(' and ')} plan limits. Click for usage`} onClick={(e) => setAnchor(anchor ? null : e.currentTarget.getBoundingClientRect())}>
+        {parts.map(({ agent, main, other }) => (
+          <span key={agent} className="pagent">
+            <Icon name={agent} />
+            {main.label}
+            <span className={`meter ${level(main.percent)}`}>
+              <b style={{ width: `${Math.min(100, main.percent)}%` }} />
+            </span>
+            {main.percent}%{other && ` · ${other.label} ${other.percent}%`}
+          </span>
+        ))}
       </button>
       {anchor && (
         <Pop anchor={anchor} className="upop" onClose={close}>
