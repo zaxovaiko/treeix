@@ -345,13 +345,25 @@ impl Default for Dictation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Recording {
     /// Where recordings go; None is `<data dir>/recordings`
     pub folder: Option<String>,
     /// ISO 639-1 code the calls are spoken in; empty lets the model detect it
     pub language: String,
+    /// Starts recording when a call app or a browser takes the microphone, and stops after it lets go
+    pub auto: bool,
+}
+
+impl Default for Recording {
+    fn default() -> Self {
+        Self {
+            folder: None,
+            language: String::new(),
+            auto: true,
+        }
+    }
 }
 
 /// The phone page: ptyd's remote.sock behind `tailscale serve` (tailscale.rs)

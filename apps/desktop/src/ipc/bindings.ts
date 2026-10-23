@@ -1392,7 +1392,11 @@ folder: string | null;
 /**
  * ISO 639-1 code the calls are spoken in; empty lets the model detect it
  */
-language: string }
+language: string; 
+/**
+ * Starts recording when a call app or a browser takes the microphone, and stops after it lets go
+ */
+auto: boolean }
 /**
  * A saved recording
  */

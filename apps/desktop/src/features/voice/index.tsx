@@ -348,6 +348,9 @@ export function RecordingSection({ view, settings, update }: SectionProps) {
         <Row label="Start or stop" desc="Records your microphone and the call app's audio, then writes a transcript and a note with Claude">
           <kbd>{keyHint('record')}</kbd>
         </Row>
+        <Row label="Record calls on their own" desc="Starts when Zoom, Teams, Slack, FaceTime or a browser (Google Meet) takes the microphone, stops when the call ends" keywords="auto automatic meet">
+          <Switch on={r.auto} onChange={(auto) => update({ recording: { auto } })} label="Record calls on their own" />
+        </Row>
         <Row label="Folder" desc="Each recording gets a folder with transcript.md and note.md. Empty keeps them in Treeix's data folder">
           <Field value={r.folder ?? ''} placeholder="Default" mono width={260} onSave={(folder) => update({ recording: { folder: folder.trim() || null } })} />
         </Row>

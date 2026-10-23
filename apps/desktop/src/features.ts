@@ -83,6 +83,6 @@ export const DEFAULT_SETTINGS: Settings = {
   routines: { maxParallel: 2, background: true },
   browser: { openLinks: false, searchUrl: 'https://www.google.com/search?q=%s', agents: true },
   dictation: { hotkey: ['MetaLeft', 'AltRight'], tapToToggle: true, sounds: true, model: 'parakeet-v3', vocabulary: [] },
-  recording: { folder: null, language: '' },
+  recording: { folder: null, language: '', auto: true },
   phone: { owner: null },
 }

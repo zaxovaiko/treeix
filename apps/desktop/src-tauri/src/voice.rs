@@ -207,13 +207,87 @@ const MODIFIERS: [&str; 9] = [
 ];
 /// Bundle id prefix and title of the call apps whose audio a recording taps.
 /// ponytail: first app on the microphone wins; Electron's URL rules and calendar titles when two calls overlap
-const CALL_APPS: [(&str, &str); 5] = [
+/// Call apps, then browsers (Meet, Teams or Zoom on the web); bundle id prefixes, so a browser's helper processes count
+const CALL_APPS: [(&str, &str); 14] = [
     ("us.zoom.xos", "Zoom"),
     ("com.microsoft.teams2", "Microsoft Teams"),
     ("com.tinyspeck.slackmacgap", "Slack huddle"),
     ("com.apple.FaceTime", "FaceTime"),
     ("com.google.Chrome", "Google Meet"),
+    ("company.thebrowser.Browser", "Browser call"),
+    ("company.thebrowser.dia", "Browser call"),
+    ("com.brave.Browser", "Browser call"),
+    ("com.microsoft.edgemac", "Browser call"),
+    ("org.mozilla.firefox", "Browser call"),
+    ("com.vivaldi.Vivaldi", "Browser call"),
+    ("com.operasoftware.Opera", "Browser call"),
+    ("com.apple.Safari", "Browser call"),
+    ("org.chromium.Chromium", "Browser call"),
 ];
+
+/// How long a call app can let go of the microphone (a reconnect, a device switch) before its auto recording stops
+const AUTO_STOP_AFTER: Duration = Duration::from_secs(20);
+
+/// The first call app among the apps holding the microphone
+fn call_app(mic: &[String]) -> Option<(&'static str, &'static str)> {
+    CALL_APPS
+        .iter()
+        .find(|(bundle, _)| mic.iter().any(|app| app.starts_with(bundle)))
+        .copied()
+}
+
+/// What a change in the apps holding the microphone does to the recording
+#[derive(Debug, PartialEq)]
+enum AutoStep {
+    Nothing,
+    /// A call began: record it
+    Start(&'static str),
+    /// A call began while already recording: stop that recording when the call ends
+    Watch(&'static str),
+    /// The watched call let go of the microphone: stop after `AUTO_STOP_AFTER` unless it comes back
+    Release,
+}
+
+fn auto_step(watched: Option<&str>, mic: &[String], recording: bool, enabled: bool) -> AutoStep {
+    match (watched, call_app(mic)) {
+        (Some(bundle), _) if !mic.iter().any(|app| app.starts_with(bundle)) => AutoStep::Release,
+        (None, Some((bundle, _))) if recording => AutoStep::Watch(bundle),
+        (None, Some((bundle, _))) if enabled => AutoStep::Start(bundle),
+        _ => AutoStep::Nothing,
+    }
+}
+
+fn is_recording(app: &AppHandle) -> bool {
+    matches!(
+        lock(&voice(app).recording).phase,
+        RecordingPhase::Recording | RecordingPhase::Paused
+    )
+}
+
+/// Records calls on its own (`settings.recording.auto`). A recording stopped by hand stays stopped until that call ends
+fn auto_record(app: &AppHandle, mic: &[String]) {
+    let enabled = settings::load(&treeix_proto::data_dir()).recording.auto;
+    let watched = lock(&voice(app).watched_call).clone();
+    match auto_step(watched.as_deref(), mic, is_recording(app), enabled) {
+        AutoStep::Nothing => {}
+        AutoStep::Start(bundle) => {
+            if recording_start(app, None).is_ok() {
+                *lock(&voice(app).watched_call) = Some(bundle.into());
+            }
+        }
+        AutoStep::Watch(bundle) => *lock(&voice(app).watched_call) = Some(bundle.into()),
+        AutoStep::Release => {
+            *lock(&voice(app).watched_call) = None;
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(AUTO_STOP_AFTER);
+                if lock(&voice(&app).watched_call).is_none() && is_recording(&app) {
+                    let _ = recording_stop(&app);
+                }
+            });
+        }
+    }
+}
 
 /// A sidecar kept running: restarted on exit with backoff (Electron's superviseHelper). Dropping it stops the helper.
 pub(crate) struct Supervisor {
@@ -418,6 +492,8 @@ struct Voice {
     folder: Mutex<Option<PathBuf>>,
     meetings_helper: Mutex<Option<Supervisor>>,
     mic_apps: Mutex<Vec<String>>,
+    /// The call app whose microphone use the recording follows; see `auto_record`
+    watched_call: Mutex<Option<String>>,
 }
 
 fn voice(app: &AppHandle) -> &Voice {
@@ -540,6 +616,7 @@ pub fn setup(app: &AppHandle) {
         folder: Mutex::new(None),
         meetings_helper: Mutex::new(None),
         mic_apps: Mutex::new(Vec::new()),
+        watched_call: Mutex::new(None),
     });
     apply(app, &settings::load(&treeix_proto::data_dir()));
     let handle = app.clone();
@@ -929,7 +1006,11 @@ fn on_meetings_line(app: &AppHandle, line: &str) {
             );
             recover(app);
         }
-        MeetingsMessage::Mic { apps } => *lock(&voice(app).mic_apps) = apps,
+        MeetingsMessage::Mic { apps } => {
+            // Before auto_record: recording_start picks the call app to tap from mic_apps
+            *lock(&voice(app).mic_apps) = apps.clone();
+            auto_record(app, &apps);
+        }
         MeetingsMessage::Stopped { folder } => {
             let language = settings::load(&treeix_proto::data_dir()).recording.language;
             let _ = send_meetings(
@@ -1141,13 +1222,7 @@ pub fn recording_start(app: &AppHandle, title: Option<String>) -> Result<Recordi
     if current.phase != RecordingPhase::Idle {
         return Err("Already recording".into());
     }
-    let call = {
-        let mic = lock(&voice(app).mic_apps);
-        CALL_APPS
-            .iter()
-            .find(|(bundle, _)| mic.iter().any(|app| app.starts_with(bundle)))
-            .copied()
-    };
+    let call = call_app(&lock(&voice(app).mic_apps));
     let title = title
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
@@ -1373,6 +1448,45 @@ mod tests {
         );
         assert!(
             serde_json::from_str::<MeetingsMessage>(r#"{"type":"events","events":[]}"#).is_err()
+        );
+    }
+
+    #[test]
+    fn calls_start_follow_and_release_the_recording() {
+        let mic = |apps: &[&str]| apps.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        let meet = mic(&["com.google.Chrome.helper"]);
+        let arc = mic(&["company.thebrowser.Browser"]);
+        assert_eq!(
+            auto_step(None, &meet, false, true),
+            AutoStep::Start("com.google.Chrome")
+        );
+        assert_eq!(
+            auto_step(None, &arc, false, true),
+            AutoStep::Start("company.thebrowser.Browser")
+        );
+        assert_eq!(auto_step(None, &meet, false, false), AutoStep::Nothing);
+        assert_eq!(
+            auto_step(None, &mic(&["com.apple.Music"]), false, true),
+            AutoStep::Nothing
+        );
+        // Recording by hand during a call: it ends with the call
+        assert_eq!(
+            auto_step(None, &meet, true, true),
+            AutoStep::Watch("com.google.Chrome")
+        );
+        // Stopped by hand while the call goes on: no restart
+        assert_eq!(
+            auto_step(Some("com.google.Chrome"), &meet, false, true),
+            AutoStep::Nothing
+        );
+        assert_eq!(
+            auto_step(Some("com.google.Chrome"), &[], true, true),
+            AutoStep::Release
+        );
+        // Native call apps win over a browser that also holds the mic
+        assert_eq!(
+            call_app(&mic(&["com.google.Chrome", "us.zoom.xos"])),
+            Some(("us.zoom.xos", "Zoom"))
         );
     }
 
