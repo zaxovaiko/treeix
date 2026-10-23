@@ -84,7 +84,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   }, [shown])
 
   const toggle = (id: PanelId) => {
-    if (hidden) view.run('settings')
+    if (hidden) view.run('close-pane')
     dispatch({ type: 'set', patch: { panel: ui.panel === id && !hidden ? null : id } })
   }
   const onKey = useEffectEvent((e: KeyboardEvent) => {

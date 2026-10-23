@@ -5,10 +5,10 @@ import { applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
 import { IN_TAURI, pickFolder, registerQuickShortcut, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
-import { fallbackPlace, type Sessions } from './model'
+import { fallbackPlace, SETTINGS_LEAF, type Sessions } from './model'
 import { isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
-import { SettingsPage, followedMode, useAppliedSettings } from '../pages/settings'
+import { followedMode, useAppliedSettings } from '../pages/settings'
 import { settingsNow } from '../features/agents/settings'
 import { toggleRecording } from '../features/voice'
 import { useBrowserAgentPanes } from '../features/browser/open'
@@ -72,7 +72,7 @@ export function Shell({ api }: { api: Api }) {
   /** Bumped on reconnect so every terminal re-attaches */
   const [epoch, setEpoch] = useState(0)
   const [palette, setPalette] = useState(false)
-  const [page, setPage] = useState<'settings' | 'graph' | null>(null)
+  const [page, setPage] = useState<'graph' | null>(null)
   const [dialog, setDialog] = useState<DialogRequest | null>(null)
   useDialogKeys(setDialog)
   const resolving = useRef(new Set<string>())
@@ -91,7 +91,7 @@ export function Shell({ api }: { api: Api }) {
         const saved = parseUi(json)
         setHome(homeDir)
         setSessions(byId(list))
-        dispatch({ type: 'load', ui: restore({ ...saved, theme: followedMode(saved.theme) }, list, chats) })
+        dispatch({ type: 'load', ui: restore({ ...saved, theme: followedMode(saved.theme) }, list, [...chats, SETTINGS_LEAF]) })
         setUnreachable(false)
         setLoaded(true)
         if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
@@ -113,7 +113,7 @@ export function Shell({ api }: { api: Api }) {
   const resync = () =>
     Promise.all([api.sessions(), api.getUi(), openChats(api)]).then(([list, json, chats]) => {
       setSessions(byId(list))
-      dispatch({ type: 'load', ui: restore({ ...ui, quick: parseUi(json).quick }, list, chats) })
+      dispatch({ type: 'load', ui: restore({ ...ui, quick: parseUi(json).quick }, list, [...chats, SETTINGS_LEAF]) })
       setEpoch((n) => n + 1)
       setConnected(true)
     })
@@ -274,7 +274,8 @@ export function Shell({ api }: { api: Api }) {
       case 'toggle-sidebar':
         return dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })
       case 'settings':
-        return setPage(page === 'settings' ? null : 'settings')
+        setPage(null)
+        return dispatch(ui.tabs.some((tab) => leaves(tab.root).includes(SETTINGS_LEAF)) ? { type: 'focus', session: SETTINGS_LEAF } : { type: 'open', session: SETTINGS_LEAF, tabId: newTabId() })
       case 'module-graph':
         if (!settingsNow()?.features.graph || !activeTab || placeOfTab(activeTab).kind === 'scratch') return
         return setPage(page === 'graph' ? null : 'graph')
@@ -353,9 +354,7 @@ export function Shell({ api }: { api: Api }) {
         )}
         {!vertical && <Panels view={view} hidden={page !== null} />}
         <main className="card center">
-          {page === 'settings' ? (
-            <SettingsPage view={view} onClose={() => setPage(null)} />
-          ) : page === 'graph' ? (
+          {page === 'graph' ? (
             <Suspense fallback={<div className="empty">Loading...</div>}>
               <GraphPage view={view} onClose={() => setPage(null)} />
             </Suspense>

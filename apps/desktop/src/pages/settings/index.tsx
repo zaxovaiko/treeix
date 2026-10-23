@@ -38,7 +38,7 @@ const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {
 let last: SettingsSection = 'appearance'
 
 /** Every setting, saved as it changes: settings.json through `updateSettings`, the look in the ui blob */
-export function SettingsPage({ view, onClose }: { view: ShellView; onClose: () => void }) {
+export function SettingsPage({ view }: { view: ShellView }) {
   const settings = useSettings(view.api)
   const [section, setSection] = useState<SettingsSection>(() => takeRequestedSection() ?? last)
   const [query, setQuery] = useState('')
@@ -66,10 +66,6 @@ export function SettingsPage({ view, onClose }: { view: ShellView; onClose: () =
   return (
     <>
       <div className="gtop">
-        <button className="btn sm" onClick={onClose}>
-          <Icon name="left" />
-          Terminal
-        </button>
         <b>Settings</b>
         <span className="grow" />
         {error ? <span className="st-err trunc">{error}</span> : <span className="dim">Saved as you change them</span>}

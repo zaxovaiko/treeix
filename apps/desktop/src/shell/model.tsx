@@ -11,7 +11,13 @@ const DOT: Record<SessionStatus, Dot> = { running: 'run', needs: 'need', done: '
 export const statusDot = (status: SessionStatus): Dot => DOT[status]
 export const DOT_LABEL: Record<Dot, string> = { run: 'Running', watch: 'Watching', need: 'Needs you', err: 'Crashed', done: 'Done', exit: 'Exited', idle: 'Idle' }
 
-export const KIND_ICON: Record<SessionKind, IconName> = { shell: 'terminal', claude: 'claude', codex: 'codex', routine: 'terminal' }
+/** Settings opens as a tab: this leaf in the pane tree */
+export const SETTINGS_LEAF = 'settings:'
+
+/** What a tab shows: its lead session's kind, or Settings */
+export type TabKind = SessionKind | 'settings'
+
+export const KIND_ICON: Record<TabKind, IconName> = { shell: 'terminal', claude: 'claude', codex: 'codex', routine: 'terminal', settings: 'gear' }
 
 export type Sessions = Record<string, SessionInfo>
 
@@ -38,13 +44,15 @@ export const liveCount = (tabs: Tab[], sessions: Sessions) => tabs.flatMap((tab)
 /** A tab of chats only is named by its focused chat */
 const chatOf = (tab: Tab) => (isChatLeaf(tab.focus) ? getChat(leafChat(tab.focus)) : null)
 
-export const tabKind = (tab: Tab, sessions: Sessions): SessionKind => lead(tab, sessions)?.kind ?? chatOf(tab)?.info?.agent ?? 'shell'
+const isSettings = (tab: Tab) => tab.focus === SETTINGS_LEAF
+
+export const tabKind = (tab: Tab, sessions: Sessions): TabKind => (isSettings(tab) ? 'settings' : (lead(tab, sessions)?.kind ?? chatOf(tab)?.info?.agent ?? 'shell'))
 export const tabTitle = (tab: Tab, sessions: Sessions) => {
   const chat = chatOf(tab)
-  return tab.title ?? lead(tab, sessions)?.title ?? (chat ? titleOf(chat) : 'zsh')
+  return isSettings(tab) ? 'Settings' : (tab.title ?? lead(tab, sessions)?.title ?? (chat ? titleOf(chat) : 'zsh'))
 }
 
-export function Ki({ kind, dot = 'idle', sm }: { kind: SessionKind; dot?: Dot; sm?: boolean }) {
+export function Ki({ kind, dot = 'idle', sm }: { kind: TabKind; dot?: Dot; sm?: boolean }) {
   return (
     <span className={`ki ${kind} ${dot === 'idle' ? '' : dot} ${sm ? 'sm' : ''}`}>
       <Icon name={KIND_ICON[kind]} />

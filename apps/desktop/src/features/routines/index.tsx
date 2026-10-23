@@ -6,7 +6,6 @@ import { Icon } from "../../lib/icons";
 import type { Command } from "../../lib/paletteSearch";
 import {
   showSettingsSection,
-  takeRequestedSection,
 } from "../../pages/settings/nav";
 import { Group, Row, Seg, Switch } from "../../pages/settings/controls";
 import type { SectionProps } from "../../pages/settings/sections";
@@ -55,14 +54,10 @@ const editById = (id: string) => {
   else toast({ icon: "clock", title: "That routine was deleted" });
 };
 
-/** Settings > Routines, opening the Settings page when it is closed */
+/** Settings > Routines, opening the Settings tab when it is closed */
 function showRoutines(view: ShellView) {
   showSettingsSection("routines");
-  // Nothing took the request, so the page is closed: open it on Routines
-  if (takeRequestedSection()) {
-    showSettingsSection("routines");
-    view.run("settings");
-  }
+  view.run("settings");
 }
 
 /** The run's session in a tab, or History once it has ended */
@@ -270,7 +265,7 @@ function RoutineRow({
         {last?.session && (
           <button
             className="btn sm"
-            onClick={() => (view.run("settings"), openRun(view, last))}
+            onClick={() => openRun(view, last)}
           >
             Open
           </button>
@@ -353,7 +348,7 @@ function RunRow({
         {run.session && (
           <button
             className="btn sm"
-            onClick={() => (view.run("settings"), openRun(view, run))}
+            onClick={() => openRun(view, run)}
           >
             Open
           </button>

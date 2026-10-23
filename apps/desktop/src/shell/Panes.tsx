@@ -6,7 +6,8 @@ import { titleOf, useChatState } from '../panes/chat/store'
 import { Icon } from '../lib/icons'
 import { BrowserHead, closeBrowser, isBrowserLeaf } from '../features/browser/open'
 import { closePlan, isPlanLeaf, PlanHead } from '../features/plans/open'
-import { DOT_LABEL, KIND_ICON, statusDot } from './model'
+import { DOT_LABEL, KIND_ICON, SETTINGS_LEAF, statusDot } from './model'
+import { SettingsPage } from '../pages/settings'
 import { withHint } from './shortcuts'
 import { paneRects, splitHandles, type Handle, type Rect, type Tab } from './state'
 import type { ShellView } from './Shell'
@@ -79,7 +80,8 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
         const chat = isChatLeaf(id)
         const browser = isBrowserLeaf(id)
         const plan = isPlanLeaf(id)
-        const close = () => (file ? closeFileLeaf(view, id) : chat ? closeChat(view, id) : browser ? closeBrowser(view, id) : plan ? closePlan(view, id) : view.closePane(id))
+        const settings = id === SETTINGS_LEAF
+        const close = () => (file ? closeFileLeaf(view, id) : chat ? closeChat(view, id) : browser ? closeBrowser(view, id) : plan ? closePlan(view, id) : settings ? dispatch({ type: 'remove', session: id }) : view.closePane(id))
         return (
           <div key={id} className={`pane ${multi ? (focused ? 'focus' : 'dimmed') : ''}`} style={box(rect)}>
             {multi && (
@@ -90,6 +92,11 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                   <BrowserHead leaf={id} />
                 ) : plan ? (
                   <PlanHead leaf={id} />
+                ) : settings ? (
+                  <>
+                    <Icon name="gear" />
+                    <span className="trunc grow">Settings</span>
+                  </>
                 ) : (
                   <>
                     <Icon name={file ? 'folder' : KIND_ICON[info?.kind ?? 'shell']} />
@@ -119,6 +126,10 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
                 <Suspense fallback={<div className="empty">Loading...</div>}>
                   <ChatPane key={`${id}:${epoch}`} view={view} leaf={id} focused={active && focused} />
                 </Suspense>
+              </div>
+            ) : settings ? (
+              <div className="pterm" style={{ background: 'var(--background)' }} onMouseDown={() => dispatch({ type: 'focus', session: id })}>
+                <SettingsPage view={view} />
               </div>
             ) : browser || plan ? (
               <div className="pterm" onMouseDown={() => dispatch({ type: 'focus', session: id })}>

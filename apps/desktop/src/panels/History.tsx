@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Branch, Place, SessionRecord, Worktree } from '../ipc/api'
 import { Icon } from '../lib/icons'
-import { DOT_LABEL, Ki, tabDot, tabKind, tabTitle } from '../shell/model'
+import { DOT_LABEL, Ki, tabDot, tabKind, tabTitle, type TabKind } from '../shell/model'
 import { placeLabel } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
 import { RunMark } from '../features/routines'
@@ -96,7 +96,7 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
     )
 
   const query = q.trim().toLowerCase()
-  const match = (k: SessionRecord['kind'] | 'routine', text: string, path: string) =>
+  const match = (k: SessionRecord['kind'] | TabKind, text: string, path: string) =>
     (kind === 'all' || k === kind) && (!query || text.toLowerCase().includes(query)) && (!here || path === place.path)
   const open = view.ordered.filter((t) => match(tabKind(t, view.sessions), tabTitle(t, view.sessions), view.placeOfTab(t).path))
   const closed = records.filter((r) => match(r.kind, `${r.title} ${r.firstPrompt ?? ''}`, r.cwd))
