@@ -218,3 +218,25 @@ test('right-click shows our menus, never the browser one', async ({ page }) => {
   })
   expect(prevented).toBe(true)
 })
+
+test('the quick terminal lists running agents beside its shell and switches to them', async ({ page }) => {
+  await page.goto('/?window=quick')
+  const side = page.getByRole('navigation', { name: 'Sessions' })
+  await expect(side.getByRole('button', { name: 'Shell' })).toHaveClass(/on/)
+  const agent = side.getByRole('button').nth(1)
+  await agent.click()
+  await expect(agent).toHaveClass(/on/)
+  await expect(page.locator('.quick .term')).toBeVisible()
+  await side.getByRole('button', { name: 'Shell' }).click()
+  await expect(side.getByRole('button', { name: 'Shell' })).toHaveClass(/on/)
+})
+
+test('the quick terminal slide and opacity are set in Settings', async ({ page }) => {
+  await open(page)
+  await page.getByRole('button', { name: /^Settings/ }).first().click()
+  await page.getByPlaceholder('Search settings').fill('quick terminal')
+  await page.getByRole('switch', { name: 'Slide in' }).click()
+  await persisted(page, '"quickAnimate":false')
+  await page.getByRole('slider', { name: 'Quick terminal opacity' }).fill('0.6')
+  await persisted(page, '"quickOpacity":0.6')
+})

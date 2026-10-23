@@ -73,6 +73,14 @@ fn drop_down(window: &tauri::WebviewWindow) {
     ));
 }
 
+/// Whether it slides in, and how opaque it is (0.3 to 1); Linux windows have neither, so it ignores both
+pub fn set_look(app: &AppHandle, animate: bool, opacity: f64) {
+    #[cfg(target_os = "macos")]
+    panel::set_look(app, animate, opacity.clamp(0.3, 1.0));
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, animate, opacity);
+}
+
 // global-hotkey directly, not tauri-plugin-global-shortcut: the plugin pins global-hotkey 0.8, which has no
 // IntlBackslash, the § key on Mac ISO keyboards
 thread_local! {
@@ -129,6 +137,7 @@ fn swap(
 mod panel {
     use super::LABEL;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use tauri::{AppHandle, WebviewWindow};
     // tauri_panel! brings MainThreadMarker, NSEvent, NSWindow, NSRect, NSPoint and NSSize in
     use tauri_nspanel::objc2_app_kit::NSScreen;
@@ -147,6 +156,20 @@ mod panel {
         panel_event!(QuickPanelEvents {
             window_did_resign_key(notification: &NSNotification) -> ()
         })
+    }
+
+    static ANIMATE: AtomicBool = AtomicBool::new(true);
+    /// How far above its place it starts; AppKit moves windows at about 150px per 0.2s, so this slide takes ~0.1s
+    const SLIDE: f64 = 72.0;
+
+    pub fn set_look(app: &AppHandle, animate: bool, opacity: f64) {
+        ANIMATE.store(animate, Ordering::Relaxed);
+        let app = app.clone();
+        let _ = app.clone().run_on_main_thread(move || {
+            if let Ok(panel) = app.get_webview_panel(LABEL) {
+                panel.set_alpha_value(opacity);
+            }
+        });
     }
 
     pub fn convert(window: &WebviewWindow) -> tauri::Result<()> {
@@ -196,10 +219,17 @@ mod panel {
                 NSSize::new(area.size.width, height),
             )
         };
-        // Slides down from above the top edge, so its size, and the shell's grid, stay put while it moves
-        window.setFrame_display(at(top), false);
+        // Slides down a little from above its place, so its size, and the shell's grid, stay put while it moves
+        let slide = if ANIMATE.load(Ordering::Relaxed) {
+            SLIDE.min(height)
+        } else {
+            0.0
+        };
+        window.setFrame_display(at(top - height + slide), false);
         panel.show_and_make_key();
-        window.setFrame_display_animate(at(top - height), true, true);
+        if slide > 0.0 {
+            window.setFrame_display_animate(at(top - height), true, true);
+        }
     }
 
     /// The visible frame (below the menu bar, beside the Dock) of the screen the pointer is on

@@ -234,6 +234,13 @@ pub fn set_quick_shortcut(app: AppHandle, accelerator: Option<String>) -> Result
     crate::quick::set_shortcut(&app, accelerator.as_deref())
 }
 
+/// Whether the quick terminal slides in, and its opacity, 0.3 to 1
+#[tauri::command]
+#[specta::specta]
+pub fn set_quick_look(app: AppHandle, animate: bool, opacity: f64) {
+    crate::quick::set_look(&app, animate, opacity)
+}
+
 /// The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)
 #[tauri::command]
 #[specta::specta]

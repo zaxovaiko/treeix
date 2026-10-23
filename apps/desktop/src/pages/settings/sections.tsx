@@ -241,6 +241,12 @@ function Hotkey({ view, settings }: SectionProps) {
           }}
         />
       </Row>
+      <Row label="Slide in" desc="Off, it appears at once" keywords="quick terminal hotkey animation">
+        <Switch label="Slide in" on={view.ui.quickAnimate} onChange={(quickAnimate) => setUi(view, { quickAnimate })} />
+      </Row>
+      <Row label="Opacity" desc={`${Math.round(view.ui.quickOpacity * 100)}%, macOS only`} keywords="quick terminal hotkey transparency transparent">
+        <input type="range" className="range" aria-label="Quick terminal opacity" min={0.3} max={1} step={0.05} value={view.ui.quickOpacity} onChange={(e) => setUi(view, { quickOpacity: Number(e.target.value) })} />
+      </Row>
     </Group>
   )
 }

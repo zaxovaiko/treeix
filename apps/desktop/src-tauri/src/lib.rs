@@ -39,6 +39,7 @@ fn specta() -> Builder<tauri::Wry> {
             places,
             home_dir,
             set_quick_shortcut,
+            set_quick_look,
             autorun,
             autorun_done,
             // Phase 3: git

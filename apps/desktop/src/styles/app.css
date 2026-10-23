@@ -248,3 +248,9 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .quick { height: 100vh; display: flex; flex-direction: column; background: var(--term-bg); box-shadow: inset 0 -1px 0 var(--input); }
 .quick .qh { height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; font-size: 11px; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
 .quick .qh b { color: var(--foreground); font-weight: 600; }
+.quick .qbody { flex: 1; min-height: 0; display: flex; }
+.quick .qside { width: 184px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 6px; border-right: 1px solid var(--border); }
+.quick .qside button { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 12px; text-align: left; color: var(--muted-foreground); }
+.quick .qside button:hover { background: var(--accent); }
+.quick .qside button.on { background: var(--accent); color: var(--foreground); }
+.range { width: 160px; accent-color: var(--primary); }

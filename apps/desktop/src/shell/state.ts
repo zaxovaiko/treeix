@@ -44,6 +44,10 @@ export interface UiState {
   renderer: Renderer
   /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null: none */
   quickShortcut: string | null
+  /** The quick terminal slides down when shown; off, it just appears */
+  quickAnimate: boolean
+  /** Opacity of the quick terminal window, 0.3 to 1 */
+  quickOpacity: number
   /** Page zoom of both windows, 1 = 100% */
   zoom: number
   /** Group colors picked by hand, by place key */
@@ -73,6 +77,8 @@ export const initialUi: UiState = {
   quick: null,
   renderer: 'auto',
   quickShortcut: null,
+  quickAnimate: true,
+  quickOpacity: 1,
   zoom: 1,
   colors: {},
 }
@@ -128,7 +134,7 @@ export type Action =
   | { type: 'color'; key: string; color: string | null }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quick' | 'zoom'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quickAnimate' | 'quickOpacity' | 'quick' | 'zoom'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {

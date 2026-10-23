@@ -2,20 +2,29 @@ import { useEffect, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { Api } from '../ipc/api'
+import type { SessionInfo } from '../ipc/bindings'
 import { Icon } from '../lib/icons'
 import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
 import { paneGrid } from '../panes/terminal/xterm'
-import { IN_TAURI, setZoom, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, setQuickLook, setZoom, UI_CHANGED } from '../lib/native'
 import { followedMode, useAppliedSettings } from '../pages/settings'
 import { applyTheme, type Mode } from '../styles/theme'
 import { parseUi, type UiState } from './state'
 import { acceleratorLabel } from './shortcuts'
+import { Ki, statusDot, tilde } from './model'
 
-type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom'>
+type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom' | 'quickAnimate' | 'quickOpacity'>
 type Opened = { id: string; cwd: string; home: string; shortcut: string | null }
 
 const GONE = new Set(['exited', 'restored', 'crashed'])
+/** Events that change which agents run or how their rows read */
+const AGENT_EVENTS = new Set(['created', 'removed', 'exit', 'status', 'title', 'kind', 'cwd'])
+
+async function liveAgents(api: Api): Promise<SessionInfo[]> {
+  const list = await api.sessions()
+  return list.filter((s) => (s.kind === 'claude' || s.kind === 'codex') && !GONE.has(s.status)).sort((a, b) => a.createdAt - b.createdAt)
+}
 
 /** Its shell, reused while it lives; a new one in ~ otherwise, recorded under `quick` in the UI blob */
 async function quickSession(api: Api, onLook: (look: Look) => void): Promise<Opened> {
@@ -31,18 +40,22 @@ async function quickSession(api: Api, onLook: (look: Look) => void): Promise<Ope
   return opened(info)
 }
 
-/** The quick terminal window: one terminal under a header with its folder and how to hide it */
+/** The quick terminal window: its own shell, and the running agents beside it to switch to, under a header with the folder and how to hide it */
 export function Quick({ api }: { api: Api }) {
   const [session, setSession] = useState<Opened | null>(null)
   const [renderer, setRenderer] = useState<Renderer>('auto')
   const [mode, setMode] = useState<Mode>('dark')
+  const [agents, setAgents] = useState<SessionInfo[]>([])
+  /** The agent shown instead of the shell; null: the shell */
+  const [picked, setPicked] = useState<string | null>(null)
   useAppliedSettings(api, mode, setMode)
 
   useEffect(() => {
     let cancelled = false
     let current: string | null = null
-    const look = ({ theme, ui, renderer, zoom }: Look) => {
+    const look = ({ theme, ui, renderer, zoom, quickAnimate, quickOpacity }: Look) => {
       applyTheme(theme, ui)
+      void setQuickLook(quickAnimate, quickOpacity).catch((e: unknown) => console.warn('quick look:', e))
       void setZoom(zoom).catch((e: unknown) => console.warn('zoom:', e))
       setMode(theme)
       setRenderer(renderer)
@@ -52,8 +65,11 @@ export function Quick({ api }: { api: Api }) {
         current = opened.id
         if (!cancelled) setSession(opened)
       })
+    const refresh = () => void liveAgents(api).then((list) => !cancelled && setAgents(list))
     open()
+    refresh()
     const off = api.onEvent((e) => {
+      if (AGENT_EVENTS.has(e.type)) refresh()
       if (e.type === 'cwd' && e.session === current) setSession((s) => s && { ...s, cwd: e.cwd })
       if (e.type !== 'exit' || e.session !== current) return
       void api.remove(e.session)
@@ -68,6 +84,9 @@ export function Quick({ api }: { api: Api }) {
     }
   }, [api])
 
+  const agent = agents.find((a) => a.id === picked)
+  const shown = agent?.id ?? session?.id
+
   return (
     <div className="quick">
       {session && (
@@ -75,14 +94,30 @@ export function Quick({ api }: { api: Api }) {
           <div className="qh">
             <Icon name="terminal" />
             <b>Quick terminal</b>
-            <span className="mono">{session.cwd.startsWith(session.home) ? `~${session.cwd.slice(session.home.length)}` : session.cwd}</span>
+            <span className="mono">{tilde(agent?.cwd ?? session.cwd, session.home)}</span>
             <span className="grow" />
             <button className="btn sm" onClick={() => void getCurrentWindow().hide()}>
               {session.shortcut && <kbd>{acceleratorLabel(session.shortcut)}</kbd>} Hide
             </button>
           </div>
-          <div className="pterm">
-            <TerminalPane api={api} sessionId={session.id} visible focused onFocus={() => {}} renderer={renderer} />
+          <div className="qbody">
+            {agents.length > 0 && (
+              <nav className="qside" aria-label="Sessions">
+                <button className={agent ? '' : 'on'} onClick={() => setPicked(null)}>
+                  <Ki kind="shell" sm />
+                  <span className="trunc">Shell</span>
+                </button>
+                {agents.map((a) => (
+                  <button key={a.id} className={a.id === shown ? 'on' : ''} onClick={() => setPicked(a.id)} title={tilde(a.cwd, session.home)}>
+                    <Ki kind={a.kind} dot={statusDot(a.status)} sm />
+                    <span className="trunc">{a.title}</span>
+                  </button>
+                ))}
+              </nav>
+            )}
+            <div className="pterm">
+              <TerminalPane key={shown} api={api} sessionId={shown ?? session.id} visible focused onFocus={() => {}} renderer={renderer} />
+            </div>
           </div>
         </>
       )}
