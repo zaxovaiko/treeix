@@ -46,13 +46,41 @@ function tagOf(pr: PullRequest): [string, string] {
 
 const EMPTY: Record<Filter, string> = { all: 'No pull requests', mine: 'None of yours open', review: 'No reviews waiting', routines: 'No routine has opened one yet' }
 
-/** The filter outlives switching panels */
+const STATES = {
+  any: ['Any state', () => true],
+  open: ['Open', (pr) => pr.state === 'open' && !pr.draft],
+  draft: ['Draft', (pr) => pr.state === 'open' && pr.draft],
+  approved: ['Approved', (pr) => pr.state === 'open' && pr.review?.state === 'approved'],
+  changes: ['Changes requested', (pr) => pr.state === 'open' && pr.review?.state === 'changes'],
+  failing: ['CI failing', (pr) => pr.state === 'open' && pr.pipeline?.status === 'failed'],
+  conflicts: ['Conflicts', (pr) => pr.state === 'open' && pr.conflicts],
+  merged: ['Merged', (pr) => pr.state === 'merged'],
+  closed: ['Closed', (pr) => pr.state === 'closed'],
+} as const satisfies Record<string, readonly [string, (pr: PullRequest) => boolean]>
+type StateFilter = keyof typeof STATES
+
+/** Narrowing on top of the tabs; empty author or repo means any */
+interface Facets {
+  state: StateFilter
+  author: string
+  repo: string
+}
+const ANY: Facets = { state: 'any', author: '', repo: '' }
+
+/** Keeps the picked value listed after a refresh drops its last PR */
+const options = (values: string[], picked: string) => [...new Set([...values, picked].filter(Boolean))].sort((a, b) => a.localeCompare(b))
+
+/** The filters outlive switching panels */
 let lastFilter: Filter = 'all'
+let lastFacets = ANY
 
 export function Prs({ view, data }: { view: ShellView; data: PrData }) {
   const { api } = view
   const [filter, keepFilter] = useState(lastFilter)
   const setFilter = (f: Filter) => keepFilter((lastFilter = f))
+  const [facets, keepFacets] = useState(lastFacets)
+  const setFacet = (patch: Partial<Facets>) => keepFacets((lastFacets = { ...facets, ...patch }))
+  const narrowed = facets.state !== 'any' || facets.author !== '' || facets.repo !== ''
   /** Per PR: the running check out step, or the last error */
   const [busy, setBusy] = useState<Record<string, { text: string; error?: boolean }>>({})
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null)
@@ -64,7 +92,11 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
     review: (pr) => pr.review?.state === 'requested' && pr.state === 'open',
     routines: fromRoutine,
   }
-  const list = data.list.filter(shown[filter])
+  const authors = options(data.list.map((pr) => pr.author), facets.author)
+  const repos = options(data.list.map((pr) => pr.repoPath), facets.repo)
+  const list = data.list.filter(
+    (pr) => shown[filter](pr) && STATES[facets.state][1](pr) && (!facets.author || pr.author === facets.author) && (!facets.repo || pr.repoPath === facets.repo),
+  )
   const idOf = (pr: PullRequest) => `${pr.repoPath}#${pr.number}`
   const note = (pr: PullRequest, text: string | null, error = false) =>
     setBusy((all) => {
@@ -206,6 +238,38 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
           <PIcon name="reload" />
         </button>
       </Head>
+      <div className="pfil">
+        <select value={facets.state} onChange={(e) => setFacet({ state: e.target.value as StateFilter })} aria-label="State">
+          {Object.entries(STATES).map(([k, [label]]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select value={facets.author} onChange={(e) => setFacet({ author: e.target.value })} aria-label="Author">
+          <option value="">Anyone</option>
+          {authors.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+        {repos.length > 1 && (
+          <select value={facets.repo} onChange={(e) => setFacet({ repo: e.target.value })} aria-label="Repository">
+            <option value="">All repos</option>
+            {repos.map((r) => (
+              <option key={r} value={r}>
+                {lastPart(r)}
+              </option>
+            ))}
+          </select>
+        )}
+        {narrowed && (
+          <button className="icon sm" onClick={() => setFacet(ANY)} title="Clear filters">
+            <Icon name="x" />
+          </button>
+        )}
+      </div>
       {data.offline && (
         <div className="banner amber">
           <PIcon name="wifiOff" />
@@ -284,7 +348,7 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
             )
           })
         ) : (
-          <div className="empty">{EMPTY[filter]}</div>
+          <div className="empty">{narrowed ? 'No pull requests match' : EMPTY[filter]}</div>
         )}
       </div>
       <div className="cfoot dim" style={{ fontSize: 11 }}>
