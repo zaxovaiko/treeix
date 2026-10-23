@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { Api, DictationEntry, DictationStatus, RecordingInfo, RecordingStatus, TranscriptLine, VoiceEvent } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
 import type { Command } from '../../lib/paletteSearch'
-import { Field, Group, Row, Select, Status, Switch } from '../../pages/settings/controls'
+import { Field, Group, Row, Status, Switch } from '../../pages/settings/controls'
 import type { SectionProps } from '../../pages/settings/sections'
 import { keyHint, withHint } from '../../shell/shortcuts'
 import type { ShellView } from '../../shell/Shell'
@@ -182,11 +182,12 @@ const HELPER_TEXT = {
   unsupported: 'Needs an Apple silicon Mac on macOS 14 or later',
 } as const
 
-const HOTKEYS = [['MetaLeft', 'AltRight'], ['AltRight'], ['MetaRight'], ['Fn'], ['ControlLeft', 'AltLeft']]
+// Word error rates: NVIDIA's model cards, Open ASR Leaderboard English average. Both are 0.6B, so equally fast
 const MODELS: Record<string, string> = { 'parakeet-v3': 'Parakeet v3, 25 languages', 'parakeet-v2': 'Parakeet v2, English only, more accurate' }
+const SPEED_QUALITY: Record<string, string> = { 'parakeet-v3': 'Speed: fast · Quality: 6.3% word error rate in English', 'parakeet-v2': 'Speed: fast · Quality: 6.1% word error rate in English' }
 
 /** Records the modifiers held together, saved when the first one is let go; Escape cancels */
-function HoldRecorder({ onChange }: { onChange: (keys: string[]) => void }) {
+function HoldRecorder({ value, onChange }: { value: string[]; onChange: (keys: string[]) => void }) {
   const [held, setHeld] = useState<string[] | null>(null)
   const self = useRef<HTMLButtonElement>(null)
   const save = useEffectEvent(onChange)
@@ -219,7 +220,7 @@ function HoldRecorder({ onChange }: { onChange: (keys: string[]) => void }) {
   }, [recording])
   return (
     <button ref={self} className={`krec ${recording ? 'on' : ''}`} aria-label="Record hold to talk keys" title="Click, then hold the modifier keys and let go" onClick={() => setHeld(recording ? null : [])}>
-      {!recording ? 'Record' : held.length ? hotkeyLabel(held) : 'Hold keys...'}
+      {!recording ? <kbd>{hotkeyLabel(value)}</kbd> : held.length ? hotkeyLabel(held) : 'Hold keys...'}
     </button>
   )
 }
@@ -235,8 +236,6 @@ export function VoiceSection({ view, settings, update }: SectionProps) {
     api.dictationHistory().then(setHistory, () => {})
     return api.onVoice((e) => e.type === 'dictated' && setHistory((h) => [e.entry, ...h.filter((x) => x.at !== e.entry.at)].slice(0, 50)))
   }, [api])
-  const key = d.hotkey.join('+')
-  const hotkeys = HOTKEYS.some((h) => h.join('+') === key) ? HOTKEYS : [d.hotkey, ...HOTKEYS]
   const access = (kind: 'microphone' | 'accessibility', label: string, desc: string) => {
     const state = status?.[kind] ?? 'notAsked'
     return (
@@ -262,8 +261,7 @@ export function VoiceSection({ view, settings, update }: SectionProps) {
       </Group>
       <Group title="Hotkey">
         <Row label="Hold to talk" desc="Hold the keys and speak; release to insert" keywords="hotkey shortcut">
-          <Select value={key} options={hotkeys.map((h) => [h.join('+'), hotkeyLabel(h)] as const)} onChange={(v) => set({ hotkey: v.split('+') })} />
-          <HoldRecorder onChange={(hotkey) => set({ hotkey })} />
+          <HoldRecorder value={d.hotkey} onChange={(hotkey) => set({ hotkey })} />
         </Row>
         <Row label="Tap to toggle" desc="A quick tap keeps listening until the next tap">
           <Switch label="Tap to toggle" on={d.tapToToggle} onChange={(tapToToggle) => set({ tapToToggle })} />
@@ -274,7 +272,7 @@ export function VoiceSection({ view, settings, update }: SectionProps) {
       </Group>
       <Group title="Model">
         {(status?.models ?? []).map((m) => (
-          <Row key={m.id} label={MODELS[m.id] ?? m.id} desc={m.error ?? (m.phase === 'downloading' ? `Downloading ${Math.round((m.progress ?? 0) * 100)}%` : m.phase === 'missing' ? 'Not downloaded' : m.id === d.model ? 'In use' : 'Downloaded')} keywords="parakeet speech model">
+          <Row key={m.id} label={MODELS[m.id] ?? m.id} desc={m.error ?? [m.phase === 'downloading' ? `Downloading ${Math.round((m.progress ?? 0) * 100)}%` : m.phase === 'missing' ? 'Not downloaded' : m.id === d.model ? 'In use' : 'Downloaded', SPEED_QUALITY[m.id]].filter(Boolean).join(' · ')} keywords="parakeet speech model">
             {m.id !== d.model && m.phase !== 'missing' && m.phase !== 'downloading' && (
               <button className="btn sm" onClick={() => set({ model: m.id })}>
                 Use
