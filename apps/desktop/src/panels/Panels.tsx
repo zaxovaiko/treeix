@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useState, type PointerEvent } from 'react'
 import type { GitStatus, PullRequest } from '../ipc/api'
 import { useSettings } from '../features/agents/settings'
+import { compact } from '../features/agents/usage'
 import { fallbackPlace } from '../shell/model'
 import { shortcutsPaused, withHint } from '../shell/shortcuts'
 import { PANEL, type PanelId } from '../shell/state'
@@ -117,7 +118,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
       {ITEMS.filter(([id]) => !off(id)).map(([id, icon, tip]) => (
         <button key={id} className={`icon ${shown === id ? 'on' : ''}`} onClick={() => toggle(id)} title={tip}>
           <PIcon name={icon === 'folder' && shown === id ? 'folderOpen' : icon} />
-          {!!badges[id] && <span className="ndot">{badges[id]}</span>}
+          {!!badges[id] && <span className="ndot">{badgeText(badges[id])}</span>}
         </button>
       ))}
       {graph && (
@@ -163,3 +164,6 @@ function PanelResize({ view, fromRight }: { view: ShellView; fromRight: boolean 
   }
   return <div className="vsz" onPointerDown={onPointerDown} onDoubleClick={() => view.dispatch({ type: 'set', patch: { panelWidth: PANEL.initial } })} />
 }
+
+/** Exact up to 9999, then 10k, 1.2m */
+const badgeText = (n: number) => (n < 10_000 ? n : compact(n).toLowerCase())
