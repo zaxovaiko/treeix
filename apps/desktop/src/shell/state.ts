@@ -15,7 +15,7 @@ export interface Tab {
 }
 
 /** Side panels on the right, opened from the activity bar */
-export type PanelId = 'explorer' | 'changes' | 'prs' | 'history'
+export type PanelId = 'explorer' | 'changes' | 'prs' | 'history' | 'tickets'
 
 export interface RecentPlace {
   path: string

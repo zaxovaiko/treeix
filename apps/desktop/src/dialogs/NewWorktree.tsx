@@ -46,14 +46,14 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
   const [reload, setReload] = useState(0)
   const [mode, setMode] = useState<'branch' | 'pr'>(request.pr ? 'pr' : 'branch')
   const [prNumber, setPrNumber] = useState<number | null>(request.pr ?? null)
-  const [name, setName] = useState('')
+  const [name, setName] = useState(request.ticket ? ticketBranch(request.ticket) : '')
   const [picking, setPicking] = useState(false)
   const [hi, setHi] = useState(0)
   const [valid, setValid] = useState<boolean | null>(null)
   const [base, setBase] = useState('')
   const [agents, setAgents] = useState<AgentName[]>(['claude'])
   const [prompt, setPrompt] = useState('')
-  const [ticket, setTicket] = useState<Ticket | null>(null)
+  const [ticket, setTicket] = useState<Ticket | null>(request.ticket ?? null)
   const [shellSplit, setShellSplit] = useState(true)
   const [draftPr, setDraftPr] = useState(false)
   const [copyEnv, setCopyEnv] = useState(true)
@@ -192,12 +192,18 @@ export function NewWorktree({ view, request, onClose }: { view: ShellView; reque
     const t = row.ticket
     setName(ticketBranch(t))
     setTicket(t)
-    if (prompt.trim()) return
+    if (!prompt.trim()) brief(t)
+  }
+  /** The agent's first prompt quotes the ticket, unless one is typed already */
+  const brief = (t: Ticket) =>
     void api.ticketDetail(t.source, t.key).then(
       (detail) => setPrompt((p) => p.trim() ? p : ticketPrompt(detail)),
       () => setPrompt((p) => p.trim() ? p : `${t.key}: ${t.title}`)
     )
-  }
+  // Opened from the Tickets panel
+  useEffect(() => {
+    if (request.ticket) brief(request.ticket)
+  }, [request.ticket])
 
   const onBranchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && picking && rows[current]) pick(rows[current])

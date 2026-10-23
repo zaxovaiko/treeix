@@ -11,15 +11,18 @@ import { Explorer } from './Explorer'
 import { History } from './History'
 import { needsYou } from './logic'
 import { Prs, type PrData } from './Prs'
+import { Tickets } from './Tickets'
+import { useTickets } from '../features/tickets/useTickets'
 import '../styles/panels.css'
 
 const PR_REFRESH_MS = 60_000
 
-const ITEMS: [PanelId, PanelIconName | 'folder' | 'branch', string][] = [
+const ITEMS: [PanelId, PanelIconName | 'folder' | 'branch' | 'jira', string][] = [
   ['explorer', 'folder', 'Explorer (⇧⌘E)'],
   ['changes', 'branch', 'Changes (⌃⇧G)'],
   ['prs', 'pr', 'Pull requests'],
   ['history', 'history', 'Session history'],
+  ['tickets', 'jira', 'Your tickets'],
 ]
 
 /** ⇧⌘E and ⌃⇧G; matched on `code` so the layout doesn't matter */
@@ -32,10 +35,14 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const place = activeTab ? view.placeOfTab(activeTab) : fallbackPlace(home, home)
   const root = place.path
   const scratch = place.kind === 'scratch'
-  const features = useSettings(api)?.features
+  const settings = useSettings(api)
+  const features = settings?.features
   const graph = features?.graph ?? false
   const prsOn = features?.prs ?? true
-  const shown = hidden || (ui.panel === 'prs' && !prsOn) ? null : ui.panel
+  const ticketsOn = !!(features?.jira || features?.notion)
+  const off = (id: PanelId | null) => (id === 'prs' && !prsOn) || (id === 'tickets' && !ticketsOn)
+  const shown = hidden || off(ui.panel) ? null : ui.panel
+  const tickets = useTickets(api, ticketsOn && shown === 'tickets' ? settings : null)
 
   // Git status and file changes of the focused place: one watcher feeds every panel and the badge
   const [git, setGit] = useState<{ root: string; status: GitStatus | null }>({ root: '', status: null })
@@ -89,7 +96,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   }
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     const id = panelKey(e)
-    if (!id || (id === 'prs' && !prsOn) || shortcutsPaused()) return
+    if (!id || off(id) || shortcutsPaused()) return
     e.preventDefault()
     e.stopPropagation()
     toggle(id)
@@ -107,7 +114,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
 
   const bar = (
     <div className="actbar" key="bar">
-      {ITEMS.filter(([id]) => id !== 'prs' || prsOn).map(([id, icon, tip]) => (
+      {ITEMS.filter(([id]) => !off(id)).map(([id, icon, tip]) => (
         <button key={id} className={`icon ${shown === id ? 'on' : ''}`} onClick={() => toggle(id)} title={tip}>
           <PIcon name={icon === 'folder' && shown === id ? 'folderOpen' : icon} />
           {!!badges[id] && <span className="ndot">{badges[id]}</span>}
@@ -128,6 +135,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
       {shown === 'changes' && <Changes key={root} view={view} place={place} status={status} tick={tick} prs={prs.list} onPanel={openPanel} />}
       {shown === 'prs' && <Prs view={view} data={data} />}
       {shown === 'history' && <History view={view} place={place} />}
+      {shown === 'tickets' && <Tickets view={view} data={tickets} refresh={tickets.refresh} repo={place.repoRoot} />}
     </aside>
   )
   const vertical = ui.orientation === 'vertical'

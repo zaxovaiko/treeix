@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as Reac
 import { settingsNow } from '../features/agents/settings'
 import { McpSetup } from '../features/mcp/McpSetup'
 import type { Command } from '../lib/paletteSearch'
+import type { Ticket } from '../ipc/api'
 import { IS_MAC, shortcutsPaused } from '../shell/shortcuts'
 import type { ShellView } from '../shell/Shell'
 import { FileHistory } from './FileHistory'
@@ -11,7 +12,7 @@ import { Worktrees } from './Worktrees'
 import '../styles/dialogs.css'
 
 export type DialogRequest =
-  | { kind: 'newWorktree'; repo?: string; pr?: number }
+  | { kind: 'newWorktree'; repo?: string; pr?: number; ticket?: Ticket }
   | { kind: 'worktrees'; cleanup?: boolean }
   | { kind: 'find' }
   | { kind: 'fileHistory'; root: string; file: string }
