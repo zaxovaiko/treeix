@@ -5,7 +5,7 @@ name: Release
 on:
   push:
     branches: [main]
-    paths: ['apps/desktop/**', 'crates/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '!**.md']
+    paths: ['apps/desktop/**', 'crates/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.github/workflows/release.yml', '!**.md']
 
 permissions:
   contents: write
@@ -70,6 +70,8 @@ jobs:
     runs-on: macos-26
     env:
       TAG: ${{ needs.version.outputs.tag }}
+      # The app and ptyd compare it to tell an older running daemon apart; Cargo's version never moves
+      TREEIX_BUILD: ${{ needs.version.outputs.tag }}
       TARGET: universal-apple-darwin
     outputs:
       sig: ${{ steps.upload.outputs.sig }}
@@ -216,6 +218,8 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       TAG: ${{ needs.version.outputs.tag }}
+      # The app and ptyd compare it to tell an older running daemon apart; Cargo's version never moves
+      TREEIX_BUILD: ${{ needs.version.outputs.tag }}
     outputs:
       sig: ${{ steps.upload.outputs.sig }}
     steps:
