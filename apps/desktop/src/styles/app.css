@@ -45,7 +45,8 @@ kbd { font: 500 10.5px/16px -apple-system, system-ui, sans-serif; height: 16px; 
 .kbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .kbar.mini { width: auto; gap: 6px; padding: 0 4px 0 8px; }
 .body { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 0 8px; }
-.card { border-radius: 12px; background: var(--background); box-shadow: inset 0 0 0 1px var(--input); overflow: hidden; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* a border, not an inset shadow: positioned panes paint over a shadow */
+.card { border-radius: 12px; background: var(--background); border: 1px solid var(--input); overflow: hidden; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 /* a narrow window shrinks the sidebar to its minimum before the panel or the terminal */
 .side { flex: 0 1 auto; min-width: 180px; }
 .center { flex: 1; min-width: 200px; }
@@ -221,7 +222,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 [data-ui="compact"] .titlebar { padding: 0 6px 0 12px; box-shadow: inset 0 -1px var(--border); }
 [data-ui="compact"] .kbar { height: 24px; }
 [data-ui="compact"] .body { gap: 0; padding: 0; }
-[data-ui="compact"] .card { border-radius: 0; box-shadow: none; }
+[data-ui="compact"] .card { border-radius: 0; border: 0; }
 [data-ui="compact"] .body > * + *:not(.vsz) { border-left: 1px solid var(--border); }
 [data-ui="compact"] :is(.sh, .ctop, .hstrip) { height: 34px; }
 [data-ui="compact"] .trow { padding-top: 4px; padding-bottom: 4px; }
