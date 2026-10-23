@@ -11,7 +11,7 @@ import { RoutinesSection } from '../../features/routines'
 import { BrowserSection } from '../../features/browser'
 import { RecordingSection, VoiceSection } from '../../features/voice'
 import { PIcon, type PanelIconName } from '../../panels/common'
-import type { IconName } from '../../lib/icons'
+import { Icon, type IconName } from '../../lib/icons'
 import { Field, Group, Recorder, Row, Seg, Select, Status, Switch, useHit } from './controls'
 
 export interface SectionProps {
@@ -164,6 +164,29 @@ function Terminal({ view, settings, update }: SectionProps) {
   )
 }
 
+const ACTION_ICON: Record<ActionId, IconName> = {
+  'new-shell': 'terminal',
+  'new-claude': 'claude',
+  'new-codex': 'codex',
+  'open-folder': 'folder',
+  'split-right': 'split',
+  'split-down': 'splitDown',
+  'close-pane': 'x',
+  'next-tab': 'right',
+  'prev-tab': 'left',
+  palette: 'search',
+  'toggle-sidebar': 'sideL',
+  settings: 'gear',
+  'toggle-tabs': 'layout',
+  'toggle-ui': 'islands',
+  'toggle-theme': 'moon',
+  'module-graph': 'network',
+  record: 'rec',
+  'zoom-in': 'zoomIn',
+  'zoom-out': 'zoomOut',
+  'zoom-reset': 'search',
+}
+
 function Keys({ settings, update }: SectionProps) {
   const keys = settings.keys
   const defaults = defaultKeys()
@@ -174,7 +197,7 @@ function Keys({ settings, update }: SectionProps) {
           const accel = keyFor(id, keys)
           const clash = conflict(id, accel, keys)
           return (
-            <Row key={id} label={label} desc={clash ? <span className="warn">{clash}</span> : undefined} keywords="shortcut keys">
+            <Row key={id} label={label} icon={<Icon name={ACTION_ICON[id]} className="kico" />} desc={clash ? <span className="warn">{clash}</span> : undefined} keywords="shortcut keys">
               <Recorder
                 label={label}
                 value={accel}

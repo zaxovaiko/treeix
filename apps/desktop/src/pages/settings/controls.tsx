@@ -26,13 +26,18 @@ export function Group({ title, children }: { title?: string; children: ReactNode
 }
 
 /** One setting: label and description on the left, its control on the right. `keywords` widen the search; `wide` stacks the control under */
-export function Row({ label, desc, keywords, wide, children }: { label: string; desc?: ReactNode; keywords?: string; wide?: boolean; children?: ReactNode }) {
+export function Row({ label, icon, desc, keywords, wide, children }: { label: string; icon?: ReactNode; desc?: ReactNode; keywords?: string; wide?: boolean; children?: ReactNode }) {
   const { query, section, group } = useContext(Where)
   if (!matches(query, label, typeof desc === 'string' ? desc : '', keywords, group, section)) return null
   return (
     <div className={`srow ${wide ? 'col' : ''}`}>
       <div className="grow">
-        {label && <div className="sl">{label}</div>}
+        {label && (
+          <div className="sl">
+            {icon}
+            {label}
+          </div>
+        )}
         {desc && <div className="sd">{desc}</div>}
       </div>
       {children && <div className="sc">{children}</div>}
