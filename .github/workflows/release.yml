@@ -116,23 +116,13 @@ jobs:
           key: ${{ steps.voice.outputs.cache-primary-key }}
 
       # tauri bundles externalBin as binaries/<name>-<target>; build-ptyd.sh builds the host arch only, and a
-      # universal app takes one fat binary. Reused until the Rust crates it builds from change
-      - uses: actions/cache/restore@v4
-        id: ptyd
-        with:
-          path: apps/desktop/src-tauri/binaries/treeix-ptyd-universal-apple-darwin
-          key: ptyd-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**') }}
+      # universal app takes one fat binary. Built every release, never cached: it embeds TREEIX_BUILD, and a
+      # daemon reporting another build than the app's gets upgraded to itself in a loop
       - name: Universal treeix-ptyd sidecar
-        if: steps.ptyd.outputs.cache-hit != 'true'
         run: |
           for arch in aarch64 x86_64; do cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$arch-apple-darwin"; done
           lipo -create -output "apps/desktop/src-tauri/binaries/treeix-ptyd-$TARGET" \
             target/aarch64-apple-darwin/release/treeix-ptyd target/x86_64-apple-darwin/release/treeix-ptyd
-      - if: steps.ptyd.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: apps/desktop/src-tauri/binaries/treeix-ptyd-universal-apple-darwin
-          key: ${{ steps.ptyd.outputs.cache-primary-key }}
 
       # Each per-arch compile of the universal build checks for its own <name>-<arch> file
       - name: Per-arch sidecar names
