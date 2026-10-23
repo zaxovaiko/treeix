@@ -213,6 +213,10 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .sd { margin-top: 2px; font-size: 11.5px; color: var(--muted-foreground); line-height: 1.4; }
 .sc { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 .sc .sd { margin: 0; color: var(--red); }
+.notes h1, .notes h2, .notes h3 { margin: 6px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--foreground); }
+.notes h1:first-child, .notes h2:first-child, .notes h3:first-child { margin-top: 0; }
+.notes ul { margin: 0; padding-left: 16px; }
+.notes p { margin: 4px 0 0; }
 
 /* UI: islands (rounded panels on the window background) vs compact (edge to edge) */
 [data-ui="islands"] .body { gap: 6px; padding: 0 6px; }

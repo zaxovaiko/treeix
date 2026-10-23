@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { FEATURES, THEMES, type FeatureId, type SettingsSection } from '../../features'
 import type { CliTool, KeepAwakeState, McpStatus, NotionDatabase, Settings, SettingsPatch, UpdateInfo } from '../../ipc/api'
 import { ACTIONS, conflict, defaultKeys, keyFor, type ActionId, type Keymap } from '../../lib/hotkeys'
@@ -559,6 +561,34 @@ function Features({ settings, update }: SectionProps) {
   )
 }
 
+const RELEASES = 'https://github.com/zaxovaiko/treeix/releases'
+
+/** The release's notes (GitHub markdown); links open in the browser */
+function ReleaseNotes({ view, notes }: { view: ShellView; notes: string }) {
+  return (
+    <div className="notes">
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              onClick={(e) => {
+                e.preventDefault()
+                if (href && /^https?:/.test(href)) void view.api.openUrl(href)
+              }}
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {notes}
+      </Markdown>
+    </div>
+  )
+}
+
 type UpdateState = { step: 'idle' } | { step: 'checking' } | { step: 'none' } | { step: 'ready'; info: UpdateInfo } | { step: 'installing' } | { step: 'error'; message: string }
 
 function About({ view, settings, update }: SectionProps) {
@@ -577,7 +607,7 @@ function About({ view, settings, update }: SectionProps) {
   }
   return (
     <Group>
-      <Row label={`Treeix ${version ?? ''}`} desc={state.step === 'ready' && state.info.notes ? state.info.notes.replace(/^#+ /gm, '') : 'Sessions keep running while it restarts'} keywords="version update">
+      <Row label={`Treeix ${version ?? ''}`} desc={state.step === 'ready' && state.info.notes ? <ReleaseNotes view={view} notes={state.info.notes} /> : 'Sessions keep running while it restarts'} keywords="version update">
         {state.step === 'checking' && <span className="dim">Checking...</span>}
         {state.step === 'installing' && <span className="dim">Installing...</span>}
         {state.step === 'none' && <span className="dim">Up to date</span>}
@@ -597,6 +627,9 @@ function About({ view, settings, update }: SectionProps) {
             </button>
           )
         )}
+        <button className="btn sm" onClick={() => void view.api.openUrl(RELEASES)}>
+          Changelog
+        </button>
       </Row>
       <Row label="Check for updates on start" keywords="update automatic">
         <Switch label="Check for updates on start" on={settings.updates.autoCheck} onChange={(autoCheck) => update({ updates: { autoCheck } })} />

@@ -68,7 +68,7 @@ export function settingsMock(): SettingsApi {
       { name: 'glab', installed: false, version: null, signedIn: null, account: null, update: null },
     ],
     appVersion: async () => '0.48.2',
-    checkUpdate: async () => ({ version: '0.49.0', notes: '## Features\n\n- Chats survive an app restart' }),
+    checkUpdate: async () => ({ version: '0.49.0', notes: '## Features\n\n- **chats**: Chats survive an app restart\n\n**Full changelog**: https://github.com/zaxovaiko/treeix/compare/v0.48.0...v0.49.0' }),
     async installUpdate() {
       location.reload()
     },

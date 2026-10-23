@@ -31,7 +31,7 @@ const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {
   recording: ['Meeting recording', 'rec'],
   phone: ['Phone', 'phone'],
   features: ['Features', 'gear'],
-  about: ['About', 'alert'],
+  about: ['About', 'info'],
 }
 
 /** Kept across openings of the page */
