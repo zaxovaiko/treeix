@@ -9,11 +9,14 @@ use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
+use anyhow::Context;
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::{Read, Write};
+use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, mpsc};
@@ -101,11 +104,40 @@ impl Attached {
 }
 
 struct Process {
-    master: Box<dyn MasterPty + Send>,
+    /// The reader and writer are dups of it; it alone stays open across an upgrade's exec
+    master: OwnedFd,
     input: mpsc::Sender<Vec<u8>>,
     pid: u32,
     started: Option<u64>,
 }
+
+impl Process {
+    fn foreground_group(&self) -> Option<i32> {
+        // SAFETY: tcgetpgrp on a descriptor this Process owns
+        match unsafe { libc::tcgetpgrp(self.master.as_raw_fd()) } {
+            group if group > 0 => Some(group),
+            _ => None,
+        }
+    }
+
+    fn resize(&self, cols: u16, rows: u16) -> std::io::Result<()> {
+        let size = libc::winsize {
+            ws_row: rows.max(1),
+            ws_col: cols.max(2),
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        // SAFETY: TIOCSWINSZ reads a winsize from a valid pointer
+        if unsafe { libc::ioctl(self.master.as_raw_fd(), libc::TIOCSWINSZ, &size) } == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+}
+
+/// Blocks until the process exits and returns its exit code
+type Wait = Box<dyn FnOnce() -> Option<i32> + Send>;
 
 enum Output {
     Data { seq: u64, bytes: Vec<u8> },
@@ -254,12 +286,55 @@ impl Session {
         }
         // A restart starts with no agent status; the last run's would linger
         let _ = std::fs::remove_file(crate::hooks::status_dir(&daemon.data_dir).join(&self.id));
-        let child = pair.slave.spawn_command(cmd)?;
+        let mut child = pair.slave.spawn_command(cmd)?;
         drop(pair.slave);
-        let reader = pair.master.try_clone_reader()?;
-        let mut writer = pair.master.take_writer()?;
         let pid = child.process_id().unwrap_or_default();
+        let master = pair
+            .master
+            .as_raw_fd()
+            .context("the PTY has no descriptor")?;
+        // SAFETY: pair.master keeps the descriptor open until the end of this function
+        let master = unsafe { BorrowedFd::borrow_raw(master) }.try_clone_to_owned()?;
+        {
+            let mut info = lock(&self.info);
+            info.pid = Some(pid);
+            info.status = SessionStatus::Running;
+            info.exit_code = None;
+        }
+        let wait = move || child.wait().ok().map(|status| status.exit_code() as i32);
+        self.start(daemon, master, pid, Box::new(wait), restart)
+    }
 
+    /// Takes over the process of a session the previous daemon image handed over across exec: same pid, so it
+    /// is still this process's child
+    pub fn adopt(self: &Arc<Self>, daemon: &Arc<Daemon>, master: OwnedFd) -> anyhow::Result<()> {
+        let pid = self.info().pid.context("no pid")?;
+        self.start(daemon, master, pid, Box::new(move || wait_pid(pid)), false)
+    }
+
+    /// Keeps the PTY open across exec and returns its descriptor, for `adopt` in the next image
+    pub fn inherit_master(&self) -> Option<RawFd> {
+        let process = lock(&self.process);
+        let master = &process.as_ref()?.master;
+        nix::fcntl::fcntl(
+            master,
+            nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::empty()),
+        )
+        .ok()?;
+        Some(master.as_raw_fd())
+    }
+
+    /// Streams the PTY of a running process: input, output, and its exit
+    fn start(
+        self: &Arc<Self>,
+        daemon: &Arc<Daemon>,
+        master: OwnedFd,
+        pid: u32,
+        wait: Wait,
+        restart: bool,
+    ) -> anyhow::Result<()> {
+        let reader = File::from(master.try_clone()?);
+        let mut writer = File::from(master.try_clone()?);
         let (input, input_rx) = mpsc::channel::<Vec<u8>>();
         std::thread::Builder::new()
             .name(format!("pty-in-{}", self.id))
@@ -271,18 +346,12 @@ impl Session {
                 }
             })?;
         *lock(&self.process) = Some(Process {
-            master: pair.master,
+            master,
             input,
             pid,
             started: procinfo::start_time(pid as i32),
         });
         lock(&self.flow).closing = false;
-        {
-            let mut info = lock(&self.info);
-            info.pid = Some(pid);
-            info.status = SessionStatus::Running;
-            info.exit_code = None;
-        }
 
         let (tx, rx) = unbounded_channel();
         if restart {
@@ -293,15 +362,15 @@ impl Session {
         let (session, daemon) = (self.clone(), daemon.clone());
         std::thread::Builder::new()
             .name(format!("pty-out-{}", self.id))
-            .spawn(move || session.read_loop(&daemon, reader, child, tx))?;
+            .spawn(move || session.read_loop(&daemon, reader, wait, tx))?;
         Ok(())
     }
 
     fn read_loop(
         &self,
         daemon: &Daemon,
-        mut reader: Box<dyn Read + Send>,
-        mut child: Box<dyn Child + Send + Sync>,
+        mut reader: File,
+        wait: Wait,
         tx: UnboundedSender<Output>,
     ) {
         let mut buf = vec![0u8; READ_BUF];
@@ -314,8 +383,7 @@ impl Session {
                 Err(_) => break,
             }
         }
-        let code = child.wait().ok().map(|status| status.exit_code() as i32);
-        let _ = tx.send(Output::Exit(code));
+        let _ = tx.send(Output::Exit(wait()));
     }
 
     /// Lagging clients don't hold the reader back; only a stuck one does, so memory stays bounded
@@ -585,12 +653,7 @@ impl Session {
 
     pub fn resize(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
         if let Some(process) = &*lock(&self.process) {
-            process.master.resize(PtySize {
-                rows: rows.max(1),
-                cols: cols.max(2),
-                pixel_width: 0,
-                pixel_height: 0,
-            })?;
+            process.resize(cols, rows)?;
         }
         lock(&self.vt).term.resize(size(cols, rows));
         let mut info = lock(&self.info);
@@ -621,7 +684,7 @@ impl Session {
         let (pid, foreground) = {
             let process = lock(&self.process);
             let process = process.as_ref()?;
-            (process.pid, process.master.process_group_leader())
+            (process.pid, process.foreground_group())
         };
         {
             lock(&self.flow).closing = true;
@@ -643,7 +706,7 @@ impl Session {
                 return;
             };
             let pid = process.pid as i32;
-            let leader = process.master.process_group_leader();
+            let leader = process.foreground_group();
             (leader.filter(|&g| g > 0).unwrap_or(pid), pid)
         };
         if let Some(cwd) = procinfo::cwd(foreground) {
@@ -829,6 +892,19 @@ async fn coalesce(session: Arc<Session>, daemon: Arc<Daemon>, mut rx: UnboundedR
         if let Some(code) = exit {
             session.exited(&daemon, code);
             return;
+        }
+    }
+}
+
+/// portable_pty's exit code: a signal counts as 1
+fn wait_pid(pid: u32) -> Option<i32> {
+    use nix::sys::wait::{WaitStatus, waitpid};
+    loop {
+        match waitpid(Pid::from_raw(pid as i32), None) {
+            Ok(WaitStatus::Exited(_, code)) => return Some(code),
+            Ok(WaitStatus::Signaled(..)) => return Some(1),
+            Ok(_) | Err(nix::errno::Errno::EINTR) => {}
+            Err(_) => return None,
         }
     }
 }

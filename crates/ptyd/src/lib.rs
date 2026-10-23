@@ -17,7 +17,7 @@ pub mod client;
 use anyhow::Context;
 use server::Daemon;
 use std::fs;
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -34,6 +34,28 @@ pub struct Opts {
     pub socket: PathBuf,
     /// SIGTERM/SIGINT snapshot and exit; off for in-process servers so tests keep Ctrl-C
     pub handle_signals: bool,
+    /// PTY masters by session, left open across exec by the image this one replaced
+    pub handoff: Vec<(String, OwnedFd)>,
+}
+
+/// `treeix-ptyd --handoff <session>=<fd>...`: how `Daemon::hand_off` starts its successor
+pub const HANDOFF: &str = "--handoff";
+
+/// The masters a `--handoff` command line names, closed again on the next exec
+pub fn inherited_masters(args: impl Iterator<Item = String>) -> Vec<(String, OwnedFd)> {
+    args.skip_while(|arg| arg != HANDOFF)
+        .skip(1)
+        .filter_map(|arg| {
+            let (session, fd) = arg.split_once('=')?;
+            let fd = fd.parse::<RawFd>().ok().filter(|&fd| fd > 2)?;
+            // SAFETY: fcntl on any number is sound; it fails for one that is not open
+            if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
+                return None;
+            }
+            // SAFETY: open (checked above), and the previous image left it for this one alone
+            Some((session.to_owned(), unsafe { OwnedFd::from_raw_fd(fd) }))
+        })
+        .collect()
 }
 
 /// Serves until Shutdown or a signal. Returns at once when another daemon holds the data dir
@@ -86,7 +108,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
         UnixListener::bind(&socket).with_context(|| format!("binding {}", socket.display()))?;
     fs::set_permissions(&socket, fs::Permissions::from_mode(0o600))?;
 
-    let daemon = Daemon::load(opts.data_dir.clone(), BUILD.to_owned());
+    let daemon = Daemon::load(opts.data_dir.clone(), BUILD.to_owned(), opts.handoff);
     daemon.save_state(false);
     daemon.spawn_timers();
     remote::listen(&daemon);
@@ -115,6 +137,14 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
         () = accept => {}
         () = daemon.shutdown.notified() => {}
         () = signals(opts.handle_signals) => {}
+    }
+    // In-process servers share the process with their host: Upgrade only stops them
+    if let Some(exe) = daemon.take_upgrade()
+        && opts.handle_signals
+    {
+        // Let the Ok reach the app before exec closes the connection
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        daemon.hand_off(&exe);
     }
     daemon.stop();
     drop(listener);
@@ -170,6 +200,7 @@ pub fn spawn_in_process(data_dir: PathBuf) -> std::thread::JoinHandle<anyhow::Re
                 data_dir,
                 socket,
                 handle_signals: false,
+                handoff: Vec::new(),
             })
         }
     });

@@ -7,7 +7,9 @@ use anyhow::{Context, bail};
 use nix::sys::signal::{Signal, killpg};
 use nix::unistd::{Pid, getpgid};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::os::fd::OwnedFd;
+use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -38,6 +40,8 @@ pub struct Daemon {
     state_dirty: Notify,
     state_write: Mutex<()>,
     pub shutdown: Notify,
+    /// The daemon an Upgrade asked to exec once the reply is out
+    upgrade: Mutex<Option<PathBuf>>,
     stopping: AtomicBool,
     pub chats: crate::chat::Chats,
     pub routines: crate::routines::Routines,
@@ -48,8 +52,11 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Daemon {
-    /// Loads the last state; sessions that were running come back without a process
-    pub fn load(data_dir: PathBuf, build: String) -> Arc<Self> {
+    /// Loads the last state; sessions that were running come back without a process, unless the previous image
+    /// handed over their PTY (`masters`)
+    pub fn load(data_dir: PathBuf, build: String, masters: Vec<(SessionId, OwnedFd)>) -> Arc<Self> {
+        let mut masters: HashMap<_, _> = masters.into_iter().collect();
+        let mut adopted = Vec::new();
         let saved = state::load(&data_dir);
         let revived = if saved.clean_shutdown {
             SessionStatus::Restored
@@ -58,22 +65,29 @@ impl Daemon {
         };
         let mut sessions = HashMap::new();
         for SavedSession { info, env, started } in saved.sessions {
+            let master = masters.remove(&info.id);
             let was_running = !matches!(info.status, SessionStatus::Exited | SessionStatus::Error);
-            if was_running && let (Some(pid), Some(started)) = (info.pid, started) {
+            if master.is_none()
+                && was_running
+                && let (Some(pid), Some(started)) = (info.pid, started)
+            {
                 kill_orphan(pid as i32, started);
             }
             let session = Session::new(info, env, true);
-            if was_running {
+            if was_running && master.is_none() {
                 session.set_status(revived);
             }
             if let Some(ansi) = state::load_snapshot(&data_dir, &session.id) {
                 session.load_snapshot(&ansi);
             }
+            if let Some(master) = master {
+                adopted.push((session.clone(), master));
+            }
             sessions.insert(session.id.clone(), session);
         }
         let chats = crate::chat::Chats::load(&data_dir);
         let routines = crate::routines::Routines::load(&data_dir);
-        Arc::new(Self {
+        let daemon = Arc::new(Self {
             data_dir,
             build,
             sessions: Mutex::new(sessions),
@@ -83,10 +97,18 @@ impl Daemon {
             state_dirty: Notify::new(),
             state_write: Mutex::new(()),
             shutdown: Notify::new(),
+            upgrade: Mutex::default(),
             stopping: AtomicBool::new(false),
             chats,
             routines,
-        })
+        });
+        for (session, master) in adopted {
+            if let Err(e) = session.adopt(&daemon, master) {
+                tracing::error!("taking over {}: {e:#}", session.id);
+                session.set_status(revived);
+            }
+        }
+        daemon
     }
 
     pub fn stopping(&self) -> bool {
@@ -166,17 +188,54 @@ impl Daemon {
         if self.stopping.swap(true, Ordering::AcqRel) {
             return;
         }
+        let sessions = self.persist();
+        for session in &sessions {
+            session.signal(Signal::SIGHUP);
+        }
+        tracing::info!("stopped with {} sessions", sessions.len());
+    }
+
+    /// Execs `exe` in place of this image. The pid stays, so the shells stay its children, and their PTYs stay
+    /// open for the new image to take over; chats and routines restart as after `stop`. Returns only when exec
+    /// fails, with the shells hung up
+    // ponytail: output read between the snapshots and exec (a few ms) is lost
+    pub fn hand_off(&self, exe: &Path) {
+        if self.stopping.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let sessions = self.persist();
+        let masters: Vec<String> = sessions
+            .iter()
+            .filter_map(|s| Some(format!("{}={}", s.id, s.inherit_master()?)))
+            .collect();
+        tracing::info!(
+            "handing {} sessions over to {}",
+            masters.len(),
+            exe.display()
+        );
+        let e = std::process::Command::new(exe)
+            .arg(crate::HANDOFF)
+            .args(masters)
+            .exec();
+        tracing::error!("exec {}: {e}", exe.display());
+        for session in &sessions {
+            session.signal(Signal::SIGHUP);
+        }
+    }
+
+    pub fn take_upgrade(&self) -> Option<PathBuf> {
+        lock(&self.upgrade).take()
+    }
+
+    fn persist(&self) -> Vec<Arc<Session>> {
         let sessions = self.sessions();
         for session in &sessions {
             self.save_snapshot(session);
         }
         self.save_state(true);
-        for session in &sessions {
-            session.signal(Signal::SIGHUP);
-        }
         self.chats.stop();
         self.routines.stop();
-        tracing::info!("stopped with {} sessions", sessions.len());
+        sessions
     }
 
     /// Debounced state.json writes, periodic snapshots of busy sessions, foreground polling
@@ -311,7 +370,7 @@ impl Daemon {
             crate::routines::handle(self, outbox, id, req);
             return;
         }
-        let shutdown = matches!(req, Request::Shutdown);
+        let shutdown = matches!(req, Request::Shutdown | Request::Upgrade { .. });
         let resp = self.respond(client, req);
         let _ = outbox.send(ServerMsg::Resp { id, resp });
         if shutdown {
@@ -419,6 +478,10 @@ impl Daemon {
             }
             Request::Shutdown => {
                 self.stop();
+                Ok(Response::Ok)
+            }
+            Request::Upgrade { exe } => {
+                *lock(&self.upgrade) = Some(exe.into());
                 Ok(Response::Ok)
             }
             Request::Restart { session } => {

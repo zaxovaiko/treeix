@@ -315,31 +315,75 @@ fn emit(app: &AppHandle, event: SessionEvent) {
 type Connection = (OwnedReadHalf, OwnedWriteHalf, Hello);
 
 async fn connect() -> io::Result<Connection> {
-    if let Ok((mut reader, mut writer, hello)) = handshake().await {
+    if let Ok((reader, writer, hello)) = handshake().await {
         if is_ours(&hello) {
             return Ok((reader, writer, hello));
         }
-        tracing::info!(theirs = %describe(&hello), ours = %describe_ours(), "daemon build differs, replacing it");
-        proto::write_frame(
-            &mut writer,
-            &ClientMsg::Req {
-                id: 0,
-                req: Request::Shutdown,
-            },
-        )
-        .await?;
-        // The daemon snapshots its sessions before it closes the socket
-        let exited = timeout(Duration::from_secs(10), async {
-            while let Ok(Some(_)) = proto::read_frame::<_, ServerMsg>(&mut reader).await {}
-        });
-        if exited.await.is_err() {
-            return Err(io::Error::other("old daemon did not exit"));
+        tracing::info!(theirs = %describe(&hello), ours = %describe_ours(), "daemon build differs, upgrading it");
+        if upgrade(reader, writer).await {
+            if let Ok(conn) = ours().await {
+                return Ok(conn);
+            }
+        } else if let Ok((reader, writer, _)) = handshake().await {
+            // Older than Upgrade: replacing it restarts its shells
+            shut_down(reader, writer).await?;
         }
     }
     // launchctl and systemctl block; keep them off the runtime's threads
     tokio::task::spawn_blocking(crate::service::start)
         .await
         .map_err(io::Error::other)??;
+    ours().await
+}
+
+/// Asks the daemon to exec our build in its place, which keeps its shells running. False when it can't: one
+/// older than Upgrade hangs up without a reply
+async fn upgrade(mut reader: OwnedReadHalf, mut writer: OwnedWriteHalf) -> bool {
+    let Ok(exe) = crate::service::sidecar() else {
+        return false;
+    };
+    let req = ClientMsg::Req {
+        id: 0,
+        req: Request::Upgrade {
+            exe: exe.to_string_lossy().into_owned(),
+        },
+    };
+    if proto::write_frame(&mut writer, &req).await.is_err() {
+        return false;
+    }
+    // Its Ok, then the hangup at exec
+    let upgraded = timeout(Duration::from_secs(10), async {
+        let mut ok = false;
+        while let Ok(Some(msg)) = proto::read_frame::<_, ServerMsg>(&mut reader).await {
+            if let ServerMsg::Resp { id: 0, resp } = msg {
+                ok = resp.is_ok();
+            }
+        }
+        ok
+    });
+    matches!(upgraded.await, Ok(true))
+}
+
+async fn shut_down(mut reader: OwnedReadHalf, mut writer: OwnedWriteHalf) -> io::Result<()> {
+    proto::write_frame(
+        &mut writer,
+        &ClientMsg::Req {
+            id: 0,
+            req: Request::Shutdown,
+        },
+    )
+    .await?;
+    // The daemon snapshots its sessions before it closes the socket
+    let exited = timeout(Duration::from_secs(10), async {
+        while let Ok(Some(_)) = proto::read_frame::<_, ServerMsg>(&mut reader).await {}
+    });
+    exited
+        .await
+        .map_err(|_| io::Error::other("old daemon did not exit"))
+}
+
+/// Waits up to 5 s for a daemon of our build to answer
+async fn ours() -> io::Result<Connection> {
     let mut last = io::Error::other("daemon did not come up");
     for _ in 0..50 {
         sleep(Duration::from_millis(100)).await;

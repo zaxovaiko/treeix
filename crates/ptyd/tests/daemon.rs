@@ -521,6 +521,7 @@ async fn second_daemon_exits_when_one_answers() {
         data_dir: dir.path().into(),
         socket: dir.path().join("ptyd.sock"),
         handle_signals: false,
+        handoff: Vec::new(),
     };
     std::thread::spawn(move || treeix_ptyd::run(opts))
         .join()

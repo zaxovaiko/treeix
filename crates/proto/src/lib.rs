@@ -11,8 +11,8 @@ pub mod routines;
 use chat::{ChatContent, ChatCreate, ChatEntry, ChatId, ChatInfo};
 use routines::{Routine, RoutineId, RoutineRun, RunId};
 
-/// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Shutdown,
-/// so an older app never takes down a newer daemon by connecting
+/// Bumped on any incompatible change. The daemon only reports it: the app compares and sends Upgrade (or
+/// Shutdown), so an older app never takes down a newer daemon by connecting
 pub const PROTO_VERSION: u32 = 5;
 /// Bundle id; also the data dir name
 pub const APP_ID: &str = "com.dyvertex.treeix";
@@ -211,6 +211,11 @@ pub enum Request {
     /// Stops a queued or running run (kills its session), which ends Cancelled. Replies Ok
     RunCancel {
         run: RunId,
+    },
+    /// Replies Ok, then execs `exe` (a newer daemon) in place: the pid and every live session carry over.
+    /// A daemon older than this can't decode it and hangs up instead
+    Upgrade {
+        exe: String,
     },
 }
 
@@ -504,6 +509,12 @@ mod tests {
             req: Request::Shutdown,
         };
         assert_eq!(postcard::to_stdvec(&shutdown).unwrap(), [1, 3, 11]);
+        // A newer app sends this to whatever daemon runs, so its index never moves
+        let upgrade = ClientMsg::Req {
+            id: 3,
+            req: Request::Upgrade { exe: "x".into() },
+        };
+        assert_eq!(postcard::to_stdvec(&upgrade).unwrap(), [1, 3, 33, 1, b'x']);
         let ok = ServerMsg::Resp {
             id: 3,
             resp: Ok(Response::Ok),

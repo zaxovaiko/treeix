@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Tauri puts the sidecar next to the app binary, in the bundle and in dev
-fn sidecar() -> io::Result<PathBuf> {
+pub(crate) fn sidecar() -> io::Result<PathBuf> {
     Ok(std::env::current_exe()?.with_file_name("treeix-ptyd"))
 }
 

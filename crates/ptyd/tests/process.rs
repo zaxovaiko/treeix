@@ -160,6 +160,70 @@ async fn other_build_does_not_stop_the_daemon_until_it_sends_shutdown() {
 }
 
 #[tokio::test]
+async fn upgrade_execs_in_place_and_the_shells_keep_running() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut daemon, mut client) = start(dir.path()).await;
+    let info = created(&mut client, &["sh", "-c", "echo before; cat; exit 7"]).await;
+    eventually_listed(&mut client, |s| s.seq > 0).await;
+
+    let exe = env!("CARGO_BIN_EXE_treeix-ptyd").to_owned();
+    let upgrade = client.request(Request::Upgrade { exe }).await.unwrap();
+    assert_eq!(upgrade, Response::Ok);
+    while let Ok(Some(_)) = client.next_event().await {}
+
+    let start = Instant::now();
+    let mut client = loop {
+        if let Ok(client) = Client::connect(&dir.path().join("ptyd.sock")).await {
+            break client;
+        }
+        assert!(start.elapsed() < Duration::from_secs(5), "new image serves");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    assert_eq!(client.pid, daemon.0.id(), "same process");
+    let kept = list(&mut client).await.remove(0);
+    assert_eq!((kept.status, kept.pid), (SessionStatus::Running, info.pid));
+
+    // Input still reaches cat, and its exit comes back through the new image's waitpid
+    let Response::Attached { seq, .. } = client
+        .request(Request::Attach {
+            session: info.id.clone(),
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("not attached");
+    };
+    let write = Request::Write {
+        session: info.id.clone(),
+        data: b"after\n\x04".to_vec(),
+    };
+    client.request(write).await.unwrap();
+    let mut out = Vec::new();
+    let code = loop {
+        match client.next_event().await.unwrap().expect("connection open") {
+            Event::Data { session, bytes, .. } if session == info.id => out.extend(bytes),
+            Event::Exit { session, code } if session == info.id => break code,
+            _ => {}
+        }
+    };
+    assert!(
+        String::from_utf8_lossy(&out).contains("after"),
+        "{out:?} from {seq}"
+    );
+    assert_eq!(code, Some(7));
+    client.request(Request::Shutdown).await.unwrap();
+    assert!(daemon.exited_within(Duration::from_secs(2)));
+}
+
+async fn eventually_listed(client: &mut Client, done: impl Fn(&SessionInfo) -> bool) {
+    let start = Instant::now();
+    while !list(client).await.iter().any(&done) {
+        assert!(start.elapsed() < Duration::from_secs(5), "timed out");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+#[tokio::test]
 async fn sigterm_with_live_sessions_exits_within_two_seconds() {
     let dir = tempfile::tempdir().unwrap();
     let (mut daemon, mut client) = start(dir.path()).await;
