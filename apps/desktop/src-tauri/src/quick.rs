@@ -128,7 +128,8 @@ mod panel {
 
     pub fn convert(window: &WebviewWindow) -> tauri::Result<()> {
         let panel = window.to_panel::<QuickPanel>()?;
-        panel.set_level(PanelLevel::Floating.value());
+        // Status: over every app's windows, the Dock and the menu bar
+        panel.set_level(PanelLevel::Status.value());
         panel.set_collection_behavior(
             CollectionBehavior::new()
                 .can_join_all_spaces()
@@ -170,6 +171,7 @@ mod tests {
         for accelerator in [
             "Control+Backquote",
             "Control+IntlBackslash",
+            "IntlBackslash",
             "Shift+Super+KeyT",
             "F5",
         ] {

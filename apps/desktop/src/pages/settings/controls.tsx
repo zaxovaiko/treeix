@@ -127,7 +127,7 @@ export function Recorder({ value, onChange, label }: { value: string | null; onC
     if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) return save(null)
     const accel = accelerator(e)
     if (accel) save(accel)
-    else if (!MODIFIER_KEYS.has(e.key)) setError(`Hold ${IS_MAC ? '⌘, ⌃ or ⌥' : 'Ctrl or Alt'} with the key`)
+    else if (!MODIFIER_KEYS.has(e.key)) setError(`Hold ${IS_MAC ? '⌘, ⌃ or ⌥' : 'Ctrl or Alt'} with the key, or press ${IS_MAC ? '§' : '<'} or an F-key alone`)
   })
   // On the window: WebKit doesn't focus a clicked button, so its own keydown never fires
   useEffect(() => {

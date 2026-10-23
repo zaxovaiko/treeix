@@ -201,7 +201,7 @@ function Hotkey({ view, settings }: SectionProps) {
   const clash = conflict('quick', accel, settings.keys)
   return (
     <Group>
-      <Row label="Quick terminal" desc={clash ? <span className="warn">{clash}</span> : 'A small terminal over any app. Not set keeps ⌃`'} keywords="global shortcut hotkey window">
+      <Row label="Quick terminal" desc={clash ? <span className="warn">{clash}</span> : 'A small terminal over every app and window, from anywhere'} keywords="global shortcut hotkey window">
         <Recorder
           label="Quick terminal"
           value={accel}

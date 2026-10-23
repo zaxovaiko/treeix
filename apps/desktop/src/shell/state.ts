@@ -42,7 +42,7 @@ export interface UiState {
   /** The quick terminal window's session; written by that window only */
   quick: string | null
   renderer: Renderer
-  /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null keeps the built-in default */
+  /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null: none */
   quickShortcut: string | null
 }
 

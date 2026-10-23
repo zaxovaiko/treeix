@@ -116,12 +116,13 @@ export const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
 
 /**
  * A global-shortcut accelerator (global-hotkey) from a recorded chord, e.g. `Control+Backquote`. Null until a
- * non-modifier key is down with at least one modifier, F-keys aside, so a bare letter can't steal typing everywhere
+ * non-modifier key is down with at least one modifier, so a bare letter can't steal typing everywhere. F-keys and §
+ * (IntlBackslash, rarely typed) work alone
  */
 export function accelerator(e: Keys): string | null {
   if (MODIFIER_KEYS.has(e.key) || !e.code) return null
   const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter((m): m is string => !!m)
-  if (!mods.length && !/^F\d+$/.test(e.code)) return null
+  if (!mods.length && !/^(F\d+|IntlBackslash)$/.test(e.code)) return null
   return [...mods, e.code].join('+')
 }
 

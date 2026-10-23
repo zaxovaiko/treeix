@@ -93,6 +93,7 @@ test('records global shortcut accelerators', () => {
   expect(accelerator(key(' ', { alt: true, meta: false }, 'Space'))).toBe('Alt+Space')
   expect(accelerator(key('T', { shift: true }, 'KeyT'))).toBe('Shift+Super+KeyT')
   expect(accelerator(key('F5', { meta: false }, 'F5'))).toBe('F5')
+  expect(accelerator(key('§', { meta: false }, 'IntlBackslash'))).toBe('IntlBackslash')
   expect(accelerator(key('a', { meta: false }, 'KeyA'))).toBeNull()
   expect(accelerator(key('Shift', { shift: true, meta: false }, 'ShiftLeft'))).toBeNull()
 })
