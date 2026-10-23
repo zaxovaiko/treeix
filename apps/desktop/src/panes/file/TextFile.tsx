@@ -186,6 +186,7 @@ export function TextFile({
         fontSize: 12.5,
         lineHeight: 19,
         minimap: { enabled: false },
+        renderWhitespace: 'none',
         tabSize: 2,
         // The EditContext div doesn't count as a text input for the app's shortcuts; the textarea does
         editContext: false
