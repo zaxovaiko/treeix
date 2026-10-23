@@ -4,6 +4,7 @@
 import { Terminal } from '@xterm/xterm'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import type { Api, Attachment, SessionInfo } from '../ipc/api'
+import { chordOf, keyFor, type ActionId } from '../lib/hotkeys'
 import { bytesFrom } from '../panes/terminal/stream'
 import { runSteps, scrollbackDiff, waitFor, type E2eReport, type Step } from './run'
 
@@ -97,6 +98,13 @@ function button(title: string, within: ParentNode = document): HTMLButtonElement
   const found = [...within.querySelectorAll<HTMLButtonElement>(`button[title^="${title}"]`)].find((el) => el.offsetParent !== null)
   if (!found) throw new Error(`no visible "${title}" button`)
   return found
+}
+
+/** An app shortcut's default chord, as the keyboard would send it */
+function press(id: ActionId) {
+  const accel = keyFor(id, {})
+  if (!accel) throw new Error(`no chord for ${id}`)
+  ;(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { ...chordOf(accel), bubbles: true, cancelable: true }))
 }
 
 /** Text into the pane's xterm input, as a keyboard or IME would put it there */
@@ -212,10 +220,10 @@ export async function runE2e(api: Api): Promise<E2eReport> {
       async () => {
         const ids = visibleIds()
         const shown = await Promise.all(ids.map(async (id) => ({ id, attaches: taps.panes.get(id)?.attaches ?? 0, text: await paneText(id) })))
-        // The settings page hides the stage: every pane detaches
+        // Settings opens as its own tab, which hides this one: every pane detaches, and closing it brings them back
         button('Settings').click()
         await waitFor('every pane detached', () => ids.every((id) => !taps.panes.get(id)?.attached))
-        button('Settings').click()
+        press('close-pane')
         await waitFor('every pane re-attached', () => shown.every(({ id, attaches }) => (taps.panes.get(id)?.attaches ?? 0) > attaches && taps.panes.get(id)?.attached))
         for (const { id, text } of shown) {
           const diff = scrollbackDiff(text, await paneText(id))
