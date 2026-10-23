@@ -189,7 +189,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .filter { margin: 0 8px 6px; height: 28px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 8px; background: var(--muted); color: var(--muted-foreground); }
 .filter input { flex: 1; min-width: 0; background: none; border: 0; color: var(--foreground); font-size: 12px; user-select: text; }
 .sfoot { flex: none; display: flex; gap: 6px; padding: 8px; }
-.sfoot .btn { flex: 1; min-width: 0; justify-content: center; }
+.sfoot .btn { min-width: 0; height: 20px; }
 [data-ui="compact"] .filter { margin-top: 6px; }
 
 /* settings page */
