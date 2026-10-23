@@ -5,6 +5,7 @@
 use crate::types::{DaemonState, Frame, Hello, SessionEvent};
 use std::collections::HashMap;
 use std::io;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -315,7 +316,13 @@ fn emit(app: &AppHandle, event: SessionEvent) {
 type Connection = (OwnedReadHalf, OwnedWriteHalf, Hello);
 
 async fn connect() -> io::Result<Connection> {
-    if let Ok((reader, writer, hello)) = handshake().await {
+    let first = match handshake(HELLO_TIMEOUT).await {
+        Err(e) if e.kind() == io::ErrorKind::TimedOut => {
+            handshake_or_kill(&proto::socket_path(), Duration::from_secs(10)).await
+        }
+        other => other,
+    };
+    if let Ok((reader, writer, hello)) = first {
         if is_ours(&hello) {
             return Ok((reader, writer, hello));
         }
@@ -324,7 +331,7 @@ async fn connect() -> io::Result<Connection> {
             if let Ok(conn) = ours().await {
                 return Ok(conn);
             }
-        } else if let Ok((reader, writer, _)) = handshake().await {
+        } else if let Ok((reader, writer, _)) = handshake(HELLO_TIMEOUT).await {
             // Older than Upgrade: replacing it restarts its shells
             shut_down(reader, writer).await?;
         }
@@ -387,7 +394,7 @@ async fn ours() -> io::Result<Connection> {
     let mut last = io::Error::other("daemon did not come up");
     for _ in 0..50 {
         sleep(Duration::from_millis(100)).await;
-        match handshake().await {
+        match handshake(HELLO_TIMEOUT).await {
             Ok(conn) if is_ours(&conn.2) => return Ok(conn),
             Ok(conn) => {
                 last = io::Error::other(format!(
@@ -415,10 +422,31 @@ fn is_ours(hello: &Hello) -> bool {
     hello.proto == proto::PROTO_VERSION && hello.build == BUILD
 }
 
-async fn handshake() -> io::Result<Connection> {
-    let (mut reader, mut writer) = UnixStream::connect(proto::socket_path())
-        .await?
-        .into_split();
+const HELLO_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// A daemon that takes connections but never says hello holds the socket and the data dir lock, so no new one can
+/// start: one exec'd from a disk image that was then ejected faults on every page forever. Past a longer wait it
+/// gets killed for the service (or the next connect) to start a fresh one; its shells are unreachable either way
+async fn handshake_or_kill(socket: &Path, wait: Duration) -> io::Result<Connection> {
+    let stream = UnixStream::connect(socket).await?;
+    let pid = stream.peer_cred()?.pid();
+    let result = hello(stream, wait).await;
+    if let (Err(e), Some(pid)) = (&result, pid)
+        && e.kind() == io::ErrorKind::TimedOut
+    {
+        tracing::warn!(pid, "daemon is not answering, killing it");
+        // SAFETY: kill is sound for any pid; this one listens on our socket
+        unsafe { libc::kill(pid, libc::SIGKILL) };
+    }
+    result
+}
+
+async fn handshake(wait: Duration) -> io::Result<Connection> {
+    hello(UnixStream::connect(proto::socket_path()).await?, wait).await
+}
+
+async fn hello(stream: UnixStream, wait: Duration) -> io::Result<Connection> {
+    let (mut reader, mut writer) = stream.into_split();
     proto::write_frame(
         &mut writer,
         &ClientMsg::Hello {
@@ -427,12 +455,7 @@ async fn handshake() -> io::Result<Connection> {
         },
     )
     .await?;
-    match timeout(
-        Duration::from_secs(3),
-        proto::read_frame::<_, ServerMsg>(&mut reader),
-    )
-    .await
-    {
+    match timeout(wait, proto::read_frame::<_, ServerMsg>(&mut reader)).await {
         Ok(Ok(Some(ServerMsg::Hello { proto, build, pid }))) => Ok((
             reader,
             writer,
@@ -540,5 +563,30 @@ mod tests {
         assert!(!streams.send(&"a".into(), main_id, Frame::data(0, b"x")));
         assert!(streams.send(&"a".into(), quick_id, Frame::data(0, b"x")));
         assert_eq!(quick_seen.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_daemon_that_never_says_hello_is_killed() {
+        let socket =
+            std::env::temp_dir().join(format!("treeix-silent-{}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&socket);
+        let mut silent = std::process::Command::new("python3")
+            .args(["-c", "import socket,sys,time; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(); time.sleep(60)"])
+            .arg(&socket)
+            .spawn()
+            .unwrap();
+        while !socket.exists() {
+            sleep(Duration::from_millis(10)).await;
+        }
+        let err = handshake_or_kill(&socket, Duration::from_millis(200))
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+        let status = silent.wait().unwrap();
+        let _ = std::fs::remove_file(&socket);
+        assert_eq!(
+            std::os::unix::process::ExitStatusExt::signal(&status),
+            Some(libc::SIGKILL)
+        );
     }
 }
