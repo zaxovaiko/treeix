@@ -241,7 +241,7 @@ export function Sidebar({ view }: ViewProps) {
         {!groups.length && <div className="empty">{query.trim() ? 'No sessions match' : 'No sessions yet'}</div>}
       </div>
       <div className="sfoot">
-        <button className="btn" onClick={() => view.run('open-folder')} title={withHint('Open folder', 'open-folder')}>
+        <button className="btn sm" onClick={() => view.run('open-folder')} title={withHint('Open folder', 'open-folder')}>
           <Icon name="folder" />
           <span className="trunc">Open folder...</span>
         </button>
