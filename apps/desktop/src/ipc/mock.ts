@@ -918,6 +918,7 @@ function phase3(): Phase3 {
       const meta = REPOS[repoPath]
       if (meta) meta.missing = []
     },
+    runCommand: async () => '',
     async discardChanges(root, file) {
       const path = inside(root, file)
       edits.delete(path)

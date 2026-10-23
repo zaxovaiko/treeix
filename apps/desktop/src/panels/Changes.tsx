@@ -3,7 +3,7 @@ import type { DiffScope, FilePatch, GitStatus, Place, PullRequest } from '../ipc
 import { Icon } from '../lib/icons'
 import type { PanelId } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
-import { askAgent, Head, NoFolder, PIcon, runIn } from './common'
+import { askAgent, Head, NoFolder, PIcon } from './common'
 import { parseHunks, STATUS_CLASS, STATUS_LETTER } from './logic'
 
 const GONE = new Set(['exited', 'restored', 'crashed'])
@@ -30,6 +30,8 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
   const [sent, setSent] = useState<Sent[]>([])
   const [confirm, setConfirm] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** The git command running in the background; the place watcher picks up what it changes */
+  const [running, setRunning] = useState<string | null>(null)
 
   const onBase = !status?.base || status.branch === status.base
   const scope: DiffScope = onBase ? 'local' : pick
@@ -43,6 +45,12 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
     )
     return () => void (live = false)
   }, [api, root, scope, status, tick])
+
+  const attempt = (call: Promise<void>) => call.then(() => setError(null), (e: unknown) => setError(String(e)))
+  const run = (command: string) => {
+    setRunning(command)
+    void attempt(api.runCommand(root, command).then(() => undefined)).finally(() => setRunning(null))
+  }
 
   if (place.kind === 'scratch')
     return (
@@ -63,7 +71,7 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
         </div>
         <div className="grow" />
         <div className="cfoot">
-          <button className="btn sm" onClick={() => void runIn(view, root, 'git init')}>
+          <button className="btn sm" onClick={() => run('git init')}>
             <Icon name="branch" />
             git init
           </button>
@@ -74,7 +82,6 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
       </>
     )
 
-  const attempt = (call: Promise<void>) => call.then(() => setError(null), (e: unknown) => setError(String(e)))
   const local = status.changes
   const conflicts = new Set(status.conflicts)
   const current = patches.find((p) => p.path === file) ?? patches[0]
@@ -163,10 +170,10 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
                 <Icon name="claude" />
                 Ask Claude to resolve
               </button>
-              <button className="btn sm" onClick={() => void runIn(view, root, 'git rebase --abort')}>
+              <button className="btn sm" disabled={!!running} onClick={() => run('git rebase --abort')}>
                 Abort
               </button>
-              <button className="btn sm" disabled={status.conflicts.length > 0} title={status.conflicts.length ? 'Resolve every conflict first' : undefined} onClick={() => void runIn(view, root, 'git rebase --continue')}>
+              <button className="btn sm" disabled={status.conflicts.length > 0 || !!running} title={status.conflicts.length ? 'Resolve every conflict first' : undefined} onClick={() => run('git rebase --continue')}>
                 Continue
               </button>
             </div>
@@ -179,7 +186,7 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
           <span className="grow">
             {status.behind} new commit{status.behind === 1 ? '' : 's'} on {status.upstream}
           </span>
-          <button className="btn sm" onClick={() => void runIn(view, root, 'git pull')}>
+          <button className="btn sm" disabled={!!running} onClick={() => run('git pull')}>
             Pull ⇣{status.behind}
           </button>
         </div>
@@ -188,6 +195,12 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
         <div className="banner red">
           <Icon name="alert" />
           <span className="grow">{error}</span>
+        </div>
+      )}
+      {running && (
+        <div className="banner sky">
+          <Icon name="clock" />
+          <span className="grow trunc">Running {running}...</span>
         </div>
       )}
       <div className="dim psum dots">
@@ -304,13 +317,13 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
       <div className="cfoot">
         <button
           className="btn sm"
-          disabled={!local.length || !!status.rebase || detached}
+          disabled={!local.length || !!status.rebase || detached || !!running}
           title={detached ? 'Detached HEAD: create a branch first' : local.length ? undefined : 'Nothing to commit'}
-          onClick={() => void runIn(view, root, `git commit -am "${quoted(commitMessage)}"`)}
+          onClick={() => run(`git commit -am "${quoted(commitMessage)}"`)}
         >
           Commit
         </button>
-        <button className="btn sm" disabled={!push.ok} onClick={() => void runIn(view, root, push.command)}>
+        <button className="btn sm" disabled={!push.ok || !!running} onClick={() => run(push.command)}>
           {push.label}
         </button>
         {!onBase && !status.merged && pr ? (
@@ -321,7 +334,7 @@ export function Changes({ view, place, status, tick, prs, onPanel }: { view: She
           !onBase &&
           !status.merged &&
           !detached && (
-            <button className="btn sm" onClick={() => void runIn(view, root, gitlab ? 'glab mr create --draft --fill' : 'gh pr create --draft --fill')}>
+            <button className="btn sm" disabled={!!running} onClick={() => run(gitlab ? 'glab mr create --draft --fill --yes' : 'gh pr create --draft --fill')}>
               <PIcon name="pr" />
               Open {gitlab ? 'MR' : 'PR'}
             </button>

@@ -334,6 +334,8 @@ export interface Api {
   // System (U6)
   /** claude, codex, acli, gh, glab: installed, version, signed in */
   cliTools(): Promise<CliTool[]>
+  /** A one-off command in the login shell at `cwd`, no terminal: its output; rejects with the output when it fails */
+  runCommand(cwd: string, command: string): Promise<string>
   appVersion(): Promise<string>
   /** null when this is the newest version */
   checkUpdate(): Promise<UpdateInfo | null>

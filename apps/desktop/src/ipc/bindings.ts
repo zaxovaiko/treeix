@@ -393,6 +393,13 @@ async cliTools() : Promise<CliTool[]> {
     return await TAURI_INVOKE("cli_tools");
 },
 /**
+ * A one-off command (git pull, commit, push) in the login shell at `cwd` with no terminal, so git neither prompts
+ * nor opens an editor. Its output, or the output as the error
+ */
+async runCommand(cwd: string, command: string) : Promise<string> {
+    return await TAURI_INVOKE("run_command", { cwd, command });
+},
+/**
  * None when this is the newest version
  */
 async checkUpdate() : Promise<UpdateInfo | null> {

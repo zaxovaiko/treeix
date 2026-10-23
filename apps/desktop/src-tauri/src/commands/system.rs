@@ -172,6 +172,41 @@ async fn cli_tool(name: &'static str) -> CliTool {
     tool
 }
 
+/// Long enough for a push behind a pre-push hook
+const RUN_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// A one-off command (git pull, commit, push) in the login shell at `cwd` with no terminal, so git neither prompts
+/// nor opens an editor. Its output, or the output as the error
+#[tauri::command]
+#[specta::specta]
+pub async fn run_command(cwd: String, command: String) -> Result<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let child = tokio::process::Command::new(shell)
+        .args(["-lc", &command])
+        .current_dir(&cwd)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_EDITOR", "true")
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    let out = tokio::time::timeout(RUN_TIMEOUT, child)
+        .await
+        .map_err(|_| format!("{command}: still running after 10 minutes, stopped"))?
+        .map_err(|e| e.to_string())?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+    .trim()
+    .to_string();
+    match (out.status.success(), text.is_empty()) {
+        (true, _) => Ok(text),
+        (false, true) => Err(format!("{command}: {}", out.status)),
+        (false, false) => Err(text),
+    }
+}
+
 /// Success and stdout + stderr, from the user's login shell so PATH matches the terminal sessions; None on timeout
 async fn in_login_shell(command: &str) -> Option<(bool, String)> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
