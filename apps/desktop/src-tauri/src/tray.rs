@@ -86,26 +86,28 @@ fn render(app: &AppHandle, settings: &Settings, state: &State) -> tauri::Result<
     tray.set_tooltip(Some(tooltip))
 }
 
-/// What sits next to the icon: a dot with the count of sessions that need you, then the chosen usage
+/// What sits next to the icon: a dot with the count of sessions that need you, then the chosen usage per agent
 fn title(settings: &Settings, state: &State) -> Option<String> {
-    let limits = (settings.features.usage)
-        .then(|| state.limits.claude.or(state.limits.codex))
-        .flatten();
     let percent = |window: Option<treeix_core::agents::limits::LimitWindow>| {
         window.map(|w| format!("{}%", w.used_percent.round()))
     };
-    let usage = limits.and_then(|l: AgentLimits| match settings.usage.tray {
+    let usage = |l: AgentLimits| match settings.usage.tray {
         TrayLabel::Weekly => percent(l.weekly),
         TrayLabel::FiveHour => percent(l.five_hour),
         // ponytail: rings as text, draw them into the icon if people want the picture
         TrayLabel::Rings => match (percent(l.five_hour), percent(l.weekly)) {
-            (Some(five), Some(week)) => Some(format!("{five} · {week}")),
+            (Some(five), Some(week)) => Some(format!("{five}·{week}")),
             (five, week) => five.or(week),
         },
         TrayLabel::Icon | TrayLabel::Off => None,
-    });
+    };
+    let agents = [("✳", state.limits.claude), ("⬡", state.limits.codex)];
+    let usages = agents
+        .into_iter()
+        .filter(|_| settings.features.usage)
+        .filter_map(|(mark, limits)| Some(format!("{mark} {}", usage(limits?)?)));
     let needs = (!state.needs.is_empty()).then(|| format!("● {}", state.needs.len()));
-    let parts: Vec<String> = [needs, usage].into_iter().flatten().collect();
+    let parts: Vec<String> = needs.into_iter().chain(usages).collect();
     (!parts.is_empty()).then(|| parts.join("  "))
 }
 
@@ -193,7 +195,11 @@ mod tests {
                     weekly: window(41.6),
                     updated_at: None,
                 }),
-                codex: None,
+                codex: Some(AgentLimits {
+                    five_hour: None,
+                    weekly: window(3.0),
+                    updated_at: None,
+                }),
             },
         }
     }
@@ -204,11 +210,11 @@ mod tests {
         assert_eq!(title(&settings, &state(0)), None);
         assert_eq!(title(&settings, &state(2)).as_deref(), Some("● 2"));
         settings.usage.tray = TrayLabel::Weekly;
-        assert_eq!(title(&settings, &state(0)).as_deref(), Some("42%"));
+        assert_eq!(title(&settings, &state(0)).as_deref(), Some("✳ 42%  ⬡ 3%"));
         settings.usage.tray = TrayLabel::Rings;
         assert_eq!(
             title(&settings, &state(1)).as_deref(),
-            Some("● 1  12% · 42%")
+            Some("● 1  ✳ 12%·42%  ⬡ 3%")
         );
         settings.features.usage = false;
         assert_eq!(title(&settings, &state(0)), None);
