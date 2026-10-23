@@ -40,6 +40,8 @@
 .fv-comment-glyph::before { content: "+"; width: 16px; height: 16px; border-radius: 4px; background: var(--primary); color: #fff; font: 600 13px/16px -apple-system, system-ui, sans-serif; text-align: center; }
 
 /* Comment cards and the draft, between the lines */
+/* Monaco paints its lines layer over the zones; lift the comment cards so they take clicks */
+.monaco-editor .lines-content > .view-zones { z-index: 1; }
 .fv-card { margin: 4px 16px 4px 4px; padding: 8px 6px 8px 10px; display: flex; gap: 8px; align-items: flex-start; border-radius: 8px; background: var(--popover); box-shadow: 0 0 0 1px var(--input); font: 12px/1.45 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--foreground); user-select: text; -webkit-user-select: text; max-width: 640px; }
 .fv-card > svg { margin-top: 2px; color: var(--primary); }
 .fv-text { white-space: pre-wrap; overflow-wrap: anywhere; }

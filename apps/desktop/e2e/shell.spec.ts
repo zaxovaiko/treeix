@@ -159,3 +159,17 @@ test('the quick terminal shortcut records the § key', async ({ page }) => {
   await expect(recorder).toHaveText('⌃§')
   await persisted(page, 'Control+IntlBackslash')
 })
+
+test('a line comment box takes clicks and typing, and the lines still take clicks', async ({ page }) => {
+  await open(page)
+  await page.keyboard.press('Meta+Shift+e')
+  await page.locator('.frow', { hasText: 'README.md' }).first().click()
+  const glyph = (await page.locator('.monaco-editor .margin-view-overlays > div').first().boundingBox())!
+  await page.mouse.click(glyph.x + 5, glyph.y + glyph.height / 2)
+  const note = page.getByPlaceholder('Note for the agent')
+  await note.click()
+  await page.keyboard.type('check this')
+  await expect(note).toHaveValue('check this')
+  await page.locator('.monaco-editor .view-line').last().click()
+  await expect(page.locator('.monaco-editor textarea.inputarea')).toBeFocused()
+})
