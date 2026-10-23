@@ -402,30 +402,18 @@ impl Session {
         }
     }
 
-    /// A shell becomes the agent it runs and back when it exits, Running again as a shell
+    /// A shell becomes the agent it runs and back when it exits
     fn set_kind(&self, daemon: &Daemon, kind: SessionKind) {
-        use SessionStatus::*;
         let mut info = lock(&self.info);
         if info.kind == kind {
             return;
         }
         info.kind = kind;
-        let resumed =
-            kind == SessionKind::Shell && matches!(info.status, Needs | Done | Idle | Watching);
-        if resumed {
-            info.status = Running;
-        }
         drop(info);
         daemon.broadcast(Event::Kind {
             session: self.id.clone(),
             kind,
         });
-        if resumed {
-            daemon.broadcast(Event::Status {
-                session: self.id.clone(),
-                status: Running,
-            });
-        }
     }
 
     fn set_cwd(&self, daemon: &Daemon, cwd: String) {
@@ -646,18 +634,17 @@ impl Session {
         Some(pid)
     }
 
-    /// Follows the foreground process: its cwd, the agent a shell runs, and its name as the title when nothing set one
+    /// Follows the foreground process: its cwd, the agent a shell runs or whether it is busy, and its name as the
+    /// title when nothing set one
     pub fn poll_foreground(&self, daemon: &Daemon) {
-        let foreground = {
+        let (foreground, pid) = {
             let process = lock(&self.process);
             let Some(process) = process.as_ref() else {
                 return;
             };
-            process
-                .master
-                .process_group_leader()
-                .filter(|&g| g > 0)
-                .unwrap_or(process.pid as i32)
+            let pid = process.pid as i32;
+            let leader = process.master.process_group_leader();
+            (leader.filter(|&g| g > 0).unwrap_or(pid), pid)
         };
         if let Some(cwd) = procinfo::cwd(foreground) {
             self.set_cwd(daemon, cwd);
@@ -669,6 +656,17 @@ impl Session {
                 _ => SessionKind::Shell,
             };
             self.set_kind(daemon, kind);
+            if kind == SessionKind::Shell {
+                // An interactive shell owns the terminal only at its prompt; one running a command has no job
+                // control to tell, so it stays Running
+                let idle = foreground == pid && lock(&self.info).command.is_empty();
+                let status = if idle {
+                    SessionStatus::Idle
+                } else {
+                    SessionStatus::Running
+                };
+                self.set_live_status(daemon, status, kind);
+            }
         }
         if !self.has_title.load(Ordering::Relaxed)
             && let Some(name) = procinfo::name(foreground)
@@ -719,15 +717,16 @@ impl Session {
         info.pid = None;
     }
 
-    /// An agent status from the hook watcher; only while the process runs, its status is an agent one and it is
-    /// still an agent, so neither an exit nor a shell back at its prompt is overwritten
-    pub fn set_agent_status(&self, daemon: &Daemon, status: SessionStatus) {
+    /// A status read off a running session (an agent's hooks or screen, a shell's foreground process) for `kind`;
+    /// only while the process runs, its status is a live one and it still is that kind, so neither an exit nor an
+    /// agent's status after it handed the terminal back to its shell is overwritten
+    pub fn set_live_status(&self, daemon: &Daemon, status: SessionStatus, kind: SessionKind) {
         use SessionStatus::*;
         let mut info = lock(&self.info);
         if info.status == status
+            || info.kind != kind
             || !self.is_live()
             || !matches!(info.status, Running | Needs | Done | Idle | Watching)
-            || info.kind == SessionKind::Shell
         {
             return;
         }

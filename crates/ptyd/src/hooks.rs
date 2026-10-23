@@ -173,7 +173,7 @@ pub fn watch(daemon: &Arc<Daemon>) {
                 let kind = session.info().kind;
                 if matches!(kind, SessionKind::Claude | SessionKind::Codex) && session.is_live() {
                     let seen = seen.entry(session.id.clone()).or_default();
-                    poll(&daemon, &session, &dir, seen);
+                    poll(&daemon, &session, kind, &dir, seen);
                 } else {
                     // A shell back at its prompt starts fresh with its next agent
                     seen.remove(&session.id);
@@ -184,7 +184,13 @@ pub fn watch(daemon: &Arc<Daemon>) {
 }
 
 /// Only a launched Claude has the hooks (`--settings`); one started in a shell is read off its screen like Codex
-fn poll(daemon: &Daemon, session: &crate::session::Session, dir: &Path, seen: &mut Seen) {
+fn poll(
+    daemon: &Daemon,
+    session: &crate::session::Session,
+    kind: SessionKind,
+    dir: &Path,
+    seen: &mut Seen,
+) {
     let hooked = session.launched == SessionKind::Claude;
     if hooked {
         let usage = dir.join(format!("{USAGE_PREFIX}{}", session.id));
@@ -231,7 +237,7 @@ fn poll(daemon: &Daemon, session: &crate::session::Session, dir: &Path, seen: &m
         seen.worked = true;
     }
     let status = agent_status(session.info().status, state, finished);
-    session.set_agent_status(daemon, status);
+    session.set_live_status(daemon, status, kind);
 }
 
 #[cfg(test)]

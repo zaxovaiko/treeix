@@ -107,3 +107,35 @@ async fn a_shell_running_claude_turns_into_a_claude_session_until_it_exits() {
     }
     assert_eq!(kinds, [SessionKind::Claude, SessionKind::Shell]);
 }
+
+#[tokio::test]
+async fn an_interactive_shell_is_idle_at_its_prompt_and_running_a_command() {
+    let dir = tempfile::tempdir().unwrap();
+    let _server = treeix_ptyd::spawn_in_process(dir.path().into());
+    let mut client = Client::connect(&dir.path().join("ptyd.sock"))
+        .await
+        .expect("connect");
+    let Response::Created(info) = client
+        .request(Request::Create(CreateSession {
+            command: vec![],
+            ..match create(SessionKind::Shell, "") {
+                Request::Create(create) => create,
+                _ => unreachable!(),
+            }
+        }))
+        .await
+        .unwrap()
+    else {
+        panic!("not created");
+    };
+    wait_for_status(&mut client, &info.id, SessionStatus::Idle).await;
+    client
+        .request(Request::Write {
+            session: info.id.clone(),
+            data: b"sleep 4\r".to_vec(),
+        })
+        .await
+        .unwrap();
+    wait_for_status(&mut client, &info.id, SessionStatus::Running).await;
+    wait_for_status(&mut client, &info.id, SessionStatus::Idle).await;
+}
