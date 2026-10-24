@@ -110,6 +110,20 @@ test('live count: only panes in tabs with a running process, so not the quick te
   expect(liveCount(s.tabs, sessions)).toBe(2)
 })
 
+test('an agent started in the quick terminal gets a tab, its plain shell does not', () => {
+  const shell = restore({ ...initialUi, quick: 'q' }, [info('a'), info('q')])
+  expect(shell.tabs.flatMap((t) => leaves(t.root))).toEqual(['a'])
+  const agent = restore({ ...initialUi, quick: 'q' }, [info('a'), { ...info('q'), kind: 'claude' }])
+  expect(agent.tabs.flatMap((t) => leaves(t.root))).toEqual(['a', 'q'])
+})
+
+test('a background open adds the tab and keeps the active one', () => {
+  const s = restore(initialUi, [info('a')])
+  const next = reducer(s, { type: 'open', session: 'b', tabId: 'tb', background: true })
+  expect(next.tabs.map((t) => t.id)).toContain('tb')
+  expect(next.active).toBe(s.active)
+})
+
 test('zoom steps by 10% and stays between 50% and 200%', () => {
   expect(zoomed(1, 1)).toBe(1.1)
   expect(zoomed(0.7, -1)).toBe(0.6)

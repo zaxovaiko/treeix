@@ -126,7 +126,8 @@ export const newTabId = () => `t${Date.now().toString(36)}${(lastId++).toString(
 
 export type Action =
   | { type: 'load'; ui: UiState }
-  | { type: 'open'; session: string; tabId: string }
+  /** `background`: the tab is added without switching to it */
+  | { type: 'open'; session: string; tabId: string; background?: boolean }
   | { type: 'split'; session: string; dir: SplitDir; place?: string }
   | { type: 'remove'; session: string }
   | { type: 'focus'; session: string }
@@ -146,7 +147,7 @@ export function reducer(state: UiState, action: Action): UiState {
     case 'open': {
       const rest = withoutSession(state, action.session)
       const tab: Tab = { id: action.tabId, root: { type: 'pane', session: action.session }, focus: action.session }
-      return { ...rest, tabs: [...rest.tabs, tab], active: tab.id }
+      return { ...rest, tabs: [...rest.tabs, tab], active: action.background && rest.active ? rest.active : tab.id }
     }
     case 'split': {
       const rest = withoutSession(state, action.session)
@@ -205,7 +206,7 @@ export function parseUi(json: string | null): UiState {
 
 /**
  * Reconciles the saved layout with the daemon's sessions: panes whose session is gone drop out, live sessions
- * without a tab get their own. The quick terminal's session belongs to its own window
+ * without a tab get their own. The quick terminal's shell belongs to its own window, until an agent runs in it
  */
 /** `kept`: leaves that aren't sessions but still exist, like open chats */
 export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] = []): UiState {
@@ -215,7 +216,7 @@ export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] 
     if (!live.has(session)) state = withoutSession(state, session)
   }
   const shown = new Set(state.tabs.flatMap((t) => leaves(t.root)))
-  const orphans = sessions.filter((s) => !shown.has(s.id) && s.id !== saved.quick).sort((a, b) => a.createdAt - b.createdAt)
+  const orphans = sessions.filter((s) => !shown.has(s.id) && (s.id !== saved.quick || s.kind === 'claude' || s.kind === 'codex')).sort((a, b) => a.createdAt - b.createdAt)
   const tabs = [...state.tabs, ...orphans.map((s, i): Tab => ({ id: `t${s.id}-${i}`, root: { type: 'pane', session: s.id }, focus: s.id }))]
   const active = tabs.some((t) => t.id === state.active) ? state.active : (tabs[0]?.id ?? null)
   return { ...state, tabs, active }

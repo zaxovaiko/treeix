@@ -132,7 +132,10 @@ export function Shell({ api }: { api: Api }) {
       case 'cwd':
         return patch(e.session, { cwd: e.cwd })
       case 'kind':
-        return patch(e.session, { kind: e.kind })
+        patch(e.session, { kind: e.kind })
+        // An agent started in a shell this window has no tab for (the quick terminal's) joins the sidebar
+        if ((e.kind === 'claude' || e.kind === 'codex') && !ui.tabs.some((tab) => leaves(tab.root).includes(e.session))) dispatch({ type: 'open', session: e.session, tabId: newTabId(), background: true })
+        return
       case 'exit':
         patch(e.session, { status: 'exited', exitCode: e.code })
         // A clean shell exit closes its pane; a failed one stays to show why. Closed panes are forgotten either way
