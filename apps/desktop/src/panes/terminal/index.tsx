@@ -162,6 +162,9 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
   })
   term.onBinary((data) => hooks.gone() || send(Uint8Array.from(data, (char) => char.charCodeAt(0))))
   term.onResize(({ cols, rows }) => void api.resize(sessionId, cols, rows))
+  // A session shown in two windows (an agent in the quick terminal and the main one) takes the grid of the one in use
+  const claimGrid = (): void => void (attachment && api.resize(sessionId, term.cols, term.rows))
+  window.addEventListener('focus', claimGrid)
   term.onSelectionChange(() => {
     if (settingsNow()?.terminal.copyOnSelect && term.hasSelection()) void copyText(term.getSelection())
   })
@@ -251,6 +254,7 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
       observer.disconnect()
       themeObserver.disconnect()
       window.removeEventListener('treeix-theme', restyle)
+      window.removeEventListener('focus', claimGrid)
       void stopDrop?.then((stop) => stop())
       acks.flush()
       void attachment?.detach()
