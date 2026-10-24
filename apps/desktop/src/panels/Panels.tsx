@@ -108,9 +108,12 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
     return () => window.removeEventListener('keydown', handler, true)
   }, [])
 
+  // Only the focused project's PRs; a place outside any repo shows them all
+  const ofProject = (repoPath: string) => !place.repoRoot || repoPath === place.repoRoot
+  const prList = prs.list.filter((pr) => ofProject(pr.repoPath))
   const userOf = (pr: PullRequest) => prs.providers.find((p) => p.provider === pr.provider)?.user ?? null
-  const badges: Partial<Record<PanelId, number>> = { changes: status?.changes.length ?? 0, prs: prs.list.filter((pr) => needsYou(pr, userOf(pr))).length }
-  const data: PrData = { ...prs, refresh: refreshPrs }
+  const badges: Partial<Record<PanelId, number>> = { changes: status?.changes.length ?? 0, prs: prList.filter((pr) => needsYou(pr, userOf(pr))).length }
+  const data: PrData = { ...prs, list: prList, errors: prs.errors.filter((e) => ofProject(e.repoPath)), refresh: refreshPrs }
   const openPanel = (id: PanelId) => dispatch({ type: 'set', patch: { panel: id } })
 
   const bar = (
@@ -133,7 +136,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const panel = (
     <aside className="card rpanel" key="panel" style={{ width: ui.panelWidth }}>
       {shown === 'explorer' && <Explorer key={root} view={view} place={place} status={status} tick={tick} />}
-      {shown === 'changes' && <Changes key={root} view={view} place={place} status={status} tick={tick} prs={prs.list} onPanel={openPanel} />}
+      {shown === 'changes' && <Changes key={root} view={view} place={place} status={status} tick={tick} prs={prList} onPanel={openPanel} />}
       {shown === 'prs' && <Prs view={view} data={data} />}
       {shown === 'history' && <History view={view} place={place} />}
       {shown === 'tickets' && <Tickets view={view} data={tickets} refresh={tickets.refresh} repo={place.repoRoot} />}
