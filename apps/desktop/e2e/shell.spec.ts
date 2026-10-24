@@ -52,6 +52,27 @@ test('Shift+Cmd+T reopens the last closed tab, an agent with its conversation', 
   await expect(activeRow(page)).toContainText(/claude/i)
 })
 
+test('a folder and its branch fold on their own, and the folder color reaches its branches', async ({ page }) => {
+  await open(page)
+  const folder = page.locator('.side .repo', { hasText: 'treeix' })
+  const branch = page.locator('.side .wt', { hasText: 'main' }).first()
+  const rows = await tabRows(page).count()
+  await branch.click()
+  await expect(folder).toBeVisible()
+  const folded = await tabRows(page).count()
+  expect(folded).toBeLessThan(rows)
+  const branches = page.locator('.side .wt')
+  const all = await branches.count()
+  await folder.click()
+  await expect(branches).not.toHaveCount(all)
+  await folder.click()
+  await expect(branches).toHaveCount(all)
+  await expect(tabRows(page)).toHaveCount(folded)
+  await folder.click({ button: 'right' })
+  await page.getByRole('button', { name: 'Rose', exact: true }).click()
+  await expect(branch).toHaveAttribute('style', /#f43f5e/)
+})
+
 /** Visible panes left to right, then top to bottom */
 async function layout(page: Page) {
   const boxes = await Promise.all((await panes(page).all()).map(async (pane) => ({ pane, box: (await pane.boundingBox())! })))

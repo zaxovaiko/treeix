@@ -5,7 +5,7 @@ import { RoutineClock, RoutinesHost } from '../features/routines'
 import { VoiceTitleItems } from '../features/voice'
 import type { Api, Place, ProgressState } from '../ipc/api'
 import { Icon } from '../lib/icons'
-import { DOT_LABEL, GROUP_COLORS, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
+import { DOT_LABEL, GROUP_COLORS, groupColorKey, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
 import { keyHint, withHint } from './shortcuts'
 import { leaves, placeLabel, SIDEBAR, type Group, type PlaceTabs, type Tab } from './state'
 import type { ShellView } from './Shell'
@@ -186,13 +186,19 @@ function PlaceRows({ view, entry }: ViewProps & { entry: PlaceTabs }) {
 }
 
 function GroupRows({ view, group }: ViewProps & { group: Group }) {
-  const closed = view.ui.collapsed.includes(group.key)
+  // Its own key: the main checkout's place has the group's, and folds on its own
+  const key = groupColorKey(group.key)
+  const closed = view.ui.collapsed.includes(key)
   const first = group.places[0].place
-  const toggle = () => view.dispatch({ type: 'toggleCollapsed', key: group.key })
+  const toggle = () => view.dispatch({ type: 'toggleCollapsed', key })
+  const [menu, openMenu] = useColorMenu(view)
+  const color = view.ui.colors[key]
+  const row = { onClick: toggle, onContextMenu: openMenu(key), style: color ? { '--c': color } : undefined, className: `repo ${color ? 'tinted' : ''}` }
   if (first.repoRoot)
     return (
       <>
-        <div className="repo" onClick={toggle}>
+        {menu}
+        <div {...row} title="Right-click for a color">
           <Chev closed={closed} />
           <Icon name={closed ? 'folder' : 'folderOpen'} />
           <span className="grow trunc">{first.repoName}</span>
@@ -203,7 +209,8 @@ function GroupRows({ view, group }: ViewProps & { group: Group }) {
   const tabs = group.places.flatMap((p) => p.tabs)
   return (
     <>
-      <div className="repo" onClick={toggle} title={tilde(first.path, view.home)}>
+      {menu}
+      <div {...row} title={`${tilde(first.path, view.home)}. Right-click for a color`}>
         <Chev closed={closed} />
         <Icon name={first.kind === 'scratch' ? 'home' : closed ? 'folder' : 'folderOpen'} />
         <span className="grow trunc">{first.kind === 'scratch' ? '~' : first.name}</span>

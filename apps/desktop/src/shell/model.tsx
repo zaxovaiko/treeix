@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import type { Place, SessionInfo, SessionKind, SessionStatus } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
-import { leaves, type Tab } from './state'
+import { groupKey, leaves, type Tab } from './state'
 import { isChatLeaf, leafChat } from '../panes/chat/open'
 import { getChat, titleOf } from '../panes/chat/store'
 
@@ -77,9 +77,13 @@ const COLORS = GROUP_COLORS.slice(1).map(([, color]) => color)
 /** Hand-picked group colors (`UiState.colors`) for components without the view */
 export const GroupColors = createContext<Record<string, string>>({})
 
-/** The picked color, else stable per place: checkouts on the base folder are slate, worktrees get a color from their path */
+/** Where a folder group's picked color lives in `UiState.colors`, apart from its main checkout's, which shares the key */
+export const groupColorKey = (key: string) => `group:${key}`
+
+/** The place's picked color, else its group's, else stable per place: checkouts on the base folder are slate, worktrees get a color from their path */
 export function placeColor(place: Place, colors: Record<string, string> = {}): string {
-  if (colors[place.key]) return colors[place.key]
+  const picked = colors[place.key] ?? colors[groupColorKey(groupKey(place))]
+  if (picked) return picked
   if (place.kind === 'root' || place.kind === 'git') return '#64748b'
   if (place.kind === 'folder' || place.kind === 'scratch') return '#94a3b8'
   let hash = 0
