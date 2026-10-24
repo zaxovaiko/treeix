@@ -8,28 +8,30 @@ export type Keymap = Partial<Record<string, string>>
 
 type Keys = Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'shiftKey' | 'altKey' | 'ctrlKey'>
 
+/** In the order Settings lists them, under their group's title */
 export const ACTIONS = [
-  ['new-shell', 'New shell'],
-  ['new-claude', 'New Claude'],
-  ['new-codex', 'New Codex'],
-  ['open-folder', 'Open folder'],
-  ['split-right', 'Split right'],
-  ['split-down', 'Split down'],
-  ['close-pane', 'Close pane'],
-  ['next-tab', 'Next tab'],
-  ['prev-tab', 'Previous tab'],
-  ['palette', 'Command palette'],
-  ['toggle-sidebar', 'Toggle sidebar'],
-  ['settings', 'Settings'],
-  ['toggle-tabs', 'Tabs on top or on the side'],
-  ['toggle-ui', 'Compact or Islands'],
-  ['toggle-theme', 'Light or dark'],
-  ['module-graph', 'Module graph'],
-  ['record', 'Record a meeting'],
-  ['zoom-in', 'Zoom in'],
-  ['zoom-out', 'Zoom out'],
-  ['zoom-reset', 'Actual size'],
-] as const satisfies readonly (readonly [CommandId, string])[]
+  ['new-shell', 'New shell', 'Sessions'],
+  ['new-claude', 'New Claude', 'Sessions'],
+  ['new-codex', 'New Codex', 'Sessions'],
+  ['open-folder', 'Open folder', 'Sessions'],
+  ['record', 'Record a meeting', 'Sessions'],
+  ['close-pane', 'Close pane', 'Tabs and panes'],
+  ['reopen-tab', 'Reopen closed tab', 'Tabs and panes'],
+  ['split-right', 'Split right', 'Tabs and panes'],
+  ['split-down', 'Split down', 'Tabs and panes'],
+  ['next-tab', 'Next tab', 'Tabs and panes'],
+  ['prev-tab', 'Previous tab', 'Tabs and panes'],
+  ['palette', 'Command palette', 'Navigation'],
+  ['toggle-sidebar', 'Toggle sidebar', 'Navigation'],
+  ['module-graph', 'Module graph', 'Navigation'],
+  ['settings', 'Settings', 'Navigation'],
+  ['toggle-tabs', 'Tabs on top or on the side', 'Appearance'],
+  ['toggle-ui', 'Compact or Islands', 'Appearance'],
+  ['toggle-theme', 'Light or dark', 'Appearance'],
+  ['zoom-in', 'Zoom in', 'Appearance'],
+  ['zoom-out', 'Zoom out', 'Appearance'],
+  ['zoom-reset', 'Actual size', 'Appearance'],
+] as const satisfies readonly (readonly [CommandId, string, string])[]
 
 export type ActionId = (typeof ACTIONS)[number][0]
 

@@ -5,7 +5,7 @@ import { DOT_LABEL, Ki, tabDot, tabKind, tabTitle, type TabKind } from '../shell
 import { placeLabel } from '../shell/state'
 import type { ShellView } from '../shell/Shell'
 import { RunMark } from '../features/routines'
-import { Head, openSession, PIcon } from './common'
+import { Head, PIcon, reopenSession } from './common'
 import { ago, dayLabel } from './logic'
 
 type Kind = 'all' | SessionRecord['kind']
@@ -73,15 +73,7 @@ export function History({ view, place }: { view: ShellView; place: Place }) {
   }
 
   const resume = async (r: SessionRecord, fork: boolean, cwd: string) => {
-    const command =
-      r.agentSession && r.kind === 'claude'
-        ? ['claude', '--resume', r.agentSession, ...(fork ? ['--fork-session'] : [])]
-        : r.agentSession && r.kind === 'codex'
-          ? ['codex', 'resume', r.agentSession]
-          : r.kind === 'shell' && r.command.length
-            ? r.command
-            : undefined
-    await openSession(view, { kind: r.kind, cwd, command, title: fork ? `Fork: ${r.title}` : r.title })
+    await reopenSession(view, r, cwd, fork)
     if (fork) return
     await api.forgetSession(r.id)
     setRecords((all) => all.filter((x) => x.id !== r.id))

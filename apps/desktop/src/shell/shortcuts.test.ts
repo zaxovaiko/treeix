@@ -23,6 +23,7 @@ test('maps the macOS shell shortcuts', () => {
   expect(mac(key('ArrowLeft', { alt: true }))).toBe('focus-left')
   expect(mac(key('\\', {}, 'Backslash'))).toBe('toggle-sidebar')
   expect(mac(key('P', { shift: true }))).toBe('palette')
+  expect(mac(key('T', { shift: true }))).toBe('reopen-tab')
 })
 
 test('macOS leaves other keys to the terminal', () => {
@@ -77,6 +78,7 @@ test('menu chords: only what src-tauri/src/menu.rs binds, and only on macOS', ()
   expect(menuChord(key('\\', {}, 'Backslash'), {}, true)).toBe(true)
   expect(menuChord(key(',', {}, 'Comma'), {}, true)).toBe(true)
   expect(menuChord(key('P', { shift: true }, 'KeyP'), {}, true)).toBe(true)
+  expect(menuChord(key('T', { shift: true }, 'KeyT'), {}, true)).toBe(true)
   expect(menuChord(key('k', {}, 'KeyK'), {}, true)).toBe(false)
   expect(menuChord(key('t', {}, 'KeyT'), {}, true)).toBe(false)
   expect(menuChord(key(',', {}, 'Comma'), {}, false)).toBe(false)

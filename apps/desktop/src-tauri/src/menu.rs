@@ -71,6 +71,11 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         )?)
         .separator()
         .item(&item("close-pane", "Close Pane", None)?)
+        .item(&item(
+            "reopen-tab",
+            "Reopen Closed Tab",
+            Some("CmdOrCtrl+Shift+T"),
+        )?)
         .build()?;
     // Predefined items so WKWebView gets the native clipboard and undo shortcuts
     let edit = SubmenuBuilder::new(app, "Edit")

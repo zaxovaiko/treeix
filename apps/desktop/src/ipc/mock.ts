@@ -312,7 +312,12 @@ export function mockApi(): Api {
       if (sim) exit(sim, null)
     },
     async remove(id) {
-      if (!sims.delete(id)) return
+      const sim = sims.get(id)
+      if (!sim || !sims.delete(id)) return
+      // Like ptyd: a closed session lands in the history
+      const { kind, title, cwd, command, createdAt, agentSession } = sim.info
+      if (kind === 'shell' || kind === 'claude' || kind === 'codex')
+        records = [{ id, kind, title, cwd, branch: null, repoRoot: null, agentSession, command, createdAt, closedAt: Date.now(), messages: null, cost: null, firstPrompt: null }, ...records]
       fire({ type: 'removed', session: id })
     },
     async restart(id) {
@@ -610,6 +615,9 @@ const RECORDS: SessionRecord[] = (
   }
 })
 
+/** Closed sessions, shared by the session calls that add to them and the History calls that read them */
+let records = [...RECORDS]
+
 const FILE_LOG: [string, string, number, string][] = [
   ['a41c9e2', 'You', 2, 'feat(terminal): blocks keep their exit status'],
   ['9c1e2d4', 'Claude', 24, 'fix: flush before exit'],
@@ -671,7 +679,6 @@ function phase3(): Phase3 {
   const placeWatchers = new Map<string, Set<(change: FsChange) => void>>()
   const fileWatchers = new Map<string, Set<() => void>>()
   const prs = PRS.map((pr) => ({ ...pr }))
-  let records = [...RECORDS]
 
   const checkoutOf = (path: string) => CHECKOUTS.filter((c) => path === c.path || path.startsWith(`${c.path}/`)).sort((a, b) => b.path.length - a.path.length)[0]
   const stateOf = (root: string) => (STATE[root] ??= checkoutState({}))

@@ -1,10 +1,11 @@
 import { useContext, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import type { CreateSession, Place } from '../ipc/api'
+import type { CreateSession, Place, SessionRecord } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
 import { paneGrid } from '../panes/terminal/xterm'
 import { newTabId } from '../shell/state'
 import { GroupColors, placeColor, placeIcon, placeName } from '../shell/model'
 import type { ShellView } from '../shell/Shell'
+import { resumeCommand } from './logic'
 
 // Line icons only the panels use, same 24px stroke style as lib/icons
 const PANEL_ICONS = {
@@ -134,6 +135,10 @@ export async function openSession(view: ShellView, opts: Omit<CreateSession, 'co
   view.dispatch({ type: 'open', session: info.id, tabId: newTabId() })
   return info
 }
+
+/** A closed session back in a new tab (`resumeCommand`) */
+export const reopenSession = (view: ShellView, r: SessionRecord, cwd = r.cwd, fork = false) =>
+  openSession(view, { kind: r.kind, cwd, command: resumeCommand(r, fork), title: fork ? `Fork: ${r.title}` : r.title })
 
 /** Types a command into a new shell in `cwd`, like the prototype's runIn: the user sees it run and can answer prompts */
 export async function runIn(view: ShellView, cwd: string, command: string) {

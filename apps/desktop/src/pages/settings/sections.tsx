@@ -174,6 +174,7 @@ const ACTION_ICON: Record<ActionId, IconName> = {
   'split-right': 'split',
   'split-down': 'splitDown',
   'close-pane': 'x',
+  'reopen-tab': 'clock',
   'next-tab': 'right',
   'prev-tab': 'left',
   palette: 'search',
@@ -194,25 +195,27 @@ function Keys({ settings, update }: SectionProps) {
   const defaults = defaultKeys()
   return (
     <>
-      <Group>
-        {ACTIONS.map(([id, label]) => {
-          const accel = keyFor(id, keys)
-          const clash = conflict(id, accel, keys)
-          return (
-            <Row key={id} label={label} icon={<Icon name={ACTION_ICON[id]} className="kico" />} desc={clash ? <span className="warn">{clash}</span> : undefined} keywords="shortcut keys">
-              <Recorder
-                label={label}
-                value={accel}
-                onChange={(next) => {
-                  // The default again drops the override, so a later change to the default reaches it
-                  const value = next ?? ''
-                  update({ keys: { ...withoutKey(keys, id), ...(value === (defaults[id] ?? '') ? {} : { [id]: value }) } })
-                }}
-              />
-            </Row>
-          )
-        })}
-      </Group>
+      {[...new Set(ACTIONS.map(([, , group]) => group))].map((group) => (
+        <Group key={group} title={group}>
+          {ACTIONS.filter((action) => action[2] === group).map(([id, label]) => {
+            const accel = keyFor(id, keys)
+            const clash = conflict(id, accel, keys)
+            return (
+              <Row key={id} label={label} icon={<Icon name={ACTION_ICON[id]} className="kico" />} desc={clash ? <span className="warn">{clash}</span> : undefined} keywords="shortcut keys">
+                <Recorder
+                  label={label}
+                  value={accel}
+                  onChange={(next) => {
+                    // The default again drops the override, so a later change to the default reaches it
+                    const value = next ?? ''
+                    update({ keys: { ...withoutKey(keys, id), ...(value === (defaults[id] ?? '') ? {} : { [id]: value }) } })
+                  }}
+                />
+              </Row>
+            )
+          })}
+        </Group>
+      ))}
       <Group>
         <Row label="Reset all shortcuts" keywords="shortcut keys default">
           <button className="btn sm" disabled={!Object.keys(keys).length} onClick={() => update({ keys: {} })}>

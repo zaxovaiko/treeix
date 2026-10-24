@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import type { PullRequest } from '../ipc/api'
-import { ago, ciText, dayLabel, isIgnored, needsYou, parseHunks } from './logic'
+import type { PullRequest, SessionRecord } from '../ipc/api'
+import { ago, ciText, dayLabel, isIgnored, needsYou, parseHunks, resumeCommand } from './logic'
 
 test('parseHunks numbers old and new lines', () => {
   const patch = ['diff --git a/x b/x', '--- a/x', '+++ b/x', '@@ -2,3 +2,3 @@ fn', ' a', '-b', '+c', ' d', '\\ No newline at end of file', '@@ -10 +10,2 @@', '+e', ' f'].join('\n')
@@ -50,4 +50,13 @@ test('needsYou: review requested, or mine with failing CI, only while open', () 
   expect(needsYou(pr({ author: 'me', pipeline: failed, state: 'merged' }), 'me')).toBe(false)
   expect(ciText({ status: 'running', done: 2, total: 5, url: '' })).toBe('CI 2/5')
   expect(ciText(null)).toBe('No CI')
+})
+
+test('resumeCommand resumes agents by their session and reruns shells', () => {
+  const r: SessionRecord = { id: 's', kind: 'claude', title: '', cwd: '/', branch: null, repoRoot: null, agentSession: 'abc', command: ['claude'], createdAt: 0, closedAt: 0, messages: null, cost: null, firstPrompt: null }
+  expect(resumeCommand(r)).toEqual(['claude', '--resume', 'abc'])
+  expect(resumeCommand(r, true)).toEqual(['claude', '--resume', 'abc', '--fork-session'])
+  expect(resumeCommand({ ...r, kind: 'codex' })).toEqual(['codex', 'resume', 'abc'])
+  expect(resumeCommand({ ...r, agentSession: null })).toBeUndefined()
+  expect(resumeCommand({ ...r, kind: 'shell', agentSession: null, command: ['htop'] })).toEqual(['htop'])
 })

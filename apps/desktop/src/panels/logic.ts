@@ -1,4 +1,4 @@
-import type { ChangeStatus, PullRequest } from '../ipc/api'
+import type { ChangeStatus, PullRequest, SessionRecord } from '../ipc/api'
 
 /** VS Code's letters: U is untracked, ! a conflict */
 export const STATUS_LETTER: Record<ChangeStatus, string> = { added: 'A', modified: 'M', renamed: 'R', deleted: 'D', untracked: 'U', conflicted: '!' }
@@ -74,4 +74,11 @@ export const needsYou = (pr: PullRequest, user: string | null) =>
 export function ciText(pipeline: PullRequest['pipeline']): string {
   if (!pipeline) return 'No CI'
   return pipeline.status === 'running' ? `CI ${pipeline.done}/${pipeline.total}` : `CI ${pipeline.status}`
+}
+
+/** What brings a closed session back: an agent resumes its conversation (forked: a copy), a shell reruns its command */
+export function resumeCommand(r: SessionRecord, fork = false): string[] | undefined {
+  if (r.agentSession && r.kind === 'claude') return ['claude', '--resume', r.agentSession, ...(fork ? ['--fork-session'] : [])]
+  if (r.agentSession && r.kind === 'codex') return ['codex', 'resume', r.agentSession]
+  return r.kind === 'shell' && r.command.length ? r.command : undefined
 }

@@ -9,6 +9,7 @@ export type CommandId =
   | 'split-right'
   | 'split-down'
   | 'close-pane'
+  | 'reopen-tab'
   | 'next-tab'
   | 'prev-tab'
   | 'palette'
@@ -25,7 +26,7 @@ export type CommandId =
   | `tab-${number}`
   | `focus-${Direction}`
 
-const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme', 'module-graph', 'record', 'zoom-in', 'zoom-out', 'zoom-reset'])
+const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'reopen-tab', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme', 'module-graph', 'record', 'zoom-in', 'zoom-out', 'zoom-reset'])
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
@@ -40,6 +41,7 @@ const MENU_KEYS: Record<string, string> = {
   'open-folder': 'Super+KeyO',
   record: 'Shift+Super+KeyR',
   'close-pane': '',
+  'reopen-tab': 'Shift+Super+KeyT',
   palette: 'Shift+Super+KeyP',
   'toggle-sidebar': 'Super+Backslash',
   'module-graph': 'Shift+Super+KeyG',
@@ -91,6 +93,7 @@ function macShortcut(e: Keys): CommandId | null {
     if (key === 'p') return 'palette'
     if (key === 'g') return 'module-graph'
     if (key === 'r') return 'record'
+    if (key === 't') return 'reopen-tab'
     return null
   }
   if (/^[1-9]$/.test(e.key)) return `tab-${Number(e.key)}`
@@ -119,6 +122,7 @@ const MAC_HINTS: Partial<Record<CommandId, string>> = {
   'split-right': '⌘D',
   'split-down': '⇧⌘D',
   'close-pane': '⌘W',
+  'reopen-tab': '⇧⌘T',
   palette: '⌘K',
   'toggle-sidebar': '⌘\\',
   settings: '⌘,',

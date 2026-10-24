@@ -39,6 +39,19 @@ test('new shell opens a tab that runs what is typed', async ({ page }) => {
   await expect(activeRow(page)).toContainText('echo hi')
 })
 
+test('Shift+Cmd+T reopens the last closed tab, an agent with its conversation', async ({ page }) => {
+  await open(page)
+  const start = await tabRows(page).count()
+  await page.keyboard.press('Meta+Shift+c')
+  await expect(tabRows(page)).toHaveCount(start + 1)
+  const before = start + 1
+  await page.keyboard.press('Meta+w')
+  await expect(tabRows(page)).toHaveCount(before - 1)
+  await page.keyboard.press('Meta+Shift+t')
+  await expect(tabRows(page)).toHaveCount(before)
+  await expect(activeRow(page)).toContainText(/claude/i)
+})
+
 /** Visible panes left to right, then top to bottom */
 async function layout(page: Page) {
   const boxes = await Promise.all((await panes(page).all()).map(async (pane) => ({ pane, box: (await pane.boundingBox())! })))

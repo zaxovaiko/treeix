@@ -18,6 +18,7 @@ import { Palette } from './Palette'
 import { Dialogs, useDialogKeys, type DialogRequest } from '../dialogs'
 import { paneGrid } from '../panes/terminal/xterm'
 import { Panels } from '../panels/Panels'
+import { reopenSession } from '../panels/common'
 import { isFileLeaf, leafRoot, openFile } from '../panes/file/open'
 import { chatLeaf, isChatLeaf, leafChat } from '../panes/chat/open'
 import { getChat, initChats, useChatsVersion } from '../panes/chat/store'
@@ -237,6 +238,14 @@ export function Shell({ api }: { api: Api }) {
   }
   const closeTab = (tab: Tab) => leaves(tab.root).forEach(closePane)
 
+  /** The newest closed session, resumed where it ran; routine runs closed on their own and stay in History */
+  const reopenLast = async () => {
+    const [last] = (await api.sessionHistory()).filter((r) => !r.run).sort((a, b) => b.closedAt - a.closedAt)
+    if (!last) return
+    await reopenSession(view, last)
+    await api.forgetSession(last.id)
+  }
+
   const activateAt = (index: number) => {
     const tab = ordered[index]
     if (tab) dispatch({ type: 'activate', tabId: tab.id })
@@ -269,6 +278,9 @@ export function Shell({ api }: { api: Api }) {
         if (page) return setPage(null)
         if (activeTab) closePane(activeTab.focus)
         return
+      case 'reopen-tab':
+        setPage(null)
+        return void reopenLast().catch((e: unknown) => console.warn('reopen:', e))
       case 'next-tab':
         return cycle(1)
       case 'prev-tab':
