@@ -1,7 +1,6 @@
-import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs'
 import type { Branch, GitStatus, PullRequest, SearchMatch, Worktree } from '../ipc/api'
 
-// Pure helpers behind the dialogs: the branch picker and its live check, the Worktrees rows, Find in files grouping, history hunks
+// Pure helpers behind the dialogs: the branch picker and its live check, the Worktrees rows, Find in files grouping
 
 /** Where `addWorktree` puts a branch, relative to the repo (contract: `/` becomes `+`) */
 export const worktreeDir = (branch: string) => `.claude/worktrees/${branch.replaceAll('/', '+')}`
@@ -175,29 +174,3 @@ export const splitMatch = ({ text, column, length }: SearchMatch): [string, stri
 
 export const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 export const dirName = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf('/')))
-
-export type DiffRow = { kind: 'hunk' | 'add' | 'del' | 'ctx'; text: string }
-
-const strip = (line: string | undefined) => (line ?? '').replace(/\r?\n$/, '')
-
-function rowsOf(file: FileDiffMetadata): DiffRow[] {
-  const rows: DiffRow[] = []
-  for (const hunk of file.hunks) {
-    rows.push({ kind: 'hunk', text: strip(hunk.hunkSpecs) })
-    for (const part of hunk.hunkContent) {
-      if (part.type === 'context') {
-        for (let i = 0; i < part.lines; i++) rows.push({ kind: 'ctx', text: strip(file.additionLines[part.additionLineIndex + i]) })
-        continue
-      }
-      for (let i = 0; i < part.deletions; i++) rows.push({ kind: 'del', text: strip(file.deletionLines[part.deletionLineIndex + i]) })
-      for (let i = 0; i < part.additions; i++) rows.push({ kind: 'add', text: strip(file.additionLines[part.additionLineIndex + i]) })
-    }
-  }
-  return rows
-}
-
-/** Rows of a `diff --git` patch (a commit's change) */
-export const patchRows = (patch: string): DiffRow[] => (patch ? parsePatchFiles(patch).flatMap((p) => p.files.flatMap(rowsOf)) : [])
-
-/** Rows from one version to another (a local save vs the file now) */
-export const versionRows = (name: string, before: string, after: string): DiffRow[] => rowsOf(parseDiffFromFile({ name, contents: before }, { name, contents: after }))

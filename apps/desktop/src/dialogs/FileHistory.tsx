@@ -3,7 +3,8 @@ import type { Commit, HistoryEntry } from '../ipc/api'
 import type { ShellView } from '../shell/Shell'
 import { Glyph } from './icons'
 import { Modal } from './index'
-import { baseName, patchRows, versionRows, type DiffRow } from './logic'
+import type { DiffRow } from './diffRows'
+import { baseName } from './logic'
 
 type Version = { kind: 'save'; entry: HistoryEntry } | { kind: 'commit'; commit: Commit }
 
@@ -34,10 +35,11 @@ export function FileHistory({ view, root, file, onClose }: { view: ShellView; ro
     if (!version) return
     let cancelled = false
     setDiff(null)
-    const rows =
+    const rows = import('./diffRows').then(({ patchRows, versionRows }) =>
       version.kind === 'commit'
         ? api.commitDiff(root, version.commit.sha, file).then((patches) => patches.flatMap((p) => patchRows(p.patch)))
         : Promise.all([api.readHistory(root, file, version.entry.id), api.readFile(root, file)]).then(([saved, now]) => versionRows(file, saved, now ?? ''))
+    )
     void rows.then(
       (r) => !cancelled && setDiff(r),
       () => !cancelled && setDiff([])

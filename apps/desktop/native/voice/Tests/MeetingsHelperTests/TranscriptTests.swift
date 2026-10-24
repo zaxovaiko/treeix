@@ -1,5 +1,5 @@
 import Testing
-@testable import treeix_meetings
+@testable import MeetingsHelper
 
 private func timed(_ pieces: [(String, Double)]) -> [TimedToken] { pieces.map { TimedToken(text: $0.0, start: $0.1, end: $0.1 + 0.2) } }
 

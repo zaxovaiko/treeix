@@ -64,30 +64,41 @@ jobs:
           gh release edit "$TAG" --target "$GITHUB_SHA" --notes-file "$RUNNER_TEMP/notes.md" > /dev/null 2>&1 ||
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
-  # One universal app (Apple silicon and Intel), signed, notarized and stapled, as Treeix.dmg and the updater bundle
+  # One app per Mac architecture, signed, notarized and stapled, each a DMG and an updater bundle. Half the download
+  # of a universal app, and the Intel one leaves out the dictation helper, which needs Apple silicon
   macos:
     needs: version
     runs-on: macos-26
+    strategy:
+      matrix:
+        include:
+          # Treeix.dmg stays the Apple silicon one: the landing page's /download and older links point at it
+          - arch: aarch64
+            dmg: Treeix.dmg
+            config: '{"build":{"beforeBuildCommand":"bun run build"},"bundle":{"createUpdaterArtifacts":true}}'
+          - arch: x86_64
+            dmg: Treeix-x86_64.dmg
+            config: '{"build":{"beforeBuildCommand":"bun run build"},"bundle":{"createUpdaterArtifacts":true,"externalBin":["binaries/treeix-ptyd"]}}'
     env:
       TAG: ${{ needs.version.outputs.tag }}
       # The app and ptyd compare it to tell an older running daemon apart; Cargo's version never moves
       TREEIX_BUILD: ${{ needs.version.outputs.tag }}
-      TARGET: universal-apple-darwin
-    outputs:
-      sig: ${{ steps.upload.outputs.sig }}
+      ARCH: ${{ matrix.arch }}
+      TARGET: ${{ matrix.arch }}-apple-darwin
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Rust for both architectures
+      - name: Rust for ${{ matrix.arch }}
         run: |
           rustup toolchain install
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          rustup target add "$TARGET"
 
       # Saved even when a later step fails, so a broken run still warms the next one
       - uses: Swatinem/rust-cache@v2
         with:
+          key: ${{ matrix.arch }}
           cache-on-failure: true
 
       # tauri.conf.json takes its version from package.json; the bump lives only in this build
@@ -96,41 +107,31 @@ jobs:
       - run: bun install --frozen-lockfile
         working-directory: apps/desktop
 
-      # The dictation and meetings helpers (Swift, FluidAudio). A cold universal build takes minutes, so the
-      # binaries are reused until the Swift sources change. Saved right after the build, so a later failure keeps them
-      - uses: actions/cache/restore@v4
+      # The dictation and meetings helper (Swift, FluidAudio), Apple silicon only; the runner is one. A cold build
+      # takes minutes, so the binary is reused until the Swift sources change. Saved right after the build, so a
+      # later failure keeps it
+      - if: matrix.arch == 'aarch64'
+        uses: actions/cache/restore@v4
         id: voice
         with:
-          path: |
-            apps/desktop/src-tauri/binaries/treeix-voice-universal-apple-darwin
-            apps/desktop/src-tauri/binaries/treeix-meetings-universal-apple-darwin
-          key: voice-${{ hashFiles('apps/desktop/native/voice/Package.*', 'apps/desktop/native/voice/Sources/**') }}
-      - if: steps.voice.outputs.cache-hit != 'true'
+          path: apps/desktop/src-tauri/binaries/treeix-voice-aarch64-apple-darwin
+          key: voice-${{ hashFiles('apps/desktop/native/voice/Package.*', 'apps/desktop/native/voice/Sources/**', 'apps/desktop/scripts/build-voice.sh') }}
+      - if: matrix.arch == 'aarch64' && steps.voice.outputs.cache-hit != 'true'
         run: sh apps/desktop/scripts/build-voice.sh release
-      - if: steps.voice.outputs.cache-hit != 'true'
+      - if: matrix.arch == 'aarch64' && steps.voice.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: |
-            apps/desktop/src-tauri/binaries/treeix-voice-universal-apple-darwin
-            apps/desktop/src-tauri/binaries/treeix-meetings-universal-apple-darwin
+          path: apps/desktop/src-tauri/binaries/treeix-voice-aarch64-apple-darwin
           key: ${{ steps.voice.outputs.cache-primary-key }}
 
-      # tauri bundles externalBin as binaries/<name>-<target>; build-ptyd.sh builds the host arch only, and a
-      # universal app takes one fat binary. Built every release, never cached: it embeds TREEIX_BUILD, and a
-      # daemon reporting another build than the app's gets upgraded to itself in a loop
-      - name: Universal treeix-ptyd sidecar
+      # tauri bundles externalBin as binaries/<name>-<target>; build-ptyd.sh builds the host arch only. Built every
+      # release, never cached: it embeds TREEIX_BUILD, and a daemon reporting another build than the app's gets
+      # upgraded to itself in a loop
+      - name: treeix-ptyd sidecar
         run: |
-          for arch in aarch64 x86_64; do cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$arch-apple-darwin"; done
-          lipo -create -output "apps/desktop/src-tauri/binaries/treeix-ptyd-$TARGET" \
-            target/aarch64-apple-darwin/release/treeix-ptyd target/x86_64-apple-darwin/release/treeix-ptyd
-
-      # Each per-arch compile of the universal build checks for its own <name>-<arch> file
-      - name: Per-arch sidecar names
-        working-directory: apps/desktop/src-tauri/binaries
-        run: |
-          for name in treeix-ptyd treeix-voice treeix-meetings; do
-            for arch in aarch64 x86_64; do cp "$name-$TARGET" "$name-$arch-apple-darwin"; done
-          done
+          cargo build --release -p treeix-ptyd --bin treeix-ptyd --target "$TARGET"
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp "target/$TARGET/release/treeix-ptyd" "apps/desktop/src-tauri/binaries/treeix-ptyd-$TARGET"
 
       # Tauri signs with APPLE_SIGNING_IDENTITY and notarizes with the API key (its APPLE_API_KEY is the key id,
       # APPLE_API_KEY_PATH the .p8)
@@ -171,7 +172,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: bun run tauri build --target "$TARGET" --config '{"build":{"beforeBuildCommand":"bun run build"},"bundle":{"createUpdaterArtifacts":true}}'
+        run: bun run tauri build --target "$TARGET" --config '${{ matrix.config }}'
 
       - name: Verify the signatures
         run: |
@@ -190,16 +191,18 @@ jobs:
           xcrun stapler staple "$dmg"
           rm -f "$APPLE_API_KEY_PATH"
 
-      # Treeix.dmg is what the landing page's /download points at (vercel.json)
+      # The landing page's /download points at Treeix.dmg and /download/intel at Treeix-x86_64.dmg (vercel.json);
+      # publish reads the .sig into latest.json
       - name: Upload to the draft
-        id: upload
         env:
           GH_TOKEN: ${{ github.token }}
+          DMG: ${{ matrix.dmg }}
         working-directory: target/${{ env.TARGET }}/release/bundle
         run: |
-          cp dmg/*.dmg "$RUNNER_TEMP/Treeix.dmg"
-          gh release upload "$TAG" --clobber "$RUNNER_TEMP/Treeix.dmg" macos/Treeix.app.tar.gz macos/Treeix.app.tar.gz.sig
-          echo "sig=$(cat macos/Treeix.app.tar.gz.sig)" >> "$GITHUB_OUTPUT"
+          cp dmg/*.dmg "$RUNNER_TEMP/$DMG"
+          cp macos/Treeix.app.tar.gz "$RUNNER_TEMP/Treeix-$ARCH.app.tar.gz"
+          cp macos/Treeix.app.tar.gz.sig "$RUNNER_TEMP/Treeix-$ARCH.app.tar.gz.sig"
+          gh release upload "$TAG" --clobber "$RUNNER_TEMP/$DMG" "$RUNNER_TEMP/Treeix-$ARCH.app.tar.gz" "$RUNNER_TEMP/Treeix-$ARCH.app.tar.gz.sig"
 
   # The AppImage is also its own update: the updater swaps the file in place
   appimage:
@@ -261,21 +264,22 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.version.outputs.tag }}
-      MAC_SIG: ${{ needs.macos.outputs.sig }}
       LINUX_SIG: ${{ needs.appimage.outputs.sig }}
     steps:
-      # The feed tauri-plugin-updater reads from releases/latest/download/latest.json. The universal app serves
-      # both Mac architectures
+      # The feed tauri-plugin-updater reads from releases/latest/download/latest.json. Installed universal apps
+      # move to their own architecture's app on their next update
       - name: Upload latest.json
         run: |
           base="https://github.com/$GH_REPO/releases/download/$TAG"
           gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          gh release download "$TAG" --pattern 'Treeix-*.app.tar.gz.sig' --dir "$RUNNER_TEMP/sigs"
           jq -n --arg version "${TAG#v}" --rawfile notes "$RUNNER_TEMP/notes.md" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg mac "$base/Treeix.app.tar.gz" --arg mac_sig "$MAC_SIG" \
+            --arg arm "$base/Treeix-aarch64.app.tar.gz" --rawfile arm_sig "$RUNNER_TEMP/sigs/Treeix-aarch64.app.tar.gz.sig" \
+            --arg intel "$base/Treeix-x86_64.app.tar.gz" --rawfile intel_sig "$RUNNER_TEMP/sigs/Treeix-x86_64.app.tar.gz.sig" \
             --arg linux "$base/Treeix-x86_64.AppImage" --arg linux_sig "$LINUX_SIG" \
             '{version: $version, notes: $notes, pub_date: $date, platforms: {
-              "darwin-aarch64": {url: $mac, signature: $mac_sig},
-              "darwin-x86_64": {url: $mac, signature: $mac_sig},
+              "darwin-aarch64": {url: $arm, signature: ($arm_sig | rtrimstr("\n"))},
+              "darwin-x86_64": {url: $intel, signature: ($intel_sig | rtrimstr("\n"))},
               "linux-x86_64": {url: $linux, signature: $linux_sig}
             }}' > "$RUNNER_TEMP/latest.json"
           gh release upload "$TAG" --clobber "$RUNNER_TEMP/latest.json"

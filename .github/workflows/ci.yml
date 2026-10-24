@@ -41,7 +41,7 @@ jobs:
       - name: Sidecar placeholders
         run: |
           mkdir -p apps/desktop/src-tauri/binaries apps/desktop/dist
-          for name in treeix-ptyd treeix-voice treeix-meetings; do touch "apps/desktop/src-tauri/binaries/$name-$(rustc --print host-tuple)"; done
+          for name in treeix-ptyd treeix-voice; do touch "apps/desktop/src-tauri/binaries/$name-$(rustc --print host-tuple)"; done
 
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings

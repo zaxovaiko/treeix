@@ -4,7 +4,7 @@
 
 AI agents write code faster than anyone can read it. The reading is the bottleneck, and it is usually spread across a terminal, a git client, a browser tab per pull request and a tracker. Treeix puts one worktree, its diff, the review comments, the pull request and the agent session that produced it on a single screen.
 
-- Platform: macOS 13.3 or later as one universal build for Apple silicon and Intel, signed and notarized by Apple. Linux: an x86_64 AppImage on GitHub releases. A built-in updater. Dictation and meeting recording need Apple silicon. A native app: Rust and Tauri, with a React interface.
+- Platform: macOS 13.3 or later, with a build for Apple silicon and one for Intel, signed and notarized by Apple. Linux: an x86_64 AppImage on GitHub releases. A built-in updater. Dictation and meeting recording need Apple silicon. A native app: Rust and Tauri, with a React interface.
 - Price: free. No account, no telemetry, no Treeix server.
 - License: Apache 2.0. Source: https://github.com/zaxovaiko/treeix
 - Works with: Claude Code, OpenAI Codex, any shell or CLI agent, GitHub (gh), GitLab (glab), Jira (Atlassian CLI, acli), Notion (personal access token). Each integration is optional.
@@ -62,7 +62,8 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 ## Links
 
 - [Video tour](https://youtu.be/Un4AvXgqtAM): the whole app in 80 seconds
-- [Download the DMG](https://treeix.dyvertex.com/download): latest release, universal build for macOS 13.3 or later
+- [Download the DMG](https://treeix.dyvertex.com/download): latest release for Apple silicon, macOS 13.3 or later
+- [Intel DMG](https://treeix.dyvertex.com/download/intel): latest release for Intel Macs, macOS 13.3 or later
 - [Linux AppImage](https://github.com/zaxovaiko/treeix/releases/latest): x86_64, from the latest release
 - [Source code on GitHub](https://github.com/zaxovaiko/treeix): README, issues, discussions
 - [Releases and changelog](https://github.com/zaxovaiko/treeix/releases)

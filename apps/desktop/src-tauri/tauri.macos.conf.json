@@ -5,8 +5,7 @@
     },
     "externalBin": [
       "binaries/treeix-ptyd",
-      "binaries/treeix-voice",
-      "binaries/treeix-meetings"
+      "binaries/treeix-voice"
     ]
   }
 }

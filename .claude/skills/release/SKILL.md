@@ -59,7 +59,7 @@ gh release view v<version>
 ```
 
 The release stays a draft until the Mac and Linux jobs are done, then gets `latest.json` and goes public. It carries
-`Treeix.dmg` (universal), `Treeix.app.tar.gz`, `Treeix-x86_64.AppImage`, their `.sig` files and `latest.json`. The
+`Treeix.dmg` (Apple silicon), `Treeix-x86_64.dmg`, `Treeix-{aarch64,x86_64}.app.tar.gz`, `Treeix-x86_64.AppImage`, their `.sig` files and `latest.json`. The
 landing page's `/download` redirect points at `releases/latest/download/Treeix.dmg`, so it starts working the moment
 the release is published - no landing change needed.
 

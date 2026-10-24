@@ -1,5 +1,5 @@
-//! Dictation and call recording through the Swift helpers in apps/desktop/native/voice, shipped as externalBin
-//! sidecars: `treeix-voice` (hotkey, microphone, Parakeet, its own HUD, pasting) and `treeix-meetings` (call
+//! Dictation and call recording through the Swift helper in apps/desktop/native/voice, shipped as an externalBin
+//! sidecar: `treeix-voice` (hotkey, microphone, Parakeet, its own HUD, pasting) and `treeix-voice meetings` (call
 //! audio, transcript with speakers). Both speak JSON lines over stdin/stdout (Electron's dictation and meetings
 //! protocol.ts). Recordings go to settings.recording.folder as `<date> <title>/` with transcript.md and note.md.
 //! Contract: docs/contracts/phase67-contract.md. Owner: V7
@@ -175,7 +175,7 @@ pub enum VoiceEvent {
     /// A live transcript line while Recording
     #[expect(
         dead_code,
-        reason = "treeix-meetings transcribes after stop, so no live lines yet"
+        reason = "treeix-voice meetings transcribes after stop, so no live lines yet"
     )]
     Transcript {
         line: TranscriptLine,
@@ -300,6 +300,7 @@ impl Supervisor {
     /// None when the binary isn't there. `on_line` gets each stdout line, `on_down` why it stopped before a restart.
     pub(crate) fn start(
         path: PathBuf,
+        args: &'static [&'static str],
         on_line: impl Fn(&str) + Send + 'static,
         on_down: impl Fn(String) + Send + 'static,
     ) -> Option<Self> {
@@ -324,6 +325,7 @@ impl Supervisor {
             loop {
                 let started = Instant::now();
                 let reason = match Command::new(&path)
+                    .args(args)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
@@ -641,6 +643,7 @@ fn apply(app: &AppHandle, saved: &Settings) {
             let (lines, down) = (app.clone(), app.clone());
             *slot = Supervisor::start(
                 sidecar("treeix-voice"),
+                &[],
                 move |line| on_voice_line(&lines, line),
                 move |reason| {
                     update_dictation(&down, |s| {
@@ -665,7 +668,8 @@ fn apply(app: &AppHandle, saved: &Settings) {
     } else if slot.is_none() {
         let (lines, down) = (app.clone(), app.clone());
         *slot = Supervisor::start(
-            sidecar("treeix-meetings"),
+            sidecar("treeix-voice"),
+            &["meetings"],
             move |line| on_meetings_line(&lines, line),
             move |reason| {
                 *lock(&voice(&down).folder) = None;
@@ -1601,12 +1605,13 @@ mod tests {
             .expect("script");
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
 
-        assert!(Supervisor::start(dir.join("missing"), |_| {}, |_| {}).is_none());
+        assert!(Supervisor::start(dir.join("missing"), &[], |_| {}, |_| {}).is_none());
 
         let (lines, got_line) = mpsc::channel();
         let (downs, got_down) = mpsc::channel();
         let helper = Supervisor::start(
             script,
+            &[],
             move |line| {
                 let _ = lines.send(line.to_string());
             },

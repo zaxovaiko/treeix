@@ -19,10 +19,21 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Sized for download: whole-program LTO and size-first code. Panics still unwind, so one bad session can't
+# take the daemon and every other session down with it
 [profile.release]
-lto = "thin"
+lto = "fat"
+opt-level = "s"
 codegen-units = 1
 strip = "symbols"
+
+# The terminal hot path keeps full speed: parsing PTY output, scrollback, the wire format
+[profile.release.package.treeix-ptyd]
+opt-level = 3
+[profile.release.package.alacritty_terminal]
+opt-level = 3
+[profile.release.package.vte]
+opt-level = 3
 
 # Stripping symbols from proc-macro dylibs breaks loading them on macOS 27 (E0463, mis-aligned LINKEDIT)
 [profile.release.build-override]

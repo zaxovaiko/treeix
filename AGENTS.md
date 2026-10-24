@@ -6,7 +6,7 @@
 
 # Releases
 
-- Every push to `main` that touches the app (`apps/desktop`, `crates`, `Cargo.*`, `rust-toolchain.toml`) publishes a release to users (`.github/workflows/release.yml`): a universal Mac DMG and a Linux AppImage, both updating themselves through `latest.json`. Treat a push as a release.
+- Every push to `main` that touches the app (`apps/desktop`, `crates`, `Cargo.*`, `rust-toolchain.toml`) publishes a release to users (`.github/workflows/release.yml`): Mac DMGs for Apple silicon and Intel and a Linux AppImage, both updating themselves through `latest.json`. Treat a push as a release.
 - Patch: just push. The version comes from the latest `v*` tag and the bump is never committed, so `apps/desktop/package.json` (which `tauri.conf.json` reads its version from) lags behind on purpose. Don't "fix" it.
 - Major: a breaking commit (above), then push. Nothing else to bump.
 - Minor: `npm version --no-git-tag-version --prefix apps/desktop <x.y.0>`, commit `chore: release v<x.y.0>`, push. It must be higher than the latest tag.

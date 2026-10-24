@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import type { Branch, GitStatus, SearchMatch, Worktree } from '../ipc/api'
-import { branchCheck, branchRows, cleanable, groupMatches, patchRows, removeWarnings, rowState, setupCommand, splitMatch, versionRows, worktreeDir, type WorktreeRow } from './logic'
+import { branchCheck, branchRows, cleanable, groupMatches, removeWarnings, rowState, setupCommand, splitMatch, worktreeDir, type WorktreeRow } from './logic'
+import { patchRows, versionRows } from './diffRows'
 
 const REPO = '/r/app'
 const branch = (name: string, extra: Partial<Branch> = {}): Branch => ({ name, remote: false, ahead: 0, behind: 0, gone: false, merged: false, committedAt: 0, author: 'ana', worktree: null, ...extra })

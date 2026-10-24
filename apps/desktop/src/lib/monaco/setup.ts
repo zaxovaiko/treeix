@@ -1,6 +1,6 @@
 import { editorThemeColors } from './theme'
 
-export type Monaco = typeof import('monaco-editor')
+export type Monaco = typeof import('./core')
 
 type Shiki = Awaited<ReturnType<typeof import('shiki').createHighlighter>>
 // @shikijs/monaco types its theme helper against the unlisted `monaco-editor-core`, which resolves to `{}` here
@@ -14,26 +14,16 @@ let loading: Promise<{ monaco: Monaco; shiki: Shiki }> | null = null
 
 /** Everything heavy loads here on first use, so the terminal never pays for the editor */
 async function load(): Promise<{ monaco: Monaco; shiki: Shiki }> {
-  const [monaco, { default: EditorWorker }, { default: TsWorker }, { createHighlighter }, { shikiToMonaco }, { default: pierreDark }, { default: pierreLight }] = await Promise.all([
-    import('monaco-editor'),
+  const [monaco, { default: EditorWorker }, { createHighlighter }, { shikiToMonaco }, { default: pierreDark }, { default: pierreLight }] = await Promise.all([
+    import('./core'),
     // Workers are bundled files served from the app's own origin: WKWebView refuses blob: workers
     import('monaco-editor/editor/editor.worker.js?worker'),
-    import('monaco-editor/language/typescript/ts.worker.js?worker'),
     import('shiki'),
     import('@shikijs/monaco'),
     import('@pierre/theme/pierre-dark'),
     import('@pierre/theme/pierre-light')
   ])
-  self.MonacoEnvironment = { getWorker: (_id, label) => (label === 'typescript' || label === 'javascript' ? new TsWorker() : new EditorWorker()) }
-  // Single-file TS: syntax errors and in-file smarts, but unresolved imports would flag every line
-  for (const defaults of [monaco.typescript.typescriptDefaults, monaco.typescript.javascriptDefaults]) {
-    defaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false })
-  }
-  // Their JSON, CSS and HTML modes ask the base worker for validation it doesn't have, which throws; shiki colors these files
-  const { json, css, html } = monaco
-  for (const defaults of [json.jsonDefaults, css.cssDefaults, css.scssDefaults, css.lessDefaults, html.htmlDefaults, html.handlebarDefaults, html.razorDefaults]) {
-    defaults.setModeConfiguration({})
-  }
+  self.MonacoEnvironment = { getWorker: () => new EditorWorker() }
   const shiki = await createHighlighter({ themes: [pierreDark as ShikiThemeInput, pierreLight as ShikiThemeInput], langs: [] })
   shikiToMonaco(shiki, monaco)
   window.addEventListener('treeix-theme', () => void applyEditorTheme())

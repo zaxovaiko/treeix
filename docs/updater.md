@@ -26,7 +26,8 @@ it is the same: `bunx tauri signer generate --ci -w ~/.tauri/treeix-updater.key 
 `.github/workflows/release.yml` builds with `bundle.createUpdaterArtifacts` on (off in the repo, so local builds
 need no key) and uploads to the release:
 
-- `Treeix.app.tar.gz` and its `.sig`: the universal Mac app, for both `darwin-aarch64` and `darwin-x86_64`.
+- `Treeix-aarch64.app.tar.gz` and `Treeix-x86_64.app.tar.gz` with their `.sig`: the Mac app per arch, for
+  `darwin-aarch64` and `darwin-x86_64`.
 - `Treeix-x86_64.AppImage` and its `.sig`: the AppImage is its own update, for `linux-x86_64`.
 - `latest.json`, written last from both signatures:
 
@@ -36,8 +37,8 @@ need no key) and uploads to the release:
   "notes": "Release notes, markdown",
   "pub_date": "2026-10-22T12:00:00Z",
   "platforms": {
-    "darwin-aarch64": { "signature": "<content of the .sig>", "url": "https://github.com/zaxovaiko/treeix/releases/download/v0.2.0/Treeix.app.tar.gz" },
-    "darwin-x86_64": { "signature": "...", "url": ".../Treeix.app.tar.gz" },
+    "darwin-aarch64": { "signature": "<content of the .sig>", "url": "https://github.com/zaxovaiko/treeix/releases/download/v0.2.0/Treeix-aarch64.app.tar.gz" },
+    "darwin-x86_64": { "signature": "...", "url": ".../Treeix-x86_64.app.tar.gz" },
     "linux-x86_64": { "signature": "...", "url": ".../Treeix-x86_64.AppImage" }
   }
 }

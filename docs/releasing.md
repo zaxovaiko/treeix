@@ -16,9 +16,9 @@ and `fix` subjects grouped and scope first, other types left out, and a link to 
 
 ## What a release carries
 
-- `Treeix.dmg`: the universal Mac app (Apple silicon and Intel), signed, notarized and stapled. The landing page's
-  `/download` redirects here (`vercel.json`).
-- `Treeix.app.tar.gz` and its `.sig`: the Mac update bundle.
+- `Treeix.dmg` (Apple silicon) and `Treeix-x86_64.dmg` (Intel, no dictation or meetings), signed, notarized and
+  stapled. The landing page's `/download` and `/download/intel` redirect here (`vercel.json`).
+- `Treeix-aarch64.app.tar.gz`, `Treeix-x86_64.app.tar.gz` and their `.sig`: the Mac update bundles.
 - `Treeix-x86_64.AppImage` and its `.sig`: Linux, built on Ubuntu 22.04, and its own update.
 - `latest.json`: the update feed, uploaded last.
 
@@ -35,7 +35,7 @@ The Mac job needs these secrets and fails without them:
   Developer, for notarization.
 - `TAURI_SIGNING_PRIVATE_KEY` (both jobs), plus `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has one.
 
-Tauri signs the app and every sidecar (`treeix-ptyd`, `treeix-voice`, `treeix-meetings`) with the hardened runtime
+Tauri signs the app and every sidecar (`treeix-ptyd`, and `treeix-voice` on Apple silicon) with the hardened runtime
 and `src-tauri/Entitlements.plist` (microphone, calendars), notarizes and staples the app; the job then notarizes and
 staples the DMG.
 

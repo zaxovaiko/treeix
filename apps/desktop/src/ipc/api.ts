@@ -397,7 +397,7 @@ export interface Api {
   planRead(name: string): Promise<string>
   /** Parses every JS/TS file under the root and resolves its imports */
   graphScan(root: string): Promise<ModuleGraph>
-  // Dictation and recording (V7): the treeix-voice and treeix-meetings sidecars, macOS on Apple silicon only
+  // Dictation and recording (V7): the treeix-voice sidecar, macOS on Apple silicon only
   dictationStatus(): Promise<DictationStatus>
   /** Starts or stops listening, like a tap of the hotkey */
   dictationToggle(): Promise<void>

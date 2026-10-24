@@ -86,7 +86,7 @@ Notes stack up in the drawer, then go over as one prompt.
 
 ## Install
 
-Download the DMG from [treeix.dyvertex.com/download](https://treeix.dyvertex.com/download). One universal build for Apple silicon and Intel, macOS 13.3 or newer, signed and notarized by Apple. Dictation and meeting recording need Apple silicon.
+Download the DMG from [treeix.dyvertex.com/download](https://treeix.dyvertex.com/download). That one is for Apple silicon; Intel Macs take [treeix.dyvertex.com/download/intel](https://treeix.dyvertex.com/download/intel). macOS 13.3 or newer, signed and notarized by Apple. Dictation and meeting recording need Apple silicon.
 
 On Linux, take the x86_64 AppImage from the [latest release](https://github.com/zaxovaiko/treeix/releases/latest).
 
