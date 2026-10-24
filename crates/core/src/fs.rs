@@ -122,6 +122,21 @@ pub fn list_files(root: &Path) -> Option<PlaceFiles> {
                 continue;
             };
             let folder = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            // An ignored folder that is its own checkout is still the user's code, listed with its own .gitignore
+            // ponytail: the watcher still skips it, so its new files show after the next listing
+            if folder
+                && path.join(".git").exists()
+                && let Some(nested) = list_files(&path)
+            {
+                files.extend(nested.files.into_iter().map(|file| format!("{rel}/{file}")));
+                ignored.extend(
+                    nested
+                        .ignored
+                        .into_iter()
+                        .map(|file| format!("{rel}/{file}")),
+                );
+                continue;
+            }
             ignored.push(if folder { format!("{rel}/") } else { rel });
         }
     }
@@ -130,17 +145,12 @@ pub fn list_files(root: &Path) -> Option<PlaceFiles> {
     Some(PlaceFiles { files, ignored })
 }
 
-/// One level of a folder, relative to `root`, folders ending in `/`; empty when it can't be read
+/// The names in one folder of `root`, folders ending in `/`; empty when it can't be read
 pub fn list_directory(root: &Path, folder: &str) -> Result<Vec<String>, String> {
     let dir = if folder.is_empty() {
         root.to_path_buf()
     } else {
         inside_root(root, folder)?
-    };
-    let prefix = if folder.is_empty() {
-        String::new()
-    } else {
-        format!("{}/", folder.trim_end_matches('/'))
     };
     let Ok(entries) = fs::read_dir(dir) else {
         return Ok(Vec::new());
@@ -154,7 +164,7 @@ pub fn list_directory(root: &Path, folder: &str) -> Result<Vec<String>, String> 
             } else {
                 ""
             };
-            format!("{prefix}{}{slash}", entry.file_name().to_string_lossy())
+            format!("{}{slash}", entry.file_name().to_string_lossy())
         })
         .collect();
     names.sort();
@@ -401,6 +411,24 @@ mod tests {
     }
 
     #[test]
+    fn list_files_includes_an_ignored_nested_checkout() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path();
+        fs::write(root.join(".gitignore"), "shorts/\n").unwrap();
+        fs::create_dir_all(root.join("shorts/.git")).unwrap();
+        fs::create_dir_all(root.join("shorts/content")).unwrap();
+        fs::write(root.join("shorts/.gitignore"), "out/\n").unwrap();
+        fs::write(root.join("shorts/content/a.md"), "").unwrap();
+        fs::create_dir_all(root.join("shorts/out")).unwrap();
+        let listed = list_files(root).unwrap();
+        assert_eq!(
+            listed.files,
+            [".gitignore", "shorts/.gitignore", "shorts/content/a.md"]
+        );
+        assert_eq!(listed.ignored, ["shorts/out/"]);
+    }
+
+    #[test]
     fn list_directory_marks_folders() {
         let root = tempfile::tempdir().unwrap();
         let root = root.path();
@@ -408,10 +436,7 @@ mod tests {
         fs::write(root.join("src/a.ts"), "").unwrap();
         fs::write(root.join("src/.DS_Store"), "").unwrap();
         assert_eq!(list_directory(root, "").unwrap(), ["src/"]);
-        assert_eq!(
-            list_directory(root, "src").unwrap(),
-            ["src/a.ts", "src/lib/"]
-        );
+        assert_eq!(list_directory(root, "src").unwrap(), ["a.ts", "lib/"]);
         assert!(list_directory(root, "../x").is_err());
     }
 
