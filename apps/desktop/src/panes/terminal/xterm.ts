@@ -39,19 +39,19 @@ const ANSI_NAMES = [
 
 /**
  * Theme and font from CSS custom properties, defaults in terminal.css:
- * --term-bg, --term-fg, --term-cursor, --term-selection, --term-font, --term-font-size, and ANSI colors --term-0 .. --term-15
+ * --term-bg (--xterm-bg overrides it for a see-through canvas), --term-fg, --term-cursor, --term-selection, --term-font, --term-font-size, and ANSI colors --term-0 .. --term-15
  */
-function cssTheme(host: HTMLElement): { theme: ITheme; fontFamily: string; fontSize: number } {
+function cssTheme(host: HTMLElement): { theme: ITheme; allowTransparency: boolean; fontFamily: string; fontSize: number } {
   const style = getComputedStyle(host)
   const read = (name: string): string | undefined => style.getPropertyValue(name).trim() || undefined
   const theme: ITheme = {
-    background: read('--term-bg'),
+    background: read('--xterm-bg') ?? read('--term-bg'),
     foreground: read('--term-fg'),
     cursor: read('--term-cursor'),
     selectionBackground: read('--term-selection')
   }
   ANSI_NAMES.forEach((name, index) => (theme[name] = read(`--term-${index}`)))
-  return { theme, fontFamily: read('--term-font') ?? 'monospace', fontSize: Number(read('--term-font-size')) || 12 }
+  return { theme, allowTransparency: read('--xterm-bg') !== undefined, fontFamily: read('--term-font') ?? 'monospace', fontSize: Number(read('--term-font-size')) || 12 }
 }
 
 /** Find highlights from --term-match and --term-match-active; decorations take #RRGGBB only */
@@ -109,8 +109,6 @@ export function openXterm(host: HTMLElement, webgl: boolean): Xterm {
   const term = new Terminal({
     ...style,
     cursorWidth: 2,
-    // Opaque canvas: no blend tricks needed under a see-through window
-    allowTransparency: false,
     // unicode11 registers through the proposed unicode API
     allowProposedApi: true
   })

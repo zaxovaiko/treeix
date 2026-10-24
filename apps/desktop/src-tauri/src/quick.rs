@@ -26,6 +26,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     .visible_on_all_workspaces(true)
     .skip_taskbar(true)
     .visible(false)
+    // See-through comes from the page's background alpha, so the backdrop blur has transparent pixels to show through
+    .transparent(cfg!(target_os = "macos"))
     // A suspended webview stops acking, and the daemon then pauses the shell's output
     .background_throttling(BackgroundThrottlingPolicy::Disabled)
     .build()?;
@@ -73,13 +75,12 @@ fn drop_down(window: &tauri::WebviewWindow) {
     ));
 }
 
-/// Whether it slides in, how opaque it is (0.3 to 1) and whether what shows through is blurred; Linux windows
-/// have none of these, so it ignores them
-pub fn set_look(app: &AppHandle, animate: bool, opacity: f64, blur: bool) {
+/// Whether it slides in and whether what shows through is blurred; Linux windows have neither, so it ignores them
+pub fn set_look(app: &AppHandle, animate: bool, blur: bool) {
     #[cfg(target_os = "macos")]
-    panel::set_look(app, animate, opacity.clamp(0.3, 1.0), blur);
+    panel::set_look(app, animate, blur);
     #[cfg(not(target_os = "macos"))]
-    let _ = (app, animate, opacity, blur);
+    let _ = (app, animate, blur);
 }
 
 // global-hotkey directly, not tauri-plugin-global-shortcut: the plugin pins global-hotkey 0.8, which has no
@@ -171,12 +172,11 @@ mod panel {
         fn CGSSetWindowBackgroundBlurRadius(connection: i32, window: i32, radius: i32) -> i32;
     }
 
-    pub fn set_look(app: &AppHandle, animate: bool, opacity: f64, blur: bool) {
+    pub fn set_look(app: &AppHandle, animate: bool, blur: bool) {
         ANIMATE.store(animate, Ordering::Relaxed);
         let app = app.clone();
         let _ = app.clone().run_on_main_thread(move || {
             if let Ok(panel) = app.get_webview_panel(LABEL) {
-                panel.set_alpha_value(opacity);
                 let window: &NSWindow = panel.as_panel();
                 let number = window.windowNumber() as i32;
                 // SAFETY: on the main thread, with a live window's number

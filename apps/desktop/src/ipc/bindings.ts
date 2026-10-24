@@ -72,10 +72,10 @@ async setQuickShortcut(accelerator: string | null) : Promise<null> {
     return await TAURI_INVOKE("set_quick_shortcut", { accelerator });
 },
 /**
- * Whether the quick terminal slides in, its opacity, 0.3 to 1, and whether what shows through is blurred
+ * Whether the quick terminal slides in and whether what shows through its translucent background is blurred
  */
-async setQuickLook(animate: boolean, opacity: number, blur: boolean) : Promise<void> {
-    await TAURI_INVOKE("set_quick_look", { animate, opacity, blur });
+async setQuickLook(animate: boolean, blur: boolean) : Promise<void> {
+    await TAURI_INVOKE("set_quick_look", { animate, blur });
 },
 /**
  * The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)

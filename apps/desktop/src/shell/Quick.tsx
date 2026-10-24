@@ -5,7 +5,7 @@ import type { Api } from '../ipc/api'
 import type { SessionInfo } from '../ipc/bindings'
 import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
-import { paneGrid } from '../panes/terminal/xterm'
+import { IS_MAC, paneGrid } from '../panes/terminal/xterm'
 import { IN_TAURI, setQuickLook, setZoom, UI_CHANGED } from '../lib/native'
 import { followedMode, useAppliedSettings } from '../pages/settings'
 import { applyTheme, type Mode } from '../styles/theme'
@@ -54,7 +54,9 @@ export function Quick({ api }: { api: Api }) {
     let current: string | null = null
     const look = ({ theme, ui, renderer, zoom, quickAnimate, quickOpacity, quickBlur }: Look) => {
       applyTheme(theme, ui)
-      void setQuickLook(quickAnimate, quickOpacity, quickBlur).catch((e: unknown) => console.warn('quick look:', e))
+      // Only the Mac window is transparent; elsewhere a see-through page would show the webview's own fill
+      document.documentElement.style.setProperty('--quick-alpha', `${IS_MAC ? Math.round(Math.min(1, Math.max(0.3, quickOpacity)) * 100) : 100}%`)
+      void setQuickLook(quickAnimate, quickBlur).catch((e: unknown) => console.warn('quick look:', e))
       void setZoom(zoom).catch((e: unknown) => console.warn('zoom:', e))
       setMode(theme)
       setRenderer(renderer)

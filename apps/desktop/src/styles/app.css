@@ -246,7 +246,9 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 [data-ui="islands"] .body > .vsz::after { inset: 4px -1px; border-radius: 1px; }
 
 /* quick terminal window: dropped from the top edge, the terminal under a hairline header */
-.quick { height: 100vh; display: flex; flex-direction: column; background: var(--term-bg); box-shadow: inset 0 -1px 0 var(--input); }
+/* One translucent fill at the opacity set in Settings; the terminal and the page under it stay clear so the macOS blur shows through */
+.quick { --xterm-bg: rgb(0 0 0 / 0); height: 100vh; display: flex; flex-direction: column; background: color-mix(in srgb, var(--term-bg) var(--quick-alpha, 100%), transparent); box-shadow: inset 0 -1px 0 var(--input); }
+:root:has(.quick), :root:has(.quick) body, .quick .term, .quick .term .xterm .xterm-viewport { background: transparent; }
 .quick .qh { height: 18px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; font-size: 10px; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
 .quick .qh button { display: flex; color: var(--muted-foreground); }
 .quick .qh button:hover { color: var(--foreground); }
