@@ -20,6 +20,8 @@ const USAGE_PREFIX: &str = "usage-";
 // ponytail: polls the folder; a file watcher if many sessions make the reads show up
 const POLL: Duration = Duration::from_millis(400);
 const FOOTER_ROWS: usize = 3;
+/// Bands sit over the prompt box, under the last reply
+const BAND_ROWS: usize = 12;
 
 pub fn status_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("agent-status")
@@ -112,6 +114,20 @@ fn background_work(screen: &str) -> bool {
     lines[lines.len().saturating_sub(FOOTER_ROWS)..]
         .iter()
         .any(|line| counts_background_work(&line.trim_end().to_lowercase()))
+        || lines[lines.len().saturating_sub(BAND_ROWS)..]
+            .iter()
+            .any(|line| watches_ci(line))
+}
+
+/// A CI band above the prompt, `● repo/branch @ <sha> running`: the agent is waiting on a pipeline it pushed
+fn watches_ci(line: &str) -> bool {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    words.windows(3).any(|w| {
+        w[0] == "@"
+            && w[1].len() >= 7
+            && w[1].chars().all(|c| c.is_ascii_hexdigit())
+            && w[2] == "running"
+    })
 }
 
 /// `· <n> <shell|monitor|agent|background task>[s]` at the end of the line
@@ -292,6 +308,27 @@ mod tests {
             AgentState::Watching
         );
         assert_eq!(state(None, true, &screen(" ·1 shell")), AgentState::Idle);
+    }
+
+    #[test]
+    fn claude_waiting_on_a_ci_run_it_pushed_is_watching() {
+        let screen = |state: &str| {
+            format!(
+                "✻ Baked for 2m 41s · done 14:52\n\n  ● treeix/main @ c2f7a78 {state} [-]\n  ✓ Update installed\n────\n❯ \n────\n  Opus 5.5 | 2.0%\n"
+            )
+        };
+        assert_eq!(
+            state(Some(Hook::Done), true, &screen("running")),
+            AgentState::Watching
+        );
+        assert_eq!(
+            state(Some(Hook::Done), true, &screen("passed")),
+            AgentState::Idle
+        );
+        assert_eq!(
+            state(Some(Hook::Done), true, "● The release is running\n❯ \n"),
+            AgentState::Idle
+        );
     }
 
     #[test]
