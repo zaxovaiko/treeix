@@ -103,7 +103,7 @@ export interface Xterm {
 }
 
 /** An xterm with the app's addons opened in `host`; the GPU context lives exactly as long as it does */
-export function openXterm(host: HTMLElement, webgl: boolean): Xterm {
+export function openXterm(host: HTMLElement, webgl: boolean, openUrl: (url: string) => void = (url) => void window.open(url, '_blank')): Xterm {
   const style = look(host)
   let applied = JSON.stringify(style)
   const term = new Terminal({
@@ -118,8 +118,7 @@ export function openXterm(host: HTMLElement, webgl: boolean): Xterm {
   term.loadAddon(search)
   term.loadAddon(new Unicode11Addon())
   term.unicode.activeVersion = '11'
-  // ponytail: opens in the system browser via window.open, route through the app's link handling once it exists
-  term.loadAddon(new WebLinksAddon((_, uri) => window.open(uri, '_blank')))
+  term.loadAddon(new WebLinksAddon((_, uri) => openUrl(uri)))
   term.open(host)
   let gl: WebglAddon | null = null
   if (webgl) {

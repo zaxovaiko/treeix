@@ -135,7 +135,8 @@ export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpen
 
 /** A live xterm attached to the session; `close` detaches and frees everything, hidden sessions cost no JS */
 function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: boolean, hooks: PaneHooks) {
-  const view = openXterm(host, webgl)
+  // The webview opens no windows; the system browser does
+  const view = openXterm(host, webgl, (url) => void api.openUrl(url))
   const { term, fit } = view
   let closed = false
   let attachment: Attachment | null = null
