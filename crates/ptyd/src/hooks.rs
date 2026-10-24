@@ -157,6 +157,12 @@ fn status_line_conversation(text: &str) -> Option<String> {
     (!id.is_empty()).then(|| id.to_owned())
 }
 
+fn status_line_dir(text: &str) -> Option<String> {
+    let input: serde_json::Value = serde_json::from_str(text).ok()?;
+    let dir = input.get("workspace")?.get("current_dir")?.as_str()?;
+    (!dir.is_empty()).then(|| dir.to_owned())
+}
+
 /// Claude started in a shell has no hooks, but keeps its conversation in `~/.claude/sessions/<pid>.json`
 pub fn shell_claude_conversation(pid: i32) -> Option<String> {
     let home = std::env::var_os("HOME")?;
@@ -222,9 +228,12 @@ fn poll(
         let modified = fs::metadata(&usage).and_then(|m| m.modified()).ok();
         if modified != seen.usage_modified {
             seen.usage_modified = modified;
-            let conversation = fs::read_to_string(&usage)
-                .ok()
-                .and_then(|t| status_line_conversation(&t));
+            let text = fs::read_to_string(&usage).unwrap_or_default();
+            // The agent's own dir, so one that moved into a worktree is grouped under it
+            if let Some(dir) = status_line_dir(&text) {
+                session.set_cwd(daemon, dir);
+            }
+            let conversation = status_line_conversation(&text);
             if let Some(agent_session) = conversation.filter(|c| session.set_agent_session(c)) {
                 daemon.broadcast(Event::AgentSession {
                     session: session.id.clone(),
@@ -367,5 +376,17 @@ mod tests {
         );
         assert_eq!(status_line_conversation(r#"{"session_id":""}"#), None);
         assert_eq!(status_line_conversation("not json"), None);
+    }
+
+    #[test]
+    fn status_line_dir_reads_the_current_dir() {
+        assert_eq!(
+            status_line_dir(
+                r#"{"workspace":{"current_dir":"/r/.claude/worktrees/x","project_dir":"/r"}}"#
+            ),
+            Some("/r/.claude/worktrees/x".into())
+        );
+        assert_eq!(status_line_dir(r#"{"workspace":{"current_dir":""}}"#), None);
+        assert_eq!(status_line_dir(r#"{"cwd":"/r"}"#), None);
     }
 }

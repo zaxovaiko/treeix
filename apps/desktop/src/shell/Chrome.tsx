@@ -194,7 +194,8 @@ function GroupRows({ view, group }: ViewProps & { group: Group }) {
   const [menu, openMenu] = useColorMenu(view)
   const color = view.ui.colors[key]
   const row = { onClick: toggle, onContextMenu: openMenu(key), style: color ? { '--c': color } : undefined, className: `repo ${color ? 'tinted' : ''}` }
-  if (first.repoRoot)
+  // Sessions on one branch only sit right under the repo, without a branch row
+  if (first.repoRoot && group.places.length > 1)
     return (
       <>
         {menu}
@@ -213,8 +214,8 @@ function GroupRows({ view, group }: ViewProps & { group: Group }) {
       <div {...row} title={`${tilde(first.path, view.home)}. Right-click for a color`}>
         <Chev closed={closed} />
         <Icon name={first.kind === 'scratch' ? 'home' : closed ? 'folder' : 'folderOpen'} />
-        <span className="grow trunc">{first.kind === 'scratch' ? '~' : first.name}</span>
-        {closed ? <span className="tag">{tabs.length}</span> : <span className="prov local">{first.kind === 'scratch' ? 'Home' : 'Not git'}</span>}
+        <span className="grow trunc">{first.kind === 'scratch' ? '~' : (first.repoName ?? first.name)}</span>
+        {closed ? <span className="tag">{tabs.length}</span> : !first.repoRoot && <span className="prov local">{first.kind === 'scratch' ? 'Home' : 'Not git'}</span>}
         <PlusHere view={view} place={first} />
       </div>
       {!closed && tabs.map((tab) => <TabRow key={tab.id} view={view} tab={tab} />)}

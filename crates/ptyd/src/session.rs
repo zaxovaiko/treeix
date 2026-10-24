@@ -489,7 +489,7 @@ impl Session {
         });
     }
 
-    fn set_cwd(&self, daemon: &Daemon, cwd: String) {
+    pub fn set_cwd(&self, daemon: &Daemon, cwd: String) {
         let mut info = lock(&self.info);
         if info.cwd != cwd {
             info.cwd.clone_from(&cwd);
@@ -714,7 +714,11 @@ impl Session {
             let leader = process.foreground_group();
             (leader.filter(|&g| g > 0).unwrap_or(pid), pid)
         };
-        if let Some(cwd) = procinfo::cwd(foreground) {
+        // A launched Claude reports its dir in the statusline (hooks.rs); its process stays where it started
+        if let Some(cwd) = (self.launched != SessionKind::Claude)
+            .then(|| procinfo::cwd(foreground))
+            .flatten()
+        {
             self.set_cwd(daemon, cwd);
         }
         if self.launched == SessionKind::Shell {
