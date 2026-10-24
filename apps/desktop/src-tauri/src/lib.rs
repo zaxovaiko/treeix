@@ -216,8 +216,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
+            // The quick terminal is tracked too, so the height it was dragged to survives a restart; toggling re-places it
             tauri_plugin_window_state::Builder::new()
-                .with_denylist(&[quick::LABEL])
                 // A window hidden at quit must not come back invisible
                 .with_state_flags(StateFlags::all() - StateFlags::VISIBLE)
                 .build(),
