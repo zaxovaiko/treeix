@@ -119,7 +119,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const bar = (
     <div className="actbar" key="bar">
       {ITEMS.filter(([id]) => !off(id)).map(([id, icon, tip]) => (
-        <button key={id} className={`icon ${shown === id ? 'on' : ''}`} onClick={() => toggle(id)} title={tip}>
+        <button key={id} className={`icon ${shown === id ? 'on' : ''}`} onClick={() => toggle(id)} title={id === 'prs' && badges.prs ? `${tip}: ${badges.prs} waiting on you` : tip}>
           <PIcon name={icon === 'folder' && shown === id ? 'folderOpen' : icon} />
           {!!badges[id] && <span className="ndot">{badgeText(badges[id])}</span>}
         </button>

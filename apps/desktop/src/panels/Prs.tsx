@@ -48,7 +48,7 @@ const EMPTY: Record<Filter, string> = { all: 'No pull requests', mine: 'None of 
 
 const STATES = {
   any: ['Any state', () => true],
-  open: ['Open', (pr) => pr.state === 'open' && !pr.draft],
+  open: ['Open', (pr) => pr.state === 'open'],
   draft: ['Draft', (pr) => pr.state === 'open' && pr.draft],
   approved: ['Approved', (pr) => pr.state === 'open' && pr.review?.state === 'approved'],
   changes: ['Changes requested', (pr) => pr.state === 'open' && pr.review?.state === 'changes'],
@@ -65,14 +65,17 @@ interface Facets {
   author: string
   repo: string
 }
-const ANY: Facets = { state: 'any', author: '', repo: '' }
+const DEFAULT: Facets = { state: 'open', author: '', repo: '' }
+
+/** Conflicts need fixing first, drafts are not ready for anyone yet */
+const rank = (pr: PullRequest) => (pr.state === 'open' && pr.conflicts ? 0 : pr.draft ? 2 : 1)
 
 /** Keeps the picked value listed after a refresh drops its last PR */
 const options = (values: string[], picked: string) => [...new Set([...values, picked].filter(Boolean))].sort((a, b) => a.localeCompare(b))
 
 /** The filters outlive switching panels */
 let lastFilter: Filter = 'all'
-let lastFacets = ANY
+let lastFacets = DEFAULT
 
 export function Prs({ view, data }: { view: ShellView; data: PrData }) {
   const { api } = view
@@ -80,7 +83,7 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
   const setFilter = (f: Filter) => keepFilter((lastFilter = f))
   const [facets, keepFacets] = useState(lastFacets)
   const setFacet = (patch: Partial<Facets>) => keepFacets((lastFacets = { ...facets, ...patch }))
-  const narrowed = facets.state !== 'any' || facets.author !== '' || facets.repo !== ''
+  const narrowed = facets.state !== DEFAULT.state || facets.author !== '' || facets.repo !== ''
   /** Per PR: the running check out step, or the last error */
   const [busy, setBusy] = useState<Record<string, { text: string; error?: boolean }>>({})
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null)
@@ -94,9 +97,9 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
   }
   const authors = options(data.list.map((pr) => pr.author), facets.author)
   const repos = options(data.list.map((pr) => pr.repoPath), facets.repo)
-  const list = data.list.filter(
-    (pr) => shown[filter](pr) && STATES[facets.state][1](pr) && (!facets.author || pr.author === facets.author) && (!facets.repo || pr.repoPath === facets.repo),
-  )
+  const list = data.list
+    .filter((pr) => shown[filter](pr) && STATES[facets.state][1](pr) && (!facets.author || pr.author === facets.author) && (!facets.repo || pr.repoPath === facets.repo))
+    .sort((a, b) => rank(a) - rank(b))
   const idOf = (pr: PullRequest) => `${pr.repoPath}#${pr.number}`
   const note = (pr: PullRequest, text: string | null, error = false) =>
     setBusy((all) => {
@@ -265,7 +268,7 @@ export function Prs({ view, data }: { view: ShellView; data: PrData }) {
           </select>
         )}
         {narrowed && (
-          <button className="icon sm" onClick={() => setFacet(ANY)} title="Clear filters">
+          <button className="icon sm" onClick={() => setFacet(DEFAULT)} title="Clear filters">
             <Icon name="x" />
           </button>
         )}
