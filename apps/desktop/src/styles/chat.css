@@ -3,7 +3,7 @@
 .chatp:focus { outline: none; }
 .chatp .pbody.chat { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px; font: 13px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
 .chatp textarea, .chatp select { font: inherit; color: inherit; }
-.chatp .btn.pri, .chatp .icon.pri { background: var(--primary); color: #fff; box-shadow: none; }
+.chatp .btn.pri, .chatp .icon.pri { background: var(--primary); color: var(--on-primary); box-shadow: none; }
 .chatp .icon.pri:disabled { background: var(--accent); color: var(--muted-foreground); cursor: default; }
 .chatp .btn.ghost { box-shadow: none; }
 

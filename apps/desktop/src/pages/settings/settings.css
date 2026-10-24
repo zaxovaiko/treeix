@@ -1,7 +1,7 @@
 /* Settings page controls (prototype round 6); the page frame (.gtop, .setp, .snav, .srow, .seg, .krec) is in styles/app.css */
 .setp .snav-i svg { width: 14px; height: 14px; flex: none; }
 .setp .snav .filter { margin-top: 0; }
-.setp .btn.pri { background: var(--primary); color: #fff; box-shadow: none; }
+.setp .btn.pri { background: var(--primary); color: var(--on-primary); box-shadow: none; }
 .setp .btn.pri:hover { filter: brightness(1.12); }
 .setp .btn:disabled { opacity: .4; cursor: default; }
 .srow.col { flex-direction: column; align-items: stretch; gap: 6px; }
@@ -14,7 +14,7 @@
 .sw { width: 30px; height: 18px; flex: none; border-radius: 9px; background: color-mix(in srgb, var(--foreground) 22%, transparent); position: relative; }
 .sw i { position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .12s; }
 .sw.on { background: var(--primary); }
-.sw.on i { transform: translateX(12px); }
+.sw.on i { transform: translateX(12px); background: var(--on-primary); }
 .sstat { display: inline-flex; align-items: center; }
 .sdot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; margin-right: 6px; background: var(--muted-foreground); }
 .sdot.ok { background: var(--green); }

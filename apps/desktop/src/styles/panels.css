@@ -8,7 +8,7 @@
 .card.rpanel { flex: 0 1 auto; min-width: 260px; container-type: inline-size; }
 .actbar { width: 34px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 2px; }
 [data-ui="compact"] .actbar { padding-top: 4px; }
-.ndot { position: absolute; top: 0; right: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--primary); color: #fff; font-size: 9px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--background); }
+.ndot { position: absolute; top: 0; right: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--primary); color: var(--on-primary); font-size: 9px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--background); }
 [data-ui="islands"] .ndot { box-shadow: 0 0 0 2px var(--canvas); }
 
 .ph { min-height: 40px; flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 5px 6px 5px 12px; }
@@ -48,7 +48,7 @@
 .dl .o, .dl .n { width: 30px; flex: none; text-align: right; padding-right: 6px; color: var(--muted-foreground); opacity: .8; }
 .dl .t { white-space: pre-wrap; overflow-wrap: anywhere; flex: 1; min-width: 0; padding-left: 8px; }
 .dl.a { background: var(--add); } .dl.d { background: var(--del); }
-.dl .cmt { position: absolute; z-index: 1; left: 2px; top: 1px; width: 16px; height: 16px; display: none; place-items: center; border-radius: 4px; background: var(--primary); color: #fff; }
+.dl .cmt { position: absolute; z-index: 1; left: 2px; top: 1px; width: 16px; height: 16px; display: none; place-items: center; border-radius: 4px; background: var(--primary); color: var(--on-primary); }
 .dl .cmt svg { width: 12px; height: 12px; }
 .dl:hover .cmt { display: grid; }
 .thread { margin: 4px 10px 8px; border-radius: 6px; background: var(--muted); padding: 8px; font: 12px -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; gap: 6px; }
@@ -93,7 +93,7 @@
 .banner .conf { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .banner .a { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .flink { cursor: pointer; text-decoration: underline dotted; }
-.btn.pri { background: var(--primary); color: #fff; box-shadow: none; }
+.btn.pri { background: var(--primary); color: var(--on-primary); box-shadow: none; }
 .btn.pri:hover { background: color-mix(in srgb, var(--primary) 88%, #fff); }
 .btn.danger { color: var(--red); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent); }
 .btn:disabled { opacity: .4; pointer-events: none; }

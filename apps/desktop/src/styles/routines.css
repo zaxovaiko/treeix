@@ -42,5 +42,5 @@
 .rtoasts .t { font-weight: 600; }
 .rtoasts .d { color: var(--muted-foreground); font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
 .rtoasts .a { display: flex; gap: 6px; margin-top: 8px; }
-.rtoasts .btn.pri { background: var(--primary); color: #fff; box-shadow: none; }
+.rtoasts .btn.pri { background: var(--primary); color: var(--on-primary); box-shadow: none; }
 @keyframes rt-rise { from { opacity: 0; transform: translateY(6px); } }

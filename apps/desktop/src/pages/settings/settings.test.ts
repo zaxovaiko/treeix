@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { DEFAULT_SETTINGS } from '../../features'
-import { fontStack, themeVars } from './apply'
+import { fontStack, onColor, themeVars } from './apply'
 import { onSettingsSection, openableSection, showSettingsSection, takeRequestedSection } from './nav'
 
 test('fontStack quotes family names but not CSS font keywords', () => {
@@ -38,4 +38,11 @@ test('showSettingsSection waits for a closed page and goes straight to an open o
   stop()
   expect(seen).toEqual(['terminal'])
   expect(takeRequestedSection()).toBeNull()
+})
+
+test('text over a light primary turns dark', () => {
+  expect(onColor('#4f5ff0')).toBe('#fff')
+  expect(onColor('#ededed')).toBe('#0a0a0a')
+  expect(onColor('#fff')).toBe('#0a0a0a')
+  expect(themeVars('dark', 'Vercel')['--on-primary']).toBe('#0a0a0a')
 })

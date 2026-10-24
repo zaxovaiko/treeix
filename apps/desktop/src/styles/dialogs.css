@@ -6,12 +6,12 @@
 .modal:focus { outline: none; }
 .modal h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .modal h3 svg { width: 15px; height: 15px; color: var(--muted-foreground); }
-.modal .btn.pri { background: var(--primary); color: #fff; box-shadow: none; } .modal .btn.pri:hover { filter: brightness(1.12); }
+.modal .btn.pri { background: var(--primary); color: var(--on-primary); box-shadow: none; } .modal .btn.pri:hover { filter: brightness(1.12); }
 .modal .btn.danger { background: var(--red); color: #fff; box-shadow: none; } .modal .btn.danger:hover { filter: brightness(1.1); }
 .modal .btn:disabled { opacity: .4; cursor: default; }
 .modal .btn.pri:disabled, .modal .btn.danger:disabled { opacity: 1; filter: none; background: var(--muted); color: var(--muted-foreground); }
 .modal .btn svg { width: 13px; height: 13px; }
-.modal .btn.pri kbd { color: #fff; background: rgb(255 255 255 / 20%); box-shadow: none; } .modal .btn.pri:disabled kbd { color: inherit; background: transparent; }
+.modal .btn.pri kbd { color: var(--on-primary); background: rgb(255 255 255 / 20%); box-shadow: none; } .modal .btn.pri:disabled kbd { color: inherit; background: transparent; }
 .modal .seg button { display: inline-flex; align-items: center; gap: 5px; } .modal .seg button svg { width: 12px; height: 12px; flex: none; }
 .modal .tag.green { color: var(--green); background: var(--green-bg); } .modal .tag.amber { color: var(--amber); background: var(--amber-bg); }
 .modal .tag.sky { color: var(--sky); background: var(--sky-bg); } .modal .tag.violet { color: var(--violet); background: var(--violet-bg); }
@@ -29,7 +29,7 @@
 .chk { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: 12px; }
 .chk input[type=checkbox] { appearance: none; margin: 0; flex: none; width: 14px; height: 14px; border-radius: 4px; display: grid; place-items: center; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--foreground) 45%, transparent); }
 .chk input[type=checkbox]:checked { background: var(--primary); box-shadow: none; }
-.chk input[type=checkbox]:checked::after { content: ""; width: 7px; height: 3.5px; border: 1.5px solid #fff; border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
+.chk input[type=checkbox]:checked::after { content: ""; width: 7px; height: 3.5px; border: 1.5px solid var(--on-primary); border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
 .mft { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 14px; font-size: 12px; }
 .mft > .dim { margin-right: auto; min-width: 0; }
 .modal .banner { margin: 0 0 12px; }
@@ -77,7 +77,7 @@
 .clrow { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 0 8px; border-radius: 8px; font-size: 12px; }
 .clrow:hover { background: var(--accent); }
 .clrow .cbx { width: 16px; height: 16px; flex: none; display: grid; place-items: center; margin-top: 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--input); }
-.clrow .cbx svg { width: 11px; height: 11px; } .clrow.on .cbx { background: var(--primary); box-shadow: none; color: #fff; } .clrow .cbx.none { box-shadow: none; }
+.clrow .cbx svg { width: 11px; height: 11px; } .clrow.on .cbx { background: var(--primary); box-shadow: none; color: var(--on-primary); } .clrow .cbx.none { box-shadow: none; }
 .clrow .cb { flex: 1; min-width: 0; }
 .clrow .t { width: 100%; height: 28px; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left; }
 .clrow.missing .nm { text-decoration: line-through; color: var(--muted-foreground); }

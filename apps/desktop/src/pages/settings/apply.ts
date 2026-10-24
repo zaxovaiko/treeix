@@ -11,6 +11,13 @@ export function fontStack(family: string, fallback: string): string {
   return `${/^(ui-[a-z-]+|system-ui|monospace|-apple-system)$/.test(name) ? name : `"${name}"`}, ${fallback}`
 }
 
+/** Text over `primary`: white, or near black when the color is light (Vercel's #ededed) */
+export function onColor(hex: string): string {
+  const full = hex.length === 4 ? hex.replace(/[0-9a-f]/gi, (d) => d + d) : hex
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(full.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.3 ? '#0a0a0a' : '#fff'
+}
+
 /** The custom properties a theme sets; the first theme of each mode is the stylesheet's own and sets none, an unknown name falls back to it */
 export function themeVars(mode: Mode, name: string): Record<string, string> {
   const list = THEMES[mode]
@@ -20,12 +27,13 @@ export function themeVars(mode: Mode, name: string): Record<string, string> {
   return {
     '--background': background,
     '--primary': primary,
+    '--on-primary': onColor(primary),
     '--popover': `color-mix(in srgb, var(--foreground) ${mode === 'light' ? 0 : 7}%, ${background})`,
     '--term-bg': background,
   }
 }
 
-const THEME_VARS = ['--background', '--primary', '--popover', '--term-bg']
+const THEME_VARS = ['--background', '--primary', '--on-primary', '--popover', '--term-bg']
 
 function apply(settings: Settings, mode: Mode) {
   const style = document.documentElement.style

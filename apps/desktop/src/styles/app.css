@@ -2,7 +2,7 @@
 :root {
   --background: #000; --popover: #121212; --foreground: #f5f5f5; --muted-foreground: #848484;
   --border: rgb(255 255 255 / 6%); --input: rgb(255 255 255 / 8%); --accent: rgb(255 255 255 / 4%); --accent-ink: #fff; --accent-pct: 4%; --muted: rgb(255 255 255 / 3%);
-  --primary: #4f5ff0; --canvas: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  --primary: #4f5ff0; --on-primary: #fff; --canvas: color-mix(in srgb, var(--foreground) 5%, var(--background));
   --amber: #f59e0b; --red: #ef4444; --sky: #0ea5e9; --green: #10b981; --violet: #a78bfa;
   --amber-bg: rgb(251 191 36 / 15%); --red-bg: rgb(248 113 113 / 15%); --violet-bg: rgb(167 139 250 / 15%); --sky-bg: rgb(56 189 248 / 15%); --green-bg: rgb(52 211 153 / 15%);
   color-scheme: dark;
