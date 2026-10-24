@@ -1678,7 +1678,11 @@ scrollback: number; copyOnSelect: boolean; optionAsMeta: boolean;
 /**
  * None runs the login shell from the user database
  */
-shell: string | null; loginShell: boolean; confirmQuit: boolean }
+shell: string | null; loginShell: boolean; confirmQuit: boolean; 
+/**
+ * Cmd-clicked paths open in the file view; off, in their default app
+ */
+openFilesInApp: boolean }
 export type Ticket = { 
 /**
  * `TRX-47` for Jira, the page id for Notion

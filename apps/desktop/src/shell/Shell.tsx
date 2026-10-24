@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react'
 import { emit, listen } from '@tauri-apps/api/event'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
@@ -13,7 +14,7 @@ import { settingsNow } from '../features/agents/settings'
 import { toggleRecording } from '../features/voice'
 import { useBrowserAgentPanes } from '../features/browser/open'
 import { resolveShortcut } from '../lib/hotkeys'
-import { TabPanes } from './Panes'
+import { openAbsolute, TabPanes } from './Panes'
 import { Palette } from './Palette'
 import { Dialogs, useDialogKeys, type DialogRequest } from '../dialogs'
 import { paneGrid } from '../panes/terminal/xterm'
@@ -345,6 +346,21 @@ export function Shell({ api }: { api: Api }) {
     if (!IN_TAURI) return
     const unlisten = listen<{ id: string }>('menu', (e) => onMenu(e.payload.id))
     return () => void unlisten.then((stop) => stop())
+  }, [])
+
+  // Files dropped anywhere but a terminal (which types their paths) open in the file view
+  const onDrop = useEffectEvent((paths: string[]) => {
+    const opener = { api, openFile: (root: string, file: string, line?: number) => openFile({ ui, dispatch }, root, file, line) }
+    for (const path of paths) void openAbsolute(opener, path)
+  })
+  useEffect(() => {
+    if (!IN_TAURI) return
+    const stop = getCurrentWebview().onDragDropEvent(({ payload }) => {
+      if (payload.type !== 'drop') return
+      const { x, y } = payload.position.toLogical(window.devicePixelRatio)
+      if (!document.elementFromPoint(x, y)?.closest('.term')) onDrop(payload.paths)
+    })
+    return () => void stop.then((unlisten) => unlisten())
   }, [])
 
   if (!loaded)

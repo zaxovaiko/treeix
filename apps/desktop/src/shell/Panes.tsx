@@ -11,6 +11,7 @@ import { closePlan, isPlanLeaf, PlanHead } from '../features/plans/open'
 import { DOT_LABEL, KIND_ICON, SETTINGS_LEAF, statusDot } from './model'
 import { SettingsPage } from '../pages/settings'
 import { withHint } from './shortcuts'
+import { settingsNow } from '../features/agents/settings'
 import { paneRects, splitHandles, type Handle, type Rect, type Tab } from './state'
 import type { ShellView } from './Shell'
 
@@ -32,29 +33,40 @@ function ChatHead({ leaf }: { leaf: string }) {
 }
 
 /**
- * A path printed in a terminal, in the file view: the first target that exists, under its own checkout when it's outside the
- * session's. One that resolves to nothing (cut short, relative to another folder) is looked up in the session's checkout
+ * A file in the file view, under its own checkout (`root` when inside it); a folder, or any file with `external`, in Finder
+ * or its default app. False when nothing is there
+ */
+export async function openAbsolute(view: Pick<ShellView, 'api' | 'openFile'>, absolute: string, { line, root, external = false }: { line?: number; root?: string; external?: boolean } = {}): Promise<boolean> {
+  const { api } = view
+  const cut = absolute.lastIndexOf('/')
+  const dir = absolute.slice(0, cut) || '/'
+  const names = await api.listDirectory(dir, '').catch((): string[] => [])
+  const name = absolute.slice(cut + 1)
+  if (names.includes(`${name}/`) || (external && names.includes(name))) return api.openPath(absolute).then(() => true)
+  if (!names.includes(name)) return false
+  const [place] = root && absolute.startsWith(`${root}/`) ? [{ key: root }] : await api.places([dir]).catch(() => [])
+  const base = place && absolute.startsWith(`${place.key}/`) ? place.key : dir
+  view.openFile(base, absolute.slice(base.length + 1), line)
+  return true
+}
+
+/**
+ * A path printed in a terminal, in the file view or, per Settings, its default app: the first target that exists. One that
+ * resolves to nothing (cut short, relative to another folder) is looked up in the session's checkout
  */
 async function openPrinted(view: ShellView, session: string, targets: { path: string; line: number | null }[]) {
   const { api, home } = view
   const root = view.placeOf(session).key
   const cwd = view.sessions[session]?.cwd ?? home
+  const external = settingsNow()?.terminal.openFilesInApp === false
   for (const { path, line } of targets) {
     const absolute = path.startsWith('~/') ? resolvePath(home, path.slice(2)) : resolvePath(cwd, path)
-    const cut = absolute.lastIndexOf('/')
-    const dir = absolute.slice(0, cut) || '/'
-    const names = await api.listDirectory(dir, '').catch((): string[] => [])
-    const name = absolute.slice(cut + 1)
-    if (names.includes(`${name}/`)) return api.openPath(absolute)
-    if (!names.includes(name)) continue
-    const [place] = absolute.startsWith(`${root}/`) ? [{ key: root }] : await api.places([dir]).catch(() => [])
-    const base = place && absolute.startsWith(`${place.key}/`) ? place.key : dir
-    return view.openFile(base, absolute.slice(base.length + 1), line ?? undefined)
+    if (await openAbsolute(view, absolute, { line: line ?? undefined, root, external })) return
   }
   const files = (await api.listFiles(root).catch(() => null))?.files ?? []
   for (const { path, line } of targets) {
     const [file] = filesEndingWith(files, path)
-    if (file) return view.openFile(root, file, line ?? undefined)
+    if (file) return external ? api.openPath(`${root}/${file}`) : view.openFile(root, file, line ?? undefined)
   }
 }
 

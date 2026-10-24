@@ -139,6 +139,9 @@ function Terminal({ view, settings, update }: SectionProps) {
         <Row label="Scrollback" desc="Lines kept per pane">
           <Select value={t.scrollback} options={[1000, 3000, 5000, 10000, 20000, 50000].map((n) => [n, n.toLocaleString('en')] as const)} onChange={(scrollback) => set({ scrollback })} />
         </Row>
+        <Row label="Open files in Treeix" desc="Cmd-clicked paths open in the file view. Off opens them in their default app" keywords="finder link click path external">
+          <Switch label="Open files in Treeix" on={t.openFilesInApp} onChange={(openFilesInApp) => set({ openFilesInApp })} />
+        </Row>
         <Row label="Copy on select">
           <Switch label="Copy on select" on={t.copyOnSelect} onChange={(copyOnSelect) => set({ copyOnSelect })} />
         </Row>

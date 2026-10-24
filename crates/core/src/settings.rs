@@ -102,6 +102,8 @@ pub struct Terminal {
     pub shell: Option<String>,
     pub login_shell: bool,
     pub confirm_quit: bool,
+    /// Cmd-clicked paths open in the file view; off, in their default app
+    pub open_files_in_app: bool,
 }
 
 impl Default for Terminal {
@@ -118,6 +120,7 @@ impl Default for Terminal {
             shell: None,
             login_shell: true,
             confirm_quit: true,
+            open_files_in_app: true,
         }
     }
 }

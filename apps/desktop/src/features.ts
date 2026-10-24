@@ -70,7 +70,7 @@ export const THEMES = {
 export const DEFAULT_SETTINGS: Settings = {
   features: { usage: true, ports: true, chat: true, mcp: true, jira: false, notion: false, prs: true, awake: true, race: true, routines: true, browser: true, plans: true, graph: true, dictation: false, recording: false },
   appearance: { darkTheme: 'Neutral', lightTheme: 'Light', followSystem: true },
-  terminal: { fontFamily: 'JetBrains Mono', fontSize: 12, lineHeight: 1.2, cursorStyle: 'block', cursorBlink: true, scrollback: 10_000, copyOnSelect: false, optionAsMeta: true, shell: null, loginShell: true, confirmQuit: true },
+  terminal: { fontFamily: 'JetBrains Mono', fontSize: 12, lineHeight: 1.2, cursorStyle: 'block', cursorBlink: true, scrollback: 10_000, copyOnSelect: false, optionAsMeta: true, shell: null, loginShell: true, confirmQuit: true, openFilesInApp: true },
   keys: {},
   agents: { skipPermissionsClaude: false, skipPermissionsCodex: false },
   chats: { defaultView: 'terminal', width: 760, showThinking: true, notify: true },
