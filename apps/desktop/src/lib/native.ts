@@ -19,11 +19,11 @@ export async function registerQuickShortcut(accelerator: string | null): Promise
   await commands.setQuickShortcut(accelerator)
 }
 
-/** Whether the quick terminal slides in, and its window opacity */
-export async function setQuickLook(animate: boolean, opacity: number): Promise<void> {
+/** Whether the quick terminal slides in, its window opacity, and whether what shows through is blurred */
+export async function setQuickLook(animate: boolean, opacity: number, blur: boolean): Promise<void> {
   if (!IN_TAURI) return
   const { commands } = await import('../ipc/bindings')
-  await commands.setQuickLook(animate, opacity)
+  await commands.setQuickLook(animate, opacity, blur)
 }
 
 /** Page zoom of this window; the browser build zooms the page with CSS */

@@ -3,7 +3,6 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { Api } from '../ipc/api'
 import type { SessionInfo } from '../ipc/bindings'
-import { Icon } from '../lib/icons'
 import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
 import { paneGrid } from '../panes/terminal/xterm'
@@ -14,7 +13,7 @@ import { parseUi, type UiState } from './state'
 import { acceleratorLabel } from './shortcuts'
 import { Ki, statusDot, tilde } from './model'
 
-type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom' | 'quickAnimate' | 'quickOpacity'>
+type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom' | 'quickAnimate' | 'quickOpacity' | 'quickBlur'>
 type Opened = { id: string; cwd: string; home: string; shortcut: string | null }
 
 const GONE = new Set(['exited', 'restored', 'crashed'])
@@ -53,9 +52,9 @@ export function Quick({ api }: { api: Api }) {
   useEffect(() => {
     let cancelled = false
     let current: string | null = null
-    const look = ({ theme, ui, renderer, zoom, quickAnimate, quickOpacity }: Look) => {
+    const look = ({ theme, ui, renderer, zoom, quickAnimate, quickOpacity, quickBlur }: Look) => {
       applyTheme(theme, ui)
-      void setQuickLook(quickAnimate, quickOpacity).catch((e: unknown) => console.warn('quick look:', e))
+      void setQuickLook(quickAnimate, quickOpacity, quickBlur).catch((e: unknown) => console.warn('quick look:', e))
       void setZoom(zoom).catch((e: unknown) => console.warn('zoom:', e))
       setMode(theme)
       setRenderer(renderer)
@@ -92,12 +91,10 @@ export function Quick({ api }: { api: Api }) {
       {session && (
         <>
           <div className="qh">
-            <Icon name="terminal" />
-            <b>Quick terminal</b>
-            <span className="mono">{tilde(agent?.cwd ?? session.cwd, session.home)}</span>
+            <span className="mono trunc">{tilde(agent?.cwd ?? session.cwd, session.home)}</span>
             <span className="grow" />
-            <button className="btn sm" onClick={() => void getCurrentWindow().hide()}>
-              {session.shortcut && <kbd>{acceleratorLabel(session.shortcut)}</kbd>} Hide
+            <button onClick={() => void getCurrentWindow().hide()} title="Hide" aria-label="Hide">
+              {session.shortcut ? <kbd>{acceleratorLabel(session.shortcut)}</kbd> : 'Hide'}
             </button>
           </div>
           <div className="qbody">

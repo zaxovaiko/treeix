@@ -198,8 +198,8 @@ export function Shell({ api }: { api: Api }) {
   useAppliedSettings(api, ui.theme, (theme) => dispatch({ type: 'set', patch: { theme } }))
   useBrowserAgentPanes({ api, dispatch, activeTab, placeOfTab })
   useEffect(() => {
-    if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer, zoom: ui.zoom, quickAnimate: ui.quickAnimate, quickOpacity: ui.quickOpacity })
-  }, [loaded, ui.theme, ui.ui, ui.renderer, ui.zoom, ui.quickAnimate, ui.quickOpacity])
+    if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer, zoom: ui.zoom, quickAnimate: ui.quickAnimate, quickOpacity: ui.quickOpacity, quickBlur: ui.quickBlur })
+  }, [loaded, ui.theme, ui.ui, ui.renderer, ui.zoom, ui.quickAnimate, ui.quickOpacity, ui.quickBlur])
   useEffect(() => void setZoom(ui.zoom).catch((e: unknown) => console.warn('zoom:', e)), [ui.zoom])
 
   const focusCwd = () => (activeTab ? (sessions[activeTab.focus]?.cwd ?? home) : home)

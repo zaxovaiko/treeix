@@ -73,12 +73,13 @@ fn drop_down(window: &tauri::WebviewWindow) {
     ));
 }
 
-/// Whether it slides in, and how opaque it is (0.3 to 1); Linux windows have neither, so it ignores both
-pub fn set_look(app: &AppHandle, animate: bool, opacity: f64) {
+/// Whether it slides in, how opaque it is (0.3 to 1) and whether what shows through is blurred; Linux windows
+/// have none of these, so it ignores them
+pub fn set_look(app: &AppHandle, animate: bool, opacity: f64, blur: bool) {
     #[cfg(target_os = "macos")]
-    panel::set_look(app, animate, opacity.clamp(0.3, 1.0));
+    panel::set_look(app, animate, opacity.clamp(0.3, 1.0), blur);
     #[cfg(not(target_os = "macos"))]
-    let _ = (app, animate, opacity);
+    let _ = (app, animate, opacity, blur);
 }
 
 // global-hotkey directly, not tauri-plugin-global-shortcut: the plugin pins global-hotkey 0.8, which has no
@@ -161,13 +162,31 @@ mod panel {
     static ANIMATE: AtomicBool = AtomicBool::new(true);
     /// How far above its place it starts; AppKit moves windows at about 150px per 0.2s, so this slide takes ~0.1s
     const SLIDE: f64 = 72.0;
+    const BLUR_RADIUS: i32 = 24;
 
-    pub fn set_look(app: &AppHandle, animate: bool, opacity: f64) {
+    // The window server's backdrop blur, the one Terminal, iTerm2 and Ghostty use; AppKit has no public call for it
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGSMainConnectionID() -> i32;
+        fn CGSSetWindowBackgroundBlurRadius(connection: i32, window: i32, radius: i32) -> i32;
+    }
+
+    pub fn set_look(app: &AppHandle, animate: bool, opacity: f64, blur: bool) {
         ANIMATE.store(animate, Ordering::Relaxed);
         let app = app.clone();
         let _ = app.clone().run_on_main_thread(move || {
             if let Ok(panel) = app.get_webview_panel(LABEL) {
                 panel.set_alpha_value(opacity);
+                let window: &NSWindow = panel.as_panel();
+                let number = window.windowNumber() as i32;
+                // SAFETY: on the main thread, with a live window's number
+                unsafe {
+                    CGSSetWindowBackgroundBlurRadius(
+                        CGSMainConnectionID(),
+                        number,
+                        if blur { BLUR_RADIUS } else { 0 },
+                    )
+                };
             }
         });
     }
