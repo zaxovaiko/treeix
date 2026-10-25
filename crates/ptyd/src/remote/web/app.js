@@ -57,6 +57,11 @@ const KEYS = [
 ]
 const FLAGS = [[1, 'b'], [2, 'i'], [4, 'u'], [16, 'd'], [32, 's'], [64, 'h']]
 const FONT_KEY = 'treeix.font'
+const FIT_KEY = 'treeix.fit'
+// A request the phone dropped while asleep or switching networks would otherwise hold the poller forever
+const TIMEOUT = 8000
+// A row of box-drawing rules, like the lines around an agent's prompt
+const RULE = /^[\s─━═┄┈╌-]{8,}$/
 
 const app = document.getElementById('app')
 const host = location.hostname.split('.')[0]
@@ -80,6 +85,7 @@ async function api(path, body) {
   const init = body === undefined
     ? {}
     : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+  init.signal = AbortSignal.timeout(TIMEOUT)
   let res
   try {
     res = await fetch(path, init)
@@ -117,7 +123,9 @@ function poller(every, fn, fail) {
     }
     if (!stopped) timer = setTimeout(run, every)
   }
-  document.addEventListener('visibilitychange', run)
+  // Back from the lock screen or the tab switcher, or the network came back
+  const wake = ['visibilitychange', 'pageshow', 'online']
+  for (const name of wake) window.addEventListener(name, run)
   run()
   return {
     now: run,
@@ -125,7 +133,7 @@ function poller(every, fn, fail) {
     stop() {
       stopped = true
       clearTimeout(timer)
-      document.removeEventListener('visibilitychange', run)
+      for (const name of wake) window.removeEventListener(name, run)
     },
   }
 }
@@ -420,6 +428,7 @@ function paint(p) {
 
 function screenLine(spans) {
   const line = $('div', { class: 'ln' })
+  if (RULE.test(spans.map(([text]) => text).join(''))) line.classList.add('rule')
   for (const [text, fgPaint, bgPaint, flags] of spans) {
     if (fgPaint == null && bgPaint == null && !flags) {
       line.append(text)
@@ -434,6 +443,12 @@ function screenLine(spans) {
     line.append(span)
   }
   return line
+}
+
+/** Wrapped, a TUI's empty rows only push the text apart, so a run of them shows as one */
+function wrappedLines(lines) {
+  const blank = (spans) => spans.every(([text]) => !text.trim())
+  return lines.filter((spans, i) => !blank(spans) || (i > 0 && !blank(lines[i - 1])))
 }
 
 /** Width of one monospace cell per px of font size */
@@ -451,32 +466,49 @@ function terminal(id) {
   const ratio = cellRatio()
   let cols = 80
   let seq = null
+  let lines = []
+  // Wrapped and readable by default; Fit shrinks the Mac's full width onto the phone, for TUIs that need their layout
+  let fitted = localStorage.getItem(FIT_KEY) === '1'
 
   function fit() {
-    const stored = Number(localStorage.getItem(FONT_KEY))
     const style = getComputedStyle(screen)
     const width = screen.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-    const size = stored || Math.min(14, Math.max(5, Math.floor((width / (cols * ratio)) * 10) / 10))
+    const size = fitted
+      ? Math.min(14, Math.max(5, Math.floor((width / (cols * ratio)) * 10) / 10))
+      : Number(localStorage.getItem(FONT_KEY)) || 12
     screen.style.fontSize = `${size}px`
     return size
   }
+  function draw() {
+    const stick = atBottom(screen)
+    screen.replaceChildren(...(fitted ? lines : wrappedLines(lines)).map(screenLine))
+    fit()
+    if (stick) screen.scrollTop = screen.scrollHeight
+  }
   function zoom(factor) {
-    const size = Math.min(24, Math.max(5, Math.round(fit() * factor * 2) / 2))
-    localStorage.setItem(FONT_KEY, String(size))
-    fit()
+    localStorage.setItem(FONT_KEY, String(Math.min(20, Math.max(8, Math.round(fit() * factor)))))
+    draw()
   }
-  const autoFit = () => {
-    localStorage.removeItem(FONT_KEY)
-    fit()
-  }
-  const head = header('', '', {
-    back: '#/agents',
-    actions: [
-      $('button', { class: 'icon-btn', 'aria-label': 'Smaller text', text: 'A-', onclick: () => zoom(0.8) }),
-      $('button', { class: 'icon-btn', 'aria-label': 'Larger text', text: 'A+', onclick: () => zoom(1.25) }),
-      $('button', { class: 'icon-btn', 'aria-label': 'Fit the width', text: 'Fit', onclick: autoFit }),
-    ],
+  const smaller = $('button', { class: 'icon-btn', 'aria-label': 'Smaller text', text: 'A-', onclick: () => zoom(0.85) })
+  const larger = $('button', { class: 'icon-btn', 'aria-label': 'Larger text', text: 'A+', onclick: () => zoom(1.15) })
+  const fitButton = $('button', {
+    class: 'icon-btn toggle',
+    'aria-label': 'Fit the Mac width',
+    text: 'Fit',
+    onclick: () => {
+      fitted = !fitted
+      localStorage.setItem(FIT_KEY, fitted ? '1' : '0')
+      mode()
+      draw()
+    },
   })
+  function mode() {
+    screen.classList.toggle('wrap', !fitted)
+    fitButton.setAttribute('aria-pressed', String(fitted))
+    smaller.hidden = larger.hidden = fitted
+  }
+  mode()
+  const head = header('', '', { back: '#/agents', actions: [smaller, larger, fitButton] })
 
   async function send(text) {
     try {
@@ -505,12 +537,12 @@ function terminal(id) {
       head.set(r.info.title || base(r.info.cwd), [KIND[r.info.kind], base(r.info.cwd), label].filter(Boolean).join(' · '))
       alert.clear()
       if (!r.lines) return
-      const stick = seq == null || atBottom(screen)
+      const first = seq == null
       seq = r.seq
       cols = r.cols
-      screen.replaceChildren(...r.lines.map(screenLine))
-      fit()
-      if (stick) screen.scrollTop = screen.scrollHeight
+      lines = r.lines
+      draw()
+      if (first) screen.scrollTop = screen.scrollHeight
     },
     alert.show,
   )

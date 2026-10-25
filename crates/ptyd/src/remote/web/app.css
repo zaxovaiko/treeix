@@ -110,6 +110,7 @@ a { color: var(--primary); text-decoration: none; }
 }
 
 .icon-btn:active { background: var(--card); }
+.toggle[aria-pressed="true"] { background: var(--card); color: var(--primary); }
 
 .back { font-size: 22px; line-height: 1; }
 
@@ -361,6 +362,8 @@ a.btn {
 }
 
 .screen .ln { min-height: 1.25em; }
+.screen.wrap { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
+.screen.wrap .ln.rule { white-space: pre; overflow: hidden; opacity: 0.5; }
 .screen .b { font-weight: 700; }
 .screen .i { font-style: italic; }
 .screen .u { text-decoration: underline; }
