@@ -195,7 +195,12 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Session {
-    pub fn new(info: SessionInfo, env: Vec<(String, String)>, has_title: bool) -> Arc<Self> {
+    pub fn new(
+        info: SessionInfo,
+        launched: SessionKind,
+        env: Vec<(String, String)>,
+        has_title: bool,
+    ) -> Arc<Self> {
         let term_events = Arc::new(Mutex::new(Vec::new()));
         let config = Config {
             scrolling_history: HISTORY,
@@ -209,7 +214,7 @@ impl Session {
         Arc::new(Self {
             id: info.id.clone(),
             env,
-            launched: info.kind,
+            launched,
             seq: AtomicU64::new(info.seq),
             vt: Mutex::new(Vt {
                 term,
@@ -302,7 +307,29 @@ impl Session {
             info.exit_code = None;
         }
         let wait = move || child.wait().ok().map(|status| status.exit_code() as i32);
-        self.start(daemon, master, pid, Box::new(wait), restart)
+        self.start(daemon, master, pid, Box::new(wait), restart)?;
+        if restart && let Some(line) = self.resume_line(&info) {
+            // Typed ahead: the shell runs it once it is up, and is still there after the agent quits
+            self.write(line.into_bytes());
+        }
+        Ok(())
+    }
+
+    /// What brings back the agent a shell ran: it resumes its conversation
+    fn resume_line(&self, info: &SessionInfo) -> Option<String> {
+        if self.launched != SessionKind::Shell || !info.command.is_empty() {
+            return None;
+        }
+        // It ends up in a shell, and comes from a file the agent wrote
+        let id = info
+            .agent_session
+            .as_deref()
+            .filter(|id| id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))?;
+        match info.kind {
+            SessionKind::Claude => Some(format!("claude --resume {id}\r")),
+            SessionKind::Codex => Some(format!("codex resume {id}\r")),
+            _ => None,
+        }
     }
 
     /// Takes over the process of a session the previous daemon image handed over across exec: same pid, so it
@@ -487,6 +514,8 @@ impl Session {
             session: self.id.clone(),
             kind,
         });
+        // Saved as the agent Restart resumes
+        daemon.mark_state_dirty();
     }
 
     pub fn set_cwd(&self, daemon: &Daemon, cwd: String) {

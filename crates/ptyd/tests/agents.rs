@@ -139,3 +139,94 @@ async fn an_interactive_shell_is_idle_at_its_prompt_and_running_a_command() {
     wait_for_status(&mut client, &info.id, SessionStatus::Running).await;
     wait_for_status(&mut client, &info.id, SessionStatus::Idle).await;
 }
+
+#[tokio::test]
+async fn restarting_a_restored_shell_resumes_the_claude_it_ran() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    let resumed = dir.path().join("resumed");
+    let claude = bin.join("claude");
+    std::fs::write(
+        &claude,
+        format!("#!/bin/sh\necho \"$@\" > '{}'\n", resumed.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&claude, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    // Skips zsh's new-user wizard, which would eat the typed line
+    std::fs::write(dir.path().join(".zshrc"), "").unwrap();
+    let server = treeix_ptyd::spawn_in_process(dir.path().into());
+    let mut client = Client::connect(&dir.path().join("ptyd.sock"))
+        .await
+        .expect("connect");
+    let Response::Created(info) = client
+        .request(Request::Create(CreateSession {
+            command: vec![],
+            // The user's rc files and their real claude stay out
+            env: vec![
+                ("HOME".into(), dir.path().display().to_string()),
+                ("PATH".into(), format!("{}:/usr/bin:/bin", bin.display())),
+            ],
+            ..match create(SessionKind::Shell, "") {
+                Request::Create(create) => create,
+                _ => unreachable!(),
+            }
+        }))
+        .await
+        .unwrap()
+    else {
+        panic!("not created");
+    };
+    client
+        .request(Request::Write {
+            session: info.id.clone(),
+            data: b"bash -c 'exec -a claude sleep 100'\r".to_vec(),
+        })
+        .await
+        .unwrap();
+    loop {
+        match client.next_event().await.unwrap().expect("connection open") {
+            Event::Kind {
+                session,
+                kind: SessionKind::Claude,
+            } if session == info.id => break,
+            _ => {}
+        }
+    }
+    client
+        .request(Request::SetAgentSession {
+            session: info.id.clone(),
+            agent_session: "abc-123".into(),
+        })
+        .await
+        .unwrap();
+    client.request(Request::Shutdown).await.unwrap();
+    server.join().unwrap().unwrap();
+
+    let _server = treeix_ptyd::spawn_in_process(dir.path().into());
+    let mut client = Client::connect(&dir.path().join("ptyd.sock"))
+        .await
+        .expect("connect");
+    let Response::Sessions(list) = client.request(Request::List).await.unwrap() else {
+        panic!("no session list");
+    };
+    let restored = list.iter().find(|s| s.id == info.id).expect("session kept");
+    assert_eq!(
+        (restored.kind, restored.status),
+        (SessionKind::Claude, SessionStatus::Restored)
+    );
+    client
+        .request(Request::Restart {
+            session: info.id.clone(),
+        })
+        .await
+        .unwrap();
+    let start = Instant::now();
+    while std::fs::read_to_string(&resumed).map_or(true, |args| args.trim() != "--resume abc-123") {
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "claude was not resumed"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}

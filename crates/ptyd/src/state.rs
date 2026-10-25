@@ -5,7 +5,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use treeix_proto::SessionInfo;
+use treeix_proto::{SessionInfo, SessionKind};
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct State {
@@ -23,6 +23,9 @@ pub struct SavedSession {
     /// `procinfo::start_time` of `info.pid`, so a later daemon only kills that process and never a reused pid
     #[serde(default)]
     pub started: Option<u64>,
+    /// The agent a shell ran in the foreground (`info.kind` is the kind it was launched as), so Restart resumes it
+    #[serde(default)]
+    pub foreground: Option<SessionKind>,
 }
 
 pub fn load(dir: &Path) -> State {

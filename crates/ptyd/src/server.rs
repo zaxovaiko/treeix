@@ -64,7 +64,13 @@ impl Daemon {
             SessionStatus::Crashed
         };
         let mut sessions = HashMap::new();
-        for SavedSession { info, env, started } in saved.sessions {
+        for SavedSession {
+            info,
+            env,
+            started,
+            foreground,
+        } in saved.sessions
+        {
             let master = masters.remove(&info.id);
             let was_running = !matches!(info.status, SessionStatus::Exited | SessionStatus::Error);
             if master.is_none()
@@ -73,7 +79,12 @@ impl Daemon {
             {
                 kill_orphan(pid as i32, started);
             }
-            let session = Session::new(info, env, true);
+            let launched = info.kind;
+            let info = SessionInfo {
+                kind: foreground.unwrap_or(launched),
+                ..info
+            };
+            let session = Session::new(info, launched, env, true);
             if was_running && master.is_none() {
                 session.set_status(revived);
             }
@@ -150,14 +161,18 @@ impl Daemon {
         let mut sessions: Vec<SavedSession> = self
             .sessions()
             .iter()
-            .map(|s| SavedSession {
-                // A shell comes back as a shell, whatever agent it ran
-                info: SessionInfo {
-                    kind: s.launched,
-                    ..s.info()
-                },
-                env: s.env.clone(),
-                started: s.started(),
+            .map(|s| {
+                let info = s.info();
+                SavedSession {
+                    foreground: (info.kind != s.launched).then_some(info.kind),
+                    // A shell comes back as a shell, whatever agent it ran
+                    info: SessionInfo {
+                        kind: s.launched,
+                        ..info
+                    },
+                    env: s.env.clone(),
+                    started: s.started(),
+                }
             })
             .collect();
         sessions.sort_by_key(|s| s.info.created_at);
@@ -540,7 +555,7 @@ impl Daemon {
             agent_session: None,
             routine: create.routine,
         };
-        let session = Session::new(info, create.env, create.title.is_some());
+        let session = Session::new(info, create.kind, create.env, create.title.is_some());
         session
             .spawn(self, false)
             .with_context(|| format!("starting {:?}", session.info().command))?;
