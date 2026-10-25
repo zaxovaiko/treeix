@@ -409,12 +409,13 @@ async fn shutdown_restores_sessions_ui_and_restart() {
     let dir = tempfile::tempdir().unwrap();
     let server = treeix_ptyd::spawn_in_process(dir.path().into());
     let mut client = connect(dir.path()).await;
-    // Only the first run turns mouse tracking on, like a TUI that was running when the host went down
+    // Only the first run turns mouse tracking on, like a TUI that was running when the host went down. The marker
+    // comes before any output, so the host never goes down between the output and the marker
     let marker = dir.path().join("ran");
     let info = created(
         &mut client,
         &format!(
-            r"printf 'persist \033[35mme\033[0m'; [ -e {0} ] || printf '\033[?1003h\033[?1006h'; touch {0}; sleep 100",
+            r#"[ -e {0} ] && m= || m='\033[?1003h\033[?1006h'; touch {0}; printf "persist \033[35mme\033[0m$m"; sleep 100"#,
             marker.display()
         ),
     )

@@ -744,10 +744,10 @@ mod tests {
         let port = listener.local_addr().expect("addr").port();
         let url = |text: String| Url::parse(&text).expect("url");
         assert_eq!(local_down(&url(format!("http://127.0.0.1:{port}/"))), None);
-        drop(listener);
+        // Not a freed ephemeral port: another test can take it, or the connect can pick it as its own source port
         assert_eq!(
-            local_down(&url(format!("http://127.0.0.1:{port}/"))),
-            Some(format!("127.0.0.1:{port}"))
+            local_down(&url("http://127.0.0.1:1/".into())),
+            Some("127.0.0.1:1".into())
         );
         assert_eq!(local_down(&url("https://example.com/".into())), None);
     }
