@@ -5,9 +5,33 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Tauri puts the sidecar next to the app binary, in the bundle and in dev
+/// Tauri puts the sidecar next to the app binary, in the bundle and in dev. An AppImage's is copied to the data dir
+/// and runs from there: its mount goes away when the app quits while the daemon lives on, and systemd can't see the
+/// mount of an AppImage run in a sandbox (firejail)
 pub(crate) fn sidecar() -> io::Result<PathBuf> {
-    Ok(std::env::current_exe()?.with_file_name("treeix-ptyd"))
+    let bundled = std::env::current_exe()?.with_file_name("treeix-ptyd");
+    if std::env::var_os("APPIMAGE").is_none() {
+        return Ok(bundled);
+    }
+    copy_into(&bundled, &treeix_proto::data_dir())
+}
+
+fn copy_into(bundled: &Path, dir: &Path) -> io::Result<PathBuf> {
+    let copy = dir.join("treeix-ptyd");
+    let bytes = std::fs::read(bundled)?;
+    if std::fs::read(&copy).ok().as_ref() != Some(&bytes) {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)?;
+        // Renamed into place: a running daemon keeps its old file, and two starting apps never see half a copy
+        let tmp = copy.with_extension(format!("{}.tmp", std::process::id()));
+        std::fs::write(&tmp, &bytes)?;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+        std::fs::rename(&tmp, &copy)?;
+    }
+    Ok(copy)
 }
 
 fn custom_data_dir() -> bool {
@@ -228,6 +252,39 @@ mod tests {
             "awaiting approval spawns by hand"
         );
         assert!(registered(Err(E::InvalidSignature), S::NotRegistered).is_err());
+    }
+
+    #[test]
+    fn an_appimage_sidecar_is_copied_and_replaced_only_when_it_changes() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = std::env::temp_dir().join(format!("treeix-sidecar-{}", std::process::id()));
+        let bundled = tmp.join("mount/treeix-ptyd");
+        std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+        std::fs::write(&bundled, "v1").unwrap();
+        let dir = tmp.join("data");
+
+        let copy = super::copy_into(&bundled, &dir).unwrap();
+        assert_eq!(copy, dir.join("treeix-ptyd"));
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "v1");
+        assert_eq!(
+            std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        let inode = |p: &Path| std::os::unix::fs::MetadataExt::ino(&std::fs::metadata(p).unwrap());
+        let first = inode(&copy);
+
+        super::copy_into(&bundled, &dir).unwrap();
+        assert_eq!(inode(&copy), first, "an unchanged sidecar is left alone");
+
+        std::fs::write(&bundled, "v2").unwrap();
+        super::copy_into(&bundled, &dir).unwrap();
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "v2");
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            1,
+            "no tmp file left behind"
+        );
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[cfg(target_os = "linux")]

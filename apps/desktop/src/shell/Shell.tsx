@@ -374,7 +374,14 @@ export function Shell({ api }: { api: Api }) {
   if (!loaded)
     return (
       <div className="win">
-        {unreachable && <Unreachable onRetry={retry} />}
+        {unreachable ? (
+          <Unreachable onRetry={retry} />
+        ) : (
+          // Fades in late, so only a slow terminal host shows it and a normal start never flashes it
+          <div className="welcome starting">
+            <p className="dim">Starting the terminal host...</p>
+          </div>
+        )}
       </div>
     )
 
