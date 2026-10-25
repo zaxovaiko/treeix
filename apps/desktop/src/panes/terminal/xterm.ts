@@ -39,20 +39,27 @@ const ANSI_NAMES = [
 
 /**
  * Theme and font from CSS custom properties, defaults in terminal.css:
- * --term-bg (--xterm-bg overrides it for a see-through canvas), --term-fg, --term-cursor, --term-selection, --term-font, --term-font-size, and ANSI colors --term-0 .. --term-15
+ * --term-bg (--term-clear: 1 makes the canvas see-through), --term-fg, --term-cursor, --term-selection, --term-font, --term-font-size, and ANSI colors --term-0 .. --term-15
  */
 function cssTheme(host: HTMLElement): { theme: ITheme; allowTransparency: boolean; fontFamily: string; fontSize: number } {
   const style = getComputedStyle(host)
   const read = (name: string): string | undefined => style.getPropertyValue(name).trim() || undefined
+  const clear = read('--term-clear') === '1'
   const theme: ITheme = {
-    background: read('--xterm-bg') ?? read('--term-bg'),
+    background: clear ? clearOf(read('--term-bg')) : read('--term-bg'),
     foreground: read('--term-fg'),
     cursor: read('--term-cursor'),
     selectionBackground: read('--term-selection')
   }
   ANSI_NAMES.forEach((name, index) => (theme[name] = read(`--term-${index}`)))
-  return { theme, allowTransparency: read('--xterm-bg') !== undefined, fontFamily: read('--term-font') ?? 'monospace', fontSize: Number(read('--term-font-size')) || 12 }
+  return { theme, allowTransparency: clear, fontFamily: read('--term-font') ?? 'monospace', fontSize: Number(read('--term-font-size')) || 12 }
 }
+
+/**
+ * `color` with no alpha, kept as #RGBA / #RRGGBBAA: xterm answers apps asking for the background (OSC 11) with its
+ * RGB, so a light theme still reads as light. The themes are hex; anything else goes clear black
+ */
+export const clearOf = (color = ''): string => (/^#([\da-f]{3}|[\da-f]{6})$/i.test(color) ? `${color}${color.length === 4 ? '0' : '00'}` : 'rgba(0, 0, 0, 0)')
 
 /** Find highlights from --term-match and --term-match-active; decorations take #RRGGBB only */
 export function searchDecorations(host: HTMLElement): ISearchDecorationOptions {
