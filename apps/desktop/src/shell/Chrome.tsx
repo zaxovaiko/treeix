@@ -3,7 +3,8 @@ import { PortsItem, TabTags } from '../features/agents/PortsItem'
 import { UsagePill } from '../features/agents/UsagePill'
 import { RoutineClock, RoutinesHost } from '../features/routines'
 import { VoiceTitleItems } from '../features/voice'
-import type { Api, Place, ProgressState } from '../ipc/api'
+import { useSettings } from '../features/agents/settings'
+import type { Api, KeepAwakeMode, Place, ProgressState } from '../ipc/api'
 import { Icon } from '../lib/icons'
 import { DOT_LABEL, GROUP_COLORS, groupColorKey, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
 import { keyHint, withHint } from './shortcuts'
@@ -37,6 +38,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
         <div className="tb-r" data-tauri-drag-region>
           <UsagePill api={view.api} />
           <VoiceTitleItems view={view} />
+          <KeepAwakeButton api={view.api} />
           <button className="kbar mini" onClick={() => run('palette')} title="Search sessions and commands">
             <Icon name="search" />
             <kbd>{keyHint('palette')}</kbd>
@@ -65,6 +67,7 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
       <div className="tb-r" data-tauri-drag-region>
         <UsagePill api={view.api} />
         <VoiceTitleItems view={view} />
+        <KeepAwakeButton api={view.api} />
         <button className="icon" onClick={() => run('toggle-theme')} title={ui.theme === 'dark' ? 'Light theme' : 'Dark theme'}>
           <Icon name={ui.theme === 'dark' ? 'sun' : 'moon'} />
         </button>
@@ -73,6 +76,25 @@ export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
         </button>
       </div>
     </div>
+  )
+}
+
+const AWAKE_NEXT: Record<KeepAwakeMode, [next: KeepAwakeMode, title: string]> = {
+  off: ['untilAgentsFinish', 'Keep awake: off'],
+  untilAgentsFinish: ['on', 'Keep awake: while agents work'],
+  on: ['off', 'Keep awake: always'],
+}
+
+/** Cycles settings.awake.mode: off, while agents work, always */
+function KeepAwakeButton({ api }: { api: Api }) {
+  const settings = useSettings(api)
+  if (!settings?.features.awake) return null
+  const mode = settings.awake.mode
+  const [next, title] = AWAKE_NEXT[mode]
+  return (
+    <button className={`icon awake-${mode}`} onClick={() => void api.updateSettings({ awake: { mode: next } })} title={title}>
+      <Icon name="coffee" />
+    </button>
   )
 }
 
