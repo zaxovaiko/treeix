@@ -110,6 +110,7 @@ fn specta() -> Builder<tauri::Wry> {
             set_secret,
             delete_secret,
             cli_tools,
+            update_cli_tool,
             run_command,
             check_update,
             install_update,

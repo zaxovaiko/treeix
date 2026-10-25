@@ -399,6 +399,12 @@ async cliTools() : Promise<CliTool[]> {
     return await TAURI_INVOKE("cli_tools");
 },
 /**
+ * Updates a tool the way it was installed, then checks it again
+ */
+async updateCliTool(name: string) : Promise<CliTool> {
+    return await TAURI_INVOKE("update_cli_tool", { name });
+},
+/**
  * A one-off command (git pull, commit, push) in the login shell at `cwd` with no terminal, so git neither prompts
  * nor opens an editor. Its output, or the output as the error
  */
@@ -901,7 +907,11 @@ signedIn: boolean | null; account: string | null;
 /**
  * A newer version, when the tool says so
  */
-update: string | null }
+update: string | null; 
+/**
+ * `update_cli_tool` knows how to update it: it updates itself, or Homebrew installed it
+ */
+updatable: boolean }
 /**
  * One commit from `git log`
  */

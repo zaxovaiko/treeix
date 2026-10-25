@@ -153,6 +153,7 @@ export function tauriApi(): Api {
     deleteSecret: (secret) => done(commands.deleteSecret(secret)),
 
     cliTools: commands.cliTools,
+    updateCliTool: commands.updateCliTool,
     runCommand: commands.runCommand,
     appVersion: getVersion,
     checkUpdate: commands.checkUpdate,

@@ -260,7 +260,16 @@ function Hotkey({ view, settings }: SectionProps) {
 
 const SIGN_IN: Record<string, string> = { gh: 'gh auth login', glab: 'glab auth login', codex: 'codex login', acli: 'acli jira auth login', claude: 'claude /login' }
 
-function cliNote(tool: CliTool): [tone: 'ok' | 'warn' | 'bad' | 'idle', note: ReactNode] {
+type CliUpdate = { step: 'running' } | { step: 'done'; from: string | null; to: string | null } | { step: 'error'; message: string }
+type CliUpdateRun = { from: string | null; done: Promise<CliTool> }
+
+/** Updates outlive the page: leaving Settings mid-update and coming back still shows it running */
+const cliUpdates = new Map<string, CliUpdateRun>()
+
+function cliNote(tool: CliTool, update?: CliUpdate): [tone: 'ok' | 'warn' | 'bad' | 'idle', note: ReactNode] {
+  if (update?.step === 'done') return ['ok', update.to && update.to !== update.from ? `Updated to ${update.to}` : 'Up to date']
+  // Package managers end with the line that says what went wrong
+  if (update?.step === 'error') return ['bad', <span title={update.message}>{update.message.trim().split('\n').at(-1)}</span>]
   if (!tool.installed) return ['bad', 'Not found on PATH']
   if (tool.signedIn === false) return ['warn', <>Not signed in. Run <code>{SIGN_IN[tool.name] ?? `${tool.name} login`}</code></>]
   if (tool.update) return ['warn', `Update available: ${tool.update}`]
@@ -270,6 +279,23 @@ function cliNote(tool: CliTool): [tone: 'ok' | 'warn' | 'bad' | 'idle', note: Re
 
 function Agents({ view, settings, update }: SectionProps) {
   const [tools, error, reload] = useLoad(() => view.api.cliTools())
+  const [updates, setUpdates] = useState<Record<string, CliUpdate>>({})
+  const follow = (name: string, run: CliUpdateRun) => {
+    const set = (update: CliUpdate) => setUpdates((all) => ({ ...all, [name]: update }))
+    set({ step: 'running' })
+    void run.done
+      .then(
+        (tool) => set({ step: 'done', from: run.from, to: tool.version }),
+        (e: unknown) => set({ step: 'error', message: message(e) })
+      )
+      .finally(reload)
+  }
+  useEffect(() => cliUpdates.forEach((run, name) => follow(name, run)), [])
+  const startUpdate = (tool: CliTool) => {
+    const run = { from: tool.version, done: view.api.updateCliTool(tool.name).finally(() => cliUpdates.delete(tool.name)) }
+    cliUpdates.set(tool.name, run)
+    follow(tool.name, run)
+  }
   const a = settings.agents
   return (
     <>
@@ -287,13 +313,24 @@ function Agents({ view, settings, update }: SectionProps) {
             {error && <div className="sd st-err">{error}</div>}
             {!tools && !error && <div className="dim">Checking...</div>}
             {tools?.map((tool) => {
-              const [tone, note] = cliNote(tool)
+              const update = updates[tool.name]
+              const [tone, note] = cliNote(tool, update)
               return (
                 <div key={tool.name} className="clirow">
                   <span className={`sdot ${tone}`} />
                   <b className="mono">{tool.name}</b>
                   <span className="dim ver">{tool.version ?? ''}</span>
                   <span className="grow dim">{note}</span>
+                  {update?.step === 'running' ? (
+                    <span className="dim">Updating...</span>
+                  ) : (
+                    tool.installed &&
+                    tool.updatable && (
+                      <button className="btn sm" onClick={() => startUpdate(tool)}>
+                        Update
+                      </button>
+                    )
+                  )}
                 </div>
               )
             })}

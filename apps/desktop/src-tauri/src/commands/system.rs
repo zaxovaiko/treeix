@@ -28,6 +28,8 @@ pub struct CliTool {
     pub account: Option<String>,
     /// A newer version, when the tool says so
     pub update: Option<String>,
+    /// `update_cli_tool` knows how to update it: it updates itself, or Homebrew installed it
+    pub updatable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -116,8 +118,47 @@ pub(crate) fn exit(app: &AppHandle) {
 #[tauri::command]
 #[specta::specta]
 pub async fn cli_tools() -> Result<Vec<CliTool>> {
-    let tools = ["claude", "codex", "acli", "gh", "glab"].map(cli_tool);
-    Ok(futures_join(tools).await)
+    Ok(futures_join(TOOLS.map(cli_tool)).await)
+}
+
+const TOOLS: [&str; 5] = ["claude", "codex", "acli", "gh", "glab"];
+
+/// Updates a tool the way it was installed, then checks it again
+#[tauri::command]
+#[specta::specta]
+pub async fn update_cli_tool(name: String) -> Result<CliTool> {
+    let name = TOOLS
+        .into_iter()
+        .find(|tool| *tool == name)
+        .ok_or_else(|| format!("{name}: not a known tool"))?;
+    let command = update_command(name).await.ok_or_else(|| {
+        format!("{name} was not installed with Homebrew; update it the way you installed it")
+    })?;
+    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    run_command(home, command).await?;
+    Ok(cli_tool(name).await)
+}
+
+/// claude and codex update themselves, through their package manager when one installed them; the rest only when
+/// the binary lives in Homebrew's Cellar, under the formula it names
+async fn update_command(name: &str) -> Option<String> {
+    if matches!(name, "claude" | "codex") {
+        return Some(format!("{name} update"));
+    }
+    let (ok, out) = in_login_shell(&format!("command -v {name}")).await?;
+    let path = std::fs::canonicalize(out.lines().next()?.trim())
+        .ok()
+        .filter(|_| ok)?;
+    brew_formula(&path).map(|formula| format!("brew upgrade {formula}"))
+}
+
+/// "acli" in /opt/homebrew/Cellar/acli/1.3.36-stable/bin/acli
+fn brew_formula(path: &std::path::Path) -> Option<String> {
+    let mut parts = path.iter();
+    parts.find(|part| *part == "Cellar")?;
+    parts
+        .next()
+        .map(|formula| formula.to_string_lossy().into_owned())
 }
 
 async fn futures_join<F: std::future::Future<Output = CliTool> + Send + 'static>(
@@ -134,7 +175,9 @@ async fn futures_join<F: std::future::Future<Output = CliTool> + Send + 'static>
 }
 
 async fn cli_tool(name: &'static str) -> CliTool {
-    let version = in_login_shell(&format!("{name} --version")).await;
+    let version_command = format!("{name} --version");
+    let (version, update_command) =
+        tokio::join!(in_login_shell(&version_command), update_command(name));
     let mut tool = CliTool {
         name: name.into(),
         installed: version.as_ref().is_some_and(|(ok, _)| *ok),
@@ -142,6 +185,7 @@ async fn cli_tool(name: &'static str) -> CliTool {
         signed_in: None,
         account: None,
         update: None,
+        updatable: false,
     };
     if !tool.installed {
         return tool;
@@ -169,6 +213,7 @@ async fn cli_tool(name: &'static str) -> CliTool {
     };
     tool.signed_in = signed_in;
     tool.account = account;
+    tool.updatable = update_command.is_some();
     tool
 }
 
@@ -324,6 +369,19 @@ mod tests {
             Some("1.48.0")
         );
         assert_eq!(version_of("command not found"), None);
+    }
+
+    #[test]
+    fn homebrew_formulas_come_from_the_cellar_path() {
+        assert_eq!(
+            brew_formula("/opt/homebrew/Cellar/acli/1.3.36-stable/bin/acli".as_ref()).as_deref(),
+            Some("acli")
+        );
+        assert_eq!(
+            brew_formula("/usr/local/Cellar/gh/2.102.0/bin/gh".as_ref()).as_deref(),
+            Some("gh")
+        );
+        assert_eq!(brew_formula("/usr/bin/gh".as_ref()), None);
     }
 
     #[test]

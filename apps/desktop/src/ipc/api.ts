@@ -336,6 +336,8 @@ export interface Api {
   // System (U6)
   /** claude, codex, acli, gh, glab: installed, version, signed in */
   cliTools(): Promise<CliTool[]>
+  /** Updates one the way it was installed (its own updater, else Homebrew): the tool checked again; rejects with the output */
+  updateCliTool(name: string): Promise<CliTool>
   /** A one-off command in the login shell at `cwd`, no terminal: its output; rejects with the output when it fails */
   runCommand(cwd: string, command: string): Promise<string>
   appVersion(): Promise<string>
