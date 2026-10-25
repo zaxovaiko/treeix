@@ -40,6 +40,7 @@ fn specta() -> Builder<tauri::Wry> {
             home_dir,
             set_quick_shortcut,
             set_quick_look,
+            set_window_blur,
             autorun,
             autorun_done,
             // Phase 3: git
@@ -237,6 +238,11 @@ pub fn run() {
             let daemon = Arc::new(daemon::Daemon::default());
             app.manage(daemon.clone());
             tauri::async_runtime::spawn(daemon.run(app.handle().clone()));
+            // Built here, not from tauri.conf.json, to be transparent on macOS only: Settings > Appearance > Opacity
+            // shows the desktop through it, and a transparent Linux webview paints its own fill
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
+                .transparent(cfg!(target_os = "macos"))
+                .build()?;
             quick::create(app.handle())?;
             quick::setup(app.handle());
             commands::mcp::start(app.handle());

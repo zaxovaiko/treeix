@@ -2,12 +2,12 @@ import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useReducer,
 import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
-import { applyTheme } from '../styles/theme'
+import { applyOpacity, applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
-import { IN_TAURI, pickFolder, registerQuickShortcut, setZoom, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, pickFolder, registerQuickShortcut, setWindowBlur, setZoom, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, zoomed, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, GroupColors, SETTINGS_LEAF, type Sessions } from './model'
-import { isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
+import { IS_MAC, isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
 import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
 import { followedMode, RELEASES, showSettingsSection, useAppliedSettings } from '../pages/settings'
 import { settingsNow } from '../features/agents/settings'
@@ -200,6 +200,11 @@ export function Shell({ api }: { api: Api }) {
 
   // Before the terminals mount, so they open with the right colors
   useLayoutEffect(() => applyTheme(ui.theme, ui.ui), [ui.theme, ui.ui])
+  // Only the Mac window is transparent (lib.rs); elsewhere a see-through page would show the webview's own fill
+  const opacity = IN_TAURI && IS_MAC ? ui.windowOpacity : 1
+  const blur = ui.windowBlur && opacity < 1
+  useLayoutEffect(() => applyOpacity(opacity), [opacity])
+  useEffect(() => void setWindowBlur(blur).catch((e: unknown) => console.warn('window blur:', e)), [blur])
   useAppliedSettings(api, ui.theme, (theme) => dispatch({ type: 'set', patch: { theme } }))
   useBrowserAgentPanes({ api, dispatch, activeTab, placeOfTab })
   useEffect(() => {

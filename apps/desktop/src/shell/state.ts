@@ -50,6 +50,10 @@ export interface UiState {
   quickOpacity: number
   /** What shows through the see-through quick terminal is blurred */
   quickBlur: boolean
+  /** Opacity of the main window's background, 0.3 to 1; the text stays solid. macOS only */
+  windowOpacity: number
+  /** What shows through the see-through main window is blurred */
+  windowBlur: boolean
   /** Page zoom of both windows, 1 = 100% */
   zoom: number
   /** Group colors picked by hand, by place key */
@@ -82,6 +86,8 @@ export const initialUi: UiState = {
   quickAnimate: true,
   quickOpacity: 1,
   quickBlur: false,
+  windowOpacity: 1,
+  windowBlur: true,
   zoom: 1,
   colors: {},
 }
@@ -138,7 +144,7 @@ export type Action =
   | { type: 'color'; key: string; color: string | null }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quickAnimate' | 'quickOpacity' | 'quickBlur' | 'quick' | 'zoom'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quickAnimate' | 'quickOpacity' | 'quickBlur' | 'windowOpacity' | 'windowBlur' | 'quick' | 'zoom'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {

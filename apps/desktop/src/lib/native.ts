@@ -26,6 +26,13 @@ export async function setQuickLook(animate: boolean, blur: boolean): Promise<voi
   await commands.setQuickLook(animate, blur)
 }
 
+/** Whether what shows through this window's translucent background is blurred */
+export async function setWindowBlur(blur: boolean): Promise<void> {
+  if (!IN_TAURI) return
+  const { commands } = await import('../ipc/bindings')
+  await commands.setWindowBlur(blur)
+}
+
 /** Page zoom of this window; the browser build zooms the page with CSS */
 export async function setZoom(scale: number): Promise<void> {
   if (!IN_TAURI) return void (document.documentElement.style.zoom = String(scale))

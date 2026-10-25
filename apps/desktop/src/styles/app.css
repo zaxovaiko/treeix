@@ -28,8 +28,8 @@ kbd { font: 500 10.5px/16px -apple-system, system-ui, sans-serif; height: 16px; 
 ::-webkit-scrollbar { width: 6px; height: 6px; } ::-webkit-scrollbar-thumb { background: var(--input); border-radius: 3px; }
 
 /* window */
-.win { display: flex; flex-direction: column; height: 100vh; background: #141416; }
-[data-mode="light"] .win { background: var(--canvas); }
+.win { --win-bg: #141416; display: flex; flex-direction: column; height: 100vh; background: color-mix(in srgb, var(--win-bg) var(--app-alpha, 100%), transparent); }
+[data-mode="light"] .win { --win-bg: var(--canvas); }
 .titlebar { height: 34px; flex: none; display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(150px, 380px) minmax(max-content, 1fr); align-items: center; gap: 12px; padding: 0 10px 0 14px; }
 .tb-l, .tb-r { display: flex; align-items: center; gap: 4px; min-width: 0; align-self: stretch; }
 .tb-r { justify-content: flex-end; }
@@ -223,7 +223,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 [data-ui="islands"] .body { gap: 6px; padding: 0 6px; }
 [data-ui="islands"] .card { border-radius: 10px; }
 [data-ui="islands"] .statusbar { height: 26px; }
-[data-ui="compact"] .win { background: var(--background); }
+[data-ui="compact"] .win { --win-bg: var(--background); }
 /* a shadow, not a border, so the row stays 34px and centered on the traffic lights */
 [data-ui="compact"] .titlebar { padding: 0 6px 0 12px; box-shadow: inset 0 -1px var(--border); }
 [data-ui="compact"] .kbar { height: 24px; }
@@ -259,3 +259,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .quick .qside button:hover { background: var(--accent); }
 .quick .qside button.on { background: var(--accent); color: var(--foreground); }
 .range { width: 160px; accent-color: var(--primary); }
+
+/* see-through main window (Settings > Appearance > Opacity, macOS): the window's one fill takes the alpha and every surface over it goes clear, so the alpha doesn't stack and the blur shows through. Popovers stay solid */
+[data-glass] { --term-clear: 1; }
+[data-glass], [data-glass] body, [data-glass] :is(.card, .pterm, .term, .chatp, .ed, .plan, .browser, .kbar), [data-glass] .term .xterm .xterm-viewport, [data-glass] :is(.monaco-editor, .monaco-editor-background, .monaco-editor .margin) { background: transparent; }

@@ -75,6 +75,14 @@ fn drop_down(window: &tauri::WebviewWindow) {
     ));
 }
 
+/// Blurs what shows through a see-through window, the main one too; Linux windows are never see-through
+pub fn set_window_blur(window: &tauri::WebviewWindow, blur: bool) {
+    #[cfg(target_os = "macos")]
+    panel::set_window_blur(window, blur);
+    #[cfg(not(target_os = "macos"))]
+    let _ = (window, blur);
+}
+
 /// Whether it slides in and whether what shows through is blurred; Linux windows have neither, so it ignores them
 pub fn set_look(app: &AppHandle, animate: bool, blur: bool) {
     #[cfg(target_os = "macos")]
@@ -172,21 +180,35 @@ mod panel {
         fn CGSSetWindowBackgroundBlurRadius(connection: i32, window: i32, radius: i32) -> i32;
     }
 
+    /// On the main thread
+    fn set_blur(window: &NSWindow, blur: bool) {
+        let number = window.windowNumber() as i32;
+        // SAFETY: on the main thread, with a live window's number
+        unsafe {
+            CGSSetWindowBackgroundBlurRadius(
+                CGSMainConnectionID(),
+                number,
+                if blur { BLUR_RADIUS } else { 0 },
+            )
+        };
+    }
+
     pub fn set_look(app: &AppHandle, animate: bool, blur: bool) {
         ANIMATE.store(animate, Ordering::Relaxed);
         let app = app.clone();
         let _ = app.clone().run_on_main_thread(move || {
             if let Ok(panel) = app.get_webview_panel(LABEL) {
-                let window: &NSWindow = panel.as_panel();
-                let number = window.windowNumber() as i32;
-                // SAFETY: on the main thread, with a live window's number
-                unsafe {
-                    CGSSetWindowBackgroundBlurRadius(
-                        CGSMainConnectionID(),
-                        number,
-                        if blur { BLUR_RADIUS } else { 0 },
-                    )
-                };
+                set_blur(panel.as_panel(), blur);
+            }
+        });
+    }
+
+    pub fn set_window_blur(window: &WebviewWindow, blur: bool) {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            if let Ok(ns_window) = target.ns_window() {
+                // SAFETY: tauri's live NSWindow, used on the main thread
+                set_blur(unsafe { &*ns_window.cast::<NSWindow>() }, blur);
             }
         });
     }

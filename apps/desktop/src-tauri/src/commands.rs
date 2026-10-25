@@ -241,6 +241,13 @@ pub fn set_quick_look(app: AppHandle, animate: bool, blur: bool) {
     crate::quick::set_look(&app, animate, blur)
 }
 
+/// Whether what shows through the calling window's translucent background is blurred
+#[tauri::command]
+#[specta::specta]
+pub fn set_window_blur(window: tauri::WebviewWindow, blur: bool) {
+    crate::quick::set_window_blur(&window, blur)
+}
+
 /// The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)
 #[tauri::command]
 #[specta::specta]

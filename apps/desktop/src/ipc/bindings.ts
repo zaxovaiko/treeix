@@ -78,6 +78,12 @@ async setQuickLook(animate: boolean, blur: boolean) : Promise<void> {
     await TAURI_INVOKE("set_quick_look", { animate, blur });
 },
 /**
+ * Whether what shows through the calling window's translucent background is blurred
+ */
+async setWindowBlur(blur: boolean) : Promise<void> {
+    await TAURI_INVOKE("set_window_blur", { blur });
+},
+/**
  * The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)
  */
 async autorun() : Promise<string | null> {
