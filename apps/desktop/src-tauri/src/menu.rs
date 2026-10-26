@@ -13,6 +13,10 @@ use tauri::{AppHandle, Emitter, Runtime};
 
 /// Handled here rather than in the frontend
 const CHECK_UPDATE: &str = "check-update";
+/// Not the predefined item: the webview is a child of the window (tauri `unstable`), so wry hands every Cmd chord to
+/// the menu before the page sees it (tauri#9426), and AppKit's selectAll: only selects Monaco's hidden textarea.
+/// This one runs selectAll: for inputs and the browser pane, then the frontend's editor selects all (panes/file/TextFile.tsx)
+const SELECT_ALL: &str = "select-all";
 
 #[derive(Clone, Serialize)]
 struct MenuAction<'a> {
@@ -85,7 +89,13 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .cut()
         .copy()
         .paste()
-        .select_all()
+        .item(&MenuItem::with_id(
+            app,
+            SELECT_ALL,
+            "Select All",
+            true,
+            Some("CmdOrCtrl+A"),
+        )?)
         .build()?;
     let view = SubmenuBuilder::new(app, "View")
         .item(&item(
@@ -172,6 +182,9 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
         tauri::async_runtime::spawn(crate::updater::check_and_ask(app.clone(), false));
         return;
     }
+    if event.id() == SELECT_ALL {
+        native_select_all();
+    }
     if let Err(e) = app.emit(
         "menu",
         MenuAction {
@@ -179,6 +192,21 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
         },
     ) {
         tracing::error!("emit menu: {e}");
+    }
+}
+
+/// What the predefined Select All sends: a nil target walks the key window's responder chain
+fn native_select_all() {
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    use objc2::{msg_send, sel};
+    let Some(class) = AnyClass::get(c"NSApplication") else {
+        return;
+    };
+    let nil = std::ptr::null_mut::<AnyObject>();
+    // SAFETY: menu events arrive on the main thread, and sendAction:to:from: takes a selector and two nil objects
+    unsafe {
+        let app: *mut AnyObject = msg_send![class, sharedApplication];
+        let _: Bool = msg_send![app, sendAction: sel!(selectAll:), to: nil, from: nil];
     }
 }
 
