@@ -11,6 +11,7 @@ mod types;
 mod updater;
 mod voice;
 
+use std::io::Write;
 use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
@@ -190,7 +191,33 @@ fn autorun() -> Option<String> {
         .filter(|name| !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric()))
 }
 
+/// A Finder-launched app's stderr goes nowhere, and a panic under an AppKit callback aborts the app, so its message
+/// and line are appended to data_dir/panic.log as well
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let path = treeix_proto::data_dir().join("panic.log");
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            let thread = std::thread::current();
+            let _ = writeln!(
+                file,
+                "{at} thread '{}' {info}",
+                thread.name().unwrap_or("?")
+            );
+        }
+        default(info);
+    }));
+}
+
 pub fn run() {
+    log_panics();
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
