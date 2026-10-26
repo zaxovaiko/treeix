@@ -116,7 +116,7 @@ impl Default for Terminal {
             cursor_blink: true,
             scrollback: 10_000,
             copy_on_select: false,
-            option_as_meta: true,
+            option_as_meta: false,
             shell: None,
             login_shell: true,
             confirm_quit: true,
