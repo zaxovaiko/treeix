@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Main and quick terminal windows",
   "windows": ["main", "quick"],
-  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize", "clipboard-manager:allow-read-text", "clipboard-manager:allow-write-text", "dialog:allow-open", "core:webview:allow-set-webview-zoom"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize", "core:window:allow-show", "core:window:allow-unminimize", "core:window:allow-set-focus","clipboard-manager:allow-read-text", "clipboard-manager:allow-write-text", "dialog:allow-open", "core:webview:allow-set-webview-zoom"]
 }

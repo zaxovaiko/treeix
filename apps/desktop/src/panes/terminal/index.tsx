@@ -11,6 +11,7 @@ import { FindBar, SessionBar } from './bars'
 import { IS_MAC, openXterm, searchDecorations, webglFor, type Xterm } from './xterm'
 import { settingsNow } from '../../features/agents/settings'
 import { useContextMenu, type MenuItem } from '../../panels/common'
+import { onMenuItem } from '../../lib/native'
 
 export interface TerminalPaneProps {
   api: Api
@@ -102,6 +103,9 @@ export function TerminalPane({ api, sessionId, visible, focused, onFocus, onOpen
   useEffect(() => {
     if (visible && focused) view?.term.focus()
   }, [visible, focused, view])
+
+  // ⌘A is a menu item the page never sees as a key (src-tauri/src/menu.rs)
+  useEffect(() => onMenuItem((id) => id === 'select-all' && view?.term.textarea === document.activeElement && view.term.selectAll()), [view])
 
   const closeFind = (): void => {
     setFind(0)

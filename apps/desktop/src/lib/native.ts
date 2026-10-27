@@ -40,5 +40,27 @@ export async function setZoom(scale: number): Promise<void> {
   await getCurrentWebview().setZoom(scale)
 }
 
+const MENU = 'menu'
+
+/** Menu bar items (src-tauri/src/menu.rs) sent to this window, the one in front when they fired; returns the stop */
+export function onMenuItem(run: (id: string) => void): () => void {
+  if (!IN_TAURI) return () => {}
+  const stop = import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => getCurrentWebviewWindow().listen<{ id: string }>(MENU, (e) => run(e.payload.id)))
+  return () => void stop.then((off) => off())
+}
+
+/** Hands a menu bar item to the main window, brought forward first unless it only changes the look */
+export async function runInMain(id: string, show: boolean): Promise<void> {
+  if (!IN_TAURI) return
+  const [{ emitTo }, { WebviewWindow }] = await Promise.all([import('@tauri-apps/api/event'), import('@tauri-apps/api/webviewWindow')])
+  const main = show ? await WebviewWindow.getByLabel('main') : null
+  if (main) {
+    await main.unminimize()
+    await main.show()
+    await main.setFocus()
+  }
+  await emitTo('main', MENU, { id })
+}
+
 /** App event the main window sends when theme, density, renderer or zoom change, so the quick terminal follows live */
 export const UI_CHANGED = 'ui-changed'

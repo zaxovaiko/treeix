@@ -1,6 +1,6 @@
 //! The macOS menu bar: every app command, so each can be found and its chord read off the menu.
 //! Cmd+W, Cmd+T, Cmd+D and Cmd+K stay unbound by default: the frontend handles them per pane.
-//! Custom items reach the frontend as the `menu` app event with their id (CommandId in src/shell/shortcuts.ts).
+//! Custom items reach the key window's frontend as the `menu` event with their id (CommandId in src/shell/shortcuts.ts).
 //! Their chords belong to the menu: the frontend leaves them alone inside Tauri (menuChord in src/shell/shortcuts.ts).
 //! A chord rebound in settings.keys moves here too, '' unbinds it; `rebind` rebuilds the menu after a settings save.
 
@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use tauri::menu::{
     HELP_SUBMENU_ID, Menu, MenuBuilder, MenuEvent, MenuItem, SubmenuBuilder, WINDOW_SUBMENU_ID,
 };
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 /// Handled here rather than in the frontend
 const CHECK_UPDATE: &str = "check-update";
@@ -185,7 +185,13 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
     if event.id() == SELECT_ALL {
         native_select_all();
     }
-    if let Err(e) = app.emit(
+    // The window in front runs it: the quick terminal over another app is key without the main window being so
+    let target = match app.get_webview_window(crate::quick::LABEL) {
+        Some(quick) if quick.is_focused().unwrap_or(false) => crate::quick::LABEL,
+        _ => "main",
+    };
+    if let Err(e) = app.emit_to(
+        target,
         "menu",
         MenuAction {
             id: event.id().as_ref(),

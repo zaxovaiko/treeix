@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { listen } from '@tauri-apps/api/event'
 import { MultiFileDiff } from '@pierre/diffs/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { SAVE_CONFLICT, type Api } from '../../ipc/api'
 import { applyEditorTheme, ensureLanguage, loadMonaco } from '../../lib/monaco/setup'
-import { IN_TAURI } from '../../lib/native'
+import { onMenuItem } from '../../lib/native'
 import { applyExternalText, normalizeEol } from '../../lib/monaco/text'
 import { languageFor } from '../../lib/monaco/theme'
 import { EditorZones, type EditorHandle, type Zone } from '../../lib/monaco/zones'
@@ -170,9 +169,7 @@ export function TextFile({
     let disposed = false
     let created: MonacoEditor.IStandaloneCodeEditor | null = null
     // ⌘A is a menu item the page never sees as a key (src-tauri/src/menu.rs)
-    const stopSelectAll = IN_TAURI
-      ? listen<{ id: string }>('menu', (e) => e.payload.id === 'select-all' && created?.hasTextFocus() && created.trigger('menu', 'editor.action.selectAll', null))
-      : null
+    const stopSelectAll = onMenuItem((id) => id === 'select-all' && created?.hasTextFocus() && created.trigger('menu', 'editor.action.selectAll', null))
     void loadMonaco().then(async (monaco) => {
       const language = languageFor(file)
       await ensureLanguage(language)
@@ -212,7 +209,7 @@ export function TextFile({
     })
     return () => {
       disposed = true
-      void stopSelectAll?.then((stop) => stop())
+      stopSelectAll()
       const model = created?.getModel()
       created?.dispose()
       model?.dispose()

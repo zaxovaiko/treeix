@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react'
-import { emit, listen } from '@tauri-apps/api/event'
+import { emit } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyOpacity, applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
-import { IN_TAURI, pickFolder, registerQuickShortcut, setWindowBlur, setZoom, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, onMenuItem, pickFolder, registerQuickShortcut, setWindowBlur, setZoom, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, zoomed, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, GroupColors, SETTINGS_LEAF, type Sessions } from './model'
 import { IS_MAC, isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
@@ -350,11 +350,7 @@ export function Shell({ api }: { api: Api }) {
     }
     if (id === 'changelog') void api.openUrl(RELEASES)
   })
-  useEffect(() => {
-    if (!IN_TAURI) return
-    const unlisten = listen<{ id: string }>('menu', (e) => onMenu(e.payload.id))
-    return () => void unlisten.then((stop) => stop())
-  }, [])
+  useEffect(() => onMenuItem(onMenu), [])
 
   // Files dropped anywhere but a terminal (which types their paths) open in the file view
   const onDrop = useEffectEvent((paths: string[]) => {

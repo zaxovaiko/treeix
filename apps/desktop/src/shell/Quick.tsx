@@ -5,14 +5,14 @@ import type { SessionInfo } from '../ipc/bindings'
 import { TerminalPane } from '../panes/terminal'
 import type { Renderer } from '../panes/terminal/renderer'
 import { IS_MAC, paneGrid } from '../panes/terminal/xterm'
-import { IN_TAURI, setQuickLook, setZoom, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, onMenuItem, runInMain, setQuickLook, setZoom, UI_CHANGED } from '../lib/native'
 import { Icon } from '../lib/icons'
 import { resolveShortcut } from '../lib/hotkeys'
 import { settingsNow } from '../features/agents/settings'
 import { followedMode, useAppliedSettings } from '../pages/settings'
 import { applyTheme, type Mode } from '../styles/theme'
 import { leaves, neighbor, paneRects, parseUi, removeLeaf, replaceLeaf, setRatio, splitHandles, type SplitDir, type SplitNode, type UiState } from './state'
-import { shortcutsPaused, withHint, type CommandId } from './shortcuts'
+import { isCommandId, shortcutsPaused, withHint, type CommandId } from './shortcuts'
 import { DOT_LABEL, KIND_ICON, Ki, statusDot, tilde } from './model'
 import { box, dragHandle, handleBox } from './Panes'
 
@@ -41,7 +41,7 @@ const paneBox = (session: string): DOMRect => document.querySelector(`.term[data
 
 /**
  * The quick terminal window: its own shells in splits, recorded under `quick` in the UI blob, the running agents beside
- * them to open in a split, under a header with the folder and how to hide it
+ * them to open in a split
  */
 export function Quick({ api }: { api: Api }) {
   const [renderer, setRenderer] = useState<Renderer>('auto')
@@ -109,6 +109,11 @@ export function Quick({ api }: { api: Api }) {
     e.preventDefault()
     e.stopPropagation()
   })
+  // Menu bar chords come here while this window is in front; the panes select all, the main window runs the rest
+  const onMenu = useEffectEvent((id: string) => {
+    if (shortcutsPaused() || id === 'select-all' || (isCommandId(id) && run(id))) return
+    void runInMain(id, !id.startsWith('zoom-')).catch((e: unknown) => console.warn('menu:', e))
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -130,6 +135,7 @@ export function Quick({ api }: { api: Api }) {
       if (!cancelled) setLayout({ root, focus: leaves(root)[0] })
     })
     const off = api.onEvent(onEvent)
+    const stopMenu = onMenuItem((id) => onMenu(id))
     const key = (e: KeyboardEvent) => onKey(e)
     window.addEventListener('keydown', key, true)
     // The main window owns the look; follow it live
@@ -137,6 +143,7 @@ export function Quick({ api }: { api: Api }) {
     return () => {
       cancelled = true
       off()
+      stopMenu()
       window.removeEventListener('keydown', key, true)
       void unlisten?.then((stop) => stop())
     }
