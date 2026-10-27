@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { MultiFileDiff } from '@pierre/diffs/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { SAVE_CONFLICT, type Api } from '../../ipc/api'
+import { attachLsp } from '../../lib/lsp'
 import { applyEditorTheme, ensureLanguage, loadMonaco } from '../../lib/monaco/setup'
 import { onMenuItem } from '../../lib/native'
 import { applyExternalText, normalizeEol } from '../../lib/monaco/text'
@@ -37,7 +38,8 @@ export function TextFile({
   reveal,
   diff,
   comments,
-  onStatus
+  onStatus,
+  onCursor
 }: {
   api: Api
   root: string
@@ -48,6 +50,8 @@ export function TextFile({
   diff: boolean
   comments: ReviewComment[]
   onStatus: (status: SaveStatus, error: string | null) => void
+  /** 1-based, as Monaco counts */
+  onCursor: (line: number, column: number) => void
 }) {
   const name = file.split('/').pop() ?? file
   const mode = useMode()
@@ -69,6 +73,7 @@ export function TextFile({
   const onDisk = useRef<string | null>(null)
   const conflictRef = useRef<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const lsp = useRef<ReturnType<typeof attachLsp> | null>(null)
   const status = (next: SaveStatus, error: string | null = null) => onStatus(next, error)
   const current = () => latest.current ?? onDisk.current ?? ''
 
@@ -110,6 +115,7 @@ export function TextFile({
       () => {
         onDisk.current = text
         status(latest.current === text ? 'saved' : 'pending')
+        lsp.current?.saved()
       },
       (reason: unknown) => {
         const message = errorText(reason)
@@ -195,7 +201,9 @@ export function TextFile({
         editContext: false
       })
       created = editor
+      lsp.current = attachLsp(api, monaco, model, root, file)
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, flush)
+      editor.onDidChangeCursorPosition(({ position }) => onCursor(position.lineNumber, position.column))
       editor.onDidChangeModelContent(() => {
         const text = model.getValue()
         const baseline = latest.current ?? onDisk.current
@@ -211,6 +219,8 @@ export function TextFile({
       disposed = true
       stopSelectAll()
       const model = created?.getModel()
+      lsp.current?.dispose()
+      lsp.current = null
       created?.dispose()
       model?.dispose()
       setHandle(null)

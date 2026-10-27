@@ -5,9 +5,12 @@
 .rpanel .ok { color: var(--green); } .rpanel .err { color: var(--red); } .rpanel .violet { color: var(--violet); }
 .rpanel .num { font: 500 11px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 
-.card.rpanel { flex: 0 1 auto; min-width: 260px; container-type: inline-size; }
-.actbar { width: 34px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 2px; }
-[data-ui="compact"] .actbar { padding-top: 4px; }
+/* a sheet over the terminals, under the title bar; solid even in a see-through window */
+.card.rpanel { position: fixed; top: 34px; right: 6px; bottom: 6px; z-index: 30; min-width: 260px; max-width: calc(100vw - 12px); container-type: inline-size; box-shadow: 0 16px 48px rgb(0 0 0 / 40%); }
+[data-glass] .card.rpanel { background: var(--background); }
+[data-ui="compact"] .card.rpanel { top: 34px; right: 0; bottom: 0; border-left: 1px solid var(--border); }
+.rpanel > .vsz { position: absolute; left: 0; top: 0; bottom: 0; }
+.actbar { flex: none; display: flex; align-items: center; gap: 2px; }
 .ndot { position: absolute; top: 0; right: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--primary); color: var(--on-primary); font-size: 9px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--background); }
 [data-ui="islands"] .ndot { box-shadow: 0 0 0 2px var(--canvas); }
 
@@ -107,3 +110,12 @@
 /* context menu */
 .pop.menu { position: fixed; z-index: 51; min-width: 200px; padding: 4px; border-radius: 10px; background: var(--popover); box-shadow: 0 0 0 1px var(--input), 0 12px 32px rgb(0 0 0 / 40%); }
 .pop.menu .mi.err { color: var(--red); }
+
+/* language servers, problems */
+.lsp-st, .lsp-sev { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted-foreground); opacity: .6; }
+.lsp-st.running { background: var(--green); opacity: 1; } .lsp-st.starting { background: var(--sky); opacity: 1; } .lsp-st.missing, .lsp-st.failed { background: var(--red); opacity: 1; }
+.lsp-sev { margin-top: 6px; background: var(--sky); opacity: 1; } .lsp-sev.err { background: var(--red); } .lsp-sev.warn { background: var(--amber); }
+.hrow:has(> .lsp-st) { align-items: center; }
+.lsp-msg { white-space: normal; overflow-wrap: anywhere; }
+.lsp-hint { padding: 4px 14px 12px; font-size: 11.5px; line-height: 1.5; color: var(--muted-foreground); }
+.lsp-hint pre { margin: 8px 0 0; padding: 8px 10px; border-radius: 6px; background: var(--muted); color: var(--foreground); font-size: 11px; }

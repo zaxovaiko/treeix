@@ -14,9 +14,13 @@
 .edcrumb .btn.ghost:hover, .edcrumb .btn.ghost.on { color: var(--foreground); background: var(--accent); }
 .edcrumb .seg { margin: 0 2px; }
 @container (max-width: 520px) { .edcrumb .hint { display: none; } }
-@container (max-width: 360px) { .edcrumb .fv-save.saved { display: none; } }
 .gs-M { color: var(--amber); } .gs-A { color: var(--green); } .gs-D { color: var(--red); text-decoration: line-through; } .gs-U { color: var(--red); font-weight: 600; }
-.fv-save { margin-right: 4px; }
+/* the dot on a tab while its file isn't on disk yet */
+.fv-dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; } .fv-dirty.saving { background: var(--sky); } .fv-dirty.failed { background: var(--red); }
+/* where the cursor is and whether it's saved, over the editor's bottom-right corner */
+.edchip { position: absolute; right: 10px; bottom: 8px; z-index: 5; height: 22px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border-radius: 6px; font-size: 11px; color: var(--muted-foreground); background: var(--popover); box-shadow: 0 0 0 1px var(--input); font-variant-numeric: tabular-nums; pointer-events: none; }
+.edchip button { pointer-events: auto; display: flex; align-items: center; gap: 6px; height: 18px; padding: 0 4px; margin: 0 -4px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.edchip button:hover { background: var(--accent); color: var(--foreground); }
 .fv-save.saved { opacity: .7; } .fv-save.pending { color: var(--amber); } .fv-save.saving { color: var(--sky); } .fv-save.failed { color: var(--red); }
 
 .fv-main { flex: 1; min-height: 0; display: flex; position: relative; }

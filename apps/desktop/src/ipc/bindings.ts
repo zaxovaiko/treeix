@@ -599,6 +599,30 @@ async recordingRead(id: string) : Promise<RecordingNote> {
  */
 async recordingDelete(id: string) : Promise<null> {
     return await TAURI_INVOKE("recording_delete", { id });
+},
+/**
+ * The opened files not shown yet, absolute
+ */
+async takeOpenedFiles() : Promise<string[]> {
+    return await TAURI_INVOKE("take_opened_files");
+},
+/**
+ * Starts `command` in `root`; its messages, then its exit, come on `output`
+ */
+async lspStart(root: string, command: string[], output: TAURI_CHANNEL<LspOutput>) : Promise<number> {
+    return await TAURI_INVOKE("lsp_start", { root, command, output });
+},
+/**
+ * Writes one JSON-RPC message to a running server
+ */
+async lspSend(id: number, body: string) : Promise<null> {
+    return await TAURI_INVOKE("lsp_send", { id, body });
+},
+/**
+ * Kills a server; the client sends `shutdown` and `exit` first for a clean stop
+ */
+async lspStop(id: number) : Promise<void> {
+    await TAURI_INVOKE("lsp_stop", { id });
 }
 }
 
@@ -1200,6 +1224,15 @@ export type LimitWindow = { usedPercent: number;
  */
 resetsAt: number | null }
 export type LimitWindowName = "fiveHour" | "weekly"
+export type LspOutput = 
+/**
+ * One JSON-RPC message from the server
+ */
+{ type: "message"; body: string } | 
+/**
+ * The server is gone: 127 when its command isn't installed, and the end of its stderr says why
+ */
+{ type: "exit"; code: number | null; stderr: string }
 export type McpAgent = "claude" | "codex"
 export type McpInstall = { agent: McpAgent; state: McpInstallState }
 export type McpInstallResult = { installed: McpAgent[]; 

@@ -55,6 +55,24 @@
     },
     "externalBin": [
       "binaries/treeix-ptyd"
+    ],
+    "fileAssociations": [
+      {
+        "name": "Text document",
+        "description": "Any text or source file, from Open With",
+        "ext": ["txt", "md", "json", "yaml", "yml", "xml", "py", "rs", "go", "sh", "css", "html", "sql"],
+        "contentTypes": ["public.plain-text", "public.source-code", "public.script", "public.json", "public.xml", "public.yaml", "net.daringfireball.markdown"],
+        "mimeType": "text/plain",
+        "role": "Editor",
+        "rank": "Alternate"
+      },
+      {
+        "name": "Source code",
+        "description": "Source files macOS has no text type for",
+        "ext": ["ts", "tsx", "mts", "cts", "jsx", "mjs", "cjs", "graphql", "gql", "prisma", "vue", "svelte", "toml", "env", "lua", "mdx", "kt", "dockerfile"],
+        "role": "Editor",
+        "rank": "Alternate"
+      }
     ]
   },
   "plugins": {

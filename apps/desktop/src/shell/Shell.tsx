@@ -4,21 +4,22 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyOpacity, applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
-import { IN_TAURI, onMenuItem, pickFolder, registerQuickShortcut, setWindowBlur, setZoom, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, onMenuItem, onOpenedFiles, pickFolder, registerQuickShortcut, setWindowBlur, setZoom, UI_CHANGED } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, zoomed, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, GroupColors, SETTINGS_LEAF, type Sessions } from './model'
 import { IS_MAC, isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
-import { CenterTop, HStrip, Sidebar, SidebarResize, StatusBar, TitleBar, Welcome } from './Chrome'
+import { HStrip, Sidebar, SidebarResize, TitleBar, Welcome } from './Chrome'
+import { RoutinesHost } from '../features/routines'
 import { followedMode, RELEASES, showSettingsSection, useAppliedSettings } from '../pages/settings'
 import { settingsNow } from '../features/agents/settings'
 import { toggleRecording } from '../features/voice'
 import { useBrowserAgentPanes } from '../features/browser/open'
 import { resolveShortcut } from '../lib/hotkeys'
 import { openAbsolute, TabPanes } from './Panes'
+import { setDefinitionOpener } from '../lib/lsp'
 import { Palette } from './Palette'
 import { Dialogs, useDialogKeys, type DialogRequest } from '../dialogs'
 import { paneGrid } from '../panes/terminal/xterm'
-import { Panels } from '../panels/Panels'
 import { reopenSession } from '../panels/common'
 import { isFileLeaf, leafRoot, openFile } from '../panes/file/open'
 import { chatLeaf, isChatLeaf, leafChat } from '../panes/chat/open'
@@ -352,11 +353,13 @@ export function Shell({ api }: { api: Api }) {
   })
   useEffect(() => onMenuItem(onMenu), [])
 
-  // Files dropped anywhere but a terminal (which types their paths) open in the file view
+  // Files dropped anywhere but a terminal (which types their paths) open in the file view, like go to definition's targets
+  const opener = { api, openFile: (root: string, file: string, line?: number) => openFile({ ui, dispatch }, root, file, line) }
   const onDrop = useEffectEvent((paths: string[]) => {
-    const opener = { api, openFile: (root: string, file: string, line?: number) => openFile({ ui, dispatch }, root, file, line) }
     for (const path of paths) void openAbsolute(opener, path)
   })
+  const onDefinition = useEffectEvent((path: string, line: number) => void openAbsolute(opener, path, { line }))
+  useEffect(() => setDefinitionOpener(onDefinition), [])
   useEffect(() => {
     if (!IN_TAURI) return
     const stop = getCurrentWebview().onDragDropEvent(({ payload }) => {
@@ -366,6 +369,8 @@ export function Shell({ api }: { api: Api }) {
     })
     return () => void stop.then((unlisten) => unlisten())
   }, [])
+  // Files opened from Finder or a file manager, once the layout is in so their tabs land in it
+  useEffect(() => (loaded ? onOpenedFiles((paths) => onDrop(paths)) : undefined), [loaded])
 
   if (!loaded)
     return (
@@ -389,7 +394,7 @@ export function Shell({ api }: { api: Api }) {
   return (
     <GroupColors value={ui.colors}>
       <div className="win">
-        <TitleBar view={view} tabbed={tabsInTitle && !empty} />
+        <TitleBar view={view} tabbed={tabsInTitle && !empty} hidden={page !== null} />
         {!connected && (
           <div className="offline">
             <Icon name="alert" />
@@ -410,7 +415,6 @@ export function Shell({ api }: { api: Api }) {
               <SidebarResize view={view} />
             </>
           )}
-          {!vertical && <Panels view={view} hidden={page !== null} />}
           <main className="card center">
             {page === 'graph' ? (
               <Suspense fallback={<div className="empty">Loading...</div>}>
@@ -419,7 +423,7 @@ export function Shell({ api }: { api: Api }) {
             ) : empty ? (
               <Welcome view={view} />
             ) : (
-              vertical ? <CenterTop view={view} /> : !tabsInTitle && <HStrip view={view} actions />
+              !vertical && !tabsInTitle && <HStrip view={view} />
             )}
             <div className="stage" hidden={page !== null || empty}>
               {[...ui.tabs]
@@ -429,9 +433,8 @@ export function Shell({ api }: { api: Api }) {
                 ))}
             </div>
           </main>
-          {vertical && <Panels view={view} hidden={page !== null} />}
         </div>
-        <StatusBar view={view} />
+        <RoutinesHost view={view} />
         {palette && <Palette view={view} onClose={() => setPalette(false)} />}
         {dialog && <Dialogs key={dialog.kind} view={view} request={dialog} onClose={() => setDialog(null)} />}
       </div>

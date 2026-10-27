@@ -81,7 +81,7 @@ async function layout(page: Page) {
 
 test('split right and down, move focus, close panes', async ({ page }) => {
   await open(page)
-  await page.locator('.ctop').getByRole('button', { name: /^Split right/ }).click()
+  await page.locator('.titlebar').getByRole('button', { name: /^Split right/ }).click()
   await expect(panes(page)).toHaveCount(2)
   await page.keyboard.press('Meta+Shift+d')
   await expect(panes(page)).toHaveCount(3)
@@ -91,7 +91,7 @@ test('split right and down, move focus, close panes', async ({ page }) => {
   expect(down.box.x).toBe(right.box.x)
   expect(down.box.y).toBeGreaterThanOrEqual(right.box.y + right.box.height - 1)
   await expect(down.pane).toHaveClass(/focus/)
-  await expect(activeRow(page).locator('.tag:not(.mono)')).toContainText('3')
+  await expect(activeRow(page).locator('.pseg')).toHaveCount(3)
 
   await page.keyboard.press('Meta+Alt+ArrowUp')
   await expect(right.pane).toHaveClass(/focus/)
@@ -154,8 +154,10 @@ test('theme toggles and persists', async ({ page }) => {
   await open(page)
   const html = page.locator('html')
   await expect(html).toHaveAttribute('data-mode', 'dark')
+  await page.getByRole('button', { name: 'More' }).click()
   await page.getByRole('button', { name: 'Light theme' }).click()
   await expect(html).toHaveAttribute('data-mode', 'light')
+  await page.getByRole('button', { name: 'More' }).click()
   await expect(page.getByRole('button', { name: 'Dark theme' })).toBeVisible()
   await persisted(page, '"theme":"light"')
   await page.reload()

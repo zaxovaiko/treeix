@@ -2,8 +2,10 @@ mod browser;
 mod commands;
 mod daemon;
 mod keep_awake;
+mod lsp;
 #[cfg(target_os = "macos")]
 mod menu;
+mod opened;
 mod quick;
 mod service;
 mod tray;
@@ -158,6 +160,10 @@ fn specta() -> Builder<tauri::Wry> {
             recordings,
             recording_read,
             recording_delete,
+            opened::take_opened_files,
+            lsp::lsp_start,
+            lsp::lsp_send,
+            lsp::lsp_stop,
         ])
         // Registering events is also what drops tauri's `TAURI_CHANNEL = null` placeholder type from the export
         .events(collect_events![
@@ -234,13 +240,17 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         // First: a second launch hands over to this one before it builds anything
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
             }
+            // A file manager opening a file while Treeix runs (Linux; macOS sends RunEvent::Opened instead)
+            opened::open(app, opened::from_args(&args, std::path::Path::new(&cwd)));
         }))
+        .manage(opened::Pending::default())
+        .manage(lsp::Servers::default())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -275,6 +285,11 @@ pub fn run() {
             commands::mcp::start(app.handle());
             commands::system::setup(app.handle());
             voice::setup(app.handle());
+            // Linux starts the app with the files to open as arguments
+            if let Ok(cwd) = std::env::current_dir() {
+                let args: Vec<String> = std::env::args().collect();
+                opened::open(app.handle(), opened::from_args(&args, &cwd));
+            }
             // macOS stops drawing frames in a covered window, and the runners wait on frames
             if let (Some(_), Some(window)) = (autorun(), app.get_webview_window("main")) {
                 window.set_always_on_top(true)?;
@@ -284,11 +299,17 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("tauri app failed to start")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
+        .run(|app, event| match event {
+            tauri::RunEvent::Exit => {
                 commands::system::exit(app);
                 voice::exit(app);
             }
+            // Finder's Open With and double-click, at launch too
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Opened { urls } => {
+                opened::open(app, urls.iter().filter_map(|url| url.to_file_path().ok()))
+            }
+            _ => {}
         });
 }
 

@@ -1,16 +1,19 @@
-import { useEffect, useState, type MouseEvent, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import { PortsItem, TabTags } from '../features/agents/PortsItem'
 import { UsagePill } from '../features/agents/UsagePill'
-import { RoutineClock, RoutinesHost } from '../features/routines'
+import { RoutineClock } from '../features/routines'
 import { VoiceTitleItems } from '../features/voice'
 import { useSettings } from '../features/agents/settings'
 import type { Api, KeepAwakeMode, Place, ProgressState } from '../ipc/api'
+import { Panels } from '../panels/Panels'
+import { LangBadge } from '../panes/file/icons'
+import { activeFileOf, isFileLeaf, useFileViews } from '../panes/file/open'
 import { Icon } from '../lib/icons'
-import { DOT_LABEL, GROUP_COLORS, groupColorKey, Ki, liveCount, placeColor, placeIcon, placeName, tabDot, tabKind, tabTitle, tilde } from './model'
+import { DOT_LABEL, GROUP_COLORS, groupColorKey, Ki, leafKind, leafTitle, liveCount, placeColor, placeIcon, placeName, statusDot, tabDot, tabKind, tabTitle, tilde } from './model'
 import { keyHint, withHint } from './shortcuts'
 import { leaves, placeLabel, SIDEBAR, type Group, type PlaceTabs, type Tab } from './state'
 import type { ShellView } from './Shell'
-import { copyText, Menu, useContextMenu, type MenuItem } from '../panels/common'
+import { copyText, Menu, PIcon, useContextMenu, type MenuItem } from '../panels/common'
 
 type ViewProps = { view: ShellView }
 
@@ -21,61 +24,57 @@ const stop = (fn: () => void) => (e: { stopPropagation(): void }) => {
 
 const Chev = ({ closed }: { closed: boolean }) => <Icon name="down" className={`chev ${closed ? 'closed' : ''}`} />
 
-export function TitleBar({ view, tabbed }: ViewProps & { tabbed: boolean }) {
+/** The only bar: tabs or where the active tab runs, then what the status bar and the side rail used to hold. `hidden` while a page (settings) covers the center */
+export function TitleBar({ view, tabbed, hidden }: ViewProps & { tabbed: boolean; hidden: boolean }) {
   const { ui, dispatch, run } = view
-  const lights = (
-    <div className="lights" data-tauri-drag-region>
-      <i />
-      <i />
-      <i />
-    </div>
-  )
-  if (tabbed)
-    return (
-      <div className="titlebar tabbed" data-tauri-drag-region>
-        {lights}
-        <HStrip view={view} />
-        <div className="tb-r" data-tauri-drag-region>
-          <UsagePill api={view.api} />
-          <VoiceTitleItems view={view} />
-          <KeepAwakeButton api={view.api} />
-          <button className="kbar mini" onClick={() => run('palette')} title="Search sessions and commands">
-            <Icon name="search" />
-            <kbd>{keyHint('palette')}</kbd>
-          </button>
-          <button className="icon" onClick={() => run('settings')} title={withHint('Settings', 'settings')}>
-            <Icon name="gear" />
-          </button>
-        </div>
-      </div>
-    )
   return (
-    <div className="titlebar" data-tauri-drag-region>
-      <div className="tb-l" data-tauri-drag-region>
-        {lights}
-        {ui.orientation === 'vertical' && (
-          <button className="icon" onClick={() => dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })} title={withHint(ui.sidebar ? 'Hide sessions' : 'Show sessions', 'toggle-sidebar')}>
-            <Icon name={ui.sidebar ? 'sideClose' : 'sideOpen'} />
-          </button>
-        )}
+    <div className={`titlebar ${tabbed ? 'tabbed' : ''}`} data-tauri-drag-region>
+      <div className="lights" data-tauri-drag-region>
+        <i />
+        <i />
+        <i />
       </div>
-      <button className="kbar" onClick={() => run('palette')}>
-        <Icon name="search" />
-        <span>Search sessions and commands</span>
-        <kbd>{keyHint('palette')}</kbd>
-      </button>
+      {ui.orientation === 'vertical' && (
+        <button className="icon" onClick={() => dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })} title={withHint(ui.sidebar ? 'Hide sessions' : 'Show sessions', 'toggle-sidebar')}>
+          <Icon name={ui.sidebar ? 'sideClose' : 'sideOpen'} />
+        </button>
+      )}
+      {tabbed ? (
+        <HStrip view={view} />
+      ) : (
+        <div className="tb-mid" data-tauri-drag-region>
+          {ui.orientation === 'vertical' && <Crumbs view={view} />}
+        </div>
+      )}
       <div className="tb-r" data-tauri-drag-region>
+        <NeedYou view={view} />
+        <PortsItem view={view} />
         <UsagePill api={view.api} />
         <VoiceTitleItems view={view} />
-        <KeepAwakeButton api={view.api} />
-        <button className="icon" onClick={() => run('toggle-theme')} title={ui.theme === 'dark' ? 'Light theme' : 'Dark theme'}>
-          <Icon name={ui.theme === 'dark' ? 'sun' : 'moon'} />
+        <Panels view={view} hidden={hidden} />
+        {view.activeTab && (
+          <button className="icon" onClick={() => view.split('row')} title={withHint('Split right', 'split-right')}>
+            <Icon name="split" />
+          </button>
+        )}
+        <button className="kbar mini" onClick={() => run('palette')} title="Search sessions and commands">
+          <Icon name="search" />
+          <kbd>{keyHint('palette')}</kbd>
         </button>
-        <button className="icon" onClick={() => run('settings')} title={withHint('Settings', 'settings')}>
-          <Icon name="gear" />
-        </button>
+        <MoreButton view={view} />
       </div>
     </div>
+  )
+}
+
+/** Jumps to the first tab waiting on you */
+function NeedYou({ view }: ViewProps) {
+  const needing = view.ordered.filter((tab) => tabDot(tab, view.sessions) === 'need')
+  if (!needing.length) return null
+  return (
+    <button className="pill st-need" onClick={() => view.dispatch({ type: 'activate', tabId: needing[0].id })}>
+      {needing.length} need you
+    </button>
   )
 }
 
@@ -85,16 +84,38 @@ const AWAKE_NEXT: Record<KeepAwakeMode, [next: KeepAwakeMode, title: string]> = 
   on: ['off', 'Keep awake: always'],
 }
 
-/** Cycles settings.awake.mode: off, while agents work, always */
-function KeepAwakeButton({ api }: { api: Api }) {
+/** ⋯: the folder, the terminal host, keep awake, theme, split down, settings */
+function MoreButton({ view }: ViewProps) {
+  const { api, ui, activeTab, run } = view
   const settings = useSettings(api)
-  if (!settings?.features.awake) return null
-  const mode = settings.awake.mode
-  const [next, title] = AWAKE_NEXT[mode]
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const place = activeTab && view.placeOfTab(activeTab)
+  const mode = settings?.awake.mode
+  const items: MenuItem[] = [
+    ...(place && place.kind !== 'scratch' ? [{ label: `Copy path: ${tilde(place.path, view.home)}`, icon: placeIcon(place), run: () => copyText(place.path) }] : []),
+    { label: `PTY host · ${liveCount(view.ordered, view.sessions)} live`, icon: 'host', run: () => {} },
+    ...(settings?.features.awake && mode ? [{ label: AWAKE_NEXT[mode][1], icon: 'coffee' as const, run: () => void api.updateSettings({ awake: { mode: AWAKE_NEXT[mode][0] } }) }] : []),
+    { label: 'Language servers', icon: 'code', run: () => view.dispatch({ type: 'set', patch: { panel: 'servers' } }) },
+    { label: ui.theme === 'dark' ? 'Light theme' : 'Dark theme', icon: ui.theme === 'dark' ? 'sun' : 'moon', run: () => run('toggle-theme') },
+    ...(activeTab ? [{ label: withHint('Split down', 'split-down'), icon: 'splitDown' as const, run: () => view.split('col') }] : []),
+    { label: withHint('Settings', 'settings'), icon: 'gear', run: () => run('settings') },
+  ]
   return (
-    <button className={`icon awake-${mode}`} onClick={() => void api.updateSettings({ awake: { mode: next } })} title={title}>
-      <Icon name="coffee" />
-    </button>
+    <>
+      <button
+        className={`icon ${at ? 'on' : ''} ${mode && mode !== 'off' ? `awake-${mode}` : ''}`}
+        title="More"
+        ref={button}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setAt(at ? null : { x: r.right - 220, y: r.bottom + 4 })
+        }}
+      >
+        <PIcon name="more" />
+      </button>
+      {at && <Menu at={at} items={items} onClose={() => setAt(null)} anchor={button} />}
+    </>
   )
 }
 
@@ -116,22 +137,16 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
   return (
     <div className={`trow ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })} onContextMenu={openMenu(tabMenu(view, tab))}>
       {menu}
-      <Ki kind={tabKind(tab, sessions)} dot={dot} />
+      {panes > 1 ? <SplitIcon /> : <TabIcon view={view} tab={tab} />}
       <div className="grow">
         <div className="t1">
-          <span className="trunc">{tabTitle(tab, sessions)}</span>
+          {panes > 1 ? <SplitSegs view={view} tab={tab} /> : <span className="trunc">{tabTitle(tab, sessions)}</span>}
           <RoutineClock view={view} tab={tab} />
         </div>
         <div className="t2">
           <span className={`st-${dot}`}>{DOT_LABEL[dot]}</span>
           {restored && <span className="tag">restored</span>}
           {view.placeOfTab(tab).missing && <span className="tag red">folder missing</span>}
-          {panes > 1 && (
-            <span className="tag">
-              <Icon name="split" />
-              {panes}
-            </span>
-          )}
           {progress && <span className={`tag ${progress.state === 'error' ? 'red' : ''}`}>{progress.percent}%</span>}
           <TabTags view={view} tab={tab} />
         </div>
@@ -140,6 +155,39 @@ function TabRow({ view, tab }: ViewProps & { tab: Tab }) {
         <Icon name="x" />
       </button>
     </div>
+  )
+}
+
+/** A file tab shows its file's language, any other its kind and state */
+function TabIcon({ view, tab, sm }: ViewProps & { tab: Tab; sm?: boolean }) {
+  const file = isFileLeaf(tab.focus) && activeFileOf(tab.focus)
+  return file ? <LangBadge path={file} /> : <Ki kind={tabKind(tab, view.sessions)} dot={tabDot(tab, view.sessions)} sm={sm} />
+}
+
+/** One pane of a split: the language of the file it shows, else its kind and status */
+function LeafIcon({ view, id }: ViewProps & { id: string }) {
+  const file = isFileLeaf(id) && activeFileOf(id)
+  const session = view.sessions[id]
+  return file ? <LangBadge path={file} /> : <Ki kind={leafKind(id, view.sessions)} dot={session ? statusDot(session.status) : 'idle'} sm />
+}
+
+const SplitIcon = ({ sm }: { sm?: boolean }) => (
+  <span className={`ki ${sm ? 'sm' : ''}`}>
+    <Icon name="split" />
+  </span>
+)
+
+/** A split tab's row: each pane's session in layout order, the focused one brighter; a click focuses that pane */
+function SplitSegs({ view, tab }: ViewProps & { tab: Tab }) {
+  return (
+    <span className="psegs">
+      {leaves(tab.root).map((id) => (
+        <button key={id} className={`pseg ${id === tab.focus ? 'on' : ''}`} onClick={stop(() => view.dispatch({ type: 'focus', session: id }))}>
+          <LeafIcon view={view} id={id} />
+          <span className="trunc">{leafTitle(id, view.sessions)}</span>
+        </button>
+      ))}
+    </span>
   )
 }
 
@@ -261,6 +309,7 @@ function filterGroups(view: ShellView, query: string): Group[] {
 
 export function Sidebar({ view }: ViewProps) {
   const [query, setQuery] = useState('')
+  useFileViews()
   const groups = filterGroups(view, query)
   return (
     <>
@@ -311,10 +360,11 @@ export function SidebarResize({ view }: ViewProps) {
 }
 
 /** Horizontal tabs: a colored chip per place, then its tabs */
-export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
+export function HStrip({ view }: ViewProps) {
   const { ui, sessions, dispatch, closeTab, run } = view
   const [menu, openMenu] = useColorMenu(view)
   const [tabMenuEl, openTabMenu] = useContextMenu()
+  useFileViews()
   return (
     <div className="hstrip">
       {menu}
@@ -332,8 +382,17 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
                 ? []
                 : tabs.map((tab) => (
                     <div key={tab.id} className={`htab ${tab.id === ui.active ? 'on' : ''}`} onClick={() => dispatch({ type: 'activate', tabId: tab.id })} onContextMenu={openTabMenu(tabMenu(view, tab))}>
-                      <Ki kind={tabKind(tab, sessions)} dot={tabDot(tab, sessions)} sm />
-                      <span className="trunc">{tabTitle(tab, sessions)}</span>
+                      {leaves(tab.root).length > 1 ? (
+                        <>
+                          <SplitIcon sm />
+                          <SplitSegs view={view} tab={tab} />
+                        </>
+                      ) : (
+                        <>
+                          <TabIcon view={view} tab={tab} sm />
+                          <span className="trunc">{tabTitle(tab, sessions)}</span>
+                        </>
+                      )}
                       <RoutineClock view={view} tab={tab} />
                       {place.missing && <span className="tag red">missing</span>}
                       <button className="icon sm x" onClick={stop(() => closeTab(tab))} title="Close">
@@ -349,81 +408,30 @@ export function HStrip({ view, actions }: ViewProps & { actions?: boolean }) {
           <Icon name="plus" />
         </button>
       </div>
-      {actions && <SplitActions view={view} />}
     </div>
   )
 }
 
-function SplitActions({ view }: ViewProps) {
-  return (
-    <div className="tacts">
-      <button className="icon sm" onClick={() => view.split('row')} title={withHint('Split right', 'split-right')}>
-        <Icon name="split" />
-      </button>
-      <button className="icon sm" onClick={() => view.split('col')} title={withHint('Split down', 'split-down')}>
-        <Icon name="splitDown" />
-      </button>
-    </div>
-  )
-}
-
-/** Vertical layout: where the active tab runs, and its split buttons */
-export function CenterTop({ view }: ViewProps) {
+/** Vertical layout: where the active tab runs */
+function Crumbs({ view }: ViewProps) {
   const tab = view.activeTab
   if (!tab) return null
   const place = view.placeOfTab(tab)
   return (
-    <div className="ctop">
-      <div className="crumbs">
-        <Ki kind={tabKind(tab, view.sessions)} dot={tabDot(tab, view.sessions)} sm />
-        {place.repoName && place.kind !== 'folder' ? (
-          <>
-            <span className="dim">{place.repoName}</span>
-            <span className="sep">/</span>
-            <span style={{ color: placeColor(place, view.ui.colors) }}>{placeName(place)}</span>
-          </>
-        ) : (
-          <span className="dim">{tilde(place.path, view.home)}</span>
-        )}
-        <span className="sep">/</span>
-        <b className="trunc">{tabTitle(tab, view.sessions)}</b>
-      </div>
-      <SplitActions view={view} />
-    </div>
-  )
-}
-
-export function StatusBar({ view }: ViewProps) {
-  const { activeTab, sessions, ordered, dispatch } = view
-  const place = activeTab && view.placeOfTab(activeTab)
-  const needing = ordered.filter((tab) => tabDot(tab, sessions) === 'need')
-  return (
-    <div className="statusbar">
-      {!place || place.kind === 'scratch' ? (
-        <span className="sb">
-          <Icon name="home" />~ · no folder
-        </span>
+    <div className="crumbs" title={place.missing ? 'This folder no longer exists' : tilde(place.path, view.home)}>
+      <Ki kind={tabKind(tab, view.sessions)} dot={tabDot(tab, view.sessions)} sm />
+      {place.repoName && place.kind !== 'folder' ? (
+        <>
+          <span className="dim">{place.repoName}</span>
+          <span className="sep">/</span>
+          <span style={{ color: placeColor(place, view.ui.colors) }}>{placeName(place)}</span>
+        </>
       ) : (
-        <span className={`sb ${place.missing ? 'st-err' : ''}`} title={place.missing ? 'This folder no longer exists' : tilde(place.path, view.home)}>
-          <Icon name={placeIcon(place)} />
-          {placeLabel(place)}
-          {place.kind === 'folder' && <span className="dim">· not a git repo</span>}
-          {place.kind === 'detached' && <span className="dim">· detached</span>}
-          {place.missing && <span>· missing</span>}
-        </span>
+        <span className="dim">{tilde(place.path, view.home)}</span>
       )}
-      <span className="grow" />
-      <PortsItem view={view} />
-      {needing.length > 0 && (
-        <button className="sb st-need" onClick={() => dispatch({ type: 'activate', tabId: needing[0].id })}>
-          {needing.length} need you
-        </button>
-      )}
-      <span className="sb" title="Terminals run in a separate host process, so they survive app restarts and updates">
-        <Icon name="host" />
-        PTY host · {liveCount(ordered, sessions)} live
-      </span>
-      <RoutinesHost view={view} />
+      {place.missing && <span className="tag red">missing</span>}
+      <span className="sep">/</span>
+      <b className="trunc">{tabTitle(tab, view.sessions)}</b>
     </div>
   )
 }

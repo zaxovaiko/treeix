@@ -49,6 +49,20 @@ export function onMenuItem(run: (id: string) => void): () => void {
   return () => void stop.then((off) => off())
 }
 
+const OPENED = 'files-opened'
+
+/** Absolute paths of files the system asked Treeix to open (Finder, a file manager): those from before the page loaded, then each as it comes */
+export function onOpenedFiles(run: (paths: string[]) => void): () => void {
+  if (!IN_TAURI) return () => {}
+  const take = () =>
+    import('../ipc/bindings')
+      .then(({ commands }) => commands.takeOpenedFiles())
+      .then((paths) => paths.length > 0 && run(paths))
+  void take()
+  const stop = import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => getCurrentWebviewWindow().listen(OPENED, () => void take()))
+  return () => void stop.then((off) => off())
+}
+
 /** Hands a menu bar item to the main window, brought forward first unless it only changes the look */
 export async function runInMain(id: string, show: boolean): Promise<void> {
   if (!IN_TAURI) return

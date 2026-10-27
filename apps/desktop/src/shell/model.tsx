@@ -4,6 +4,9 @@ import { Icon, type IconName } from '../lib/icons'
 import { groupKey, leaves, type Tab } from './state'
 import { isChatLeaf, leafChat } from '../panes/chat/open'
 import { getChat, titleOf } from '../panes/chat/store'
+import { activeFileOf, isFileLeaf, leafRoot } from '../panes/file/open'
+import { isBrowserLeaf } from '../features/browser/open'
+import { isPlanLeaf } from '../features/plans/open'
 
 /** Dot classes from the prototype: run, need, done, err, exit; idle shows none. watch: an agent waiting on a background task */
 export type Dot = 'run' | 'watch' | 'need' | 'done' | 'err' | 'exit' | 'idle'
@@ -50,8 +53,21 @@ const isSettings = (tab: Tab) => tab.focus === SETTINGS_LEAF
 export const tabKind = (tab: Tab, sessions: Sessions): TabKind => (isSettings(tab) ? 'settings' : (lead(tab, sessions)?.kind ?? chatOf(tab)?.info?.agent ?? 'shell'))
 export const tabTitle = (tab: Tab, sessions: Sessions) => {
   const chat = chatOf(tab)
-  return isSettings(tab) ? 'Settings' : (tab.title ?? lead(tab, sessions)?.title ?? (chat ? titleOf(chat) : 'zsh'))
+  return isSettings(tab) ? 'Settings' : (tab.title ?? lead(tab, sessions)?.title ?? (chat ? titleOf(chat) : leafTitle(tab.focus, sessions)))
 }
+
+/** One pane of a split tab, as its row names it */
+export function leafTitle(id: string, sessions: Sessions): string {
+  if (id === SETTINGS_LEAF) return 'Settings'
+  if (isFileLeaf(id)) return (activeFileOf(id) ?? leafRoot(id)).split('/').pop() ?? id
+  if (isChatLeaf(id)) {
+    const chat = getChat(leafChat(id))
+    return chat ? titleOf(chat) : 'Chat'
+  }
+  return sessions[id]?.title ?? (isBrowserLeaf(id) ? 'Browser' : isPlanLeaf(id) ? 'Plan' : 'zsh')
+}
+
+export const leafKind = (id: string, sessions: Sessions): TabKind => (id === SETTINGS_LEAF ? 'settings' : (sessions[id]?.kind ?? 'shell'))
 
 export function Ki({ kind, dot = 'idle', sm }: { kind: TabKind; dot?: Dot; sm?: boolean }) {
   return (

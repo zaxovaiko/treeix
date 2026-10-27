@@ -39,6 +39,12 @@ const subscribe = (listener: () => void) => {
 
 export const useFileTabs = (id: string): FileTabs | undefined => useSyncExternalStore(subscribe, () => views[id])
 
+/** Re-renders on any file view's change, for lists that name tabs by their file */
+export const useFileViews = (): void => void useSyncExternalStore(subscribe, () => views)
+
+/** The file a file view shows, relative to its root */
+export const activeFileOf = (id: string): string | undefined => views[id]?.active
+
 /** `path` against `base`, with `.` and `..` folded */
 export const resolvePath = (base: string, path: string): string =>
   `/${(path.startsWith('/') ? path : `${base}/${path}`)

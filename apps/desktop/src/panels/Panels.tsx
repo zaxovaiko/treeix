@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState, type PointerEvent } from 'react'
+import { useEffect, useEffectEvent, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from 'react'
 import type { GitStatus, PullRequest } from '../ipc/api'
 import { useSettings } from '../features/agents/settings'
 import { compact } from '../features/agents/usage'
@@ -10,6 +10,7 @@ import { Changes } from './Changes'
 import { PIcon, type PanelIconName } from './common'
 import { Explorer } from './Explorer'
 import { History } from './History'
+import { Problems, Servers } from './Lsp'
 import { needsYou } from './logic'
 import { Prs, type PrData } from './Prs'
 import { Tickets } from './Tickets'
@@ -30,7 +31,7 @@ const ITEMS: [PanelId, PanelIconName | 'folder' | 'branch' | 'jira', string][] =
 const panelKey = (e: KeyboardEvent): PanelId | null =>
   e.code === 'KeyE' && e.shiftKey && e.metaKey && !e.ctrlKey && !e.altKey ? 'explorer' : e.code === 'KeyG' && e.shiftKey && e.ctrlKey && !e.metaKey && !e.altKey ? 'changes' : null
 
-/** Activity bar plus the open side panel; `hidden` while a page (settings) covers the center */
+/** Panel icons in the title bar, the open one as a sheet over the terminals; `hidden` while a page (settings) covers the center */
 export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const { api, ui, dispatch, activeTab, home } = view
   const place = activeTab ? view.placeOfTab(activeTab) : fallbackPlace(home, home)
@@ -117,7 +118,7 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   const openPanel = (id: PanelId) => dispatch({ type: 'set', patch: { panel: id } })
 
   const bar = (
-    <div className="actbar" key="bar">
+    <div className="actbar">
       {ITEMS.filter(([id]) => !off(id)).map(([id, icon, tip]) => (
         <button key={id} className={`icon ${shown === id ? 'on' : ''}`} onClick={() => toggle(id)} title={id === 'prs' && badges.prs ? `${tip}: ${badges.prs} waiting on you` : tip}>
           <PIcon name={icon === 'folder' && shown === id ? 'folderOpen' : icon} />
@@ -133,31 +134,41 @@ export function Panels({ view, hidden }: { view: ShellView; hidden: boolean }) {
   )
   if (!shown) return bar
 
-  const panel = (
-    <aside className="card rpanel" key="panel" style={{ width: ui.panelWidth }}>
-      {shown === 'explorer' && <Explorer key={root} view={view} place={place} status={status} tick={tick} />}
-      {shown === 'changes' && <Changes key={root} view={view} place={place} status={status} tick={tick} prs={prList} onPanel={openPanel} />}
-      {shown === 'prs' && <Prs view={view} data={data} />}
-      {shown === 'history' && <History view={view} place={place} />}
-      {shown === 'tickets' && <Tickets view={view} data={tickets} refresh={tickets.refresh} repo={place.repoRoot} />}
-    </aside>
+  // Esc in a field (the Explorer filter, a commit message) is that field's
+  const onSheetKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Escape' || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    e.stopPropagation()
+    dispatch({ type: 'set', patch: { panel: null } })
+  }
+  return (
+    <>
+      {bar}
+      {/* Focusable, so a click on its text or a diff still leaves Esc with the sheet */}
+      <aside className="card rpanel" tabIndex={-1} style={{ width: ui.panelWidth }} onKeyDown={onSheetKey}>
+        <PanelResize view={view} />
+        {shown === 'explorer' && <Explorer key={root} view={view} place={place} status={status} tick={tick} />}
+        {shown === 'changes' && <Changes key={root} view={view} place={place} status={status} tick={tick} prs={prList} onPanel={openPanel} />}
+        {shown === 'prs' && <Prs view={view} data={data} />}
+        {shown === 'history' && <History view={view} place={place} />}
+        {shown === 'tickets' && <Tickets view={view} data={tickets} refresh={tickets.refresh} repo={place.repoRoot} />}
+        {shown === 'problems' && <Problems view={view} place={place} />}
+        {shown === 'servers' && <Servers view={view} place={place} />}
+      </aside>
+    </>
   )
-  const vertical = ui.orientation === 'vertical'
-  const resize = <PanelResize key="resize" view={view} fromRight={vertical} />
-  return vertical ? [resize, panel, bar] : [bar, panel, resize]
 }
 
-/** Like the sidebar's handle; the panel sits on the far side of it */
-function PanelResize({ view, fromRight }: { view: ShellView; fromRight: boolean }) {
+/** The sheet's left edge, like the sidebar's handle */
+function PanelResize({ view }: { view: ShellView }) {
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     const handle = e.currentTarget
-    const panel = (fromRight ? handle.nextElementSibling : handle.previousElementSibling)?.getBoundingClientRect()
+    const panel = handle.parentElement?.getBoundingClientRect()
     if (!panel) return
     const x = e.clientX
     handle.setPointerCapture(e.pointerId)
     handle.classList.add('drag')
     const move = (ev: globalThis.PointerEvent) =>
-      view.dispatch({ type: 'set', patch: { panelWidth: Math.round(Math.min(PANEL.max, Math.max(PANEL.min, panel.width + (fromRight ? x - ev.clientX : ev.clientX - x)))) } })
+      view.dispatch({ type: 'set', patch: { panelWidth: Math.round(Math.min(PANEL.max, Math.max(PANEL.min, panel.width + x - ev.clientX))) } })
     const up = () => {
       handle.classList.remove('drag')
       handle.removeEventListener('pointermove', move)

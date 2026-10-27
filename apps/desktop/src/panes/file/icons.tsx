@@ -1,3 +1,5 @@
+import { languageFor } from '../../lib/monaco/theme'
+
 // The file view's prototype icons, drawn like lib/icons
 const LINE = {
   file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
@@ -12,3 +14,12 @@ export type FileIconName = keyof typeof LINE
 export const FileIcon = ({ name, className }: { name: FileIconName; className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden dangerouslySetInnerHTML={{ __html: LINE[name] }} />
 )
+
+const LANG_SHORT: Record<string, string> = { typescript: 'TS', tsx: 'TSX', javascript: 'JS', jsx: 'JSX', graphql: 'GQL', markdown: 'MD', python: 'PY', rust: 'RS', shellscript: 'SH', csharp: 'C#', kotlin: 'KT', ruby: 'RB' }
+
+/** The file's language in place of a generic file icon */
+export function LangBadge({ path }: { path: string }) {
+  const language = languageFor(path)
+  if (language === 'text') return <FileIcon name="file" className="lang-none" />
+  return <span className={`lang ${language}`}>{LANG_SHORT[language] ?? language.slice(0, 4).toUpperCase()}</span>
+}

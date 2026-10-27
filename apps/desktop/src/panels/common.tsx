@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useContext, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from 'react'
 import type { CreateSession, Place, SessionRecord } from '../ipc/api'
 import { Icon, type IconName } from '../lib/icons'
 import { paneGrid } from '../panes/terminal/xterm'
@@ -24,6 +24,7 @@ const PANEL_ICONS = {
   send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
   tree: '<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  code: '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
 } as const
 
@@ -83,10 +84,11 @@ export interface MenuItem {
 }
 
 /** Context menu at a point; closes on pick, outside click or Escape */
-export function Menu({ at, items, onClose }: { at: { x: number; y: number }; items: MenuItem[]; onClose: () => void }) {
+/** `anchor`: the button that opened it, whose own click toggles it, so a mousedown there leaves it open */
+export function Menu({ at, items, onClose, anchor }: { at: { x: number; y: number }; items: MenuItem[]; onClose: () => void; anchor?: RefObject<HTMLElement | null> }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && onClose()
+    const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !anchor?.current?.contains(e.target as Node) && onClose()
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('mousedown', down, true)
     window.addEventListener('keydown', key, true)
