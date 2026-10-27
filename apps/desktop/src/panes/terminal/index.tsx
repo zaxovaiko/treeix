@@ -140,6 +140,8 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
   const { term, fit } = view
   let closed = false
   let attachment: Attachment | null = null
+  /** The snapshot is still drawing at the session's grid; fitting waits for it */
+  let drawing = false
   const acks = ackBatcher((bytes) => void attachment?.ack(bytes))
   const stream = attachStream(term, (bytes) => bytes > 0 && acks.rendered(bytes))
   // Restart reuses this attachment: ptyd keeps the session's clients and its seq runs on
@@ -148,9 +150,16 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
     .then((attached) => {
       if (closed) return void attached.detach()
       attachment = attached
+      // The snapshot is laid out for the session's grid: drawn into another, rows wrap and the cursor lands elsewhere, and
+      // a TUI's redraw after the resize paints over the wrong rows. So it is drawn at that grid, then fitted to this pane
+      drawing = true
+      term.resize(attached.info.cols, attached.info.rows)
       stream.snapshot(attached.snapshot, attached.seq)
       hooks.attached(attached.info)
-      if (attached.info.cols !== term.cols || attached.info.rows !== term.rows) void api.resize(sessionId, term.cols, term.rows)
+      term.write('', () => {
+        drawing = false
+        if (!closed) fit.fit()
+      })
     })
     .catch((error: unknown) => closed || term.write(`\r\n\x1b[31m[Could not attach: ${String(error)}]\x1b[0m\r\n`))
 
@@ -237,7 +246,7 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
   let resizeTimer: ReturnType<typeof setTimeout> | undefined
   const observer = new ResizeObserver(() => {
     clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => fit.fit(), RESIZE_DEBOUNCE_MS)
+    resizeTimer = setTimeout(() => drawing || fit.fit(), RESIZE_DEBOUNCE_MS)
   })
   observer.observe(host)
   // The --term-* tokens hang off the root's data-mode and data-ui; the theme event covers token changes without them
