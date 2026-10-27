@@ -1,6 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { Api, SessionEvent } from '../ipc/api'
 import type { SessionInfo } from '../ipc/bindings'
 import { TerminalPane } from '../panes/terminal'
@@ -13,7 +12,7 @@ import { settingsNow } from '../features/agents/settings'
 import { followedMode, useAppliedSettings } from '../pages/settings'
 import { applyTheme, type Mode } from '../styles/theme'
 import { leaves, neighbor, paneRects, parseUi, removeLeaf, replaceLeaf, setRatio, splitHandles, type SplitDir, type SplitNode, type UiState } from './state'
-import { acceleratorLabel, shortcutsPaused, withHint, type CommandId } from './shortcuts'
+import { shortcutsPaused, withHint, type CommandId } from './shortcuts'
 import { DOT_LABEL, KIND_ICON, Ki, statusDot, tilde } from './model'
 import { box, dragHandle, handleBox } from './Panes'
 
@@ -48,7 +47,6 @@ export function Quick({ api }: { api: Api }) {
   const [renderer, setRenderer] = useState<Renderer>('auto')
   const [mode, setMode] = useState<Mode>('dark')
   const [home, setHome] = useState('')
-  const [hotkey, setHotkey] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [layout, setLayout] = useState<Layout | null>(null)
   useAppliedSettings(api, mode, setMode)
@@ -126,7 +124,6 @@ export function Quick({ api }: { api: Api }) {
     void Promise.all([api.getUi(), api.sessions(), api.homeDir()]).then(async ([json, list, dir]) => {
       const saved = parseUi(json)
       look({ ...saved, theme: followedMode(saved.theme) })
-      setHotkey(saved.quickShortcut)
       setHome(dir)
       setSessions(list)
       const root = livePanes(api, saved.quick, list) ?? pane((await newShell(dir)).id)
@@ -155,17 +152,9 @@ export function Quick({ api }: { api: Api }) {
   if (!layout) return <div className="quick" />
   const rects = paneRects(layout.root)
   const multi = rects.size > 1
-  const focused = infoOf(layout.focus)
 
   return (
     <div className="quick">
-      <div className="qh">
-        <span className="mono trunc">{tilde(focused?.cwd ?? home, home)}</span>
-        <span className="grow" />
-        <button onClick={() => void getCurrentWindow().hide()} title="Hide" aria-label="Hide">
-          {hotkey ? <kbd>{acceleratorLabel(hotkey)}</kbd> : 'Hide'}
-        </button>
-      </div>
       <div className="qbody">
         {agents.length > 0 && (
           <nav className="qside" aria-label="Agents">
