@@ -96,6 +96,7 @@ export function Shell({ api }: { api: Api }) {
         setSessions(byId(list))
         dispatch({ type: 'load', ui: restore({ ...saved, theme: followedMode(saved.theme) }, list, [...chats, SETTINGS_LEAF]) })
         setUnreachable(false)
+        setConnected(true)
         setLoaded(true)
         if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut, saved.quickWholeApp).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
       },
@@ -151,7 +152,8 @@ export function Shell({ api }: { api: Api }) {
         setSessions((all) => ({ ...all, [e.info.id]: e.info }))
         return
       case 'daemon':
-        if (e.state === 'connected') resync().catch(() => setUnreachable(true))
+        // Before the first load went through (a daemon still starting after an update), the full load, saved layout and quick shortcut included
+        if (e.state === 'connected') retry()
         else setConnected(false)
     }
   })
