@@ -6,10 +6,13 @@
 use global_hotkey::hotkey::HotKey;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::utils::config::BackgroundThrottlingPolicy;
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const LABEL: &str = "quick";
+/// The chord shows and hides the main window instead of the quick terminal
+static WHOLE_APP: AtomicBool = AtomicBool::new(false);
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(
@@ -43,6 +46,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 }
 
 pub fn toggle(app: &AppHandle) {
+    if WHOLE_APP.load(Ordering::Relaxed) {
+        return toggle_main(app);
+    }
     #[cfg(target_os = "macos")]
     panel::toggle(app);
     #[cfg(not(target_os = "macos"))]
@@ -107,8 +113,33 @@ pub fn setup(app: &AppHandle) {
     }));
 }
 
+/// In front, it hides the app (macOS hands focus back to the app before it); else it comes forward
+fn toggle_main(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let in_front = window.is_visible().unwrap_or(false)
+        && window.is_focused().unwrap_or(false)
+        && !window.is_minimized().unwrap_or(false);
+    if !in_front {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    let _ = app.hide();
+    #[cfg(not(target_os = "macos"))]
+    let _ = window.hide();
+}
+
 /// The app ships with no chord (the hotkey window is opt-in), so nothing is registered until settings set one
-pub fn set_shortcut(app: &AppHandle, accelerator: Option<&str>) -> Result<(), String> {
+pub fn set_shortcut(
+    app: &AppHandle,
+    accelerator: Option<&str>,
+    whole_app: bool,
+) -> Result<(), String> {
+    WHOLE_APP.store(whole_app, Ordering::Relaxed);
     let hotkey = accelerator
         .map(str::parse::<HotKey>)
         .transpose()

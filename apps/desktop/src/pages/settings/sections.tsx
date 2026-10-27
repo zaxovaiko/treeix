@@ -250,8 +250,18 @@ function Hotkey({ view, settings }: SectionProps) {
           label="Quick terminal"
           value={accel}
           onChange={async (quickShortcut) => {
-            await registerQuickShortcut(quickShortcut)
+            await registerQuickShortcut(quickShortcut, view.ui.quickWholeApp)
             setUi(view, { quickShortcut })
+          }}
+        />
+      </Row>
+      <Row label="Whole app" desc="The shortcut shows and hides the main window instead of the quick terminal" keywords="quick terminal hotkey window main">
+        <Switch
+          label="Whole app"
+          on={view.ui.quickWholeApp}
+          onChange={(quickWholeApp) => {
+            setUi(view, { quickWholeApp })
+            void registerQuickShortcut(accel, quickWholeApp).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
           }}
         />
       </Row>

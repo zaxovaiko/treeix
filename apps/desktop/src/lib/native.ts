@@ -12,11 +12,11 @@ export async function pickFolder(home: string): Promise<string | null> {
   return typeof dir === 'string' ? dir : null
 }
 
-/** Registers the quick terminal's global chord (null: none); rejects with the plugin's message when the chord is taken */
-export async function registerQuickShortcut(accelerator: string | null): Promise<void> {
+/** Registers the global chord (null: none) for the quick terminal, or the main window when `wholeApp`; rejects with the plugin's message when the chord is taken */
+export async function registerQuickShortcut(accelerator: string | null, wholeApp: boolean): Promise<void> {
   if (!IN_TAURI) return
   const { commands } = await import('../ipc/bindings')
-  await commands.setQuickShortcut(accelerator)
+  await commands.setQuickShortcut(accelerator, wholeApp)
 }
 
 /** Whether the quick terminal slides in and whether what shows through its translucent background is blurred */

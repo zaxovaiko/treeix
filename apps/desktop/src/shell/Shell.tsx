@@ -96,7 +96,7 @@ export function Shell({ api }: { api: Api }) {
         dispatch({ type: 'load', ui: restore({ ...saved, theme: followedMode(saved.theme) }, list, [...chats, SETTINGS_LEAF]) })
         setUnreachable(false)
         setLoaded(true)
-        if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
+        if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut, saved.quickWholeApp).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
       },
       () => !cancelled && setUnreachable(true)
     )

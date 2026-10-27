@@ -44,6 +44,8 @@ export interface UiState {
   renderer: Renderer
   /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null: none */
   quickShortcut: string | null
+  /** The chord shows and hides the main window instead of the quick terminal */
+  quickWholeApp: boolean
   /** The quick terminal slides down when shown; off, it just appears */
   quickAnimate: boolean
   /** Opacity of the quick terminal window, 0.3 to 1 */
@@ -83,6 +85,7 @@ export const initialUi: UiState = {
   quick: null,
   renderer: 'auto',
   quickShortcut: null,
+  quickWholeApp: false,
   quickAnimate: true,
   quickOpacity: 1,
   quickBlur: false,
@@ -144,7 +147,7 @@ export type Action =
   | { type: 'color'; key: string; color: string | null }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quickAnimate' | 'quickOpacity' | 'quickBlur' | 'windowOpacity' | 'windowBlur' | 'quick' | 'zoom'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quickWholeApp' | 'quickAnimate' | 'quickOpacity' | 'quickBlur' | 'windowOpacity' | 'windowBlur' | 'quick' | 'zoom'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {

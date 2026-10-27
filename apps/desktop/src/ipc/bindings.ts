@@ -66,10 +66,10 @@ async homeDir() : Promise<string> {
     return await TAURI_INVOKE("home_dir");
 },
 /**
- * Global chord that toggles the quick terminal; None turns it off
+ * Global chord that toggles the quick terminal, or the main window when `whole_app`; None turns it off
  */
-async setQuickShortcut(accelerator: string | null) : Promise<null> {
-    return await TAURI_INVOKE("set_quick_shortcut", { accelerator });
+async setQuickShortcut(accelerator: string | null, wholeApp: boolean) : Promise<null> {
+    return await TAURI_INVOKE("set_quick_shortcut", { accelerator, wholeApp });
 },
 /**
  * Whether the quick terminal slides in and whether what shows through its translucent background is blurred
