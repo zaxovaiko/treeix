@@ -253,16 +253,21 @@ test('right-click shows our menus, never the browser one', async ({ page }) => {
   expect(prevented).toBe(true)
 })
 
-test('the quick terminal lists running agents beside its shell and switches to them', async ({ page }) => {
+test('the quick terminal splits, and opens running agents in a split beside its shell', async ({ page }) => {
   await page.goto('/?window=quick')
-  const side = page.getByRole('navigation', { name: 'Sessions' })
-  await expect(side.getByRole('button', { name: 'Shell' })).toHaveClass(/on/)
-  const agent = side.getByRole('button').nth(1)
+  const panes = page.locator('.quick .pane')
+  await expect(panes).toHaveCount(1)
+  await page.locator('.quick .xterm').first().click()
+  await page.keyboard.press('Meta+d')
+  await expect(panes).toHaveCount(2)
+  const agent = page.getByRole('navigation', { name: 'Agents' }).getByRole('button').first()
+  await expect(agent).not.toHaveClass(/on/)
   await agent.click()
   await expect(agent).toHaveClass(/on/)
-  await expect(page.locator('.quick .term')).toBeVisible()
-  await side.getByRole('button', { name: 'Shell' }).click()
-  await expect(side.getByRole('button', { name: 'Shell' })).toHaveClass(/on/)
+  await expect(panes).toHaveCount(3)
+  await page.keyboard.press('Meta+w')
+  await expect(panes).toHaveCount(2)
+  await expect(agent).not.toHaveClass(/on/)
 })
 
 test('the quick terminal slide and opacity are set in Settings', async ({ page }) => {
