@@ -221,7 +221,7 @@ export async function runE2e(api: Api): Promise<E2eReport> {
         const ids = visibleIds()
         const shown = await Promise.all(ids.map(async (id) => ({ id, attaches: taps.panes.get(id)?.attaches ?? 0, text: await paneText(id) })))
         // Settings opens as its own tab, which hides this one: every pane detaches, and closing it brings them back
-        button('Settings').click()
+        press('settings')
         await waitFor('every pane detached', () => ids.every((id) => !taps.panes.get(id)?.attached))
         press('close-pane')
         await waitFor('every pane re-attached', () => shown.every(({ id, attaches }) => (taps.panes.get(id)?.attaches ?? 0) > attaches && taps.panes.get(id)?.attached))

@@ -186,7 +186,7 @@ test('first run welcomes and starts a shell', async ({ page }) => {
 
 test('the quick terminal shortcut records the § key', async ({ page }) => {
   await open(page)
-  await page.getByRole('button', { name: /^Settings/ }).first().click()
+  await page.keyboard.press('Meta+Comma')
   await page.getByPlaceholder('Search settings').fill('quick terminal')
   const recorder = page.getByRole('button', { name: 'Quick terminal shortcut' })
   await recorder.click()
@@ -212,7 +212,7 @@ test('a line comment box takes clicks and typing, and the lines still take click
 
 test('recordings and dictations can be deleted from Settings', async ({ page }) => {
   await open(page)
-  await page.getByRole('button', { name: /^Settings/ }).first().click()
+  await page.keyboard.press('Meta+Comma')
   await page.getByRole('button', { name: 'Features' }).click()
   await page.getByRole('switch', { name: 'Dictation' }).click()
   await page.getByRole('switch', { name: 'Meeting recording' }).click()
@@ -274,7 +274,7 @@ test('the quick terminal splits, and opens running agents in a split beside its 
 
 test('the quick terminal slide and opacity are set in Settings', async ({ page }) => {
   await open(page)
-  await page.getByRole('button', { name: /^Settings/ }).first().click()
+  await page.keyboard.press('Meta+Comma')
   await page.getByPlaceholder('Search settings').fill('quick terminal')
   await page.getByRole('switch', { name: 'Slide in' }).click()
   await persisted(page, '"quickAnimate":false')
