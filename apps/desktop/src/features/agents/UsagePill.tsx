@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AgentUsage, Api, UsageLimits } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
+import { useContextMenu } from '../../panels/common'
 import { IS_MAC } from '../../shell/shortcuts'
 import { Pop } from './Pop'
 import { useSettings } from './settings'
@@ -31,22 +32,29 @@ export function UsagePill({ api }: { api: Api }) {
   const limits = useLimits(api, on)
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const close = useCallback(() => setAnchor(null), [])
+  const [menu, openMenu] = useContextMenu()
   const parts = settings ? pillParts(limits, settings.usage.window) : []
   if (!on || !parts.length || !limits) return null
+  const hint = parts.map(({ agent, main, other }) => `${AGENT_NAME[agent]} ${main.label} ${main.percent}%${other ? `, ${other.label} ${other.percent}%` : ''}`).join(' · ')
   return (
     <>
-      <button className="pill" title={`${parts.map((p) => AGENT_NAME[p.agent]).join(' and ')} plan limits. Click for usage`} onClick={(e) => setAnchor(anchor ? null : e.currentTarget.getBoundingClientRect())}>
-        {parts.map(({ agent, main, other }) => (
-          <span key={agent} className="pagent">
-            <Icon name={agent} />
-            {main.label}
-            <span className={`meter ${level(main.percent)}`}>
-              <b style={{ width: `${Math.min(100, main.percent)}%` }} />
+      <button
+        className="pill usage"
+        title={`${hint}. Click for usage, right-click to hide`}
+        onClick={(e) => setAnchor(anchor ? null : e.currentTarget.getBoundingClientRect())}
+        onContextMenu={openMenu([{ label: 'Hide usage meter', icon: 'x', run: () => void api.updateSettings({ usage: { pill: false } }) }])}
+      >
+        {/* A ring around each agent's icon fills with the chosen window's share; the other window is in the tooltip */}
+        {parts.map(({ agent, main }) => (
+          <span key={agent} className={`pagent ${level(main.percent)}`}>
+            <span className="ring" style={{ '--p': Math.min(100, main.percent) }}>
+              <Icon name={agent} />
             </span>
-            {main.percent}%{other && ` · ${other.label} ${other.percent}%`}
+            {main.percent}%
           </span>
         ))}
       </button>
+      {menu}
       {anchor && (
         <Pop anchor={anchor} className="upop" onClose={close}>
           <UsageDetails api={api} limits={limits} />
