@@ -133,7 +133,8 @@ fn toggle_main(app: &AppHandle) {
     let _ = window.hide();
 }
 
-/// The app ships with no chord (the hotkey window is opt-in), so nothing is registered until settings set one
+/// The app ships with no chord (the hotkey window is opt-in), so nothing is registered until settings set one.
+/// A chord that toggles the whole app takes it off the Dock and the app switcher, so the chord is the way back
 pub fn set_shortcut(
     app: &AppHandle,
     accelerator: Option<&str>,
@@ -144,12 +145,22 @@ pub fn set_shortcut(
         .map(str::parse::<HotKey>)
         .transpose()
         .map_err(|e| e.to_string())?;
+    let chorded = hotkey.is_some();
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
         let _ = tx.send(CHORD.with_borrow_mut(|chord| swap(chord, hotkey)));
     })
     .map_err(|e| e.to_string())?;
-    rx.recv().map_err(|e| e.to_string())?
+    let registered = rx.recv().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(if whole_app && chorded && registered.is_ok() {
+        tauri::ActivationPolicy::Accessory
+    } else {
+        tauri::ActivationPolicy::Regular
+    });
+    #[cfg(not(target_os = "macos"))]
+    let _ = chorded;
+    registered
 }
 
 fn swap(
