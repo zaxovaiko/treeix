@@ -132,6 +132,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .crumbs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); }
 .crumbs > * { flex: none; } .crumbs > .trunc { flex: 0 1 auto; min-width: 40px; }
 .crumbs .sep { color: var(--muted-foreground); opacity: .75; }
+.crumbs > .branch { flex-shrink: 100; margin-left: 4px;font-size: 11px; color: var(--muted-foreground); opacity: .7; }
 .stage { flex: 1; min-height: 0; position: relative; }
 .panes { position: absolute; inset: 0; }
 .panes[hidden] { display: none; }

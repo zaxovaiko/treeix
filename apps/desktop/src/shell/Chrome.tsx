@@ -420,18 +420,12 @@ function Crumbs({ view }: ViewProps) {
   return (
     <div className="crumbs" title={place.missing ? 'This folder no longer exists' : tilde(place.path, view.home)}>
       <Ki kind={tabKind(tab, view.sessions)} dot={tabDot(tab, view.sessions)} sm />
-      {place.repoName && place.kind !== 'folder' ? (
-        <>
-          <span className="dim">{place.repoName}</span>
-          <span className="sep">/</span>
-          <span style={{ color: placeColor(place, view.ui.colors) }}>{placeName(place)}</span>
-        </>
-      ) : (
-        <span className="dim">{tilde(place.path, view.home)}</span>
-      )}
+      <span className="dim">{place.repoName && place.kind !== 'folder' ? place.repoName : tilde(place.path, view.home)}</span>
       {place.missing && <span className="tag red">missing</span>}
       <span className="sep">/</span>
       <b className="trunc">{tabTitle(tab, view.sessions)}</b>
+      {/* The branch after the title, quiet, so the title reads first */}
+      {place.repoName && place.kind !== 'folder' && <span className="branch trunc">{placeName(place)}</span>}
     </div>
   )
 }
