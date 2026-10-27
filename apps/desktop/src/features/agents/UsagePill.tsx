@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AgentUsage, Api, UsageLimits } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
+import { IS_MAC } from '../../shell/shortcuts'
 import { Pop } from './Pop'
 import { useSettings } from './settings'
 import { compact, level, pillParts, summarize, untilLabel, usd, WINDOW_LABEL, type LimitAgent, type Share } from './usage'
@@ -25,7 +26,8 @@ function useLimits(api: Api, on: boolean) {
 /** Title bar: plan limits of the chosen window; click for both windows per agent and the last week's tokens */
 export function UsagePill({ api }: { api: Api }) {
   const settings = useSettings(api)
-  const on = !!settings?.features.usage && settings.usage.pill
+  const inMenuBar = IS_MAC && !!settings && ['weekly', 'fiveHour', 'rings'].includes(settings.usage.tray)
+  const on = !!settings?.features.usage && settings.usage.pill && !inMenuBar
   const limits = useLimits(api, on)
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const close = useCallback(() => setAnchor(null), [])

@@ -378,7 +378,7 @@ function Usage({ settings, update }: SectionProps) {
   const u = settings.usage
   return (
     <Group>
-      <Row label="Meter in the title bar" desc="Plan usage of Claude, else Codex">
+      <Row label="Meter in the title bar" desc={IS_MAC ? 'Plan usage of Claude, else Codex. Hidden while the menu bar shows usage' : 'Plan usage of Claude, else Codex'}>
         <Switch label="Meter in the title bar" on={u.pill} onChange={(pill) => update({ usage: { pill } })} />
       </Row>
       <Row label="Window" desc="Which limit the meter shows">
