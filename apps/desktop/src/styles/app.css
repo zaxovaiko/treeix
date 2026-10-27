@@ -256,6 +256,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .quick .qh button:hover { color: var(--foreground); }
 .quick .qh kbd { font-size: 9px; line-height: 13px; height: 13px; min-width: 13px; padding: 0 3px; }
 .quick .qbody { flex: 1; min-height: 0; display: flex; }
+.quick .qpanes { flex: 1; min-width: 0; position: relative; }
 .quick .qside { width: 184px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 6px; border-right: 1px solid var(--border); }
 .quick .qside button { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 12px; text-align: left; color: var(--muted-foreground); }
 .quick .qside button:hover { background: var(--accent); }

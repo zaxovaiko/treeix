@@ -39,8 +39,8 @@ export interface UiState {
   ui: 'compact' | 'islands'
   theme: 'dark' | 'light'
   recent: RecentPlace[]
-  /** The quick terminal window's session; written by that window only */
-  quick: string | null
+  /** The quick terminal window's panes; written by that window only */
+  quick: SplitNode | null
   renderer: Renderer
   /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null: none */
   quickShortcut: string | null
@@ -94,20 +94,20 @@ export const initialUi: UiState = {
 
 export const leaves = (node: SplitNode): string[] => (node.type === 'pane' ? [node.session] : [...leaves(node.a), ...leaves(node.b)])
 
-const removeLeaf = (node: SplitNode, session: string): SplitNode | null => {
+export const removeLeaf = (node: SplitNode, session: string): SplitNode | null => {
   if (node.type === 'pane') return node.session === session ? null : node
   const a = removeLeaf(node.a, session)
   const b = removeLeaf(node.b, session)
   return a && b ? { ...node, a, b } : (a ?? b)
 }
 
-const replaceLeaf = (node: SplitNode, session: string, next: SplitNode): SplitNode => {
+export const replaceLeaf = (node: SplitNode, session: string, next: SplitNode): SplitNode => {
   if (node.type === 'pane') return node.session === session ? next : node
   return { ...node, a: replaceLeaf(node.a, session, next), b: replaceLeaf(node.b, session, next) }
 }
 
 /** `path` is a string of a/b steps from the root to a split node */
-const setRatio = (node: SplitNode, path: string, ratio: number): SplitNode => {
+export const setRatio = (node: SplitNode, path: string, ratio: number): SplitNode => {
   if (node.type === 'pane') return node
   if (!path) return { ...node, ratio }
   return path[0] === 'a' ? { ...node, a: setRatio(node.a, path.slice(1), ratio) } : { ...node, b: setRatio(node.b, path.slice(1), ratio) }
@@ -204,7 +204,10 @@ export function parseUi(json: string | null): UiState {
   try {
     const raw: unknown = JSON.parse(json)
     if (typeof raw !== 'object' || raw === null) return initialUi
-    return { ...initialUi, ...(raw as Partial<UiState>) }
+    const ui = { ...initialUi, ...(raw as Partial<UiState>) }
+    // Before splits the quick window kept one shell's id
+    const quick: unknown = ui.quick
+    return typeof quick === 'string' ? { ...ui, quick: { type: 'pane', session: quick } } : ui
   } catch {
     return initialUi
   }
@@ -212,7 +215,7 @@ export function parseUi(json: string | null): UiState {
 
 /**
  * Reconciles the saved layout with the daemon's sessions: panes whose session is gone drop out, live sessions
- * without a tab get their own. The quick terminal's shell belongs to its own window, until an agent runs in it
+ * without a tab get their own. The quick terminal's shells belong to its own window, until an agent runs in one
  */
 /** `kept`: leaves that aren't sessions but still exist, like open chats */
 export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] = []): UiState {
@@ -222,7 +225,8 @@ export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] 
     if (!live.has(session)) state = withoutSession(state, session)
   }
   const shown = new Set(state.tabs.flatMap((t) => leaves(t.root)))
-  const orphans = sessions.filter((s) => !shown.has(s.id) && (s.id !== saved.quick || s.kind === 'claude' || s.kind === 'codex')).sort((a, b) => a.createdAt - b.createdAt)
+  const quick = new Set(saved.quick ? leaves(saved.quick) : [])
+  const orphans = sessions.filter((s) => !shown.has(s.id) && (!quick.has(s.id) || s.kind === 'claude' || s.kind === 'codex')).sort((a, b) => a.createdAt - b.createdAt)
   const tabs = [...state.tabs, ...orphans.map((s, i): Tab => ({ id: `t${s.id}-${i}`, root: { type: 'pane', session: s.id }, focus: s.id }))]
   const active = tabs.some((t) => t.id === state.active) ? state.active : (tabs[0]?.id ?? null)
   return { ...state, tabs, active }

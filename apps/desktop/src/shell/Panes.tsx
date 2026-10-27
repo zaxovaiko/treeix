@@ -71,12 +71,25 @@ async function openPrinted(view: ShellView, session: string, targets: { path: st
 }
 
 const pct = (n: number) => `${n * 100}%`
-const box = (r: Rect): CSSProperties => ({ left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) })
+export const box = (r: Rect): CSSProperties => ({ left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) })
 
-function handleBox({ dir, ratio, rect }: Handle): CSSProperties {
+export function handleBox({ dir, ratio, rect }: Handle): CSSProperties {
   return dir === 'row'
     ? { left: pct(rect.x + rect.w * ratio), top: pct(rect.y), height: pct(rect.h) }
     : { top: pct(rect.y + rect.h * ratio), left: pct(rect.x), width: pct(rect.w) }
+}
+
+/** Drags a split handle; `onRatio` gets the handle's new ratio */
+export const dragHandle = (handle: Handle, onRatio: (ratio: number) => void) => (e: PointerEvent<HTMLDivElement>) => {
+  const el = e.currentTarget
+  const area = el.parentElement?.getBoundingClientRect()
+  if (!area) return
+  el.setPointerCapture(e.pointerId)
+  el.classList.add('drag')
+  const move = (ev: globalThis.PointerEvent) =>
+    onRatio(handle.dir === 'row' ? ((ev.clientX - area.left) / area.width - handle.rect.x) / handle.rect.w : ((ev.clientY - area.top) / area.height - handle.rect.y) / handle.rect.h)
+  el.addEventListener('pointermove', move)
+  el.addEventListener('pointerup', () => (el.classList.remove('drag'), el.removeEventListener('pointermove', move)), { once: true })
 }
 
 /**
@@ -88,20 +101,6 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
   const rects = paneRects(tab.root)
   const multi = rects.size > 1
   const [menu, openMenu] = useContextMenu()
-
-  const drag = (handle: Handle) => (e: PointerEvent<HTMLDivElement>) => {
-    const el = e.currentTarget
-    const area = el.parentElement?.getBoundingClientRect()
-    if (!area) return
-    el.setPointerCapture(e.pointerId)
-    el.classList.add('drag')
-    const move = (ev: globalThis.PointerEvent) => {
-      const at = handle.dir === 'row' ? ((ev.clientX - area.left) / area.width - handle.rect.x) / handle.rect.w : ((ev.clientY - area.top) / area.height - handle.rect.y) / handle.rect.h
-      dispatch({ type: 'ratio', tabId: tab.id, path: handle.path, ratio: at })
-    }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', () => (el.classList.remove('drag'), el.removeEventListener('pointermove', move)), { once: true })
-  }
 
   return (
     <div className="panes" hidden={!active}>
@@ -185,7 +184,7 @@ export function TabPanes({ view, tab, active, epoch }: { view: ShellView; tab: T
         )
       })}
       {splitHandles(tab.root).map((handle) => (
-        <div key={handle.path} className={`psz ${handle.dir}`} style={handleBox(handle)} onPointerDown={drag(handle)} />
+        <div key={handle.path} className={`psz ${handle.dir}`} style={handleBox(handle)} onPointerDown={dragHandle(handle, (ratio) => dispatch({ type: 'ratio', tabId: tab.id, path: handle.path, ratio }))} />
       ))}
     </div>
   )

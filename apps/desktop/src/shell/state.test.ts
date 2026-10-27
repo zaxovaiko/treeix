@@ -45,8 +45,8 @@ test('closing the active tab activates its neighbour', () => {
 test('restore drops gone sessions and gives orphans a tab, but not the quick terminal', () => {
   let saved = open(initialUi, 'a')
   saved = reducer(saved, { type: 'split', session: 'gone', dir: 'row' })
-  saved = { ...saved, quick: 'q' }
-  const s = restore(saved, [info('a'), info('q'), info('new', 5)])
+  saved = { ...saved, quick: { type: 'split', dir: 'row', ratio: 0.5, a: { type: 'pane', session: 'q' }, b: { type: 'pane', session: 'q2' } } }
+  const s = restore(saved, [info('a'), info('q'), info('q2'), info('new', 5)])
   expect(s.tabs.map((t) => leaves(t.root))).toEqual([['a'], ['new']])
   expect(s.tabs[0].root.type).toBe('pane')
   expect(s.active).toBe('t-a')
@@ -55,6 +55,7 @@ test('restore drops gone sessions and gives orphans a tab, but not the quick ter
 test('parseUi falls back on garbage and keeps unknown versions safe', () => {
   expect(parseUi('nope')).toBe(initialUi)
   expect(parseUi('{"theme":"light"}').theme).toBe('light')
+  expect(parseUi('{"quick":"q"}').quick).toEqual({ type: 'pane', session: 'q' })
 })
 
 test('a single pane follows its cwd, a split keeps its place', () => {
@@ -105,15 +106,15 @@ test('older blobs get the settings defaults, and settings patch in', () => {
 })
 
 test('live count: only panes in tabs with a running process, so not the quick terminal', () => {
-  const s = restore({ ...initialUi, quick: 'q' }, [info('a'), info('b'), { ...info('c'), status: 'exited' }, info('q')])
+  const s = restore({ ...initialUi, quick: { type: 'pane', session: 'q' } }, [info('a'), info('b'), { ...info('c'), status: 'exited' }, info('q')])
   const sessions = Object.fromEntries([info('a'), info('b'), { ...info('c'), status: 'exited' as const }, info('q')].map((x) => [x.id, x]))
   expect(liveCount(s.tabs, sessions)).toBe(2)
 })
 
 test('an agent started in the quick terminal gets a tab, its plain shell does not', () => {
-  const shell = restore({ ...initialUi, quick: 'q' }, [info('a'), info('q')])
+  const shell = restore({ ...initialUi, quick: { type: 'pane', session: 'q' } }, [info('a'), info('q')])
   expect(shell.tabs.flatMap((t) => leaves(t.root))).toEqual(['a'])
-  const agent = restore({ ...initialUi, quick: 'q' }, [info('a'), { ...info('q'), kind: 'claude' }])
+  const agent = restore({ ...initialUi, quick: { type: 'pane', session: 'q' } }, [info('a'), { ...info('q'), kind: 'claude' }])
   expect(agent.tabs.flatMap((t) => leaves(t.root))).toEqual(['a', 'q'])
 })
 
