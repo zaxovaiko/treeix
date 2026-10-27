@@ -106,7 +106,7 @@ function Appearance(props: SectionProps) {
           <Row label="Opacity" desc={`${Math.round(view.ui.windowOpacity * 100)}%. The whole window's background, the text stays solid`} keywords="transparency transparent see-through window background">
             <input type="range" className="range" aria-label="Window opacity" min={0.3} max={1} step={0.05} value={view.ui.windowOpacity} onChange={(e) => setUi(view, { windowOpacity: Number(e.target.value) })} />
           </Row>
-          <Row label="Blur background" desc="What shows through is blurred" keywords="transparency transparent frosted glass window">
+          <Row label="Blur background" desc="What shows through is blurred, in the quick terminal too" keywords="transparency transparent frosted glass window quick terminal hotkey">
             <Switch label="Blur background" on={view.ui.windowBlur} onChange={(windowBlur) => setUi(view, { windowBlur })} />
           </Row>
         </Group>
@@ -270,9 +270,6 @@ function Hotkey({ view, settings }: SectionProps) {
       </Row>
       <Row label="Opacity" desc={`${Math.round(view.ui.quickOpacity * 100)}%, macOS only`} keywords="quick terminal hotkey transparency transparent">
         <input type="range" className="range" aria-label="Quick terminal opacity" min={0.3} max={1} step={0.05} value={view.ui.quickOpacity} onChange={(e) => setUi(view, { quickOpacity: Number(e.target.value) })} />
-      </Row>
-      <Row label="Blur background" desc="What shows through is blurred, macOS only" keywords="quick terminal hotkey transparency transparent frosted glass">
-        <Switch label="Blur background" on={view.ui.quickBlur} onChange={(quickBlur) => setUi(view, { quickBlur })} />
       </Row>
     </Group>
   )

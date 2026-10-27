@@ -16,7 +16,7 @@ import { isCommandId, shortcutsPaused, withHint, type CommandId } from './shortc
 import { DOT_LABEL, KIND_ICON, Ki, statusDot, tilde } from './model'
 import { box, dragHandle, handleBox } from './Panes'
 
-type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom' | 'quickAnimate' | 'quickOpacity' | 'quickBlur'>
+type Look = Pick<UiState, 'theme' | 'ui' | 'renderer' | 'zoom' | 'quickAnimate' | 'quickOpacity' | 'windowBlur'>
 type Layout = { root: SplitNode; focus: string }
 
 const GONE = new Set(['exited', 'restored', 'crashed'])
@@ -117,11 +117,11 @@ export function Quick({ api }: { api: Api }) {
 
   useEffect(() => {
     let cancelled = false
-    const look = ({ theme, ui, renderer, zoom, quickAnimate, quickOpacity, quickBlur }: Look) => {
+    const look = ({ theme, ui, renderer, zoom, quickAnimate, quickOpacity, windowBlur }: Look) => {
       applyTheme(theme, ui)
       // Only the Mac window is transparent; elsewhere a see-through page would show the webview's own fill
       document.documentElement.style.setProperty('--quick-alpha', `${IS_MAC ? Math.round(Math.min(1, Math.max(0.3, quickOpacity)) * 100) : 100}%`)
-      void setQuickLook(quickAnimate, quickBlur).catch((e: unknown) => console.warn('quick look:', e))
+      void setQuickLook(quickAnimate, windowBlur).catch((e: unknown) => console.warn('quick look:', e))
       void setZoom(zoom).catch((e: unknown) => console.warn('zoom:', e))
       setMode(theme)
       setRenderer(renderer)
