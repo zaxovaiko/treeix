@@ -419,7 +419,12 @@ async fn shutdown_restores_sessions_ui_and_restart() {
         ),
     )
     .await;
-    let before = wait_for_info(&mut client, &info.id, |s| s.seq > 0).await;
+    // Shut down only once the first run marked itself and its output is in, else the restart turns tracking on again
+    while !marker.exists() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let first_run = "persist \x1b[35mme\x1b[0m\x1b[?1003h\x1b[?1006h";
+    let before = wait_for_info(&mut client, &info.id, |s| s.seq >= first_run.len() as u64).await;
     client
         .request(Request::PutUi {
             json: r#"{"tabs":[1]}"#.into(),
