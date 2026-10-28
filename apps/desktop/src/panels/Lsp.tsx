@@ -3,6 +3,7 @@ import type { Place } from '../ipc/api'
 import { restartServer, specsFor, useLsp, type ServerState } from '../lib/lsp'
 import { CONFIG_FILE, type ServerSpec } from '../lib/lsp/servers'
 import type { ShellView } from '../shell/Shell'
+import { Icon } from '../lib/icons'
 import { Head } from './common'
 
 const STATE_LABEL: Record<ServerState, string> = { starting: 'starting', running: 'running', missing: 'not installed', failed: 'failed', stopped: 'idle' }
@@ -14,6 +15,13 @@ const CONFIG_EXAMPLE = `{
   }
 }`
 
+/** These two sheets have no title bar icon to toggle them off */
+const CloseSheet = ({ view }: { view: ShellView }) => (
+  <button className="icon sm" onClick={() => view.dispatch({ type: 'set', patch: { panel: null } })} title="Close (Esc)">
+    <Icon name="x" />
+  </button>
+)
+
 /** What the language servers found in this place's open files; a click opens the line */
 export function Problems({ view, place }: { view: ShellView; place: Place }) {
   const root = place.path
@@ -22,7 +30,9 @@ export function Problems({ view, place }: { view: ShellView; place: Place }) {
     .sort((a, b) => a.severity - b.severity || a.path.localeCompare(b.path) || a.line - b.line)
   return (
     <>
-      <Head title="Problems" place={place} />
+      <Head title="Problems" place={place}>
+        <CloseSheet view={view} />
+      </Head>
       <div className="pscroll">
         {problems.length === 0 && <div className="empty">No problems in open files</div>}
         {problems.map((p, i) => {
@@ -57,7 +67,9 @@ export function Servers({ view, place }: { view: ShellView; place: Place }) {
   }, [api, root, servers])
   return (
     <>
-      <Head title="Language servers" place={place} />
+      <Head title="Language servers" place={place}>
+        <CloseSheet view={view} />
+      </Head>
       <div className="pscroll">
         <div className="sec">This repo</div>
         {specs.map((spec) => {
