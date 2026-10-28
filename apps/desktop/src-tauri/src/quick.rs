@@ -122,6 +122,10 @@ fn toggle_main(app: &AppHandle) {
         && window.is_focused().unwrap_or(false)
         && !window.is_minimized().unwrap_or(false);
     if !in_front {
+        // The app was hidden on the last toggle; its window shows without the app unhidden, but set_focus skips
+        // invisible windows, so it came forward without activating and keys went to the app before it
+        #[cfg(target_os = "macos")]
+        let _ = app.show();
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -192,6 +196,7 @@ mod panel {
     use std::sync::atomic::{AtomicBool, Ordering};
     use tauri::{AppHandle, WebviewWindow};
     // tauri_panel! brings MainThreadMarker, NSEvent, NSWindow, NSRect, NSPoint and NSSize in
+    use tauri_nspanel::objc2;
     use tauri_nspanel::objc2_app_kit::NSScreen;
     use tauri_nspanel::{
         CollectionBehavior, ManagerExt, PanelLevel, StyleMask, WebviewWindowExt, tauri_panel,
@@ -265,8 +270,9 @@ mod panel {
                 .full_screen_auxiliary()
                 .into(),
         );
-        if let Err(e) = panel.add_style_mask(StyleMask::empty().nonactivating_panel().into()) {
-            tracing::warn!("quick terminal stays an activating panel: {e:?}");
+        match panel.add_style_mask(StyleMask::empty().nonactivating_panel().into()) {
+            Ok(()) => prevent_activation(panel.as_panel()),
+            Err(e) => tracing::warn!("quick terminal stays an activating panel: {e:?}"),
         }
         let events = QuickPanelEvents::new();
         let weak = Arc::downgrade(&panel);
@@ -277,6 +283,23 @@ mod panel {
         });
         panel.set_event_handler(Some(events.as_ref()));
         Ok(())
+    }
+
+    /// AppKit keeps the window server's activation flag from the window's creation, so a panel made nonactivating
+    /// afterwards shows as key on its first summon but gets no key events; the private setter syncs the flag
+    fn prevent_activation(window: &NSWindow) {
+        let selector = objc2::sel!(_setPreventsActivation:);
+        // SAFETY: on the main thread with a live window, and the selector is checked before it is sent
+        unsafe {
+            let responds: bool = objc2::msg_send![window, respondsToSelector: selector];
+            if responds {
+                let _: () = objc2::msg_send![window, _setPreventsActivation: true];
+            } else {
+                tracing::warn!(
+                    "quick terminal may miss keys on its first summon: no _setPreventsActivation:"
+                );
+            }
+        }
     }
 
     pub fn toggle(app: &AppHandle) {
