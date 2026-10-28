@@ -98,7 +98,7 @@ export function Menu({ at, items, onClose, anchor }: { at: { x: number; y: numbe
     }
   }, [onClose])
   return (
-    <div ref={ref} className="pop menu" style={{ left: Math.min(at.x, innerWidth - 240), top: Math.min(at.y, innerHeight - items.length * 28 - 12) }}>
+    <div ref={ref} className="pop menu" style={{ left: Math.min(at.x, innerWidth - 240), top: Math.min(at.y, innerHeight - items.length * 28 - 12), maxWidth: 240 }}>
       {items.map((item) => (
         <button
           key={item.label}
@@ -110,7 +110,9 @@ export function Menu({ at, items, onClose, anchor }: { at: { x: number; y: numbe
         >
           {item.icon && <PIcon name={item.icon} />}
           {item.color && <span className="sw" style={{ background: item.color }} />}
-          {item.label}
+          <span className="trunc" title={item.label}>
+            {item.label}
+          </span>
         </button>
       ))}
     </div>

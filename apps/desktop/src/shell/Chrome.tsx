@@ -111,7 +111,7 @@ function MoreButton({ view }: ViewProps) {
         ref={button}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect()
-          setAt(at ? null : { x: r.right - 220, y: r.bottom + 4 })
+          setAt(at ? null : { x: r.right - 240, y: r.bottom + 4 })
         }}
       >
         <PIcon name="more" />

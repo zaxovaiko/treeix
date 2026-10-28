@@ -161,6 +161,7 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .mi kbd, .mi .d { margin-left: auto; }
 .mi .d { color: var(--muted-foreground); font-size: 11px; }
 .mi .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.mi > svg { flex: none; }
 .mi .d + kbd { margin-left: 0; }
 .mi mark { background: none; color: var(--foreground); font-weight: 600; }
 .mlabel { padding: 6px 8px 3px; font-size: 10.5px; font-weight: 600; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
@@ -271,5 +272,4 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 /* see-through main window (Settings > Appearance > Opacity, macOS): the window's one fill takes the alpha and every surface over it goes clear, so the alpha doesn't stack and the blur shows through. Popovers stay solid */
 [data-glass] { --term-clear: 1; }
 [data-glass], [data-glass] body, [data-glass] :is(.card, .pterm, .term, .chatp, .ed, .plan, .browser, .kbar), [data-glass] .term .xterm .xterm-viewport, [data-glass] :is(.monaco-editor, .monaco-editor-background, .monaco-editor .margin) { background: transparent; }
-.icon.awake-untilAgentsFinish { color: var(--amber); }
-.icon.awake-on { color: var(--amber); background: var(--amber-bg); }
+.icon:is(.awake-untilAgentsFinish, .awake-on) { color: var(--amber); }
