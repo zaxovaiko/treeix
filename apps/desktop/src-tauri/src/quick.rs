@@ -157,11 +157,21 @@ pub fn set_shortcut(
     .map_err(|e| e.to_string())?;
     let registered = rx.recv().map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
-    let _ = app.set_activation_policy(if whole_app && chorded && registered.is_ok() {
-        tauri::ActivationPolicy::Accessory
-    } else {
-        tauri::ActivationPolicy::Regular
-    });
+    {
+        let hotkey_window = whole_app && chorded && registered.is_ok();
+        let _ = app.set_activation_policy(if hotkey_window {
+            tauri::ActivationPolicy::Accessory
+        } else {
+            tauri::ActivationPolicy::Regular
+        });
+        // A hotkey window has square corners and no traffic lights; decorations back on drop the overlay title bar
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.set_decorations(!hotkey_window);
+            if !hotkey_window {
+                let _ = main.set_title_bar_style(tauri::TitleBarStyle::Overlay);
+            }
+        }
+    }
     #[cfg(not(target_os = "macos"))]
     let _ = chorded;
     registered

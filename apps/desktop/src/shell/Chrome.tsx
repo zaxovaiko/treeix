@@ -29,11 +29,13 @@ export function TitleBar({ view, tabbed, hidden }: ViewProps & { tabbed: boolean
   const { ui, dispatch, run } = view
   return (
     <div className={`titlebar ${tabbed ? 'tabbed' : ''}`} data-tauri-drag-region>
-      <div className="lights" data-tauri-drag-region>
-        <i />
-        <i />
-        <i />
-      </div>
+      {!(ui.quickWholeApp && ui.quickShortcut) && (
+        <div className="lights" data-tauri-drag-region>
+          <i />
+          <i />
+          <i />
+        </div>
+      )}
       {ui.orientation === 'vertical' && (
         <button className="icon" onClick={() => dispatch({ type: 'set', patch: { sidebar: !ui.sidebar } })} title={withHint(ui.sidebar ? 'Hide sessions' : 'Show sessions', 'toggle-sidebar')}>
           <Icon name={ui.sidebar ? 'sideClose' : 'sideOpen'} />
