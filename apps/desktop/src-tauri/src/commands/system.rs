@@ -69,6 +69,13 @@ pub(crate) fn setup(app: &AppHandle) {
     super::UsageLimitsChanged::listen_any(app, move |event| {
         tray::get(&handle).set_limits(&handle, event.payload.limits);
     });
+    // The title bar meter hides while the menu bar shows usage, so the tray starts the limits watch itself
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(limits) = super::usage_limits(handle.clone()).await {
+            tray::get(&handle).set_limits(&handle, limits);
+        }
+    });
     let handle = app.clone();
     app.listen_any("session-event", move |event| {
         // Output never comes this way, so every event is worth a fresh list
