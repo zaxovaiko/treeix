@@ -448,55 +448,28 @@ async fn shutdown_restores_sessions_ui_and_restart() {
         client.request(Request::GetUi).await.unwrap(),
         Response::Ui(Some(r#"{"tabs":[1]}"#.into()))
     );
-    let restored = list(&mut client)
-        .await
-        .into_iter()
-        .find(|s| s.id == info.id)
-        .expect("session kept");
-    assert_eq!(
-        (restored.status, restored.pid, restored.seq),
-        (SessionStatus::Restored, None, before.seq)
-    );
-    let (snapshot, seq, _) = attach(&mut client, &info.id).await;
-    assert!(String::from_utf8_lossy(&snapshot).contains("persist \x1b[0;35mme"));
-    let write = Request::Write {
-        session: info.id.clone(),
-        data: b"x".to_vec(),
-    };
-    assert!(
-        client.request(write).await.is_err(),
-        "no process to write to"
-    );
-
-    assert_eq!(
-        client
-            .request(Request::Restart {
-                session: info.id.clone()
-            })
-            .await
-            .unwrap(),
-        Response::Ok
-    );
-    let mut live = Vec::new();
-    while !String::from_utf8_lossy(&live).contains("persist") {
-        if let Event::Data { seq: at, bytes, .. } = client.next_event().await.unwrap().unwrap() {
-            assert_eq!(at, seq + live.len() as u64);
-            live.extend_from_slice(&bytes);
-        }
-    }
+    // It starts again on its own, below the old screen
     let running = wait_for_info(&mut client, &info.id, |s| {
-        s.status == SessionStatus::Running
+        s.status == SessionStatus::Running && s.seq > before.seq
     })
     .await;
     assert!(running.pid.is_some_and(|pid| Some(pid) != info.pid));
-    let (snapshot, ..) = attach(&mut client, &info.id).await;
-    assert_eq!(
-        String::from_utf8_lossy(&snapshot)
+    let start = Instant::now();
+    let snapshot = loop {
+        let (snapshot, ..) = attach(&mut client, &info.id).await;
+        if String::from_utf8_lossy(&snapshot)
             .matches("persist")
-            .count(),
-        2,
-        "old screen kept above"
-    );
+            .count()
+            == 2
+        {
+            break snapshot;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "old screen kept above"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
     assert!(
         !String::from_utf8_lossy(&snapshot).contains("\x1b[?1003h"),
         "the old program's mouse tracking is off"
@@ -505,7 +478,7 @@ async fn shutdown_restores_sessions_ui_and_restart() {
 }
 
 #[tokio::test]
-async fn crash_marks_sessions_crashed() {
+async fn crash_restarts_sessions() {
     let dir = tempfile::tempdir().unwrap();
     let state = serde_json::json!({
         "clean_shutdown": false,
@@ -519,11 +492,9 @@ async fn crash_marks_sessions_crashed() {
     std::fs::write(dir.path().join("state.json"), state.to_string()).unwrap();
     let _server = treeix_ptyd::spawn_in_process(dir.path().into());
     let mut client = connect(dir.path()).await;
-    let crashed = list(&mut client).await.remove(0);
-    assert_eq!(
-        (crashed.status, crashed.pid),
-        (SessionStatus::Crashed, None)
-    );
+    let restarted = list(&mut client).await.remove(0);
+    assert_eq!(restarted.status, SessionStatus::Running);
+    assert!(restarted.pid.is_some_and(|pid| pid != 1));
     client.request(Request::Shutdown).await.unwrap();
 }
 

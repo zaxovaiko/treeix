@@ -249,7 +249,7 @@ async fn sigterm_with_live_sessions_exits_within_two_seconds() {
 }
 
 #[tokio::test]
-async fn sigkill_leaves_crashed_sessions_and_the_next_daemon_reaps_orphans() {
+async fn sigkill_restarts_sessions_and_the_next_daemon_reaps_orphans() {
     let dir = tempfile::tempdir().unwrap();
     let (mut daemon, mut client) = start(dir.path()).await;
     // Ignores the hangup the kernel sends when the dead daemon's PTY closes, like nohup'd jobs do
@@ -294,11 +294,12 @@ async fn sigkill_leaves_crashed_sessions_and_the_next_daemon_reaps_orphans() {
     );
 
     let (_daemon, mut client) = start(dir.path()).await;
-    let crashed = list(&mut client).await.remove(0);
+    let restarted = list(&mut client).await.remove(0);
     assert_eq!(
-        (crashed.id.as_str(), crashed.status, crashed.pid),
-        (info.id.as_str(), SessionStatus::Crashed, None)
+        (restarted.id.as_str(), restarted.status),
+        (info.id.as_str(), SessionStatus::Running)
     );
+    assert!(restarted.pid.is_some_and(|pid| pid as i32 != shell));
     match client
         .request(Request::Attach {
             session: info.id.clone(),

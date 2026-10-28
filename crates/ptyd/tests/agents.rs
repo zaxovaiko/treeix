@@ -141,7 +141,7 @@ async fn an_interactive_shell_is_idle_at_its_prompt_and_running_a_command() {
 }
 
 #[tokio::test]
-async fn restarting_a_restored_shell_resumes_the_claude_it_ran() {
+async fn a_restored_shell_resumes_the_claude_it_ran() {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
@@ -204,23 +204,6 @@ async fn restarting_a_restored_shell_resumes_the_claude_it_ran() {
     server.join().unwrap().unwrap();
 
     let _server = treeix_ptyd::spawn_in_process(dir.path().into());
-    let mut client = Client::connect(&dir.path().join("ptyd.sock"))
-        .await
-        .expect("connect");
-    let Response::Sessions(list) = client.request(Request::List).await.unwrap() else {
-        panic!("no session list");
-    };
-    let restored = list.iter().find(|s| s.id == info.id).expect("session kept");
-    assert_eq!(
-        (restored.kind, restored.status),
-        (SessionKind::Claude, SessionStatus::Restored)
-    );
-    client
-        .request(Request::Restart {
-            session: info.id.clone(),
-        })
-        .await
-        .unwrap();
     let start = Instant::now();
     while std::fs::read_to_string(&resumed).map_or(true, |args| args.trim() != "--resume abc-123") {
         assert!(

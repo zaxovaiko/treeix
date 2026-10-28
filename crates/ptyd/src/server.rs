@@ -20,7 +20,7 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use treeix_proto::{
     ClientMsg, CreateSession, Event, PROTO_VERSION, Request, Response, ServerMsg, SessionId,
-    SessionInfo, SessionStatus, encode, read_frame,
+    SessionInfo, SessionKind, SessionStatus, encode, read_frame,
 };
 
 pub type ClientId = u64;
@@ -52,11 +52,12 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Daemon {
-    /// Loads the last state; sessions that were running come back without a process, unless the previous image
-    /// handed over their PTY (`masters`)
+    /// Loads the last state; sessions that were running start again, unless the previous image handed over their
+    /// PTY (`masters`)
     pub fn load(data_dir: PathBuf, build: String, masters: Vec<(SessionId, OwnedFd)>) -> Arc<Self> {
         let mut masters: HashMap<_, _> = masters.into_iter().collect();
         let mut adopted = Vec::new();
+        let mut revive = Vec::new();
         let saved = state::load(&data_dir);
         let revived = if saved.clean_shutdown {
             SessionStatus::Restored
@@ -87,6 +88,7 @@ impl Daemon {
             let session = Session::new(info, launched, env, true);
             if was_running && master.is_none() {
                 session.set_status(revived);
+                revive.push(session.clone());
             }
             if let Some(ansi) = state::load_snapshot(&data_dir, &session.id) {
                 session.load_snapshot(&ansi);
@@ -116,6 +118,17 @@ impl Daemon {
         for (session, master) in adopted {
             if let Err(e) = session.adopt(&daemon, master) {
                 tracing::error!("taking over {}: {e:#}", session.id);
+                session.set_status(revived);
+                revive.push(session);
+            }
+        }
+        // Started again like Restart does, so a shell's agent resumes its conversation; a routine's run is not redone
+        for session in revive {
+            if session.launched == SessionKind::Routine {
+                continue;
+            }
+            if let Err(e) = session.spawn(&daemon, true) {
+                tracing::error!("restarting {}: {e:#}", session.id);
                 session.set_status(revived);
             }
         }
