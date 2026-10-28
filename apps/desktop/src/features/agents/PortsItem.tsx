@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Menu, type MenuItem } from '../../panels/common'
 import type { SessionPort } from '../../ipc/api'
 import { Icon } from '../../lib/icons'
 import { Ki, statusDot } from '../../shell/model'
@@ -15,24 +16,36 @@ import '../../styles/agents.css'
 const url = (port: number) => `http://localhost:${port}`
 const tabOf = (view: ShellView, session: string) => view.ordered.find((t) => leaves(t.root).includes(session))
 
-/** Status bar: every listening port as a link; click one for open, copy, kill and the session behind it */
+/** Title bar: a plug that lists the listening ports, and one opens for open, copy, kill and the session behind it */
 export function PortsItem({ view }: { view: ShellView }) {
   const settings = useSettings(view.api)
   const ports = usePorts(view.api, !!settings?.features.ports)
+  const button = useRef<HTMLButtonElement>(null)
+  const [list, setList] = useState<{ x: number; y: number } | null>(null)
   const [open, setOpen] = useState<{ port: SessionPort; anchor: DOMRect } | null>(null)
   const close = useCallback(() => setOpen(null), [])
   const unique = ports.filter((p, i) => ports.findIndex((q) => q.port === p.port) === i).sort((a, b) => a.port - b.port)
   if (!unique.length) return null
+  const items: MenuItem[] = unique.map((p) => ({
+    label: `:${p.port}${p.command ? ` · ${p.command}` : ''}`,
+    run: () => button.current && setOpen({ port: p, anchor: button.current.getBoundingClientRect() }),
+  }))
   return (
-    <span className="sb" title="Ports your sessions listen on">
-      <FIcon name="plug" />
-      {unique.map((p) => (
-        <button key={p.port} className="flink" onClick={(e) => setOpen({ port: p, anchor: e.currentTarget.getBoundingClientRect() })}>
-          :{p.port}
-        </button>
-      ))}
+    <>
+      <button
+        ref={button}
+        className={`icon ${list || open ? 'on' : ''}`}
+        title="Ports your sessions listen on"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setList(list ? null : { x: r.right - 240, y: r.bottom + 4 })
+        }}
+      >
+        <FIcon name="plug" />
+      </button>
+      {list && <Menu at={list} items={items} onClose={() => setList(null)} anchor={button} />}
       {open && <PortMenu view={view} port={open.port} anchor={open.anchor} browser={!!settings?.features.browser} onClose={close} />}
-    </span>
+    </>
   )
 }
 
