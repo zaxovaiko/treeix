@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import { IS_MAC, MODIFIER_KEYS, accelerator, acceleratorLabel } from '../../shell/shortcuts'
+import { fontStack } from './apply'
 
 /** The search and where a row sits, so each row can tell whether it matches */
 const Where = createContext({ query: '', section: '', group: '' })
@@ -110,6 +111,77 @@ export function Select<T extends string | number>({ value, options, onChange }: 
         </option>
       ))}
     </select>
+  )
+}
+
+/** Type to filter the fonts, each shown in itself; Enter takes the highlighted one, or the name as typed */
+export function FontPicker({ value, fonts, onChange }: { value: string; fonts: readonly string[]; onChange: (font: string) => void }) {
+  // null while closed
+  const [query, setQuery] = useState<string | null>(null)
+  const [active, setActive] = useState(0)
+  const input = useRef<HTMLInputElement>(null)
+  const hits = query === null ? [] : fonts.filter((font) => font.toLowerCase().includes(query.trim().toLowerCase()))
+  const close = () => {
+    setQuery(null)
+    setActive(0)
+  }
+  const pick = (font: string) => {
+    close()
+    if (font.trim() && font.trim() !== value) onChange(font.trim())
+  }
+  return (
+    <div className="fontpick">
+      <input
+        ref={input}
+        className="inp"
+        role="combobox"
+        aria-expanded={query !== null}
+        aria-label="Font"
+        style={{ width: 200, fontFamily: fontStack(value, 'monospace') }}
+        value={query ?? value}
+        placeholder={value}
+        spellCheck={false}
+        onFocus={() => setQuery('')}
+        onBlur={close}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setActive(0)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            setActive((i) => Math.min(Math.max(i + (e.key === 'ArrowDown' ? 1 : -1), 0), Math.max(hits.length - 1, 0)))
+          }
+          if (e.key === 'Enter') {
+            pick(hits[active] ?? query ?? '')
+            e.currentTarget.blur()
+          }
+          if (e.key === 'Escape') e.currentTarget.blur()
+        }}
+      />
+      {query !== null && hits.length > 0 && (
+        <ul role="listbox">
+          {hits.map((font, i) => (
+            <li
+              key={font}
+              role="option"
+              aria-selected={i === active}
+              className={i === active ? 'on' : ''}
+              style={{ fontFamily: fontStack(font, 'monospace') }}
+              // Before the input's blur closes the list
+              onMouseDown={(e) => {
+                e.preventDefault()
+                pick(font)
+                input.current?.blur()
+              }}
+              onMouseEnter={() => setActive(i)}
+            >
+              {font}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 
