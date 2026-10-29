@@ -9,7 +9,7 @@ import { Panels } from '../panels/Panels'
 import { LangBadge } from '../panes/file/icons'
 import { activeFileOf, isFileLeaf, useFileViews } from '../panes/file/open'
 import { Icon } from '../lib/icons'
-import { DOT_LABEL, GROUP_COLORS, groupColorKey, Ki, leafKind, leafTitle, liveCount, placeColor, placeIcon, placeName, statusDot, tabDot, tabKind, tabTitle, tilde } from './model'
+import { DOT_LABEL, GROUP_COLORS, groupColorKey, Ki, leafKind, leafTitle, placeColor, placeIcon, placeName, statusDot, tabDot, tabKind, tabTitle, tilde } from './model'
 import { keyHint, withHint } from './shortcuts'
 import { leaves, placeLabel, SIDEBAR, type Group, type PlaceTabs, type Tab } from './state'
 import type { ShellView } from './Shell'
@@ -53,6 +53,7 @@ export function TitleBar({ view, tabbed, hidden }: ViewProps & { tabbed: boolean
         <PortsItem view={view} />
         <UsagePill api={view.api} />
         <VoiceTitleItems view={view} />
+        <AwakeButton view={view} />
         <Panels view={view} hidden={hidden} />
         {view.activeTab && (
           <button className="icon" onClick={() => view.split('row')} title={withHint('Split right', 'split-right')}>
@@ -86,27 +87,34 @@ const AWAKE_NEXT: Record<KeepAwakeMode, [next: KeepAwakeMode, title: string]> = 
   on: ['off', 'Keep awake: always'],
 }
 
-/** ⋯: the folder, the terminal host, keep awake, theme, split down, settings */
+/** Cycles keep awake: off, while agents work, always; amber while on */
+function AwakeButton({ view }: ViewProps) {
+  const settings = useSettings(view.api)
+  const mode = settings?.awake.mode
+  if (!settings?.features.awake || !mode) return null
+  const [next, title] = AWAKE_NEXT[mode]
+  return (
+    <button className={`icon ${mode !== 'off' ? `awake-${mode}` : ''}`} title={`${title}. Click to change`} onClick={() => void view.api.updateSettings({ awake: { mode: next } })}>
+      <Icon name="coffee" />
+    </button>
+  )
+}
+
+/** ⋯: the folder, theme, settings */
 function MoreButton({ view }: ViewProps) {
-  const { api, ui, activeTab, run } = view
-  const settings = useSettings(api)
+  const { ui, activeTab, run } = view
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
   const button = useRef<HTMLButtonElement>(null)
   const place = activeTab && view.placeOfTab(activeTab)
-  const mode = settings?.awake.mode
   const items: MenuItem[] = [
     ...(place && place.kind !== 'scratch' ? [{ label: `Copy path: ${tilde(place.path, view.home)}`, icon: placeIcon(place), run: () => copyText(place.path) }] : []),
-    { label: `PTY host · ${liveCount(view.ordered, view.sessions)} live`, icon: 'host', run: () => {} },
-    ...(settings?.features.awake && mode ? [{ label: AWAKE_NEXT[mode][1], icon: 'coffee' as const, run: () => void api.updateSettings({ awake: { mode: AWAKE_NEXT[mode][0] } }) }] : []),
-    { label: 'Language servers', icon: 'code', run: () => view.dispatch({ type: 'set', patch: { panel: 'servers' } }) },
     { label: ui.theme === 'dark' ? 'Light theme' : 'Dark theme', icon: ui.theme === 'dark' ? 'sun' : 'moon', run: () => run('toggle-theme') },
-    ...(activeTab ? [{ label: withHint('Split down', 'split-down'), icon: 'splitDown' as const, run: () => view.split('col') }] : []),
     { label: withHint('Settings', 'settings'), icon: 'gear', run: () => run('settings') },
   ]
   return (
     <>
       <button
-        className={`icon ${at ? 'on' : ''} ${mode && mode !== 'off' ? `awake-${mode}` : ''}`}
+        className={`icon ${at ? 'on' : ''}`}
         title="More"
         ref={button}
         onClick={(e) => {
