@@ -443,11 +443,57 @@ function Mcp({ view }: SectionProps) {
 const McpState = ({ status }: { status: McpStatus['installs'][number]['state'] }) =>
   status === 'installed' ? <Status tone="ok">Set up</Status> : status === 'outdated' ? <Status tone="warn">Old address, set up again</Status> : <Status tone="idle">Not set up</Status>
 
-function Jira({ settings, update }: SectionProps) {
+const OPEN = 'statusCategory != Done ORDER BY updated DESC'
+const JIRA_PRESETS = [
+  [`assignee = currentUser() AND ${OPEN}`, 'Assigned to me'],
+  ['assignee = currentUser() AND statusCategory = "In Progress" ORDER BY updated DESC', 'Assigned to me, in progress'],
+  [`reporter = currentUser() AND ${OPEN}`, 'Reported by me'],
+  [`watcher = currentUser() AND ${OPEN}`, 'Watched by me'],
+] as const
+const PREVIEW_COUNT = 5
+
+function Jira({ view, settings, update }: SectionProps) {
+  const { jql } = settings.jira
+  const preset = JIRA_PRESETS.some(([q]) => q === jql)
+  const [custom, setCustom] = useState(!preset)
+  const [list, error] = useLoad(() => view.api.myTickets(), jql)
+  const failed = error ?? list?.errors.find((e) => e.source === 'jira')?.message
+  const tickets = list?.tickets.filter((t) => t.source === 'jira') ?? []
   return (
     <Group>
-      <Row label="Your tickets" desc="JQL for the tickets Open worktree suggests, through acli" keywords="jql query">
-        <Field mono width={320} value={settings.jira.jql} onSave={(jql) => update({ jira: { jql: jql.trim() } })} />
+      <Row label="Your tickets" desc="Which tickets Open worktree suggests. Not done ones, newest first" keywords="jql query filter assigned reporter watcher">
+        <Select
+          value={custom ? 'custom' : jql}
+          options={[...JIRA_PRESETS, ['custom', 'Custom JQL']]}
+          onChange={(picked) => {
+            setCustom(picked === 'custom')
+            if (picked !== 'custom') update({ jira: { jql: picked } })
+          }}
+        />
+      </Row>
+      {custom && (
+        <Row label="JQL" desc="Any Jira search. Enter saves it" keywords="jql query" wide>
+          <Field mono width={640} value={jql} placeholder={JIRA_PRESETS[0][0]} onSave={(next) => update({ jira: { jql: next.trim() || JIRA_PRESETS[0][0] } })} />
+        </Row>
+      )}
+      <Row
+        label="Matching now"
+        desc={failed ? <span className="warn">{failed}</span> : !list ? 'Asking Jira...' : tickets.length ? `${tickets.length} ticket${tickets.length === 1 ? '' : 's'}` : 'No tickets match'}
+        keywords="preview tickets"
+        wide={tickets.length > 0}
+      >
+        {tickets.length > 0 && (
+          <div className="jpreview">
+            {tickets.slice(0, PREVIEW_COUNT).map((t) => (
+              <div key={t.key} className="clirow">
+                <b className="mono">{t.key}</b>
+                <span className="grow">{t.title}</span>
+                <span className="dim">{t.status}</span>
+              </div>
+            ))}
+            {tickets.length > PREVIEW_COUNT && <div className="sd">and {tickets.length - PREVIEW_COUNT} more</div>}
+          </div>
+        )}
       </Row>
     </Group>
   )

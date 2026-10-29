@@ -56,6 +56,8 @@
 .clirow b { width: 52px; flex: none; }
 .clirow .ver { width: 56px; flex: none; }
 .clirow .latest { flex: 0 1 auto; max-width: 40%; text-align: right; overflow-wrap: anywhere; }
+.jpreview .clirow b { width: 72px; font-weight: 500; }
+.jpreview .clirow .dim { flex: none; }
 /* Search: a group or section with no matching row hides; the empty note shows only when nothing matched */
 .sgrp:not(:has(.srow, .fcard)), .shit:not(:has(.srow, .fcard)) { display: none; }
 .sinner:has(.srow, .fcard) .snone { display: none; }
