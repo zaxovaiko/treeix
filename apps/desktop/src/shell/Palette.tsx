@@ -26,7 +26,6 @@ const ACTIONS: [CommandId, string][] = [
   ['next-tab', 'Next tab'],
   ['prev-tab', 'Previous tab'],
   ['toggle-tabs', 'Toggle tabs: vertical or horizontal'],
-  ['toggle-ui', 'Toggle layout: Compact or Islands'],
   ['toggle-theme', 'Toggle theme: dark or light'],
   ['toggle-sidebar', 'Toggle sidebar'],
   ['settings', 'Settings'],
@@ -47,7 +46,6 @@ const ACTION_ICON: Partial<Record<CommandId, Command['icon']>> = {
   'next-tab': 'right',
   'prev-tab': 'left',
   'toggle-tabs': 'layout',
-  'toggle-ui': 'layout',
   'toggle-sidebar': 'sideL',
   settings: 'gear',
 }

@@ -41,11 +41,10 @@ test('closing the active tab activates its neighbour', () => {
   expect(s.active).toBe('t-c')
 })
 
-test('restore drops gone sessions and gives orphans a tab, but not the quick terminal', () => {
+test('restore drops gone sessions and gives orphans a tab', () => {
   let saved = open(initialUi, 'a')
   saved = reducer(saved, { type: 'split', session: 'gone', dir: 'row' })
-  saved = { ...saved, quick: { type: 'split', dir: 'row', ratio: 0.5, a: { type: 'pane', session: 'q' }, b: { type: 'pane', session: 'q2' } } }
-  const s = restore(saved, [info('a'), info('q'), info('q2'), info('new', 5)])
+  const s = restore(saved, [info('a'), info('new', 5)])
   expect(s.tabs.map((t) => leaves(t.root))).toEqual([['a'], ['new']])
   expect(s.tabs[0].root.type).toBe('pane')
   expect(s.active).toBe('t-a')
@@ -54,7 +53,6 @@ test('restore drops gone sessions and gives orphans a tab, but not the quick ter
 test('parseUi falls back on garbage and keeps unknown versions safe', () => {
   expect(parseUi('nope')).toBe(initialUi)
   expect(parseUi('{"theme":"light"}').theme).toBe('light')
-  expect(parseUi('{"quick":"q"}').quick).toEqual({ type: 'pane', session: 'q' })
 })
 
 test('a single pane follows its cwd, a split keeps its place', () => {
@@ -102,13 +100,6 @@ test('older blobs get the settings defaults, and settings patch in', () => {
   expect(old.quickShortcut).toBeNull()
   const s = reducer(old, { type: 'set', patch: { renderer: 'dom', quickShortcut: 'Control+Backquote' } })
   expect([s.renderer, s.quickShortcut, s.theme]).toEqual(['dom', 'Control+Backquote', 'light'])
-})
-
-test('an agent started in the quick terminal gets a tab, its plain shell does not', () => {
-  const shell = restore({ ...initialUi, quick: { type: 'pane', session: 'q' } }, [info('a'), info('q')])
-  expect(shell.tabs.flatMap((t) => leaves(t.root))).toEqual(['a'])
-  const agent = restore({ ...initialUi, quick: { type: 'pane', session: 'q' } }, [info('a'), { ...info('q'), kind: 'claude' }])
-  expect(agent.tabs.flatMap((t) => leaves(t.root))).toEqual(['a', 'q'])
 })
 
 test('a background open adds the tab and keeps the active one', () => {

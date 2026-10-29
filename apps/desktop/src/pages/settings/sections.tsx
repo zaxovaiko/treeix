@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { FEATURES, THEMES, type FeatureId, type SettingsSection } from '../../features'
 import type { CliTool, KeepAwakeState, McpStatus, NotionDatabase, Settings, SettingsPatch, UpdateInfo } from '../../ipc/api'
 import { ACTIONS, conflict, defaultKeys, keyFor, type ActionId, type Keymap } from '../../lib/hotkeys'
-import { registerQuickShortcut } from '../../lib/native'
+import { registerHotkey } from '../../lib/native'
 import { IS_MAC, keyHint } from '../../shell/shortcuts'
 import type { ShellView } from '../../shell/Shell'
 import { ZOOM, type UiState } from '../../shell/state'
@@ -92,11 +92,8 @@ function Appearance(props: SectionProps) {
         </Row>
       </Group>
       <Group title="Layout">
-        <Row label="Tabs" desc="Grouped in a sidebar, or a strip on top. With Compact, the strip sits in the title bar">
+        <Row label="Tabs" desc="Grouped in a sidebar, or a strip on top">
           <Seg value={view.ui.orientation} options={[['vertical', 'Vertical'], ['horizontal', 'Horizontal']]} onChange={(orientation) => setUi(view, { orientation })} />
-        </Row>
-        <Row label="Density" desc="Compact runs edge to edge with 1px lines. Islands floats rounded panels">
-          <Seg value={view.ui.ui} options={[['compact', 'Compact'], ['islands', 'Islands']]} onChange={(ui) => setUi(view, { ui })} />
         </Row>
         <Row label="Zoom" desc={`The whole window. ${keyHint('zoom-in')} and ${keyHint('zoom-out')} step it, ${keyHint('zoom-reset')} resets`} keywords="scale size bigger smaller">
           <Select value={view.ui.zoom} options={ZOOM_STEPS.map((z) => [z, `${Math.round(z * 100)}%`] as const)} onChange={(zoom) => setUi(view, { zoom })} />
@@ -107,7 +104,7 @@ function Appearance(props: SectionProps) {
           <Row label="Opacity" desc={`${Math.round(view.ui.windowOpacity * 100)}%. The whole window's background, the text stays solid`} keywords="transparency transparent see-through window background">
             <input type="range" className="range" aria-label="Window opacity" min={0.3} max={1} step={0.05} value={view.ui.windowOpacity} onChange={(e) => setUi(view, { windowOpacity: Number(e.target.value) })} />
           </Row>
-          <Row label="Blur background" desc="What shows through is blurred, in the quick terminal too" keywords="transparency transparent frosted glass window quick terminal hotkey">
+          <Row label="Blur background" desc="What shows through is blurred" keywords="transparency transparent frosted glass window">
             <Switch label="Blur background" on={view.ui.windowBlur} onChange={(windowBlur) => setUi(view, { windowBlur })} />
           </Row>
         </Group>
@@ -192,7 +189,6 @@ const ACTION_ICON: Record<ActionId, IconName> = {
   'toggle-sidebar': 'sideL',
   settings: 'gear',
   'toggle-tabs': 'layout',
-  'toggle-ui': 'islands',
   'toggle-theme': 'moon',
   'module-graph': 'network',
   record: 'rec',
@@ -242,34 +238,18 @@ const withoutKey = (keys: Keymap, id: ActionId) => Object.fromEntries(Object.ent
 
 function Hotkey({ view, settings }: SectionProps) {
   const accel = view.ui.quickShortcut
-  const clash = conflict('quick', accel, settings.keys)
+  const clash = conflict('hotkey', accel, settings.keys)
   return (
     <Group>
-      <Row label="Quick terminal" desc={clash ? <span className="warn">{clash}</span> : 'A small terminal over every app and window, from anywhere'} keywords="global shortcut hotkey window">
+      <Row label="Hotkey window" desc={clash ? <span className="warn">{clash}</span> : 'Shows and hides Treeix over every app, from anywhere. Set, the app leaves the Dock'} keywords="global shortcut hotkey window quick terminal">
         <Recorder
-          label="Quick terminal"
+          label="Hotkey window"
           value={accel}
           onChange={async (quickShortcut) => {
-            await registerQuickShortcut(quickShortcut, view.ui.quickWholeApp)
+            await registerHotkey(quickShortcut)
             setUi(view, { quickShortcut })
           }}
         />
-      </Row>
-      <Row label="Whole app" desc="The shortcut shows and hides the main window instead of the quick terminal" keywords="quick terminal hotkey window main">
-        <Switch
-          label="Whole app"
-          on={view.ui.quickWholeApp}
-          onChange={(quickWholeApp) => {
-            setUi(view, { quickWholeApp })
-            void registerQuickShortcut(accel, quickWholeApp).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
-          }}
-        />
-      </Row>
-      <Row label="Slide in" desc="Off, it appears at once" keywords="quick terminal hotkey animation">
-        <Switch label="Slide in" on={view.ui.quickAnimate} onChange={(quickAnimate) => setUi(view, { quickAnimate })} />
-      </Row>
-      <Row label="Opacity" desc={`${Math.round(view.ui.quickOpacity * 100)}%, macOS only`} keywords="quick terminal hotkey transparency transparent">
-        <input type="range" className="range" aria-label="Quick terminal opacity" min={0.3} max={1} step={0.05} value={view.ui.quickOpacity} onChange={(e) => setUi(view, { quickOpacity: Number(e.target.value) })} />
       </Row>
     </Group>
   )

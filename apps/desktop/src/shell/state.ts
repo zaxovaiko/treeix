@@ -36,25 +36,16 @@ export interface UiState {
   panel: PanelId | null
   panelWidth: number
   orientation: 'vertical' | 'horizontal'
-  ui: 'compact' | 'islands'
   theme: 'dark' | 'light'
   recent: RecentPlace[]
-  /** The quick terminal window's panes; written by that window only */
-  quick: SplitNode | null
   renderer: Renderer
-  /** Global accelerator for the quick terminal, e.g. `Control+Backquote`; null: none */
+  /** Global accelerator that shows and hides the main window, e.g. `Control+Backquote`; null: none */
   quickShortcut: string | null
-  /** The chord shows and hides the main window instead of the quick terminal */
-  quickWholeApp: boolean
-  /** The quick terminal slides down when shown; off, it just appears */
-  quickAnimate: boolean
-  /** Opacity of the quick terminal window, 0.3 to 1 */
-  quickOpacity: number
   /** Opacity of the main window's background, 0.3 to 1; the text stays solid. macOS only */
   windowOpacity: number
-  /** What shows through the see-through main window and quick terminal is blurred */
+  /** What shows through the see-through main window is blurred */
   windowBlur: boolean
-  /** Page zoom of both windows, 1 = 100% */
+  /** Page zoom, 1 = 100% */
   zoom: number
   /** Group colors picked by hand, by place key */
   colors: Record<string, string>
@@ -77,15 +68,10 @@ export const initialUi: UiState = {
   panel: null,
   panelWidth: PANEL.initial,
   orientation: 'vertical',
-  ui: 'compact',
   theme: 'dark',
   recent: [],
-  quick: null,
   renderer: 'auto',
   quickShortcut: null,
-  quickWholeApp: false,
-  quickAnimate: true,
-  quickOpacity: 1,
   windowOpacity: 1,
   windowBlur: true,
   zoom: 1,
@@ -144,7 +130,7 @@ export type Action =
   | { type: 'color'; key: string; color: string | null }
   | { type: 'groups'; keys: string[] }
   | { type: 'recent'; places: Place[] }
-  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'ui' | 'theme' | 'renderer' | 'quickShortcut' | 'quickWholeApp' | 'quickAnimate' | 'quickOpacity' | 'windowOpacity' | 'windowBlur' | 'quick' | 'zoom'>> }
+  | { type: 'set'; patch: Partial<Pick<UiState, 'sidebar' | 'sidebarWidth' | 'panel' | 'panelWidth' | 'orientation' | 'theme' | 'renderer' | 'quickShortcut' | 'windowOpacity' | 'windowBlur' | 'zoom'>> }
 
 export function reducer(state: UiState, action: Action): UiState {
   switch (action.type) {
@@ -204,10 +190,7 @@ export function parseUi(json: string | null): UiState {
   try {
     const raw: unknown = JSON.parse(json)
     if (typeof raw !== 'object' || raw === null) return initialUi
-    const ui = { ...initialUi, ...(raw as Partial<UiState>) }
-    // Before splits the quick window kept one shell's id
-    const quick: unknown = ui.quick
-    return typeof quick === 'string' ? { ...ui, quick: { type: 'pane', session: quick } } : ui
+    return { ...initialUi, ...(raw as Partial<UiState>) }
   } catch {
     return initialUi
   }
@@ -215,7 +198,7 @@ export function parseUi(json: string | null): UiState {
 
 /**
  * Reconciles the saved layout with the daemon's sessions: panes whose session is gone drop out, live sessions
- * without a tab get their own. The quick terminal's shells belong to its own window, until an agent runs in one
+ * without a tab get their own
  */
 /** `kept`: leaves that aren't sessions but still exist, like open chats */
 export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] = []): UiState {
@@ -225,8 +208,7 @@ export function restore(saved: UiState, sessions: SessionInfo[], kept: string[] 
     if (!live.has(session)) state = withoutSession(state, session)
   }
   const shown = new Set(state.tabs.flatMap((t) => leaves(t.root)))
-  const quick = new Set(saved.quick ? leaves(saved.quick) : [])
-  const orphans = sessions.filter((s) => !shown.has(s.id) && (!quick.has(s.id) || s.kind === 'claude' || s.kind === 'codex')).sort((a, b) => a.createdAt - b.createdAt)
+  const orphans = sessions.filter((s) => !shown.has(s.id)).sort((a, b) => a.createdAt - b.createdAt)
   const tabs = [...state.tabs, ...orphans.map((s, i): Tab => ({ id: `t${s.id}-${i}`, root: { type: 'pane', session: s.id }, focus: s.id }))]
   const active = tabs.some((t) => t.id === state.active) ? state.active : (tabs[0]?.id ?? null)
   return { ...state, tabs, active }

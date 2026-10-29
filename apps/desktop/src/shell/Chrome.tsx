@@ -25,11 +25,11 @@ const stop = (fn: () => void) => (e: { stopPropagation(): void }) => {
 const Chev = ({ closed }: { closed: boolean }) => <Icon name="down" className={`chev ${closed ? 'closed' : ''}`} />
 
 /** The only bar: tabs or where the active tab runs, then what the status bar and the side rail used to hold. `hidden` while a page (settings) covers the center */
-export function TitleBar({ view, tabbed, hidden }: ViewProps & { tabbed: boolean; hidden: boolean }) {
+export function TitleBar({ view, hidden }: ViewProps & { hidden: boolean }) {
   const { ui, dispatch, run } = view
   return (
-    <div className={`titlebar ${tabbed ? 'tabbed' : ''}`} data-tauri-drag-region>
-      {!(ui.quickWholeApp && ui.quickShortcut) && (
+    <div className="titlebar" data-tauri-drag-region>
+      {!ui.quickShortcut && (
         <div className="lights" data-tauri-drag-region>
           <i />
           <i />
@@ -41,13 +41,9 @@ export function TitleBar({ view, tabbed, hidden }: ViewProps & { tabbed: boolean
           <Icon name={ui.sidebar ? 'sideClose' : 'sideOpen'} />
         </button>
       )}
-      {tabbed ? (
-        <HStrip view={view} />
-      ) : (
-        <div className="tb-mid" data-tauri-drag-region>
-          {ui.orientation === 'vertical' && <Crumbs view={view} />}
-        </div>
-      )}
+      <div className="tb-mid" data-tauri-drag-region>
+        {ui.orientation === 'vertical' && <Crumbs view={view} />}
+      </div>
       <div className="tb-r" data-tauri-drag-region>
         <NeedYou view={view} />
         <PortsItem view={view} />

@@ -227,29 +227,18 @@ pub fn home_dir(app: AppHandle) -> Result<String> {
         .map_err(|e| e.to_string())
 }
 
-/// Global chord that toggles the quick terminal, or the main window when `whole_app`; None turns it off
+/// Global chord that shows and hides the main window; None turns it off
 #[tauri::command]
 #[specta::specta]
-pub fn set_quick_shortcut(
-    app: AppHandle,
-    accelerator: Option<String>,
-    whole_app: bool,
-) -> Result<()> {
-    crate::quick::set_shortcut(&app, accelerator.as_deref(), whole_app)
-}
-
-/// Whether the quick terminal slides in and whether what shows through its translucent background is blurred
-#[tauri::command]
-#[specta::specta]
-pub fn set_quick_look(app: AppHandle, animate: bool, blur: bool) {
-    crate::quick::set_look(&app, animate, blur)
+pub fn set_hotkey(app: AppHandle, accelerator: Option<String>) -> Result<()> {
+    crate::hotkey::set_shortcut(&app, accelerator.as_deref())
 }
 
 /// Whether what shows through the calling window's translucent background is blurred
 #[tauri::command]
 #[specta::specta]
 pub fn set_window_blur(window: tauri::WebviewWindow, blur: bool) {
-    crate::quick::set_window_blur(&window, blur)
+    crate::hotkey::set_window_blur(&window, blur)
 }
 
 /// The `TREEIX_AUTORUN` runner this app was started with (src/autorun.ts)

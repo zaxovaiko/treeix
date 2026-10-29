@@ -33,7 +33,6 @@ tracing-subscriber.workspace = true
 libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-tauri-nspanel = "=2.1.1"
 smappservice-rs = "=0.1.3"
 objc2-io-kit = { version = "=0.3.2", default-features = false, features = ["std", "pwr_mgt"] }
 objc2-core-foundation = { version = "=0.3.2", features = ["CFString"] }

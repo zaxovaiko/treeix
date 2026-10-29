@@ -29,7 +29,7 @@ The handshake carries `PROTO_VERSION` and the build id. On a mismatch the app se
 
 When the socket closes the app drops pending requests and stream channels, emits `daemon: disconnected`, and reconnects with backoff (100 ms doubling to 5 s), starting a daemon if needed. Panes attach again on `daemon: connected`. A daemon that crashed comes back via `KeepAlive` / `Restart=always`; its sessions show as crashed with the last snapshot.
 
-One connection attaches a session once; the app fans its output out to every pane showing it (main window and quick terminal). Each pane gets its own snapshot and seq, and the daemon detach goes out when the last pane leaves.
+One connection attaches a session once; the app fans its output out to every pane showing it. Each pane gets its own snapshot and seq, and the daemon detach goes out when the last pane leaves.
 
 ## Resetting it during development
 

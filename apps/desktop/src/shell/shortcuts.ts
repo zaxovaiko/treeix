@@ -16,7 +16,6 @@ export type CommandId =
   | 'toggle-sidebar'
   | 'settings'
   | 'toggle-tabs'
-  | 'toggle-ui'
   | 'toggle-theme'
   | 'module-graph'
   | 'record'
@@ -26,7 +25,7 @@ export type CommandId =
   | `tab-${number}`
   | `focus-${Direction}`
 
-const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'reopen-tab', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-ui', 'toggle-theme', 'module-graph', 'record', 'zoom-in', 'zoom-out', 'zoom-reset'])
+const MENU_IDS = new Set<string>(['new-shell', 'new-claude', 'new-codex', 'open-folder', 'split-right', 'split-down', 'close-pane', 'reopen-tab', 'next-tab', 'prev-tab', 'palette', 'toggle-sidebar', 'settings', 'toggle-tabs', 'toggle-theme', 'module-graph', 'record', 'zoom-in', 'zoom-out', 'zoom-reset'])
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
@@ -46,7 +45,6 @@ const MENU_KEYS: Record<string, string> = {
   'toggle-sidebar': 'Super+Backslash',
   'module-graph': 'Shift+Super+KeyG',
   'toggle-tabs': '',
-  'toggle-ui': '',
   'toggle-theme': '',
   'zoom-in': 'Super+Equal',
   'zoom-out': 'Super+Minus',

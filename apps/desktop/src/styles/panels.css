@@ -8,21 +8,16 @@
 /* a sheet over the terminals, under the title bar; solid even in a see-through window */
 .card.rpanel { position: fixed; top: 34px; right: 6px; bottom: 6px; z-index: 30; min-width: 260px; max-width: calc(100vw - 12px); container-type: inline-size; box-shadow: 0 16px 48px rgb(0 0 0 / 40%); }
 [data-glass] .card.rpanel { background: var(--background); }
-[data-ui="compact"] .card.rpanel { top: 34px; right: 0; bottom: 0; border-left: 1px solid var(--border); }
 .rpanel > .vsz { position: absolute; left: 0; top: 0; bottom: 0; }
 .actbar { flex: none; display: flex; align-items: center; gap: 2px; }
-.ndot { position: absolute; top: 0; right: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--primary); color: var(--on-primary); font-size: 9px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--background); }
-[data-ui="islands"] .ndot { box-shadow: 0 0 0 2px var(--canvas); }
+.ndot { position: absolute; top: 0; right: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--primary); color: var(--on-primary); font-size: 9px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--canvas); }
 
 .ph { min-height: 40px; flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 5px 6px 5px 12px; }
 .ph h2 { margin: 0; font-size: 12px; font-weight: 600; flex: 1 1 auto; min-width: 0; min-height: 26px; overflow: hidden; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ph h2 .tag { min-width: 0; flex: 0 1 auto; max-width: 45cqi; }
-[data-ui="compact"] .ph { min-height: 34px; padding-block: 2px; border-bottom: 1px solid var(--border); }
 .pscroll { flex: 1; overflow: auto; min-height: 0; padding-bottom: 6px; }
 .ppath { padding: 0 12px 6px; font-size: 10.5px; }
-[data-ui="compact"] .ppath { padding-top: 6px; }
 .psum { margin: 0 12px; padding-bottom: 8px; font-size: 11px; }
-[data-ui="compact"] .psum { padding-top: 8px; }
 .sec { padding: 12px 14px 4px; font-size: 11px; font-weight: 600; color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
 
 /* explorer */

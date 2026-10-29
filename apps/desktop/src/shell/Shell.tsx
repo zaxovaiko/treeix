@@ -1,10 +1,9 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef, useState } from 'react'
-import { emit } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { Api, Place, SessionEvent, SessionInfo, SessionKind } from '../ipc/api'
 import { applyOpacity, applyTheme } from '../styles/theme'
 import { Icon } from '../lib/icons'
-import { IN_TAURI, onMenuItem, onOpenedFiles, pickFolder, registerQuickShortcut, setWindowBlur, setZoom, UI_CHANGED } from '../lib/native'
+import { IN_TAURI, onMenuItem, onOpenedFiles, pickFolder, registerHotkey, setWindowBlur, setZoom } from '../lib/native'
 import { groupTabs, initialUi, leaves, neighbor, newTabId, parseUi, reducer, restore, tabPlace, zoomed, type Action, type Group, type SplitDir, type Tab, type UiState } from './state'
 import { fallbackPlace, GroupColors, SETTINGS_LEAF, type Sessions } from './model'
 import { IS_MAC, isCommandId, menuChord, shortcutsPaused, type CommandId } from './shortcuts'
@@ -98,7 +97,7 @@ export function Shell({ api }: { api: Api }) {
         setUnreachable(false)
         setConnected(true)
         setLoaded(true)
-        if (saved.quickShortcut) registerQuickShortcut(saved.quickShortcut, saved.quickWholeApp).catch((e: unknown) => console.warn('quick terminal shortcut:', e))
+        if (saved.quickShortcut) registerHotkey(saved.quickShortcut).catch((e: unknown) => console.warn('hotkey:', e))
       },
       () => !cancelled && setUnreachable(true)
     )
@@ -113,11 +112,11 @@ export function Shell({ api }: { api: Api }) {
     return () => clearTimeout(timer)
   }, [connected])
 
-  /** After a daemon restart: re-list, keep the layout, re-attach every terminal. The quick window may have a new session by now */
+  /** After a daemon restart: re-list, keep the layout, re-attach every terminal */
   const resync = () =>
-    Promise.all([api.sessions(), api.getUi(), openChats(api)]).then(([list, json, chats]) => {
+    Promise.all([api.sessions(), openChats(api)]).then(([list, chats]) => {
       setSessions(byId(list))
-      dispatch({ type: 'load', ui: restore({ ...ui, quick: parseUi(json).quick }, list, [...chats, SETTINGS_LEAF]) })
+      dispatch({ type: 'load', ui: restore(ui, list, [...chats, SETTINGS_LEAF]) })
       setEpoch((n) => n + 1)
       setConnected(true)
     })
@@ -193,16 +192,12 @@ export function Shell({ api }: { api: Api }) {
 
   useEffect(() => {
     if (!loaded) return
-    const timer = setTimeout(async () => {
-      // The quick terminal window owns `quick`; keep what it wrote
-      const stored = parseUi(await api.getUi())
-      await api.putUi(JSON.stringify({ ...ui, quick: stored.quick }))
-    }, PERSIST_MS)
+    const timer = setTimeout(() => void api.putUi(JSON.stringify(ui)), PERSIST_MS)
     return () => clearTimeout(timer)
   }, [api, ui, loaded])
 
   // Before the terminals mount, so they open with the right colors
-  useLayoutEffect(() => applyTheme(ui.theme, ui.ui), [ui.theme, ui.ui])
+  useLayoutEffect(() => applyTheme(ui.theme), [ui.theme])
   // Only the Mac window is transparent (lib.rs); elsewhere a see-through page would show the webview's own fill
   const opacity = IN_TAURI && IS_MAC ? ui.windowOpacity : 1
   const blur = ui.windowBlur && opacity < 1
@@ -210,9 +205,6 @@ export function Shell({ api }: { api: Api }) {
   useEffect(() => void setWindowBlur(blur).catch((e: unknown) => console.warn('window blur:', e)), [blur])
   useAppliedSettings(api, ui.theme, (theme) => dispatch({ type: 'set', patch: { theme } }))
   useBrowserAgentPanes({ api, dispatch, activeTab, placeOfTab })
-  useEffect(() => {
-    if (loaded && IN_TAURI) void emit(UI_CHANGED, { theme: ui.theme, ui: ui.ui, renderer: ui.renderer, zoom: ui.zoom, quickAnimate: ui.quickAnimate, quickOpacity: ui.quickOpacity, windowBlur: ui.windowBlur })
-  }, [loaded, ui.theme, ui.ui, ui.renderer, ui.zoom, ui.quickAnimate, ui.quickOpacity, ui.windowBlur])
   useEffect(() => void setZoom(ui.zoom).catch((e: unknown) => console.warn('zoom:', e)), [ui.zoom])
 
   const focusCwd = () => (activeTab ? (sessions[activeTab.focus]?.cwd ?? home) : home)
@@ -318,8 +310,6 @@ export function Shell({ api }: { api: Api }) {
         return dispatch({ type: 'set', patch: { zoom: 1 } })
       case 'toggle-tabs':
         return dispatch({ type: 'set', patch: { orientation: ui.orientation === 'vertical' ? 'horizontal' : 'vertical' } })
-      case 'toggle-ui':
-        return dispatch({ type: 'set', patch: { ui: ui.ui === 'compact' ? 'islands' : 'compact' } })
       case 'toggle-theme':
         // A picked mode stops following the OS, else the next launch or OS switch undoes it
         if (settingsNow()?.appearance.followSystem) void api.updateSettings({ appearance: { followSystem: false } }).catch((e: unknown) => console.warn('settings:', e))
@@ -390,13 +380,12 @@ export function Shell({ api }: { api: Api }) {
 
   const view: ShellView = { api, ui, dispatch, sessions, home, groups, ordered, activeTab, placeOf, placeOfTab, run, newSession, split, closePane, closeTab, openDialog: setDialog, openFile: (root, file, line, column) => openFile({ ui, dispatch }, root, file, line, column) }
   const vertical = ui.orientation === 'vertical'
-  const tabsInTitle = !vertical && ui.ui === 'compact'
   const empty = ui.tabs.length === 0
 
   return (
     <GroupColors value={ui.colors}>
       <div className="win">
-        <TitleBar view={view} tabbed={tabsInTitle && !empty} hidden={page !== null} />
+        <TitleBar view={view} hidden={page !== null} />
         {!connected && (
           <div className="offline">
             <Icon name="alert" />
@@ -425,7 +414,7 @@ export function Shell({ api }: { api: Api }) {
             ) : empty ? (
               <Welcome view={view} />
             ) : (
-              !vertical && !tabsInTitle && <HStrip view={view} />
+              !vertical && <HStrip view={view} />
             )}
             <div className="stage" hidden={page !== null || empty}>
               {[...ui.tabs]

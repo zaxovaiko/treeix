@@ -18,7 +18,7 @@ AI agents write code faster than anyone can read it. The reading is the bottlene
 
 ## Features
 
-- Sessions that keep running: the treeix-ptyd daemon owns every shell and agent session. Quit Treeix, open it again, and each one is still there with its scrollback. Sidebar or horizontal tabs, recursive splits, sessions grouped by repo and worktree, a quick terminal on a global shortcut, and notifications. A status dot on Claude Code and Codex sessions says working, waiting for you or done.
+- Sessions that keep running: the treeix-ptyd daemon owns every shell and agent session. Quit Treeix, open it again, and each one is still there with its scrollback. Sidebar or horizontal tabs, recursive splits, sessions grouped by repo and worktree, a hotkey window on a global shortcut, and notifications. A status dot on Claude Code and Codex sessions says working, waiting for you or done.
 - Worktrees and review: an Explorer and Changes with split or unified diffs. Line comments queue in a drawer and go to the Claude Code or Codex session in that worktree as its next prompt.
 - Session history: closed sessions stay in History; reopening one resumes the same agent conversation.
 - Open worktree: start from a branch, a pull request or a ticket from Your tickets, and copy the .env files across. A ticket names the branch (fix/ for bugs, feat/ otherwise, with the ticket key) and its title, link and description become the agent's first prompt.

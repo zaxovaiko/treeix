@@ -45,9 +45,9 @@ kbd { font: 500 10.5px/16px -apple-system, system-ui, sans-serif; height: 16px; 
 .kbar:hover { color: var(--foreground); }
 .kbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .kbar.mini { width: auto; gap: 6px; padding: 0 4px 0 8px; }
-.body { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 0 8px 8px; }
+.body { flex: 1; min-height: 0; display: flex; gap: 6px; padding: 0 6px 6px; }
 /* a border, not an inset shadow: positioned panes paint over a shadow */
-.card { border-radius: 12px; background: var(--background); border: 1px solid var(--input); overflow: hidden; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.card { border-radius: 10px; background: var(--background); border: 1px solid var(--input); overflow: hidden; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 /* a narrow window shrinks the sidebar to its minimum before the panel or the terminal */
 .side { flex: 0 1 auto; min-width: 180px; }
 .center { flex: 1; min-width: 200px; }
@@ -124,9 +124,6 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .htab:hover, .htab.on { background: var(--accent); color: var(--foreground); }
 .htab .x { opacity: 0; } .htab:hover .x, .htab.on .x { opacity: .7; }
 .gsep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; flex: none; }
-.titlebar.tabbed .lights { margin-right: 4px; }
-.titlebar.tabbed .hstrip { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; }
-.titlebar.tabbed .hscroll { padding-inline: 4px 8px; mask-image: linear-gradient(90deg, transparent, #000 4px, #000 calc(100% - 28px), transparent); }
 
 /* center */
 .crumbs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); }
@@ -205,12 +202,10 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .filter input { flex: 1; min-width: 0; background: none; border: 0; color: var(--foreground); font-size: 12px; user-select: text; }
 .sfoot { flex: none; display: flex; justify-content: flex-end; gap: 6px; padding: 8px; }
 .sfoot .btn { min-width: 0; height: 20px; }
-[data-ui="compact"] .filter { margin-top: 6px; }
 
 /* settings page */
 .gtop { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); }
 .gtop .btn.sm { height: 26px; }
-[data-ui="compact"] .gtop { height: 34px; }
 .setp { flex: 1; min-height: 0; display: flex; }
 .snav { width: 210px; flex: none; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 8px 0 12px; border-right: 1px solid var(--border); }
 .snav-g { padding: 12px 16px 3px; font-size: 10.5px; font-weight: 600; color: var(--muted-foreground); }
@@ -233,40 +228,14 @@ button.sb:hover { background: var(--accent); color: var(--foreground); }
 .notes ul { margin: 0; padding-left: 16px; }
 .notes p { margin: 4px 0 0; }
 
-/* UI: islands (rounded panels on the window background) vs compact (edge to edge) */
-[data-ui="islands"] .body { gap: 6px; padding: 0 6px 6px; }
-[data-ui="islands"] .card { border-radius: 10px; }
-[data-ui="compact"] .win { --win-bg: var(--background); }
-/* a shadow, not a border, so the row stays 34px and centered on the traffic lights */
-[data-ui="compact"] .titlebar { padding: 0 6px 0 12px; box-shadow: inset 0 -1px var(--border); }
-[data-ui="compact"] .kbar { height: 24px; }
-[data-ui="compact"] .body { gap: 0; padding: 0; }
-[data-ui="compact"] .card { border-radius: 0; border: 0; }
-[data-ui="compact"] .body > * + *:not(.vsz) { border-left: 1px solid var(--border); }
-[data-ui="compact"] :is(.sh, .hstrip) { height: 34px; }
-[data-ui="compact"] .trow { padding-top: 4px; padding-bottom: 4px; }
-[data-ui="compact"] .sb { height: 18px; }
-:root[data-ui="compact"]:not([data-mode="light"]) { --border: rgb(255 255 255 / 11%); }
-[data-ui="compact"] .sh { border-bottom: 1px solid var(--border); }
-
 /* resize handle: zero width in the layout, 8px hit area, 2px accent line while hovered or dragged */
 .vsz { width: 0; flex: none; position: relative; z-index: 5; cursor: col-resize; }
 .vsz::before { content: ""; position: absolute; inset: 0 -4px; }
 .vsz::after { content: ""; position: absolute; inset: 0 -1px; }
 .vsz:hover::after, .vsz.drag::after { background: var(--primary); }
-[data-ui="islands"] .body > .vsz { margin: 0 -3px; }
-[data-ui="islands"] .body > .vsz::after { inset: 4px -1px; border-radius: 1px; }
+.body > .vsz { margin: 0 -3px; }
+.body > .vsz::after { inset: 4px -1px; border-radius: 1px; }
 
-/* quick terminal window: dropped from the top edge, the terminal under a hairline header */
-/* One translucent fill at the opacity set in Settings; the terminal and the page under it stay clear so the macOS blur shows through */
-.quick { --term-clear: 1; height: 100vh; display: flex; flex-direction: column; background: color-mix(in srgb, var(--term-bg) var(--quick-alpha, 100%), transparent); box-shadow: inset 0 -1px 0 var(--input); }
-:root:has(.quick), :root:has(.quick) body, .quick .pterm, .quick .term, .quick .term .xterm .xterm-viewport { background: transparent; }
-.quick .qbody { flex: 1; min-height: 0; display: flex; }
-.quick .qpanes { flex: 1; min-width: 0; position: relative; }
-.quick .qside { width: 184px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 6px; border-right: 1px solid var(--border); }
-.quick .qside button { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 12px; text-align: left; color: var(--muted-foreground); }
-.quick .qside button:hover { background: var(--accent); }
-.quick .qside button.on { background: var(--accent); color: var(--foreground); }
 .range { width: 160px; accent-color: var(--primary); }
 
 /* see-through main window (Settings > Appearance > Opacity, macOS): the window's one fill takes the alpha and every surface over it goes clear, so the alpha doesn't stack and the blur shows through. Popovers stay solid */

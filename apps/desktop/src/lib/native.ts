@@ -12,18 +12,11 @@ export async function pickFolder(home: string): Promise<string | null> {
   return typeof dir === 'string' ? dir : null
 }
 
-/** Registers the global chord (null: none) for the quick terminal, or the main window when `wholeApp`; rejects with the plugin's message when the chord is taken */
-export async function registerQuickShortcut(accelerator: string | null, wholeApp: boolean): Promise<void> {
+/** Registers the global chord (null: none) that shows and hides the main window; rejects with the plugin's message when the chord is taken */
+export async function registerHotkey(accelerator: string | null): Promise<void> {
   if (!IN_TAURI) return
   const { commands } = await import('../ipc/bindings')
-  await commands.setQuickShortcut(accelerator, wholeApp)
-}
-
-/** Whether the quick terminal slides in and whether what shows through its translucent background is blurred */
-export async function setQuickLook(animate: boolean, blur: boolean): Promise<void> {
-  if (!IN_TAURI) return
-  const { commands } = await import('../ipc/bindings')
-  await commands.setQuickLook(animate, blur)
+  await commands.setHotkey(accelerator)
 }
 
 /** Whether what shows through this window's translucent background is blurred */
@@ -62,19 +55,3 @@ export function onOpenedFiles(run: (paths: string[]) => void): () => void {
   const stop = import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => getCurrentWebviewWindow().listen(OPENED, () => void take()))
   return () => void stop.then((off) => off())
 }
-
-/** Hands a menu bar item to the main window, brought forward first unless it only changes the look */
-export async function runInMain(id: string, show: boolean): Promise<void> {
-  if (!IN_TAURI) return
-  const [{ emitTo }, { WebviewWindow }] = await Promise.all([import('@tauri-apps/api/event'), import('@tauri-apps/api/webviewWindow')])
-  const main = show ? await WebviewWindow.getByLabel('main') : null
-  if (main) {
-    await main.unminimize()
-    await main.show()
-    await main.setFocus()
-  }
-  await emitTo('main', MENU, { id })
-}
-
-/** App event the main window sends when theme, density, renderer or zoom change, so the quick terminal follows live */
-export const UI_CHANGED = 'ui-changed'

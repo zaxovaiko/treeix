@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use tauri::menu::{
     HELP_SUBMENU_ID, Menu, MenuBuilder, MenuEvent, MenuItem, SubmenuBuilder, WINDOW_SUBMENU_ID,
 };
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 /// Handled here rather than in the frontend
 const CHECK_UPDATE: &str = "check-update";
@@ -116,7 +116,6 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         )?)
         .separator()
         .item(&item("toggle-tabs", "Tabs on Top or on the Side", None)?)
-        .item(&item("toggle-ui", "Compact or Islands", None)?)
         .item(&item("toggle-theme", "Light or Dark", None)?)
         .separator()
         .item(&item("zoom-in", "Zoom In", Some("CmdOrCtrl+="))?)
@@ -185,13 +184,8 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
     if event.id() == SELECT_ALL {
         native_select_all();
     }
-    // The window in front runs it: the quick terminal over another app is key without the main window being so
-    let target = match app.get_webview_window(crate::quick::LABEL) {
-        Some(quick) if quick.is_focused().unwrap_or(false) => crate::quick::LABEL,
-        _ => "main",
-    };
     if let Err(e) = app.emit_to(
-        target,
+        "main",
         "menu",
         MenuAction {
             id: event.id().as_ref(),

@@ -37,5 +37,5 @@ test('conflicts name what already owns the chord', () => {
   expect(conflict('new-shell', 'Super+KeyY', {}, true)).toBeNull()
   // A freed default is free
   expect(conflict('new-shell', 'Super+KeyK', { palette: '' }, true)).toBeNull()
-  expect(conflict('quick', 'Control+Backquote', {}, true)).toBeNull()
+  expect(conflict('hotkey', 'Control+Backquote', {}, true)).toBeNull()
 })

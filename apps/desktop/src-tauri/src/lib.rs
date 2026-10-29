@@ -1,12 +1,12 @@
 mod browser;
 mod commands;
 mod daemon;
+mod hotkey;
 mod keep_awake;
 mod lsp;
 #[cfg(target_os = "macos")]
 mod menu;
 mod opened;
-mod quick;
 mod service;
 mod tray;
 mod types;
@@ -41,8 +41,7 @@ fn specta() -> Builder<tauri::Wry> {
             put_ui,
             places,
             home_dir,
-            set_quick_shortcut,
-            set_quick_look,
+            set_hotkey,
             set_window_blur,
             autorun,
             autorun_done,
@@ -256,17 +255,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
-            // The quick terminal is tracked too, so the height it was dragged to survives a restart; toggling re-places it
             tauri_plugin_window_state::Builder::new()
                 // A window hidden at quit must not come back invisible
                 .with_state_flags(StateFlags::all() - StateFlags::VISIBLE)
                 .build(),
         );
     #[cfg(target_os = "macos")]
-    let builder = builder
-        .plugin(tauri_nspanel::init())
-        .menu(menu::build)
-        .on_menu_event(menu::on_event);
+    let builder = builder.menu(menu::build).on_menu_event(menu::on_event);
 
     builder
         .invoke_handler(specta.invoke_handler())
@@ -281,8 +276,7 @@ pub fn run() {
             tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
                 .transparent(cfg!(target_os = "macos"))
                 .build()?;
-            quick::create(app.handle())?;
-            quick::setup(app.handle());
+            hotkey::setup(app.handle());
             commands::mcp::start(app.handle());
             commands::system::setup(app.handle());
             voice::setup(app.handle());

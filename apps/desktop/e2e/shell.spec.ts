@@ -184,11 +184,11 @@ test('first run welcomes and starts a shell', async ({ page }) => {
   await expect(tabRows(page)).toHaveCount(1)
 })
 
-test('the quick terminal shortcut records the § key', async ({ page }) => {
+test('the hotkey window shortcut records the § key', async ({ page }) => {
   await open(page)
   await page.keyboard.press('Meta+Comma')
-  await page.getByPlaceholder('Search settings').fill('quick terminal')
-  const recorder = page.getByRole('button', { name: 'Quick terminal shortcut' })
+  await page.getByPlaceholder('Search settings').fill('hotkey window')
+  const recorder = page.getByRole('button', { name: 'Hotkey window shortcut' })
   await recorder.click()
   // Playwright has no IntlBackslash key, so the event WebKit sends for § goes in by hand
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '§', code: 'IntlBackslash', ctrlKey: true })))
@@ -253,31 +253,4 @@ test('right-click shows our menus, never the browser one', async ({ page }) => {
     return event.defaultPrevented
   })
   expect(prevented).toBe(true)
-})
-
-test('the quick terminal splits, and opens running agents in a split beside its shell', async ({ page }) => {
-  await page.goto('/?window=quick')
-  const panes = page.locator('.quick .pane')
-  await expect(panes).toHaveCount(1)
-  await page.locator('.quick .xterm').first().click()
-  await page.keyboard.press('Meta+d')
-  await expect(panes).toHaveCount(2)
-  const agent = page.getByRole('navigation', { name: 'Agents' }).getByRole('button').first()
-  await expect(agent).not.toHaveClass(/on/)
-  await agent.click()
-  await expect(agent).toHaveClass(/on/)
-  await expect(panes).toHaveCount(3)
-  await page.keyboard.press('Meta+w')
-  await expect(panes).toHaveCount(2)
-  await expect(agent).not.toHaveClass(/on/)
-})
-
-test('the quick terminal slide and opacity are set in Settings', async ({ page }) => {
-  await open(page)
-  await page.keyboard.press('Meta+Comma')
-  await page.getByPlaceholder('Search settings').fill('quick terminal')
-  await page.getByRole('switch', { name: 'Slide in' }).click()
-  await persisted(page, '"quickAnimate":false')
-  await page.getByRole('slider', { name: 'Quick terminal opacity' }).fill('0.6')
-  await persisted(page, '"quickOpacity":0.6')
 })

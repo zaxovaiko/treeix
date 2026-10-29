@@ -26,7 +26,6 @@ export const ACTIONS = [
   ['module-graph', 'Module graph', 'Navigation'],
   ['settings', 'Settings', 'Navigation'],
   ['toggle-tabs', 'Tabs on top or on the side', 'Appearance'],
-  ['toggle-ui', 'Compact or Islands', 'Appearance'],
   ['toggle-theme', 'Light or dark', 'Appearance'],
   ['zoom-in', 'Zoom in', 'Appearance'],
   ['zoom-out', 'Zoom out', 'Appearance'],
@@ -101,14 +100,14 @@ const RESERVED = (mac: boolean): [accel: string, what: string][] =>
     : [['Control+Shift+KeyN', 'Open worktree'], ['Control+Shift+KeyF', 'Find in files'], ['Control+Shift+KeyG', 'Changes']]
 
 /** Why `accel` is a bad pick for `id`, or null when it is free */
-export function conflict(id: ActionId | 'quick', accel: string | null, keys: Keymap, mac = IS_MAC): string | null {
+export function conflict(id: ActionId | 'hotkey', accel: string | null, keys: Keymap, mac = IS_MAC): string | null {
   if (!accel) return null
   const same = ACTIONS.find(([other]) => other !== id && keyFor(other, keys, mac) === accel)
   if (same) return `Same keys as ${same[1]}`
   const reserved = RESERVED(mac).find(([chord]) => chord === accel)
   if (reserved) return `Same keys as ${reserved[1]}`
-  // The quick terminal's chord is global: the focused app never sees it, so the terminal can't either
-  if (id === 'quick') return null
+  // The hotkey window's chord is global: the focused app never sees it, so the terminal can't either
+  if (id === 'hotkey') return null
   const action = terminalKey(chordOf(accel), mac)
   if (action.type !== 'app') return `${acceleratorLabel(accel, mac)} goes to the terminal`
   return null

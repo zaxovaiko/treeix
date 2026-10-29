@@ -35,7 +35,7 @@ apps/desktop/native/voice  Swift helpers for dictation and call recording
 - **Subprocesses, not libraries.** `git`, `gh`, `glab`, `acli`, `claude` and `codex` run with your own accounts. Long work runs in `spawn_blocking`, and path commands refuse paths outside their place.
 - **Browser panes.** One child webview per pane (`Window::add_child`, Tauri's `unstable` feature; `browser/` is the only user of it). An injected script reports console and network rows and serves the agent tools; cookie import copies from Chromium browsers, Firefox and Safari.
 - **MCP server.** `core::mcp` serves the agents Treeix runs over streamable HTTP on 127.0.0.1 with a bearer token. Browser tools show up in it only while the browser feature and its agent switch are on.
-- **The rest.** The quick terminal (a panel under a global shortcut), tray and menu, keep-awake, the updater ([docs/updater.md](updater.md)), and the voice sidecars: the two Swift helpers ship as `externalBin` and speak JSON lines over stdin and stdout.
+- **The rest.** The hotkey window (a global shortcut that shows and hides the app), tray and menu, keep-awake, the updater ([docs/updater.md](updater.md)), and the voice sidecars: the two Swift helpers ship as `externalBin` and speak JSON lines over stdin and stdout.
 
 ## Core modules
 

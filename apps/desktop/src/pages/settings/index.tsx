@@ -17,7 +17,7 @@ const SECTIONS: Record<SettingsSection, [label: string, icon: IconName]> = {
   appearance: ['Appearance', 'moon'],
   terminal: ['Terminal', 'terminal'],
   keys: ['Keyboard shortcuts', 'layout'],
-  hotkey: ['Quick terminal', 'terminal'],
+  hotkey: ['Hotkey window', 'terminal'],
   agents: ['Agents', 'claude'],
   chats: ['Chats', 'codex'],
   usage: ['Usage', 'host'],

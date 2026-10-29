@@ -175,7 +175,7 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
   })
   term.onBinary((data) => hooks.gone() || send(Uint8Array.from(data, (char) => char.charCodeAt(0))))
   term.onResize(({ cols, rows }) => void api.resize(sessionId, cols, rows))
-  // A session shown in two windows (an agent in the quick terminal and the main one) takes the grid of the one in use
+  // A session shown in two panes takes the grid of the one in use
   const claimGrid = (): void => void (attachment && api.resize(sessionId, term.cols, term.rows))
   window.addEventListener('focus', claimGrid)
   term.onSelectionChange(() => {
@@ -253,10 +253,10 @@ function showSession(host: HTMLElement, api: Api, sessionId: string, webgl: bool
     resizeTimer = setTimeout(() => drawing || fit.fit(), RESIZE_DEBOUNCE_MS)
   })
   observer.observe(host)
-  // The --term-* tokens hang off the root's data-mode and data-ui; the theme event covers token changes without them
+  // The --term-* tokens hang off the root's data-mode; the theme event covers token changes without them
   const restyle = (): void => view.restyle()
   const themeObserver = new MutationObserver(restyle)
-  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode', 'data-ui', 'style', 'class'] })
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode', 'style', 'class'] })
   window.addEventListener('treeix-theme', restyle)
 
   return {
