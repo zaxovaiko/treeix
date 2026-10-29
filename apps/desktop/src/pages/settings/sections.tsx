@@ -12,6 +12,7 @@ import { BrowserSection } from '../../features/browser'
 import { RecordingSection, VoiceSection } from '../../features/voice'
 import { PIcon, type PanelIconName } from '../../panels/common'
 import { Icon, type IconName } from '../../lib/icons'
+import { UsageDetails, useLimits } from '../../features/agents/UsagePill'
 import { Field, FontPicker, Group, Recorder, Row, Seg, Select, Status, Switch, useHit } from './controls'
 
 export interface SectionProps {
@@ -385,20 +386,32 @@ function Chats({ settings, update }: SectionProps) {
   )
 }
 
-function Usage({ settings, update }: SectionProps) {
+function Usage({ view, settings, update }: SectionProps) {
   const u = settings.usage
+  const limits = useLimits(view.api, true)
   return (
-    <Group>
-      <Row label="Meter in the title bar" desc={IS_MAC ? 'Plan usage of Claude, else Codex. Hidden while the menu bar shows usage' : 'Plan usage of Claude, else Codex'}>
-        <Switch label="Meter in the title bar" on={u.pill} onChange={(pill) => update({ usage: { pill } })} />
-      </Row>
-      <Row label="Window" desc="Which limit the meter shows">
-        <Seg value={u.window} options={[['fiveHour', '5-hour'], ['weekly', 'Weekly']]} onChange={(window) => update({ usage: { window } })} />
-      </Row>
-      <Row label={IS_MAC ? 'Menu bar' : 'Tray'} desc="Next to the icon. Sessions that need you show there too">
-        <Seg value={u.tray} options={[['off', 'Off'], ['icon', 'Icon only'], ['weekly', 'Weekly'], ['fiveHour', '5-hour'], ['rings', 'Both']]} onChange={(tray) => update({ usage: { tray } })} />
-      </Row>
-    </Group>
+    <>
+      {limits && (
+        <Group>
+          <Row label="" keywords="usage chart limits tokens cost model project last 7 days week" wide>
+            <div className="upop uset">
+              <UsageDetails api={view.api} limits={limits} />
+            </div>
+          </Row>
+        </Group>
+      )}
+      <Group>
+        <Row label="Meter in the title bar" desc={IS_MAC ? 'Plan usage of Claude, else Codex. Hidden while the menu bar shows usage' : 'Plan usage of Claude, else Codex'}>
+          <Switch label="Meter in the title bar" on={u.pill} onChange={(pill) => update({ usage: { pill } })} />
+        </Row>
+        <Row label="Window" desc="Which limit the meter shows">
+          <Seg value={u.window} options={[['fiveHour', '5-hour'], ['weekly', 'Weekly']]} onChange={(window) => update({ usage: { window } })} />
+        </Row>
+        <Row label={IS_MAC ? 'Menu bar' : 'Tray'} desc="Next to the icon. Sessions that need you show there too">
+          <Seg value={u.tray} options={[['off', 'Off'], ['icon', 'Icon only'], ['weekly', 'Weekly'], ['fiveHour', '5-hour'], ['rings', 'Both']]} onChange={(tray) => update({ usage: { tray } })} />
+        </Row>
+      </Group>
+    </>
   )
 }
 

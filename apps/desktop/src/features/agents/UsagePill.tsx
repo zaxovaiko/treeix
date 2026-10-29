@@ -9,7 +9,7 @@ import { compact, level, pillParts, summarize, untilLabel, usd, WINDOW_LABEL, ty
 
 const AGENT_NAME: Record<LimitAgent, string> = { claude: 'Claude', codex: 'Codex' }
 
-function useLimits(api: Api, on: boolean) {
+export function useLimits(api: Api, on: boolean) {
   const [limits, setLimits] = useState<UsageLimits | null>(null)
   useEffect(() => {
     if (!on) return
@@ -64,7 +64,7 @@ export function UsagePill({ api }: { api: Api }) {
   )
 }
 
-function UsageDetails({ api, limits }: { api: Api; limits: UsageLimits }) {
+export function UsageDetails({ api, limits }: { api: Api; limits: UsageLimits }) {
   const [usage, setUsage] = useState<AgentUsage | null>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {

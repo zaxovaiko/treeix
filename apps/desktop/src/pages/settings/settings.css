@@ -45,6 +45,10 @@
 .clirow { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 12px; }
 .clirow .grow { min-width: 0; overflow-wrap: anywhere; }
 .clicheck { margin-top: 8px; }
+.upop.uset { width: 100%; padding-bottom: 0; }
+.uset .ulim, .uset > .mlabel, .uset .uempty { padding-left: 0; padding-right: 0; }
+.uset .msep { margin: 4px 0; }
+.uset .uchart { height: 72px; }
 .fontpick { position: relative; }
 .fontpick ul { position: absolute; right: 0; top: 30px; z-index: 10; width: 240px; max-height: 280px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; border-radius: 8px; background: var(--popover); box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / .18); }
 .fontpick li { padding: 5px 8px; border-radius: 5px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--foreground); }
