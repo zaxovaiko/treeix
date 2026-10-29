@@ -6683,6 +6683,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "block2",
+ "flate2",
  "global-hotkey",
  "libc",
  "objc2",
@@ -6694,6 +6695,7 @@ dependencies = [
  "smappservice-rs",
  "specta",
  "specta-typescript",
+ "tar",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -6702,6 +6704,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tauri-specta",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
