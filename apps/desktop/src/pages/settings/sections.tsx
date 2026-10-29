@@ -12,7 +12,7 @@ import { BrowserSection } from '../../features/browser'
 import { RecordingSection, VoiceSection } from '../../features/voice'
 import { PIcon, type PanelIconName } from '../../panels/common'
 import { Icon, type IconName } from '../../lib/icons'
-import { Field, Group, Recorder, Row, Seg, Select, Status, Switch, useHit } from './controls'
+import { Field, FontPicker, Group, Recorder, Row, Seg, Select, Status, Switch, useHit } from './controls'
 
 export interface SectionProps {
   view: ShellView
@@ -117,16 +117,15 @@ function Appearance(props: SectionProps) {
 
 const ZOOM_STEPS = Array.from({ length: Math.round((ZOOM.max - ZOOM.min) / ZOOM.step) + 1 }, (_, i) => Math.round((ZOOM.min + i * ZOOM.step) * 10) / 10)
 
-const FONTS = ['JetBrains Mono', 'SF Mono', 'Menlo', 'Fira Code', 'Berkeley Mono', 'IBM Plex Mono', 'ui-monospace']
-
 function Terminal({ view, settings, update }: SectionProps) {
   const t = settings.terminal
+  const [fonts] = useLoad(() => view.api.monospaceFonts())
   const set = (patch: Partial<Settings['terminal']>) => update({ terminal: patch })
   return (
     <>
       <Group title="Text">
         <Row label="Font" desc="Any monospace font installed here">
-          <Select value={t.fontFamily} options={(FONTS.includes(t.fontFamily) ? FONTS : [t.fontFamily, ...FONTS]).map((f) => [f, f] as const)} onChange={(fontFamily) => set({ fontFamily })} />
+          <FontPicker value={t.fontFamily} fonts={['ui-monospace', ...(fonts ?? [])]} onChange={(fontFamily) => set({ fontFamily })} />
         </Row>
         <Row label="Size" desc="9 to 24">
           <Field type="number" min={9} max={24} width={64} value={String(t.fontSize)} onSave={(v) => set({ fontSize: Math.min(24, Math.max(9, Math.round(Number(v)) || 12)) })} />
@@ -283,15 +282,25 @@ type CliUpdateRun = { from: string | null; done: Promise<CliTool> }
 /** Updates outlive the page: leaving Settings mid-update and coming back still shows it running */
 const cliUpdates = new Map<string, CliUpdateRun>()
 
-function cliNote(tool: CliTool, update?: CliUpdate): [tone: 'ok' | 'warn' | 'bad' | 'idle', note: ReactNode] {
-  if (update?.step === 'done') return ['ok', update.to && update.to !== update.from ? `Updated to ${update.to}` : 'Up to date']
+function signInNote(tool: CliTool): ReactNode {
+  if (!tool.installed) return 'Not found on PATH'
+  if (tool.signedIn === false) return <>Not signed in. Run <code>{SIGN_IN[tool.name] ?? `${tool.name} login`}</code></>
+  if (tool.signedIn) return tool.account ? `Signed in as ${tool.account}` : 'Signed in'
+  return ''
+}
+
+function versionNote(tool: CliTool, update?: CliUpdate): ReactNode {
+  if (update?.step === 'running') return 'Updating...'
   // Package managers end with the line that says what went wrong
-  if (update?.step === 'error') return ['bad', <span title={update.message}>{update.message.trim().split('\n').at(-1)}</span>]
-  if (!tool.installed) return ['bad', 'Not found on PATH']
-  if (tool.signedIn === false) return ['warn', <>Not signed in. Run <code>{SIGN_IN[tool.name] ?? `${tool.name} login`}</code></>]
-  if (tool.update) return ['warn', `Update available: ${tool.update}`]
-  if (tool.signedIn) return ['ok', tool.account ? `Signed in as ${tool.account}` : 'Signed in']
-  return ['ok', '']
+  if (update?.step === 'error') return <span title={update.message}>{update.message.trim().split('\n').at(-1)}</span>
+  if (tool.update) return `${tool.update} available`
+  if (update?.step === 'done' && update.to && update.to !== update.from) return `Updated to ${update.to}`
+  return tool.latest ? 'Latest' : ''
+}
+
+function cliTone(tool: CliTool, update?: CliUpdate): 'ok' | 'warn' | 'bad' {
+  if (!tool.installed || update?.step === 'error') return 'bad'
+  return tool.signedIn === false || tool.update ? 'warn' : 'ok'
 }
 
 function Agents({ view, settings, update }: SectionProps) {
@@ -331,22 +340,17 @@ function Agents({ view, settings, update }: SectionProps) {
             {!tools && !error && <div className="dim">Checking...</div>}
             {tools?.map((tool) => {
               const update = updates[tool.name]
-              const [tone, note] = cliNote(tool, update)
               return (
                 <div key={tool.name} className="clirow">
-                  <span className={`sdot ${tone}`} />
+                  <span className={`sdot ${cliTone(tool, update)}`} />
                   <b className="mono">{tool.name}</b>
                   <span className="dim ver">{tool.version ?? ''}</span>
-                  <span className="grow dim">{note}</span>
-                  {update?.step === 'running' ? (
-                    <span className="dim">Updating...</span>
-                  ) : (
-                    tool.installed &&
-                    tool.updatable && (
-                      <button className="btn sm" onClick={() => startUpdate(tool)}>
-                        Update
-                      </button>
-                    )
+                  <span className="grow dim">{signInNote(tool)}</span>
+                  <span className="dim latest">{versionNote(tool, update)}</span>
+                  {update?.step !== 'running' && tool.installed && tool.updatable && (tool.update || !tool.latest) && (
+                    <button className="btn sm" onClick={() => startUpdate(tool)}>
+                      Update
+                    </button>
                   )}
                 </div>
               )

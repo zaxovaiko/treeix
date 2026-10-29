@@ -6,7 +6,7 @@ import type { Api, CliTool, KeepAwakeState, PhoneStatus, Secret, Settings, Ticke
 type SettingsApi = Pick<
   Api,
   | 'getSettings' | 'updateSettings' | 'onSettings' | 'hasSecret' | 'setSecret' | 'deleteSecret'
-  | 'cliTools' | 'updateCliTool' | 'appVersion' | 'checkUpdate' | 'installUpdate' | 'keepAwake' | 'setKeepAwake' | 'onKeepAwake'
+  | 'cliTools' | 'updateCliTool' | 'monospaceFonts' |'appVersion' | 'checkUpdate' | 'installUpdate' | 'keepAwake' | 'setKeepAwake' | 'onKeepAwake'
   | 'phoneStatus' | 'setPhone'
   | 'mcpStatus' | 'mcpInstall' | 'myTickets' | 'ticketDetail' | 'notionDatabases'
 >
@@ -14,11 +14,11 @@ type SettingsApi = Pick<
 const SETTINGS_KEY = 'treeix-settings'
 
 const CLI_TOOLS: CliTool[] = [
-  { name: 'claude', installed: true, version: '2.1.4', signedIn: true, account: 'me@example.com', update: null, updatable: true },
-  { name: 'codex', installed: true, version: '0.48.0', signedIn: true, account: null, update: '0.49.0', updatable: true },
-  { name: 'acli', installed: true, version: '1.3.2', signedIn: false, account: null, update: null, updatable: true },
-  { name: 'gh', installed: true, version: '2.82.0', signedIn: true, account: 'me', update: null, updatable: false },
-  { name: 'glab', installed: false, version: null, signedIn: null, account: null, update: null, updatable: false },
+  { name: 'claude', installed: true, version: '2.1.4', signedIn: true, account: 'me@example.com', latest: '2.1.4', update: null, updatable: true },
+  { name: 'codex', installed: true, version: '0.48.0', signedIn: true, account: null, latest: '0.49.0', update: '0.49.0', updatable: true },
+  { name: 'acli', installed: true, version: '1.3.2', signedIn: false, account: null, latest: '1.3.2', update: null, updatable: true },
+  { name: 'gh', installed: true, version: '2.82.0', signedIn: true, account: 'me', latest: null, update: null, updatable: false },
+  { name: 'glab', installed: false, version: null, signedIn: null, account: null, latest: null, update: null, updatable: false },
 ]
 
 const TICKETS: Ticket[] = [
@@ -76,6 +76,7 @@ export function settingsMock(): SettingsApi {
       Object.assign(tool, { version: tool.update ?? tool.version, update: null })
       return { ...tool }
     },
+    monospaceFonts: async () => ['Andale Mono', 'Courier New', 'Fira Code', 'JetBrains Mono', 'Menlo', 'Monaco', 'PT Mono', 'SF Mono'],
     appVersion: async () => '0.48.2',
     checkUpdate: async () => ({ version: '0.49.0', notes: '## Features\n\n- **chats**: Chats survive an app restart\n\n**Full changelog**: https://github.com/zaxovaiko/treeix/compare/v0.48.0...v0.49.0' }),
     async installUpdate() {

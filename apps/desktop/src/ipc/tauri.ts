@@ -154,6 +154,7 @@ export function tauriApi(): Api {
 
     cliTools: commands.cliTools,
     updateCliTool: commands.updateCliTool,
+    monospaceFonts: commands.monospaceFonts,
     runCommand: commands.runCommand,
     appVersion: getVersion,
     checkUpdate: commands.checkUpdate,

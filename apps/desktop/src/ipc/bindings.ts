@@ -411,6 +411,12 @@ async updateCliTool(name: string) : Promise<CliTool> {
     return await TAURI_INVOKE("update_cli_tool", { name });
 },
 /**
+ * Font families installed here whose glyphs all share one width, sorted
+ */
+async monospaceFonts() : Promise<string[]> {
+    return await TAURI_INVOKE("monospace_fonts");
+},
+/**
  * A one-off command (git pull, commit, push) in the login shell at `cwd` with no terminal, so git neither prompts
  * nor opens an editor. Its output, or the output as the error
  */
@@ -935,7 +941,11 @@ export type CliTool = { name: string; installed: boolean; version: string | null
  */
 signedIn: boolean | null; account: string | null; 
 /**
- * A newer version, when the tool says so
+ * The newest version its updater installs: npm for claude and codex, the Homebrew formula for the rest
+ */
+latest: string | null; 
+/**
+ * `latest`, when it is newer than `version`
  */
 update: string | null; 
 /**

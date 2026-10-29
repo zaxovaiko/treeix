@@ -26,7 +26,9 @@ pub struct CliTool {
     /// None when the tool has no sign-in or it could not tell
     pub signed_in: Option<bool>,
     pub account: Option<String>,
-    /// A newer version, when the tool says so
+    /// The newest version its updater installs: npm for claude and codex, the Homebrew formula for the rest
+    pub latest: Option<String>,
+    /// `latest`, when it is newer than `version`
     pub update: Option<String>,
     /// `update_cli_tool` knows how to update it: it updates itself, or Homebrew installed it
     pub updatable: bool,
@@ -130,6 +132,61 @@ pub async fn cli_tools() -> Result<Vec<CliTool>> {
 
 const TOOLS: [&str; 5] = ["claude", "codex", "acli", "gh", "glab"];
 
+/// Font families installed here whose glyphs all share one width, sorted
+#[tauri::command]
+#[specta::specta]
+pub async fn monospace_fonts() -> Result<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(installed_monospace_fonts)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn installed_monospace_fonts() -> Vec<String> {
+    use objc2_core_text::{CTFont, CTFontCollection, CTFontDescriptor, CTFontSymbolicTraits};
+    // SAFETY: the collection's array holds font descriptors, and the null matrix means identity
+    let families = unsafe {
+        let Some(descriptors) =
+            CTFontCollection::from_available_fonts(None).matching_font_descriptors()
+        else {
+            return Vec::new();
+        };
+        descriptors
+            .cast_unchecked::<CTFontDescriptor>()
+            .iter()
+            .map(|descriptor| CTFont::with_font_descriptor(&descriptor, 12.0, std::ptr::null()))
+            .filter(|font| {
+                font.symbolic_traits()
+                    .contains(CTFontSymbolicTraits::TraitMonoSpace)
+            })
+            .map(|font| font.family_name().to_string())
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    // ".SF NS Mono" and the like are the system's own
+    families
+        .into_iter()
+        .filter(|family| !family.starts_with('.'))
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn installed_monospace_fonts() -> Vec<String> {
+    let Ok(out) = std::process::Command::new("fc-list")
+        .args([":spacing=mono", "family"])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| {
+            Some(line.split(',').next()?.trim().to_string()).filter(|f| !f.is_empty())
+        })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 /// Updates a tool the way it was installed, then checks it again
 #[tauri::command]
 #[specta::specta]
@@ -142,9 +199,15 @@ pub async fn update_cli_tool(name: String) -> Result<CliTool> {
         format!("{name} was not installed with Homebrew; update it the way you installed it")
     })?;
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    run_command(home, command).await?;
+    {
+        // Two brew upgrades at once fail on Homebrew's lock
+        let _one_at_a_time = UPDATING.lock().await;
+        run_command(home, command).await?;
+    }
     Ok(cli_tool(name).await)
 }
+
+static UPDATING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// claude and codex update themselves, through their package manager when one installed them; the rest only when
 /// the binary lives in Homebrew's Cellar, under the formula it names
@@ -152,11 +215,46 @@ async fn update_command(name: &str) -> Option<String> {
     if matches!(name, "claude" | "codex") {
         return Some(format!("{name} update"));
     }
+    installed_formula(name)
+        .await
+        .map(|formula| format!("brew upgrade {formula}"))
+}
+
+async fn installed_formula(name: &str) -> Option<String> {
     let (ok, out) = in_login_shell(&format!("command -v {name}")).await?;
     let path = std::fs::canonicalize(out.lines().next()?.trim())
         .ok()
         .filter(|_| ok)?;
-    brew_formula(&path).map(|formula| format!("brew upgrade {formula}"))
+    brew_formula(&path)
+}
+
+/// From npm for claude and codex, from the Homebrew formula for the rest
+async fn latest_version(name: &str) -> Option<String> {
+    let (command, pointer) = match name {
+        "claude" => (npm_latest("@anthropic-ai/claude-code"), "/version"),
+        "codex" => (npm_latest("@openai/codex"), "/version"),
+        _ => (
+            format!("brew info --json=v2 {}", installed_formula(name).await?),
+            "/formulae/0/versions/stable",
+        ),
+    };
+    // stderr away, so the output is only the JSON
+    let (ok, out) = in_login_shell(&format!("{command} 2>/dev/null")).await?;
+    let json: serde_json::Value = serde_json::from_str(&out).ok().filter(|_| ok)?;
+    version_of(json.pointer(pointer)?.as_str()?)
+}
+
+fn npm_latest(package: &str) -> String {
+    format!("curl -fsS https://registry.npmjs.org/{package}/latest")
+}
+
+fn is_newer(latest: &str, installed: &str) -> bool {
+    let parts = |v: &str| {
+        v.split('.')
+            .map(|p| p.parse::<u64>().unwrap_or(0))
+            .collect::<Vec<_>>()
+    };
+    parts(latest) > parts(installed)
 }
 
 /// "acli" in /opt/homebrew/Cellar/acli/1.3.36-stable/bin/acli
@@ -191,13 +289,27 @@ async fn cli_tool(name: &'static str) -> CliTool {
         version: version.and_then(|(ok, out)| ok.then(|| version_of(&out)).flatten()),
         signed_in: None,
         account: None,
+        latest: None,
         update: None,
         updatable: false,
     };
     if !tool.installed {
         return tool;
     }
-    let (signed_in, account) = match name {
+    let ((signed_in, account), latest) = tokio::join!(sign_in(name), latest_version(name));
+    tool.signed_in = signed_in;
+    tool.account = account;
+    tool.update = latest
+        .clone()
+        .filter(|l| tool.version.as_deref().is_some_and(|v| is_newer(l, v)));
+    tool.latest = latest;
+    tool.updatable = update_command.is_some();
+    tool
+}
+
+/// Signed in, and as whom; None when the tool has no sign-in or it could not tell
+async fn sign_in(name: &str) -> (Option<bool>, Option<String>) {
+    match name {
         "gh" | "glab" => in_login_shell(&format!("{name} auth status"))
             .await
             .map(|(_, out)| {
@@ -217,11 +329,7 @@ async fn cli_tool(name: &'static str) -> CliTool {
             .unwrap_or((None, None)),
         "claude" => claude_account(),
         _ => (None, None),
-    };
-    tool.signed_in = signed_in;
-    tool.account = account;
-    tool.updatable = update_command.is_some();
-    tool
+    }
 }
 
 /// Long enough for a push behind a pre-push hook
@@ -276,16 +384,18 @@ async fn in_login_shell(command: &str) -> Option<(bool, String)> {
     Some((out.status.success(), text))
 }
 
-/// The first x.y.z in a `--version` line: "2.1.4 (Claude Code)", "gh version 2.82.0 (...)", "codex-cli 0.48.0"
+/// The first x.y.z in a `--version` line: "2.1.4 (Claude Code)", "gh version 2.82.0 (...)", "codex-cli 0.48.0",
+/// "acli version 1.3.39-stable"
 fn version_of(output: &str) -> Option<String> {
+    let number = |p: &str| (!p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())).then_some(());
     output.split_whitespace().find_map(|word| {
-        let word = word.trim_start_matches('v');
-        let parts: Vec<&str> = word.split('.').collect();
-        (parts.len() >= 3
-            && parts[..3]
-                .iter()
-                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())))
-        .then(|| parts[..3].join("."))
+        let mut parts = word.trim_start_matches('v').splitn(3, '.');
+        let (major, minor) = (parts.next()?, parts.next()?);
+        number(major)?;
+        number(minor)?;
+        let patch = parts.next()?.split(|c: char| !c.is_ascii_digit()).next()?;
+        number(patch)?;
+        Some(format!("{major}.{minor}.{patch}"))
     })
 }
 
@@ -370,12 +480,24 @@ mod tests {
             Some("2.82.0")
         );
         assert_eq!(version_of("codex-cli 0.48.0").as_deref(), Some("0.48.0"));
-        assert_eq!(version_of("acli v1.3.2-stable").as_deref(), None);
+        assert_eq!(
+            version_of("acli version 1.3.39-stable").as_deref(),
+            Some("1.3.39")
+        );
+        assert_eq!(version_of("(2026-09-03)"), None);
         assert_eq!(
             version_of("glab 1.48.0 (44790937b)").as_deref(),
             Some("1.48.0")
         );
         assert_eq!(version_of("command not found"), None);
+    }
+
+    #[test]
+    fn newer_compares_numbers_not_text() {
+        assert!(is_newer("1.126.0", "1.123.0"));
+        assert!(is_newer("2.10.0", "2.9.9"));
+        assert!(!is_newer("2.1.312", "2.1.312"));
+        assert!(!is_newer("2.1.311", "2.1.312"));
     }
 
     #[test]
