@@ -75,12 +75,9 @@ pub fn set_shortcut(app: &AppHandle, accelerator: Option<&str>) -> Result<(), St
         } else {
             tauri::ActivationPolicy::Regular
         });
-        // A hotkey window has square corners and no traffic lights; decorations back on drop the overlay title bar
+        // A hotkey window has no traffic lights
         if let Some(main) = app.get_webview_window("main") {
-            let _ = main.set_decorations(!hotkey_window);
-            if !hotkey_window {
-                let _ = main.set_title_bar_style(tauri::TitleBarStyle::Overlay);
-            }
+            traffic_lights::set_hidden(&main, hotkey_window);
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -136,6 +133,35 @@ mod blur {
                     number as i32,
                     if blur { BLUR_RADIUS } else { 0 },
                 );
+            }
+        });
+    }
+}
+
+// Hidden, not removed: a borderless window has no buttons, and tao's traffic light inset unwraps them on every
+// draw, so set_decorations(false) aborted the app on launch
+#[cfg(target_os = "macos")]
+mod traffic_lights {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyObject, Bool};
+
+    const CLOSE_MINIATURIZE_ZOOM: [usize; 3] = [0, 1, 2];
+
+    pub fn set_hidden(window: &tauri::WebviewWindow, hidden: bool) {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            let Ok(ns_window) = target.ns_window() else {
+                return;
+            };
+            // SAFETY: tauri's live NSWindow, used on the main thread; a missing button is nil and skipped
+            unsafe {
+                let ns_window = &*ns_window.cast::<AnyObject>();
+                for kind in CLOSE_MINIATURIZE_ZOOM {
+                    let button: *mut AnyObject = msg_send![ns_window, standardWindowButton: kind];
+                    if let Some(button) = button.as_ref() {
+                        let _: () = msg_send![button, setHidden: Bool::new(hidden)];
+                    }
+                }
             }
         });
     }
