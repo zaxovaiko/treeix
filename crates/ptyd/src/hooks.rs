@@ -68,9 +68,19 @@ fn agent_state(hooked: Option<Hook>, has_hooks: bool, screen: &str) -> AgentStat
             }
         }
         _ if waiting_for_input(screen) => AgentState::Input,
-        _ if screen.to_lowercase().contains("esc to interrupt") => AgentState::Running,
+        _ if working(screen) => AgentState::Running,
         _ => AgentState::Idle,
     }
+}
+
+// ponytail: screen-scraped, Codex says "esc to interrupt" while it works; Claude dropped that from its spinner,
+// `Unraveling… (1m 54s · ↓ 2.8k tokens)`, and ends a turn with `Worked for 1m 54s`, no ellipsis
+fn working(screen: &str) -> bool {
+    screen.to_lowercase().contains("esc to interrupt")
+        || screen.lines().any(|line| {
+            line.split_once("… (")
+                .is_some_and(|(_, rest)| rest.starts_with(|c: char| c.is_ascii_digit()))
+        })
 }
 
 /// A finished turn is Done (the app shows it as idle once on screen); a session that never worked is Idle
@@ -353,6 +363,18 @@ mod tests {
         assert_eq!(
             state(None, false, "  ❯ 1. Yes\n    2. No"),
             AgentState::Input
+        );
+        assert_eq!(
+            state(
+                None,
+                false,
+                "✻ Unraveling… (1m 54s · ↓ 2.8k tokens)\n\n❯ \n"
+            ),
+            AgentState::Running
+        );
+        assert_eq!(
+            state(None, false, "✻ Worked for 1m 54s\n\n❯ \n"),
+            AgentState::Idle
         );
         assert_eq!(state(None, false, "› "), AgentState::Idle);
     }
