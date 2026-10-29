@@ -295,10 +295,12 @@ async fn sigkill_restarts_sessions_and_the_next_daemon_reaps_orphans() {
 
     let (_daemon, mut client) = start(dir.path()).await;
     let restarted = list(&mut client).await.remove(0);
-    assert_eq!(
-        (restarted.id.as_str(), restarted.status),
-        (info.id.as_str(), SessionStatus::Running)
-    );
+    assert_eq!(restarted.id, info.id);
+    // Running, or already Idle once the foreground poll sees the shell
+    assert!(matches!(
+        restarted.status,
+        SessionStatus::Running | SessionStatus::Idle
+    ));
     assert!(restarted.pid.is_some_and(|pid| pid as i32 != shell));
     match client
         .request(Request::Attach {

@@ -493,7 +493,11 @@ async fn crash_restarts_sessions() {
     let _server = treeix_ptyd::spawn_in_process(dir.path().into());
     let mut client = connect(dir.path()).await;
     let restarted = list(&mut client).await.remove(0);
-    assert_eq!(restarted.status, SessionStatus::Running);
+    // Running, or already Idle once the shell's prompt is up
+    assert!(matches!(
+        restarted.status,
+        SessionStatus::Running | SessionStatus::Idle
+    ));
     assert!(restarted.pid.is_some_and(|pid| pid != 1));
     client.request(Request::Shutdown).await.unwrap();
 }
