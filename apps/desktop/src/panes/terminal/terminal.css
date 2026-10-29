@@ -33,6 +33,8 @@
   --term-fg: #1b1b1f;
   --term-cursor: #1b1b1f;
   --term-selection: #0000002e;
+  /* Apps pick colors for a dark background (yellow, light gray, 24-bit grays); xterm darkens them to WCAG AA, dim text to half */
+  --term-contrast: 4.5;
   --term-match: #ffe9a3;
   --term-match-active: #ffbf3d;
   --term-0: #1d1d1d;

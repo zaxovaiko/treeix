@@ -39,9 +39,10 @@ const ANSI_NAMES = [
 
 /**
  * Theme and font from CSS custom properties, defaults in terminal.css:
- * --term-bg (--term-clear: 1 makes the canvas see-through), --term-fg, --term-cursor, --term-selection, --term-font, --term-font-size, and ANSI colors --term-0 .. --term-15
+ * --term-bg (--term-clear: 1 makes the canvas see-through), --term-fg, --term-cursor, --term-selection, --term-font, --term-font-size,
+ * --term-contrast (the least contrast text gets), and ANSI colors --term-0 .. --term-15
  */
-function cssTheme(host: HTMLElement): { theme: ITheme; allowTransparency: boolean; fontFamily: string; fontSize: number } {
+function cssTheme(host: HTMLElement): { theme: ITheme; allowTransparency: boolean; fontFamily: string; fontSize: number; minimumContrastRatio: number } {
   const style = getComputedStyle(host)
   const read = (name: string): string | undefined => style.getPropertyValue(name).trim() || undefined
   const clear = read('--term-clear') === '1'
@@ -52,7 +53,13 @@ function cssTheme(host: HTMLElement): { theme: ITheme; allowTransparency: boolea
     selectionBackground: read('--term-selection')
   }
   ANSI_NAMES.forEach((name, index) => (theme[name] = read(`--term-${index}`)))
-  return { theme, allowTransparency: clear, fontFamily: read('--term-font') ?? 'monospace', fontSize: Number(read('--term-font-size')) || 12 }
+  return {
+    theme,
+    allowTransparency: clear,
+    fontFamily: read('--term-font') ?? 'monospace',
+    fontSize: Number(read('--term-font-size')) || 12,
+    minimumContrastRatio: Number(read('--term-contrast')) || 1
+  }
 }
 
 /**
